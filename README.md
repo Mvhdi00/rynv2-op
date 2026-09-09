@@ -6,6 +6,9 @@ against them.
 
 Build output: **`ReUp_Mix.user.js`**
 
+Also in this repo: **`Ryn_Type_2.user.js`**, a separate client — see
+[Ryn Type 2](#ryn-type-2).
+
 ---
 
 ## Why RYN is the base
@@ -117,6 +120,7 @@ but nothing in the client needs it. It is stripped from the build.
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
+Ryn_Type_2.user.js        Ryn Type 2, edited in place (not built)
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
@@ -126,6 +130,7 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/sim-explorer.js     Ryn Type 2's exploration system, run headless
 ```
 
 ## Build
@@ -177,3 +182,99 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# Ryn Type 2
+
+`Ryn_Type_2.user.js` is a separate client that lives here alongside the mix. It
+is edited directly rather than built, so the file in the repo is the file you
+install.
+
+## Persistent exploration
+
+Bot random movement (Bots → the Scatter Bots key, `J` by default) used to be
+x18's wander: roll a random heading, re-roll while it lands within 2 radians of
+the last one, walk it until 3300 units of straight-line distance have gone by,
+10 seconds pass, or the bot stops. A heading is not a destination, and rolling
+one repeatedly is a random walk — displacement grows with the square root of the
+number of legs, so a fleet left to it stays in the corner it started in. The
+forced >115° turn made each leg partly undo the one before, and the third
+re-roll condition fires on *stopped*, which is what a bot is every time it walks
+into something.
+
+`BotExplorer` replaces the heading with a destination and a route to it:
+
+```
+current position -> a distant sector -> a corridor to it -> travel
+-> arrive -> another distant sector -> ...
+```
+
+The bot commits to a destination and keeps it. Direction changes only for a
+reason: the route bends around something, the destination is reached or proven
+unreachable, another bot is too close, or the bot is recovering from being
+stuck. There is no per-tick randomness in the steering at all.
+
+| Concern | Where |
+|---|---|
+| What counts as solid | `_expBlockerAt`, `_expFirstBlocker` |
+| Corridor clearance | `_expCorridorClear`, `_expClearHeading` |
+| Path generation | `_expBuildPath` |
+| Bot-to-bot separation | `_expSpacingPass` |
+| Destination choice, following, stuck recovery, breaking, execution | `BotExplorer` |
+
+It is a bot module — `ModuleHandler.botModules`, between `botRangedAttack` and
+`movement` — so it runs on the server tick like every other module rather than
+on its own animation-frame pass, and `Movement.postTick` stands aside for it on
+the `_scatterActive` flag it always used.
+
+Everything underneath is the client's existing machinery:
+
+- **`PlayerManager.canMoveOnTop`** decides what is passable. It is
+  ownership-aware — boost pads, platforms, healing and spawn pads, blockers,
+  teleporters and your own clan's pit traps are walkable, an enemy pit trap is
+  not, and no resource ever is. That is what gives paths their openings: a
+  building boundary is only a wall where the game actually makes it one, so a
+  gate is routed through rather than walked around. The old check queried only
+  `PlayerObject`, so every tree, bush and rock was invisible to it and routes
+  were drawn straight through them.
+- **`ObjectManager.grid2D`** for lookups, and `isDestroyedObject` as the signal
+  that a structure nearby just came down.
+- **`ModuleHandler.startMovement`**, which keeps `move_dir` and
+  `reverse_move_dir` in step (Automill builds off the latter) and runs
+  `MovementSimulation`, so a step into a spike is refused rather than sent.
+  Movement goes out on a real change of heading or a 2s keepalive, not every
+  tick — re-sending a slightly different heading every tick is the jitter.
+- **`moduleActive` / `useAngle` / `forceWeapon` / `shouldAttack`**, the same
+  channel `BotAutoBreak` uses, for breaking. There is no second attack path and
+  the reload gate is the client's own.
+
+Breaking is only reached after routing around has failed, and only for what the
+same swept-disc probe reports first along the heading the bot is walking — it
+must also be destroyable and enemy-owned, since a clan's own buildings take no
+damage and a tree does not come down. Nothing off to the side is touched however
+close the bot walks past it. Bringing a blocker down resets the recovery clock;
+nothing coming down means recovery keeps escalating, which is what stops a bot
+hammering a wall it cannot break.
+
+Path building is the only expensive part, so it runs on a budget shared by the
+whole fleet (3 plans per 100ms whatever the bot count); a bot waiting for a slot
+holds the straight line to its destination, which is what the planner returns in
+open ground anyway.
+
+Verify with:
+
+```sh
+node tools/sim-explorer.js
+node --check Ryn_Type_2.user.js
+```
+
+`sim-explorer` pulls the block straight out of the shipped file and runs it
+against a stub of the client surface it uses, driven by an integrator that
+resolves collisions the way the game does. It checks that a bot crosses the map
+rather than milling about and that its move packets are keepalives rather than
+corrections; that a wall with a gap is routed through the gap; that a breakable
+wall is broken through while a breakable thing off to the side is left alone;
+that a pair of bots separates and only ever one of them yields; and that 24 bots
+starting on one spot spread out, stay spread, and cost a fraction of a
+millisecond per tick between them.
