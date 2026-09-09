@@ -146,6 +146,7 @@ VERIFIERS = [
     ("check",  ["node", "harness/ryn-changes-check.js"]),
     ("anti",   ["node", "harness/anti-audit.js"]),
     ("shame",  ["node", "harness/shame-model.js"]),
+    ("login",  ["node", "harness/login-latch.js"]),
 ]
 
 print("mutation tests — break it on purpose, confirm a verifier goes red\n")

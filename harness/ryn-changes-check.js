@@ -663,6 +663,34 @@ check("execute", "the velocity-tick band is open at 151 and shut at 150 and 350"
   return [true, "25 + primary inside (150, 350), and only on hat 53"];
 });
 
+/* Login. The full behaviour is measured in harness/login-latch.js, against the
+ * real game bundle; these are the two facts that file cannot see, because it
+ * tests what the patches DO rather than what the client no longer does. */
+check("no ghosts", "onload no longer clears #enterGame's disabled class by hand", () => {
+  // `disabled` is the bundle's own "we hold a Turnstile token" flag. Clearing
+  // it by hand lets Play be pressed with no token, which latches `ei` and
+  // kills Play for the life of the page.
+  const m = /const onload = \(\) => \{([\s\S]*?)\n  \};/.exec(src);
+  if (!m) return [false, "onload not found"];
+  if (/enterGame\.classList\.remove\("disabled"\)/.test(m[1]))
+    return [false, "still clears the token flag by hand"];
+  if (!/Login_default\.init\(\)/.test(m[1]))
+    return [false, "does not start the captcha supervisor"];
+  return [true, "starts the supervisor instead"];
+});
+
+check("wire", "the three login patches are registered with the bundle rewriter", () => {
+  for (const name of ["connectLatchFix", "disconnectRelease", "spawnLatchRelease"]) {
+    if (!src.includes('Hook.replace("' + name + '"')) return [false, "no " + name + " hook"];
+  }
+  // They are gated on the connect-latch probe matching, so a bundle this
+  // client no longer recognises leaves the game's own code alone rather than
+  // half-rewriting it.
+  if (!/if \(connectLatch\.length\) \{/.test(src))
+    return [false, "the patches are not gated on the probe matching"];
+  return [true, "three patches, gated on the probe"];
+});
+
 // ── 4. NO GHOSTS ──────────────────────────────────────────────────────────
 const DELETED = [
   "_healsInFlight", "isSaveHealTime", "isSaveHealTick", "isSaveHeal", "_healSent",

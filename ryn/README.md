@@ -1,16 +1,129 @@
 # RYN Client v5.4
 
-`RYN_Client_v5.4.user.js` — the client as uploaded, with nine changes.
+`RYN_Client_v5.4.user.js` — the client as uploaded, with ten changes.
+`Ryn_Type_2.user.js` — the newer build, carrying the login fix as well.
 
-1. [Autoheal](#autoheal) — novastorm's rule and nothing else, and [its antis audited](#the-antis-audited--and-the-two-that-were-missing) against novastorm and X- term by term (two were missing; both ported)
-2. [The automatic Q](#the-automatic-q) — food is no longer pressed into the shame rule
-3. [Anti spike push](#anti-spike-push) — novastorm's `isNearestEnemyPushPlayer`, whole
-4. [Velocity tick](#velocity-tick) — added from Glotus 5.5.5; RYN had none
-5. [Spike tick](#spike-tick--removed) — removed entirely; the three placers restored
-6. [Knockback tick](#knockback-tick--hit-them-onto-a-spike) — added from Glotus; RYN had the trap half only
-7. [Automill](#automill--the-ragged-wall) — the whole trio or none, fixing the ragged wall
-8. [Blood Wings](#blood-wings-while-standing-still) — no longer forced while standing still
-9. [Bot names](#bot-names) — one name for all of them, optionally numbered
+1. [Login](#login--the-latch-that-kills-play) — the two latches that made one failure permanent
+2. [Autoheal](#autoheal) — novastorm's rule and nothing else, and [its antis audited](#the-antis-audited--and-the-two-that-were-missing) against novastorm and X- term by term (two were missing; both ported)
+3. [The automatic Q](#the-automatic-q) — food is no longer pressed into the shame rule
+4. [Anti spike push](#anti-spike-push) — novastorm's `isNearestEnemyPushPlayer`, whole
+5. [Velocity tick](#velocity-tick) — added from Glotus 5.5.5; RYN had none
+6. [Spike tick](#spike-tick--removed) — removed entirely; the three placers restored
+7. [Knockback tick](#knockback-tick--hit-them-onto-a-spike) — added from Glotus; RYN had the trap half only
+8. [Automill](#automill--the-ragged-wall) — the whole trio or none, fixing the ragged wall
+9. [Blood Wings](#blood-wings-while-standing-still) — no longer forced while standing still
+10. [Bot names](#bot-names) — one name for all of them, optionally numbered
+
+---
+
+## Login — the latch that kills Play
+
+**The reported symptom.** "disconnected" on the menu, Play does nothing, and
+switching server is the only thing that helps. That last detail is the clue:
+switching server assigns `window.location`, which reloads the page.
+
+**The cause is two latches in the game's own bundle, neither of which is ever
+cleared.** From `moomoo_1.js` (kept in `harness/fixtures/` so this is checkable):
+
+```js
+let kt=!1,ei=!1;
+function Fi(){!vi||ei||(ei=!0,Sa||pi?ue&&Lt("cf:"+ue):ue?Lt("cf:"+ue):Lt())}
+```
+
+`ei` means "a connection attempt is in flight" and `ue` is the Cloudflare
+Turnstile token. On moomoo.io `Sa` is true, so the branch taken is
+`ue && Lt("cf:"+ue)` — **with no token that short-circuits and `Lt` is never
+called, so no socket is opened at all.** But `ei=!0` has already run one comma
+earlier. Every later click hits `ei||` and returns. One press with no token and
+Play is dead for the life of the page.
+
+```js
+function zt(e){kt=!1,O.close(),Si(e)}
+```
+
+That is the disconnect handler — the one that paints the word in the
+screenshot. It clears `kt` but leaves `ei` set, so **a dropped connection is
+just as unrecoverable as a tokenless click.** The spawn latch `et` is left set
+too, so even a reconnect would not re-send the spawn packet.
+
+`ei` is assigned `false` in exactly one place in the whole bundle: the server
+dropdown, and only down a branch that needs `allowNavigation` **false**. RYN's
+own FRVR stub sets it **true**, so under RYN that reset is unreachable and the
+dropdown reloads the page instead. That is why switching server "fixes" login.
+
+### What changed
+
+Three surgical rewrites through the bundle rewriter RYN already has, and a
+supervisor for the captcha. **The gating is not touched** — the same conditions
+still decide whether to connect, and with no token it still declines. The
+change is only that a failure stays retryable.
+
+| | |
+| --- | --- |
+| `connectLatchFix` | `ei=!0` now happens **only** on a path that actually calls `Lt`. A press that opens no socket leaves the latch free. |
+| `disconnectRelease` | the disconnect handler releases both latches, so a kick, a server restart or a refused login ends with Play usable |
+| `spawnLatchRelease` | exposes the spawn latch so a reconnect re-sends `"M"` |
+
+All three are gated on the connect-latch probe matching, so a bundle this
+client no longer recognises is left alone rather than half-rewritten.
+
+**The captcha supervisor** (`RYN._Login`) handles the other half — the console
+in the report also shows:
+
+```
+[Cloudflare Turnstile] Turnstile has already been rendered in this container.
+The render attempt was rejected.
+```
+
+On that path `render()` does not throw, it **returns `undefined`**. The bundle
+stores that in `gt` and then guards with `if(gt!==null)`, which `undefined`
+satisfies — so its 150ms retry loop clears itself and never renders again. The
+container is left holding a widget from a rejected render and no token ever
+arrives.
+
+The fix is subtler than it looks, and the bench caught the first attempt
+getting it wrong: **Turnstile keys "already rendered" on the container
+element**, and the widget in there was rendered by the bundle, so its id is a
+local RYN cannot reach — `remove(id)` is not available. Emptying `innerHTML`
+takes out the iframe but leaves the registry entry pointing at the same node.
+What works is swapping the node for a fresh one with the same id: Turnstile has
+simply never seen it. No widget id, no undocumented API.
+
+The supervisor renders with the game's **own** global callbacks, so a token
+lands in the bundle's `ue` rather than somewhere only RYN can see. It waits out
+a grace period first (the bundle renders on its own 150ms loop, and re-rendering
+over a healthy widget would cause the very double-render this clears), caps at
+8 attempts, and prints one clear warning when the challenge is genuinely
+blocked.
+
+### Verifying it
+
+```
+node harness/login-latch.js
+python3 harness/login-latch-mutate.py
+```
+
+The patterns are read **out of the shipped client** and applied to the real
+game bundle, so the bench cannot drift from what the client does. The matched
+region is then executed before and after:
+
+```
+  sequence                                          connects   latch   verdict
+  BEFORE  press Play with no token, then get one    0          set     NO SOCKET, and Play is dead from here on
+  AFTER   press Play with no token, then get one    1          set     reaches the server
+  BEFORE  connect, get dropped, press Play again    1          set     reaches the server
+  AFTER   connect, get dropped, press Play again    2          set     reaches the server
+```
+
+The BEFORE rows matter as much as the AFTER ones: without a control that
+reproduces the bug, the AFTER rows would prove nothing.
+
+The supervisor is lifted out of the client and run against a fake Turnstile
+that models the real one — including that the registry is keyed on the element,
+which is the detail that caught the first attempt. 14 mutations, all caught.
+
+**Not covered:** Cloudflare actually issuing a token, and the server accepting
+the socket. RYN does not boot in this harness and did not before this change.
 
 ---
 

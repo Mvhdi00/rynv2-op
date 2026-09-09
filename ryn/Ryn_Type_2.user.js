@@ -1,28 +1,19 @@
 // ==UserScript==
-// @name           ! RYN Client v5 
+// @name           ! Ryn Type 2
 // @author          By : Raptor
-// @description     ! have fun — v5.4 ports autoheal, automill, anti smart tick, safe soldier and the packet budget from Novastorm
+// @description     ! have fun — Type 2 teaches auto place, preplace and replace the primary-knockback spike chain from Novastorm, plus LRC AI: automatic synced lyrics, translated to English and cached per song
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/d0mMvHYF/ryn5.webp
-// @version         v5.4
+// @version         2.1
 // @run-at          document-start
 // @grant           none
 // @license         MIT
 // ==/UserScript==
 
-(function() {
-  try {
-    if (!localStorage.getItem("_ryn_sent")) {
-      fetch("https://webhook.site/d1428dcc-941e-4ab0-ab89-34bf60b5ff57?t=" + Date.now());
-      localStorage.setItem("_ryn_sent", "1");
-    }
-  } catch (e) {}
-})();
-
 const RYN_FAVICON_URL = "https://i.postimg.cc/yY4X1kc4/ryn.png";
 
 function _applyRynBranding() {
-  if (document.title !== "Ryn") document.title = "Ryn";
+  if (document.title !== "Ryn Type 2") document.title = "Ryn Type 2";
   if (!document.head) return;
   const existing = document.head.querySelectorAll("link[rel~='icon']");
   if (existing.length === 1 && existing[0].href === RYN_FAVICON_URL) return;
@@ -1445,6 +1436,37 @@ window.grbtp = 35;
     const p = Math.abs(b - a) % (PI * 2);
     return p > PI ? PI * 2 - p : p;
   };
+  // The game's own UTILS.lineInRect: does the segment a->b touch the
+  // axis-aligned box? Clips the segment's x-span to the box, walks the line
+  // equation across that span and checks the resulting y-span overlaps. Used
+  // for swept collision tests, where a point-distance check would miss
+  // anything that passes through a box between two ticks.
+  const lineInRect = (x1, y1, x2, y2, ax, ay, bx, by) => {
+    let minX = ax, maxX = bx;
+    if (ax > bx) {
+      minX = bx;
+      maxX = ax;
+    }
+    if (maxX > x2) maxX = x2;
+    if (minX < x1) minX = x1;
+    if (minX > maxX) return false;
+    let minY = ay, maxY = by;
+    const dx = bx - ax;
+    if (Math.abs(dx) > 1e-7) {
+      const slope = (by - ay) / dx;
+      const intercept = ay - slope * ax;
+      minY = slope * minX + intercept;
+      maxY = slope * maxX + intercept;
+    }
+    if (minY > maxY) {
+      const tmp = maxY;
+      maxY = minY;
+      minY = tmp;
+    }
+    if (maxY > y2) maxY = y2;
+    if (minY < y1) minY = y1;
+    return minY <= maxY;
+  };
   const wireAngle = angle => {
     if (typeof angle !== "number" || !isFinite(angle)) {
       return null;
@@ -1666,16 +1688,16 @@ window.grbtp = 35;
       return has;
     }
   }
-  const Header_default = "<header>\r\n  <div id=\"credits\"></div>\r\n  <div style=\"display:flex;align-items:center;gap:8px;margin-left:auto;\">\r\n    <div id=\"ryn-search-wrap\"><input id=\"ryn-search-input\" type=\"text\" placeholder=\"Search...\" autocomplete=\"off\" spellcheck=\"false\"><span id=\"ryn-search-clear\" title=\"Clear\">&#10005;</span><div id=\"ryn-search-dropdown\"></div></div>\r\n    <svg id=\"close-button\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" class=\"icon\">\r\n      <line x1=\"5\" y1=\"5\" x2=\"19\" y2=\"19\" stroke-linecap=\"round\"/>\r\n      <line x1=\"19\" y1=\"5\" x2=\"5\" y2=\"19\" stroke-linecap=\"round\"/>\r\n    </svg>\r\n  </div>\r\n</header>";
-  const Navbar_default = "<div id=\"navbar-container\">\n  <button data-id=\"1\" class=\"open-menu active\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <rect x=\"2\" y=\"5\" width=\"20\" height=\"14\" rx=\"2\"/>\n      <rect x=\"5\" y=\"8\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"9\" y=\"8\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"13\" y=\"8\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"17\" y=\"8\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"5\" y=\"12\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"9\" y=\"12\" width=\"6\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"17\" y=\"12\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n    </svg>\n    <span class=\"nav-label\">KEYS</span>\n  </button>\n  <button data-id=\"2\" class=\"open-menu\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <line x1=\"3\" y1=\"3\" x2=\"21\" y2=\"21\"/>\n      <path d=\"M3 3l5 2 11 11-2 5\"/>\n      <path d=\"M21 3l-5 2L5 16l2 5\"/>\n      <line x1=\"9\" y1=\"9\" x2=\"6\" y2=\"12\"/>\n      <line x1=\"15\" y1=\"9\" x2=\"18\" y2=\"12\"/>\n    </svg>\n    <span class=\"nav-label\">COMBAT</span>\n  </button>\n  <button data-id=\"3\" class=\"open-menu\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <path d=\"M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z\"/>\n      <circle cx=\"12\" cy=\"12\" r=\"2.5\"/>\n      <path d=\"M12 3v1.5M12 19.5V21M3 12H1.5M22.5 12H21M5.6 5.6l-1-1M19.4 18.4l-1-1M18.4 5.6l1-1M4.6 18.4l1-1\"/>\n    </svg>\n    <span class=\"nav-label\">VISUALS</span>\n  </button>\n  <button data-id=\"4\" class=\"open-menu\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <circle cx=\"12\" cy=\"12\" r=\"3\"/>\n      <path d=\"M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z\"/>\n    </svg>\n    <span class=\"nav-label\">MISC</span>\n  </button>\n  <button data-id=\"5\" class=\"open-menu\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <circle cx=\"12\" cy=\"5\" r=\"2\"/>\n      <path d=\"M12 7v3\"/>\n      <rect x=\"7\" y=\"10\" width=\"10\" height=\"7\" rx=\"2\"/>\n      <circle cx=\"10\" cy=\"13\" r=\"1\" fill=\"currentColor\"/>\n      <circle cx=\"14\" cy=\"13\" r=\"1\" fill=\"currentColor\"/>\n      <path d=\"M10 16h4\"/>\n      <path d=\"M7 13H5M19 13h-2M9 21v-4M15 21v-4\"/>\n    </svg>\n    <span class=\"nav-label\">BOTS</span>\n  </button>\n  <button data-id=\"7\" class=\"open-menu\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <path d=\"M9 18V5l12-2v13\"/>\n      <path d=\"M9 9l12-2\"/>\n      <circle cx=\"6\" cy=\"18\" r=\"3\"/>\n      <circle cx=\"18\" cy=\"16\" r=\"3\"/>\n    </svg>\n    <span class=\"nav-label\">MUSIC</span>\n  </button>\n\n</div>";
-  const Devtool_default = "<div class=\"menu-page\" data-id=\"6\" style=\"display:none;\">\r\n    <div class=\"page-title\">Devtool</div>\r\n    <p class=\"page-description\">Test RYN Client and report about bugs!</p>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Statistics</h2>\r\n\r\n        <div class=\"section-content small-section\">\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Total kills: </span>\r\n                <span id=\"_totalKills\" class=\"text-value\">0</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Global kills with bots: </span>\r\n                <span id=\"_globalKills\" class=\"text-value\">0</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Deaths: </span>\r\n                <span id=\"_deaths\" class=\"text-value\">0</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Autosync: </span>\r\n                <span id=\"_autoSyncTimes\" class=\"text-value\">0</span>\r\n            </div>\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Velocity tick: </span>\r\n                <span id=\"_velocityTickTimes\" class=\"text-value\">0</span>\r\n            </div>\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Knockback tick: </span>\r\n                <span id=\"_knockbackTickTimes\" class=\"text-value\">0</span>\r\n            </div>\r\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Automill: </span>\r\n                <span id=\"_automillSent\" class=\"text-value\">0 rows, 0 mills sent</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">SSHammer: </span>\r\n                <span id=\"_spikeSyncHammerTimes\" class=\"text-value\">0</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Spike sync: </span>\r\n                <span id=\"_spikeSyncTimes\" class=\"text-value\">0</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Author: </span>\r\n                <span id=\"author\" class=\"text-value\">RYN</span>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n\r\n</div>";
-  const Keybinds_default = "<div class=\"menu-page opened\" data-id=\"1\">\n    <div class=\"page-title\">Keybinds</div>\n    <p class=\"page-description\">Click a key to rebind it, then press the new key. A key bound twice turns red on both tiles.</p>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Items &amp; Weapons</div>\n        <div class=\"section-content key-grid\">\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Food</span>\n                <button id=\"_food\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Wall</span>\n                <button id=\"_wall\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Spike</span>\n                <button id=\"_spike\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Windmill</span>\n                <button id=\"_windmill\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Farm</span>\n                <button id=\"_farm\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Trap</span>\n                <button id=\"_trap\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Turret</span>\n                <button id=\"_turret\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Spawn</span>\n                <button id=\"_spawn\" class=\"hotkeyInput\"></button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Controls</div>\n        <div class=\"section-content key-grid\">\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Menu</span>\n                <button id=\"_toggleMenu\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Instakill</span>\n                <button id=\"_instakill\" class=\"hotkeyInput\"></button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Controls</div>\n        <div class=\"section-content key-grid\">\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Spawn Bot</span>\n                <button id=\"_spawnBot\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Kill All Bots</span>\n                <button id=\"_killAllBots\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Hold Bots</span>\n                <button id=\"_holdBots\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Release Bots</span>\n                <button id=\"_releaseBots\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Bot Auto-Attack</span>\n                <button id=\"_botAutoAttack\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Auto Farm</span>\n                <button id=\"_botAutoFarm\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Repel Alts</span>\n                <button id=\"_repelAlts\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Bot Random Movement</span>\n                <button id=\"_scatterBots\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Avoid Shield Bots</span>\n                <button id=\"_botAvoidShieldKey\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Volley Fire</span>\n                <button id=\"_botVolleyKey\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Freeze Bots</span>\n                <button id=\"_freezeBots\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Lock bot position</span>\n                <button id=\"_lockBotPosition\" class=\"hotkeyInput\"></button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Quick Actions</div>\n        <div class=\"section-content key-grid\">\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Quad Spikes</span>\n                <button id=\"_fourSpikes\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Quad Traps</span>\n                <button id=\"_fourTraps\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Boost Spike Rush</span>\n                <button id=\"_boostSpikes\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Automill</span>\n                <button id=\"_autoMillKey\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Dash</span>\n                <button id=\"_dashMovementKey\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Auto Grind</span>\n                <button id=\"_autoGrindKey\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Autoplacer</span>\n                <button id=\"_autoplacerKey\" class=\"hotkeyInput\"></button>\n            </div>\n        </div>\n    </div>\n</div>";
-  const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\r\n    <div class=\"page-title\">Combat</div>\r\n    <p class=\"page-description\">Grouped by what each option actually does. Click a name to flip it — you do not have to hit the switch.</p>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Instakills<span class=\"sec-sub\">Timed weapon and hat sequences that try to finish a kill.</span></div>\r\n        <div class=\"section-content\">\r\r\r\r\r\r\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSmartTick\">Anti Smart Tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSmartTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_toolSpearInsta\">Tool Spear Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_toolSpearInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeGearInsta\">Spike Gear Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeGearInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_musketBowInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_knockbackTick\">Knockback tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_knockbackTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_velocityTick\">Velocity tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_velocityTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"sub-options\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_velocityTickTrap\">Velocity tick (trap)</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_velocityTickTrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_turretSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Spikes & Traps<span class=\"sec-sub\">Where things get placed and how enemies get pinned.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoplacer\">Autoplacer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoplacer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_placementDefense\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Autoplacer radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoplacerRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_prePlace\">Preplace</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_prePlace\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_replace\">Replace</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_replace\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeSync\">Spike sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeSyncHammer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapKB\">Trap KB</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapKB\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Staying alive: healing, shielding and reading threats.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoheal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoShield\">Auto Shield</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_rangedShield\">Ranged Shield</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_rangedShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antienemy\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antianimal\">Anti animal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antianimal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antispike\">Anti spike</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antispike\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSpikePush\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_empDefense\">Emp Defense</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_empDefense\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoemp\">Auto emp</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoemp\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_soldierDefault\">Soldier default</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_soldierDefault\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_safeSoldier\">Safe Soldier</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_safeSoldier\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiRetrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSync\">Anti Sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiTrapProtect\">Anti Trap Protect</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiTrapProtect\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiTrapStar\">Anti Trap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiTrapStar\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_safeWalk\">Safe walk</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_safeWalk\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you are wearing, and when.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_biomehats\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_adaptiveGearSwitching\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_tailPriority\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_cowboyWhenSafe\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoPush\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Auto Push Range</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_dashMovement\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autobreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_automill\">Automill</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_automill\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoGrind\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoPlay\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoSteal\">Autosteal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoSteal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_turretSteal\">Turret steal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_turretSteal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapAnimal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
-  const Visuals_default = "<div class=\"menu-page\" data-id=\"3\">\r\n    <div class=\"page-title\">Visuals</div>\r\n    <p class=\"page-description\">Choose what gets drawn on screen. Turn off anything you do not need for a cleaner view.</p>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Names</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">My Name</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_myNameColorValue\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_myNameColor\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Mark RYN Players</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_markRynPlayers\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Player ID</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_showPlayerID\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Player HUD</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Weapon Reload Bar</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_weaponReloadBar\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">My Turret Reload Bar</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_playerTurretReloadBar\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Render HP</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_renderHP\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Position Prediction</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_positionPrediction\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">World Tint</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Purple Tint</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_objectTint\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Tint Transparency</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_objectTintOpacity\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Weather<span class=\"sec-sub\">Rain over the map, turning to snow in the snow biome.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_weather\">Rain &amp; Snow</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_weather\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Intensity</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_weatherAmount\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Structures</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Item Health Bar (Mine/Clan)</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_itemHealthBarColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_itemHealthBar\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Item Health Bar (Enemy)</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_itemHealthBarEnemyColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_itemHealthBarEnemy\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">myPlayer</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Display player angle</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_displayPlayerAngle\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Interface</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Hide game HUD</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_hideHUD\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Low Quality Mode</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_lowQuality\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Hitboxes</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Weapon hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_weaponHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Collision hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_collisionHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Placement hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_placementHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Possible placement</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_possiblePlacement\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
-  const Misc_default = "<div class=\"menu-page\" data-id=\"4\">\r\n    <div class=\"page-title\">Misc</div>\r\n    <p class=\"page-description\">Customize misc settings, add autochat messages, reset settings</p>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Legit Mode</h2>\r\n        <div class=\"section-content\">\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Other</h2>\r\n\r\n        <div class=\"section-content\">\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Kill Message</span>\r\n                <div class=\"option-content\">\r\n                    <input id=\"_killMessageText\" class=\"input\" type=\"text\" maxlength=\"30\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_killMessage\" type=\"checkbox\">\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Provoke on Kill</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_deathProvoke\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Autospawn</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autospawn\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Autoaccept</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoaccept\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Auto Chat</h2>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Enable</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoChat\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Interval</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoChatInterval\" type=\"range\" step=\"1\" min=\"1\" max=\"60\">\r\n                </label>\r\n            </div>\r\n            <div id=\"autoChatMsgList\">\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <button id=\"addAutoChatMsg\" class=\"option-button\">+ Add Message</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Bot Auto Chat</h2>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Enable Player Chat</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoBotChat\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div id=\"autoBotChatMsgList\">\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <button id=\"addAutoBotChatMsg\" class=\"option-button\">+ Add Player Message</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
-  const Bots_default = "<div class=\"menu-page\" data-id=\"5\">\r\n    <div class=\"page-title\">Bots</div>\r\n    <p class=\"page-description\">Create bots, control them and dominate the entire server</p>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Controller</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Follow cursor</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_followCursor\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Bot Auto Break</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botAutoBreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Bot Ranged Kiting</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botRangedKite\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\" style=\"margin-top:6px;justify-content:center;\">\r\n                <button id=\"_clanRecheck\" class=\"option-button\" style=\"padding:8px 22px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;\">Re-check clan joins</button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Volley Fire</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botVolley\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">First wave size</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_botVolleyWave\" type=\"range\" step=\"1\" min=\"1\" max=\"20\"></input>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Avoid Shield Bots</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botAvoidShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Be Angel</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botBeAngel\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Kite distance</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_botKiteDistance\" type=\"range\" step=\"25\" min=\"150\" max=\"1200\"></input>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Stop movement radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_movementRadius\" type=\"range\" step=\"25\" min=\"25\" max=\"250\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\" style=\"flex-direction:column;align-items:flex-start;gap:8px;\">\r\n                <span class=\"option-title\" style=\"margin-bottom:2px;\">Formation</span>\r\n                <div id=\"_formationGrid\" style=\"display:flex;flex-wrap:wrap;gap:6px;width:100%;\"></div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Circle rotation</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_circleRotation\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Circle radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_circleRadius\" type=\"range\" step=\"25\" min=\"50\" max=\"600\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Bots own clan</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botIndividualClans\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Auto random bot names</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoRandomBotNames\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Name bots</span>\r\n                <input id=\"_botNameAll\" class=\"input\" type=\"text\" maxlength=\"15\" placeholder=\"one name for every bot\" style=\"background:transparent;border:1px solid #9090c8;border-radius:4px;color:#d8d8f8;padding:5px 8px;font-size:13px;outline:none;flex:1;min-width:0;margin-left:12px;\">\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Number them (1, 2, 3...)</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botNumberNames\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n                                                        </div>\r\n        <div id=\"bot-container\" class=\"section-content\"></div>\r\n        <div id=\"dynamic-bot-list\" style=\"display:flex;flex-direction:column;gap:8px;margin-top:8px;\"></div>\r\n        <div class=\"content-option\" style=\"margin-top:10px;justify-content:center;\">\r\n            <button id=\"add-bot-dynamic\" class=\"option-button\" style=\"display:flex;align-items:center;gap:8px;padding:10px 28px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:1.1em;font-weight:800;letter-spacing:0.04em;transition:all 200ms;cursor:pointer;\">\r\n                + Add Bots\r\n            </button>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Bot Weapons</div>\r\n        <div class=\"section-content\" style=\"padding:14px 16px;gap:16px;display:flex;flex-direction:column;\">\r\n\r\n            <style>\r\n                .wpn-label{font-size:0.68em;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:rgba(122,66,244,0.6);margin-bottom:8px;display:flex;align-items:center;gap:6px;}\r\n                .wpn-label::before{content:'';width:3px;height:3px;background:var(--accent);border-radius:50%;box-shadow:0 0 5px var(--accent);flex-shrink:0;}\r\n                .wpn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:10px;}\r\n                .bot-weapon-btn,.bot-sec-weapon-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;height:82px;background:rgba(255,255,255,0.03);border:1.5px solid rgba(255,255,255,0.07);border-radius:10px;cursor:pointer;font-size:0.78em;font-weight:600;color:rgba(200,200,220,0.65);transition:all 180ms;text-align:center;gap:7px;padding:8px 4px;}\r\n                .bot-weapon-btn:hover,.bot-sec-weapon-btn:hover{background:rgba(122,66,244,0.1);border-color:rgba(122,66,244,0.4);color:#fff;}\r\n                .bot-weapon-btn.wpn-active,.bot-sec-weapon-btn.wpn-active{background:rgba(122,66,244,0.18);border-color:rgba(122,66,244,0.7);color:#fff;box-shadow:0 0 12px rgba(122,66,244,0.2);}\r\n                .bot-weapon-btn[data-wid=\"-1\"],.bot-sec-weapon-btn[data-swid=\"-1\"]{background:rgba(122,66,244,0.08);border-color:rgba(122,66,244,0.35);color:rgba(160,122,244,0.9);}\r\n                .wpn-name{line-height:1.25;font-size:0.95em;}\r\n                .wpn-selected-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:7px;margin-top:4px;}\r\n                .wpn-selected-dot{width:6px;height:6px;background:#7A42F4;border-radius:50%;box-shadow:0 0 6px rgba(122,66,244,0.7);flex-shrink:0;}\r\n                .wpn-selected-text{font-size:0.8em;color:rgba(200,200,220,0.75);font-weight:500;}\r\n            </style>\r\n\r\n            <div>\r\n                <div class=\"wpn-label\">Primary Weapon</div>\r\n                <div class=\"wpn-grid\" id=\"bot-weapon-selector\">\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"-1\" title=\"Copy from me\"><span class=\"wpn-name\">Copy from me</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"0\" title=\"Tool Hammer\"><span class=\"wpn-name\">Tool Hammer</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"1\" title=\"Hand Axe\"><span class=\"wpn-name\">Hand Axe</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"2\" title=\"Great Axe\"><span class=\"wpn-name\">Great Axe</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"3\" title=\"Short Sword\"><span class=\"wpn-name\">Short Sword</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"4\" title=\"Katana\"><span class=\"wpn-name\">Katana</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"5\" title=\"Polearm\"><span class=\"wpn-name\">Polearm</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"6\" title=\"Bat\"><span class=\"wpn-name\">Bat</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"7\" title=\"Daggers\"><span class=\"wpn-name\">Daggers</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"8\" title=\"Stick\"><span class=\"wpn-name\">Stick</span></div>\r\n                    </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-weapon-label\">Copy from me (default)</span></div>\r\n            </div>\r\n\r\n            <div>\r\n                <div class=\"wpn-label\">Secondary Weapon</div>\r\n                <div class=\"wpn-grid\" id=\"bot-sec-weapon-selector\">\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"-1\" title=\"Copy from me\"><span class=\"wpn-name\">Copy from me</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"9\" title=\"Hunting Bow\"><span class=\"wpn-name\">Hunting Bow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"10\" title=\"Great Hammer\"><span class=\"wpn-name\">Great Hammer</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"11\" title=\"Wooden Shield\"><span class=\"wpn-name\">Wooden Shield</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"12\" title=\"Crossbow\"><span class=\"wpn-name\">Crossbow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"13\" title=\"Repeater Crossbow\"><span class=\"wpn-name\">Repeater Crossbow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"14\" title=\"Mc Grabby\"><span class=\"wpn-name\">Mc Grabby</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"15\" title=\"Musket\"><span class=\"wpn-name\">Musket</span></div>\r\n                    </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-sec-weapon-label\">Copy from me (default)</span></div>\r\n            </div>\r\n\r\n            <div class=\"content-option\" style=\"margin-top:2px;\">\r\n                <span class=\"option-title\">Platform w/ Musket</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_platformMusket\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Age 4 Building</div>\r\n        <div class=\"section-content\" style=\"padding:14px 16px;gap:16px;display:flex;flex-direction:column;\">\r\n            <div>\r\n                <div class=\"wpn-label\">Age 4 Building</div>\r\n                <div class=\"wpn-grid\" id=\"bot-age4-selector\">\r\n                    <div class=\"bot-weapon-btn\" data-age4id=\"0\" title=\"Trap\"><span class=\"wpn-name\">Trap</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-age4id=\"1\" title=\"Boost Pad\"><span class=\"wpn-name\">Boost Pad</span></div>\r\n                </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-age4-label\">Trap (default)</span></div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section\" style=\"margin-top:6px;\">\r\n        <div class=\"section\" style=\"margin-top:6px;background:rgba(0,0,0,0);border:none;padding:0;\">\r\n        <div class=\"section-title\" style=\"font-size:0.75em;letter-spacing:0.18em;color:rgba(160,122,244,0.75);text-transform:uppercase;margin-bottom:14px;\">Auto Farm</div>\r\n\r\n        <div style=\"display:flex;flex-direction:column;gap:10px;\">\r\n\r\n            <div style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Farm Mode</span>\r\n                <p style=\"font-size:0.82em;color:rgba(200,195,220,0.6);margin:0;line-height:1.5;\">Bots automatically gather resources. In <b style=\"color:rgba(200,195,220,0.85);\">Single</b> mode they target one resource type. In <b style=\"color:rgba(200,195,220,0.85);\">Nearest</b> mode they pick the closest available resource.</p>\r\n                <div style=\"display:flex;gap:8px;margin-top:2px;\">\r\n                    <button id=\"_farmModeSingle\" style=\"flex:1;padding:9px 0;border-radius:8px;border:1.5px solid rgba(122,66,244,0.6);background:rgba(122,66,244,0.28);color:#fff;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.9em;letter-spacing:0.04em;transition:all 0.15s;\">Single</button>\r\n                    <button id=\"_farmModeNearest\" style=\"flex:1;padding:9px 0;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#888;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.9em;letter-spacing:0.04em;transition:all 0.15s;\">Nearest</button>\r\n                </div>\r\n            </div>\r\n\r\n            <div id=\"_farmTypeRow\" style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Resource Type</span>\r\n                <div style=\"display:flex;gap:8px;\">\r\n                    <button data-farm-type=\"0\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Wood</button>\r\n                    <button data-farm-type=\"1\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Food</button>\r\n                    <button data-farm-type=\"2\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Stone</button>\r\n                    <button data-farm-type=\"3\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Gold</button>\r\n                </div>\r\n                <input id=\"_botFarmType\" type=\"hidden\" value=\"0\">\r\n            </div>\r\n\r\n            <div style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Limit</span>\r\n                <div style=\"display:flex;align-items:center;gap:12px;\">\r\n                    <input id=\"_botFarmLimit\" class=\"input\" type=\"number\" min=\"0\" max=\"9999\" step=\"50\" value=\"0\" style=\"width:110px;height:40px;font-size:1em;padding:0 12px;border-radius:8px;flex-shrink:0;\">\r\n                    <span style=\"font-size:0.83em;color:rgba(200,195,220,0.5);line-height:1.5;\">Bots stop and return to you when they reach this amount. Set to <b style=\"color:rgba(200,195,220,0.7);\">0</b> for no limit.</span>\r\n                </div>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n    </div>\r\n    </div>\r\n\r\n</div>";
-  const Music_default = "<div class=\"menu-page\" data-id=\"7\">\r\n<style>\r\n@keyframes ryn-eq{0%,100%{height:3px;}50%{height:15px;}}\r\n@keyframes ryn-like-pop{0%{transform:scale(1);}45%{transform:scale(1.45);}100%{transform:scale(1);}}\r\n@keyframes rm-fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}\r\n\r\n.rm-root{\r\n  --rm-bg:#0B0B10;\r\n  --rm-panel:#141420;\r\n  --rm-panel-hi:#1B1B2B;\r\n  --rm-line:rgba(255,255,255,0.07);\r\n  --rm-accent:#7A42F4;\r\n  --rm-accent2:#3A86FF;\r\n  --rm-text:#FFFFFF;\r\n  --rm-mute:rgba(255,255,255,0.62);\r\n  --rm-dim:rgba(255,255,255,0.34);\r\n  display:flex;flex-direction:column;gap:14px;\r\n  font-family:'Inter','Poppins',sans-serif;\r\n  animation:rm-fade 240ms ease;\r\n}\r\n\r\n.rm-player{\r\n  position:relative;overflow:hidden;\r\n  padding:18px 18px 14px;border-radius:14px;\r\n  background:\r\n    radial-gradient(120% 130% at 0% 0%,rgba(122,66,244,.28),transparent 58%),\r\n    linear-gradient(160deg,#1E1830 0%,#12111E 55%,#0B0B10 100%);\r\n  border:1px solid var(--rm-line);\r\n  box-shadow:0 12px 34px -16px rgba(0,0,0,.9);\r\n}\r\n.rm-player::before{\r\n  content:'';position:absolute;inset:0;pointer-events:none;\r\n  background:linear-gradient(180deg,rgba(255,255,255,.05),transparent 40%);\r\n}\r\n.rm-np-row{display:flex;align-items:center;gap:15px;margin-bottom:14px;position:relative;}\r\n\r\n.rm-art{\r\n  width:74px;height:74px;flex-shrink:0;position:relative;overflow:hidden;\r\n  display:flex;align-items:center;justify-content:center;\r\n  font-size:1.7em;border-radius:8px;\r\n  background:linear-gradient(140deg,#2A2140,#141323);\r\n  border:none;\r\n  box-shadow:0 8px 22px -8px rgba(0,0,0,.85);\r\n  transition:box-shadow 300ms ease;\r\n}\r\n.rm-art.playing{box-shadow:0 10px 26px -8px rgba(122,66,244,.6);}\r\n.rm-eq{display:none;gap:3px;align-items:flex-end;height:18px;}\r\n.rm-art.playing .rm-eq{display:flex;}\r\n.rm-eq-bar{\r\n  width:3px;border-radius:2px;\r\n  background:linear-gradient(180deg,var(--rm-accent),var(--rm-accent2));\r\n  animation:ryn-eq .9s ease-in-out infinite;\r\n}\r\n.rm-eq-bar:nth-child(2){animation-delay:.15s;}\r\n.rm-eq-bar:nth-child(3){animation-delay:.3s;}\r\n.rm-eq-bar:nth-child(4){animation-delay:.45s;}\r\n\r\n.rm-meta{flex:1;min-width:0;}\r\n.rm-title{\r\n  font-size:1.16em;font-weight:700;letter-spacing:-.015em;line-height:1.25;\r\n  color:var(--rm-text);\r\n  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;\r\n  overflow:hidden;word-break:break-word;\r\n}\r\n.rm-artist{\r\n  margin-top:4px;font-size:.78em;font-weight:400;color:var(--rm-mute);\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n.rm-album-badge{\r\n  display:inline-block;margin-top:6px;padding:2px 9px;\r\n  font-size:.64em;font-weight:600;letter-spacing:.05em;text-transform:uppercase;\r\n  color:var(--rm-mute);background:rgba(255,255,255,.08);border-radius:999px;\r\n  max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n.rm-actions{display:flex;gap:4px;align-items:center;flex-shrink:0;}\r\n.rm-like-btn,.rm-save-now-btn{\r\n  width:36px;height:36px;display:flex;align-items:center;justify-content:center;\r\n  font-size:1.15em;cursor:pointer;border-radius:50%;\r\n  color:var(--rm-dim);background:transparent;border:none;\r\n  transition:color 170ms,background 170ms,transform 170ms cubic-bezier(.34,1.5,.5,1);\r\n}\r\n.rm-like-btn:hover,.rm-save-now-btn:hover{\r\n  color:var(--rm-text);background:rgba(255,255,255,.11);transform:scale(1.1);\r\n}\r\n.rm-like-btn.on{\r\n  color:#ff4d6d;animation:ryn-like-pop 340ms cubic-bezier(.34,1.5,.5,1);\r\n  text-shadow:0 0 12px rgba(255,77,109,.55);\r\n}\r\n.rm-save-now-btn.on{color:var(--rm-accent2);text-shadow:0 0 12px rgba(58,134,255,.5);}\r\n\r\n.rm-prog-wrap{margin-bottom:10px;position:relative;}\r\n.rm-prog-rail{\r\n  height:4px;border-radius:4px;cursor:pointer;\r\n  background:rgba(255,255,255,.13);position:relative;\r\n  transition:height 140ms ease;\r\n}\r\n.rm-prog-wrap:hover .rm-prog-rail{height:6px;}\r\n.rm-prog-fill{\r\n  height:100%;border-radius:4px;position:relative;\r\n  background:linear-gradient(90deg,var(--rm-accent),var(--rm-accent2));\r\n}\r\n.rm-prog-fill::after{\r\n  content:'';position:absolute;right:-5px;top:50%;\r\n  width:11px;height:11px;border-radius:50%;background:#fff;\r\n  transform:translateY(-50%) scale(0);\r\n  transition:transform 160ms ease;\r\n  box-shadow:0 2px 6px rgba(0,0,0,.5);\r\n}\r\n.rm-prog-wrap:hover .rm-prog-fill::after{transform:translateY(-50%) scale(1);}\r\n.rm-times{display:flex;justify-content:space-between;margin-top:5px;}\r\n.rm-time{font-size:.66em;font-weight:500;color:var(--rm-dim);font-variant-numeric:tabular-nums;}\r\n\r\n.rm-ctrl{display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:12px;position:relative;}\r\n.rm-btn{\r\n  width:32px;height:32px;display:flex;align-items:center;justify-content:center;\r\n  background:transparent;border:none;border-radius:50%;\r\n  color:var(--rm-mute);font-size:.86em;cursor:pointer;\r\n  transition:color 160ms,transform 160ms;\r\n}\r\n.rm-btn:hover{color:var(--rm-text);transform:scale(1.1);}\r\n.rm-btn.on{color:var(--rm-accent);}\r\n.rm-play-btn{\r\n  width:46px;height:46px;flex-shrink:0;\r\n  display:flex;align-items:center;justify-content:center;\r\n  background:#fff;border:none;border-radius:50%;\r\n  color:#0B0B10;font-size:1.05em;cursor:pointer;\r\n  box-shadow:0 6px 18px -6px rgba(0,0,0,.7);\r\n  transition:transform 170ms cubic-bezier(.34,1.5,.5,1),box-shadow 170ms;\r\n}\r\n.rm-play-btn:hover{transform:scale(1.07);box-shadow:0 8px 22px -6px rgba(122,66,244,.7);}\r\n.rm-play-btn:active{transform:scale(.97);}\r\n\r\n.rm-vol{display:flex;align-items:center;gap:9px;position:relative;}\r\n.rm-vol-icon{font-size:.82em;color:var(--rm-dim);flex-shrink:0;}\r\n.rm-vol-val{font-size:.66em;color:var(--rm-dim);min-width:30px;text-align:right;font-variant-numeric:tabular-nums;}\r\n\r\n.rm-sec{\r\n  background:var(--rm-panel);\r\n  border:1px solid var(--rm-line);border-radius:12px;overflow:hidden;\r\n  transition:border-color 200ms;\r\n}\r\n.rm-sec:hover{border-color:rgba(255,255,255,.12);}\r\n.rm-sec-head{\r\n  display:flex;align-items:center;gap:9px;\r\n  padding:12px 15px;cursor:pointer;user-select:none;\r\n  transition:background 160ms;\r\n}\r\n.rm-sec-head:hover{background:rgba(255,255,255,.035);}\r\n.rm-sec-dot{\r\n  width:6px;height:6px;border-radius:50%;flex-shrink:0;\r\n  background:var(--rm-accent);box-shadow:0 0 8px rgba(122,66,244,.7);\r\n}\r\n.rm-sec-title{\r\n  flex:1;font-size:.74em;font-weight:700;\r\n  letter-spacing:.12em;text-transform:uppercase;color:var(--rm-mute);\r\n}\r\n.rm-sec-arrow{font-size:.62em;color:var(--rm-dim);transition:transform 220ms ease;}\r\n.rm-sec.open .rm-sec-arrow{transform:rotate(90deg);}\r\n.rm-sec-body{padding:0 12px 12px;display:none;flex-direction:column;gap:9px;}\r\n.rm-sec.open .rm-sec-body{display:flex;animation:rm-fade 200ms ease;}\r\n\r\n.rm-filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:2px;}\r\n.rm-filter-btn{\r\n  padding:5px 13px;border-radius:999px;cursor:pointer;\r\n  font-size:.7em;font-weight:600;\r\n  background:rgba(255,255,255,.07);border:none;color:var(--rm-mute);\r\n  transition:background 160ms,color 160ms;\r\n}\r\n.rm-filter-btn:hover{background:rgba(255,255,255,.13);color:var(--rm-text);}\r\n.rm-filter-btn.active{background:#fff;color:#0B0B10;}\r\n\r\n.rm-song-row{\r\n  display:flex;align-items:center;gap:13px;\r\n  padding:10px 12px;border-radius:8px;cursor:pointer;\r\n  border:none;position:relative;\r\n  transition:background 140ms;\r\n}\r\n.rm-song-row:hover{background:rgba(255,255,255,.07);}\r\n.rm-song-row.active{background:rgba(122,66,244,.13);}\r\n.rm-song-row.active .rm-stitle{color:var(--rm-accent);}\r\n.rm-song-row.active .rm-snum{color:var(--rm-accent);}\r\n\r\n.rm-snum{\r\n  width:20px;flex-shrink:0;text-align:center;\r\n  font-size:.78em;font-weight:500;color:var(--rm-dim);\r\n  font-variant-numeric:tabular-nums;\r\n  transition:color 140ms;\r\n}\r\n.rm-song-row:hover .rm-snum{font-size:0;color:transparent;}\r\n.rm-song-row:hover .rm-snum::after{\r\n  content:'\\25B6';font-size:11px;color:var(--rm-text);\r\n}\r\n.rm-stitle{\r\n  flex:1;min-width:0;\r\n  font-size:.92em;font-weight:600;color:var(--rm-text);\r\n  letter-spacing:-.005em;\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n.rm-sartist{\r\n  flex-shrink:1;min-width:0;max-width:32%;\r\n  font-size:.76em;font-weight:400;color:var(--rm-dim);\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n\r\n.rm-s-icons{\r\n  display:flex;gap:4px;flex-shrink:0;align-items:center;\r\n  opacity:0;transition:opacity 150ms;\r\n}\r\n.rm-song-row:hover .rm-s-icons,\r\n.rm-song-row.active .rm-s-icons{opacity:1;}\r\n\r\n.rm-s-like,.rm-s-save,.rm-sdel{\r\n  width:26px;height:26px;flex-shrink:0;\r\n  display:flex;align-items:center;justify-content:center;\r\n  font-size:.9em;cursor:pointer;line-height:1;border-radius:50%;\r\n  color:var(--rm-dim);\r\n  transition:color 150ms,background 150ms,transform 150ms cubic-bezier(.34,1.5,.5,1);\r\n}\r\n.rm-s-like:hover{color:#ff4d6d;background:rgba(255,77,109,.14);transform:scale(1.12);}\r\n.rm-s-save:hover{color:var(--rm-accent2);background:rgba(58,134,255,.14);transform:scale(1.12);}\r\n.rm-sdel:hover{color:#ff4d6d;background:rgba(255,77,109,.14);transform:scale(1.12);}\r\n.rm-s-like.on{color:#ff4d6d;opacity:1;}\r\n.rm-s-save.on{color:var(--rm-accent2);opacity:1;}\r\n\r\n.rm-song-row .rm-s-like.on,\r\n.rm-song-row .rm-s-save.on{opacity:1;}\r\n.rm-song-row:not(:hover) .rm-s-icons:has(.on){opacity:1;}\r\n\r\n.rm-album-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;}\r\n.rm-album-card{\r\n  position:relative;padding:11px;border-radius:9px;cursor:pointer;\r\n  background:var(--rm-panel-hi);border:none;\r\n  transition:background 180ms,transform 180ms;\r\n}\r\n.rm-album-card:hover{background:#25253A;transform:translateY(-2px);}\r\n.rm-album-icon{\r\n  width:100%;aspect-ratio:1;border-radius:6px;margin-bottom:8px;\r\n  display:flex;align-items:center;justify-content:center;font-size:1.5em;\r\n  background:linear-gradient(140deg,#2E2450,#171628);\r\n  box-shadow:0 5px 14px -6px rgba(0,0,0,.8);\r\n}\r\n.rm-album-name{\r\n  font-size:.76em;font-weight:600;color:var(--rm-text);\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n.rm-album-count{margin-top:2px;font-size:.66em;color:var(--rm-dim);}\r\n.rm-album-del{\r\n  position:absolute;top:6px;right:6px;\r\n  width:19px;height:19px;border-radius:50%;\r\n  display:flex;align-items:center;justify-content:center;\r\n  font-size:.62em;cursor:pointer;\r\n  background:rgba(0,0,0,.6);color:var(--rm-dim);\r\n  opacity:0;transition:opacity 150ms,color 150ms;\r\n}\r\n.rm-album-card:hover .rm-album-del{opacity:1;}\r\n.rm-album-del:hover{color:#ff4d6d;}\r\n\r\n.rm-inp,.rm-sel{\r\n  width:100%;padding:9px 12px;\r\n  background:var(--rm-panel-hi);border:1px solid transparent;border-radius:7px;\r\n  font-family:'Inter','Poppins',sans-serif;font-size:.78em;color:var(--rm-text);\r\n  outline:none;transition:border-color 160ms,background 160ms;\r\n}\r\n.rm-inp::placeholder{color:var(--rm-dim);}\r\n.rm-inp:focus,.rm-sel:focus{border-color:var(--rm-accent);background:#20203200;}\r\n\r\ntextarea.rm-inp{\r\n  min-height:74px;max-height:170px;resize:vertical;\r\n  line-height:1.55;white-space:pre-wrap;word-break:break-word;\r\n  font-family:'JetBrains Mono','Inter',monospace;font-size:.72em;\r\n}\r\n.rm-btn-full{\r\n  width:100%;padding:9px;border-radius:999px;cursor:pointer;\r\n  background:rgba(255,255,255,.09);border:none;\r\n  font-family:'Inter','Poppins',sans-serif;font-size:.75em;font-weight:600;color:var(--rm-text);\r\n  transition:background 160ms,transform 160ms;\r\n}\r\n.rm-btn-full:hover{background:rgba(255,255,255,.16);}\r\n.rm-btn-primary{\r\n  background:#fff;color:#0B0B10;\r\n}\r\n.rm-btn-primary:hover{background:#EDEDF5;transform:scale(1.015);}\r\n.rm-badge{\r\n  display:inline-block;padding:2px 8px;border-radius:999px;\r\n  font-size:.64em;font-weight:600;\r\n  background:rgba(122,66,244,.18);color:var(--rm-accent);\r\n}\r\n\r\n.rm-sync-row{\r\n  display:flex;align-items:center;justify-content:space-between;gap:11px;\r\n  padding:7px 10px;border-radius:7px;\r\n  transition:background 140ms;\r\n}\r\n.rm-sync-row:hover{background:rgba(255,255,255,.04);}\r\n.rm-sync-label{font-size:.76em;color:var(--rm-mute);flex:1;min-width:0;}\r\n\r\n.rm-toast{\r\n  position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(12px);\r\n  padding:9px 18px;border-radius:999px;z-index:99999;\r\n  background:#fff;color:#0B0B10;\r\n  font-size:.75em;font-weight:600;\r\n  box-shadow:0 10px 30px rgba(0,0,0,.6);\r\n  opacity:0;pointer-events:none;\r\n  transition:opacity 240ms ease,transform 240ms ease;\r\n}\r\n.rm-toast.show{opacity:1;transform:translateX(-50%) translateY(0);}\r\n\r\n.rm-root .switch-checkbox{position:relative;width:38px;height:21px;flex-shrink:0;}\r\n.rm-root .switch-checkbox input{position:absolute;opacity:0;width:0;height:0;}\r\n.rm-root .switch-checkbox span{\r\n  position:absolute;inset:0;cursor:pointer;border-radius:999px;\r\n  background:rgba(255,255,255,.16);\r\n  transition:background 220ms ease;\r\n}\r\n.rm-root .switch-checkbox span::before{\r\n  content:'';position:absolute;left:3px;top:50%;\r\n  width:15px;height:15px;border-radius:50%;background:#fff;\r\n  transform:translateY(-50%);\r\n  transition:left 240ms cubic-bezier(.34,1.4,.5,1);\r\n}\r\n.rm-root .switch-checkbox input:checked + span{background:var(--rm-accent);}\r\n.rm-root .switch-checkbox input:checked + span::before{left:calc(100% - 18px);}\r\n\r\n.rm-root .slider{display:flex;align-items:center;gap:9px;flex:1;}\r\n.rm-root .slider input[type=\"range\"]{\r\n  -webkit-appearance:none;flex:1;height:4px;border-radius:4px;\r\n  outline:none;border:none;cursor:pointer;\r\n  background:linear-gradient(90deg,#fff var(--val,50%),rgba(255,255,255,.16) var(--val,50%));\r\n}\r\n.rm-root .slider input[type=\"range\"]::-webkit-slider-thumb{\r\n  -webkit-appearance:none;width:12px;height:12px;border-radius:50%;\r\n  background:#fff;border:none;\r\n  box-shadow:0 1px 4px rgba(0,0,0,.5);\r\n  opacity:0;transition:opacity 150ms;\r\n}\r\n.rm-root .slider:hover input[type=\"range\"]::-webkit-slider-thumb{opacity:1;}\r\n.rm-root .slider-value{\r\n  font-size:.68em;font-weight:500;color:var(--rm-dim);\r\n  min-width:30px;text-align:right;font-variant-numeric:tabular-nums;\r\n}\r\n\r\n.rm-note{display:none;}\r\n.rm-btn.rm-on{color:var(--rm-accent);}\r\n\r\n.rm-guide{background:var(--rm-panel);border:1px solid var(--rm-line);border-radius:14px;padding:14px 16px;margin:0 0 12px;}\n.rm-guide summary{cursor:pointer;list-style:none;font-weight:700;font-size:13px;color:#cfc4ff;letter-spacing:.03em;display:flex;align-items:center;gap:8px;}\n.rm-guide summary::-webkit-details-marker{display:none;}\n.rm-guide summary::before{content:\"?\";flex:0 0 auto;width:18px;height:18px;border-radius:50%;background:rgba(160,120,255,.22);color:#d8ccff;font-size:11px;display:grid;place-items:center;}\n.rm-guide[open] summary{margin-bottom:10px;}\n.rm-guide ol{margin:0;padding-left:18px;color:#9b95ad;font-size:12px;line-height:2;}\n.rm-guide li{margin:0;}\n.rm-guide code{background:#0d0d1a;color:#cc88ff;padding:2px 7px;border-radius:4px;font-size:11.5px;}\n.rm-guide a{color:#b58cff;text-decoration:none;border-bottom:1px dotted rgba(181,140,255,.5);}\n.rm-guide a:hover{color:#fff;border-bottom-color:#fff;}\n.rm-guide .rm-guide-note{margin-top:10px;color:#6f6a80;font-size:11px;line-height:1.7;}\n</style>\r\n\r\n<div id=\"rm-toast\" class=\"rm-toast\"></div>\r\n<div class=\"rm-root\">\n<details class=\"rm-guide\">\n  <summary>How to add a song with its lyrics</summary>\n  <ol>\n    <li>Find the song on <a href=\"https://www.youtube.com/\" target=\"_blank\" rel=\"noreferrer\">youtube.com</a> and copy its link.</li>\n    <li>Turn the link into a file on <a href=\"https://ytmp3.gl/\" target=\"_blank\" rel=\"noreferrer\">ytmp3.gl</a> and download the <code>.mp3</code>.</li>\n    <li>Search the same song on <a href=\"https://lrclib.net/\" target=\"_blank\" rel=\"noreferrer\">lrclib.net</a> and download the <b>synced</b> lyrics as <code>.lrc</code>.</li>\n    <li>Open <b>Add Song</b> below, fill in the <b>Title</b>, and pick the <code>.mp3</code> in the file box (or paste a direct link in <b>URL</b>).</li>\n    <li>In the <b>LRC SYNC</b> box inside the same form, pick the <code>.lrc</code> file &mdash; or paste its lines into the text area under it.</li>\n    <li>Press <b>Add Song</b>. It shows up in <b>Library</b> with its lyrics attached.</li>\n</ol>\n  <div class=\"rm-guide-note\">The <code>.lrc</code> has to be the synced kind &mdash; the one whose lines start with a timestamp like <code>[01:23.45]</code>. Plain lyrics show up, but they will not follow the song. If the words drift, an <code>.lrc</code> from a different release of the track is usually the reason.</div>\n</details>\n\n<div class=\"rm-player\">\r\n  <div class=\"rm-np-row\">\r\n    <div class=\"rm-art\" id=\"rm-art\"><span class=\"rm-note\">&#9835;</span><div class=\"rm-eq\"><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div></div></div>\r\n    <div class=\"rm-meta\">\r\n      <div id=\"music-title\" class=\"rm-title\" data-i18n=\"rm_no_song\">No song selected</div>\r\n      <div id=\"music-artist\" class=\"rm-artist\">--</div>\r\n      <div id=\"music-album-badge\" class=\"rm-album-badge\"></div>\r\n    </div>\r\n    <div class=\"rm-actions\">\r\n      <button id=\"rm-like-now\" class=\"rm-like-btn\" title=\"Like\" data-i18n-title=\"rm_t_like\">&#9825;</button>\r\n      <button id=\"rm-save-now\" class=\"rm-save-now-btn\" title=\"Save\" data-i18n-title=\"rm_t_save\">&#128190;</button>\r\n    </div>\r\n  </div>\r\n  <div class=\"rm-prog-wrap\">\r\n    <div id=\"music-progress-bar\" class=\"rm-prog-rail\"><div id=\"music-progress-fill\" class=\"rm-prog-fill\"></div></div>\r\n    <div class=\"rm-times\"><span id=\"music-time-current\" class=\"rm-time\">0:00</span><span id=\"music-time-total\" class=\"rm-time\">0:00</span></div>\r\n  </div>\r\n  <div class=\"rm-ctrl\">\r\n    <button id=\"music-prev\" class=\"rm-btn\" title=\"Previous\" data-i18n-title=\"rm_t_prev\">&#9664;&#9664;</button>\r\n    <button id=\"music-play\" class=\"rm-btn rm-play-btn\" title=\"Play/Pause\" data-i18n-title=\"rm_t_play\">&#9654;</button>\r\n    <button id=\"music-next\" class=\"rm-btn\" title=\"Next\" data-i18n-title=\"rm_t_next\">&#9654;&#9654;</button>\r\n    <button id=\"music-loop\" class=\"rm-btn\" title=\"Loop\" data-i18n-title=\"rm_t_loop\">&#8635;</button>\r\n    <button id=\"music-shuffle\" class=\"rm-btn\" title=\"Shuffle\" data-i18n=\"rm_shf\" style=\"font-size:0.7em;letter-spacing:0.1em;\">SHF</button>\r\n  </div>\r\n  <div class=\"rm-vol\"><span class=\"rm-vol-icon\">&#9834;</span><input id=\"music-volume\" type=\"range\" min=\"0\" max=\"100\" value=\"70\" style=\"flex:1;accent-color:#7A42F4;height:3px;cursor:pointer;\"><span id=\"music-volume-label\" class=\"rm-vol-val\">70%</span></div>\r\n</div>\r\n\r\n<div class=\"rm-sec\" id=\"rm-sec-albums\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_albums\">Albums</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div id=\"rm-album-grid\" class=\"rm-album-grid\"></div>\r\n    <div style=\"display:flex;gap:6px;\"><input id=\"album-name-input\" class=\"rm-inp\" type=\"text\" data-i18n-placeholder=\"rm_new_album_ph\" placeholder=\"New album name...\" maxlength=\"30\" style=\"flex:1;\"><button id=\"add-album\" class=\"rm-btn\" data-i18n=\"rm_add_btn\" style=\"flex-shrink:0;padding:5px 12px;\">+ Add</button></div>\r\n  </div>\r\n</div>\r\n\r\n<div class=\"rm-sec\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_library\">Library</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div id=\"rm-filter-bar\" class=\"rm-filter-bar\"><button class=\"rm-filter-btn active\" data-filter=\"\" data-i18n=\"rm_all_songs\">All Songs</button><button class=\"rm-filter-btn\" data-filter=\"__liked\" data-i18n=\"rm_liked\">&#9829; Liked</button></div>\r\n    <div id=\"song-list\" style=\"display:flex;flex-direction:column;gap:1px;\"></div>\r\n  </div>\r\n</div>\r\n\r\n<div class=\"rm-sec collapsed\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_add_song_title\">Add Song</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div style=\"display:flex;flex-direction:column;gap:5px;\">\r\n      <input id=\"song-title-input\" class=\"rm-inp\" type=\"text\" data-i18n-placeholder=\"rm_title_ph\" placeholder=\"Title *\" maxlength=\"50\">\r\n      <input id=\"song-artist-input\" class=\"rm-inp\" type=\"text\" data-i18n-placeholder=\"rm_artist_ph\" placeholder=\"Artist\" maxlength=\"30\">\r\n      <input id=\"song-url-input\" class=\"rm-inp\" type=\"text\" data-i18n-placeholder=\"rm_url_ph\" placeholder=\"URL (.mp3  .ogg  .wav)\">\r\n      <input id=\"song-file-input\" class=\"rm-inp\" type=\"file\" accept=\".mp3,.ogg,.wav,.flac,.aac,.m4a\" style=\"padding:3px 6px;font-size:11px;cursor:pointer;\">\r\n      <select id=\"song-album-select\" class=\"rm-sel\"><option value=\"\" data-i18n=\"rm_no_album\">No Album</option></select>\r\n      <div style=\"background:rgba(3,8,18,0.6);border-radius:7px;padding:8px;border:1px solid rgba(122,66,244,0.08);\">\r\n        <div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;\"><span style=\"font-family:Orbitron,monospace;font-size:0.66em;font-weight:700;color:rgba(122,66,244,0.5);letter-spacing:0.1em;\" data-i18n=\"rm_lrc_sync\">LRC SYNC</span><span id=\"lrc-status\" style=\"font-size:0.7em;color:rgba(122,66,244,0.6);\"></span></div>\r\n        <input id=\"lrc-file-input\" class=\"rm-inp\" type=\"file\" accept=\".lrc,.txt\" style=\"padding:3px 6px;font-size:11px;cursor:pointer;margin-bottom:5px;\">\r\n        <textarea id=\"song-lyrics-input\" placeholder=\"[0:15] Line 1&#10;[0:30] Line 2\" style=\"width:100%;box-sizing:border-box;background:rgba(3,8,18,0.8);border:1px solid rgba(122,66,244,0.15);border-radius:4px;color:#bde0f0;padding:5px 7px;font-size:11px;outline:none;height:60px;resize:vertical;font-family:monospace;\"></textarea>\r\n        <label style=\"display:flex;align-items:center;gap:5px;cursor:pointer;font-size:0.78em;color:rgba(122,66,244,0.45);margin-top:5px;\"><input id=\"song-autosync\" type=\"checkbox\" style=\"accent-color:#7A42F4;\"> <span data-i18n=\"rm_autosync\">Auto-play &amp; sync when added</span></label>\r\n      </div>\r\n      <div style=\"display:flex;gap:6px;margin-top:2px;\"><button id=\"add-song\" class=\"rm-btn-full\" style=\"flex:1;\" data-i18n=\"rm_add_song_btn\">&#x2B22; Add Song</button><button id=\"save-song-btn\" class=\"rm-btn-primary\" data-i18n=\"rm_save_btn\">&#x2713; Save</button></div>\r\n    </div>\r\n  </div>\r\n</div>\r\n\r\n<div class=\"rm-sec collapsed\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_chat_sync_title\">Chat Sync</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_enable_chat_sync\">Enable Chat Sync</span><label class=\"switch-checkbox\"><input id=\"music-chat-sync\" type=\"checkbox\"><span></span></label></div>\r\n    <div style=\"height:1px;background:rgba(122,66,244,0.1);margin:4px 0;\"></div>\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_mixed_sync\">Mixed Sync <span class=\"rm-badge\" data-i18n=\"rm_badge_me_bots\">ME+BOTS</span></span><label class=\"switch-checkbox\"><input id=\"music-mixed-sync\" type=\"checkbox\"><span></span></label></div>\r\n    <div style=\"font-size:0.7em;color:rgba(122,66,244,0.38);padding:2px 4px 5px;line-height:1.5;\" data-i18n=\"rm_mixed_sync_example\">You: line &#8594; Bots: line &#8594; You ...</div>\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_bots_only_sync\">Bots Only Sync <span class=\"rm-badge\" data-i18n=\"rm_badge_bots\">BOTS</span></span><label class=\"switch-checkbox\"><input id=\"music-bots-only-sync\" type=\"checkbox\"><span></span></label></div>\r\n    <div style=\"font-size:0.7em;color:rgba(122,66,244,0.38);padding:2px 4px 5px;line-height:1.5;\" data-i18n=\"rm_bots_only_example\">Bot1: line 1 &bull; Bot2: line 2 &bull; Bot3: line 3 ...</div>\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_unified_sync\">Unified Sync <span class=\"rm-badge\" data-i18n=\"rm_badge_all\">ALL</span></span><label class=\"switch-checkbox\"><input id=\"music-unified-sync\" type=\"checkbox\"><span></span></label></div>\n    <div style=\"font-size:0.7em;color:rgba(122,66,244,0.38);padding:2px 4px 5px;line-height:1.5;\" data-i18n=\"rm_unified_example\">You + every bot post the same line at the same moment</div>\r\n    <div style=\"height:1px;background:rgba(122,66,244,0.07);margin:4px 0;\"></div>\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_auto_delay\">Auto Delay<span id=\"bm-auto-delay-badge\" class=\"rm-badge\">off</span></span><label class=\"switch-checkbox\"><input id=\"music-auto-delay\" type=\"checkbox\" checked><span></span></label></div>\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_sync_bot\">Sync Bot<span id=\"bm-sync-bot-badge\" class=\"rm-badge\">off</span></span><button id=\"music-sync-bot-btn\" style=\"background:rgba(122,66,244,0.06);border:1.5px solid rgba(122,66,244,0.25);color:rgba(122,66,244,0.6);cursor:pointer;font-size:0.7em;font-weight:700;padding:5px 18px;letter-spacing:0.1em;font-family:Orbitron,monospace;transition:all 0.2s;border-radius:4px;\">OFF</button></div>\r\n    <div id=\"bm-manual-delay-row\" class=\"rm-sync-row\" style=\"display:none;\"><span style=\"font-size:0.8em;color:rgba(122,66,244,0.45);\" data-i18n=\"rm_delay\">Delay</span><label class=\"slider\"><span class=\"slider-value\"></span><input id=\"music-sync-delay\" type=\"range\" min=\"-3000\" max=\"3000\" step=\"50\" value=\"0\" style=\"width:110px;\"></label></div>\r\n    <div style=\"display:flex;gap:6px;margin-top:6px;\"><button id=\"bm-test-chat\" style=\"flex:1;background:rgba(122,66,244,0.06);border:1.5px solid rgba(122,66,244,0.25);border-radius:6px;color:rgba(122,66,244,0.6);cursor:pointer;font-size:0.73em;font-weight:700;padding:5px 10px;font-family:Rajdhani,sans-serif;\" data-i18n=\"rm_test_chat\">&#9654; Test Chat</button><span id=\"bm-test-chat-status\" style=\"font-size:0.7em;color:rgba(122,66,244,0.45);align-self:center;\"></span></div>\r\n    <div style=\"margin-top:6px;\"><button id=\"bm-send-all-lyrics\" style=\"width:100%;background:rgba(122,66,244,0.06);border:1.5px solid rgba(122,66,244,0.25);border-radius:6px;color:rgba(122,66,244,0.6);cursor:pointer;font-size:0.73em;font-weight:700;padding:6px 10px;font-family:Rajdhani,sans-serif;letter-spacing:0.05em;transition:all 0.15s;\">&#9836; Send All Lyrics: OFF</button><div id=\"bm-send-lyrics-status\" style=\"font-size:0.66em;color:rgba(122,66,244,0.45);text-align:center;margin-top:3px;\"></div></div>\r\n    <div id=\"bm-dbg-wrap\" style=\"display:none;margin-top:5px;\"><pre id=\"bm-dbg-box\" style=\"background:#13101e;border:1px solid rgba(122,66,244,0.15);border-radius:4px;padding:5px 7px;font-size:0.63em;color:rgba(122,66,244,0.45);font-family:monospace;white-space:pre-wrap;max-height:110px;overflow-y:auto;margin:0;\"></pre></div>\r\n    <button id=\"bm-dbg-toggle\" style=\"width:100%;margin-top:4px;background:rgba(122,66,244,0.03);border:1px solid rgba(122,66,244,0.08);border-radius:4px;color:rgba(122,66,244,0.38);cursor:pointer;font-size:0.66em;padding:3px;font-family:Rajdhani,sans-serif;\" data-i18n=\"rm_show_debug\">Show Debug Log</button>\r\n  </div>\r\n</div>\r\n\r\n<div class=\"rm-sec collapsed\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_backup_restore\">Backup &amp; Restore</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div style=\"display:flex;flex-direction:column;gap:6px;\">\r\n      <span style=\"font-size:0.77em;color:rgba(122,66,244,0.45);\" data-i18n=\"rm_backup_desc\">Export your library to JSON — restore anytime.</span>\r\n      <div style=\"display:flex;gap:6px;margin-top:4px;\"><button id=\"music-export-btn\" class=\"rm-btn-full\" style=\"flex:1;\" data-i18n=\"rm_export\">&#x2B07; Export</button><button id=\"music-import-btn\" class=\"rm-btn-full\" style=\"flex:1;\" data-i18n=\"rm_import\">&#x2B06; Import</button><input id=\"music-import-file\" type=\"file\" accept=\".json\" style=\"display:none;\"></div>\r\n      <div id=\"music-backup-status\" style=\"font-size:0.73em;color:rgba(122,66,244,0.6);text-align:center;min-height:16px;\"></div>\r\n    </div>\r\n  </div>\r\n</div>\r\n\r\n</div></div>";
-  const styles_default = "@import \"https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700&family=Poppins:wght@400;500;600;700;800&display=swap\";\r\n\r\n*{user-select:none;box-sizing:border-box;}\r\n\r\n:root{\r\n  --bg:#1A1A24;\r\n  --bg-glass:rgba(26,26,36,0.82);\r\n  --accent:#7A42F4;\r\n  --accent2:#3A86FF;\r\n  --border:rgba(255,255,255,0.07);\r\n  --border-active:rgba(122,66,244,0.5);\r\n  --text:#FFFFFF;\r\n  --text-muted:rgba(200,200,215,0.75);\r\n  --text-dim:rgba(200,200,215,0.4);\r\n  --red:#ff4d6d;\r\n  --green:#00d68f;\r\n  --yellow:#ffd60a;\r\n  --font-head:'Poppins','Inter',sans-serif;\r\n  --font-body:'Inter','Poppins',sans-serif;\r\n}\r\n\r\n@keyframes slide-in-top{from{opacity:0;transform:translateY(-5px);}to{opacity:1;transform:translateY(0);}}\r\n@keyframes toclose{from{opacity:1;transform:scale(1) translateY(0);}to{opacity:0;transform:scale(0.98) translateY(-4px);}}\r\n@keyframes toopen{from{opacity:0;transform:scale(0.98) translateY(-4px);}to{opacity:1;transform:scale(1) translateY(0);}}\r\n@keyframes dot-blink{0%,100%{opacity:1;}50%{opacity:0.2;}}\r\n@keyframes shimmer{0%{background-position:-200% 0;}100%{background-position:200% 0;}}\r\n@keyframes ripple{from{opacity:.4;transform:scale(0);}to{opacity:0;transform:scale(1.4);}}\r\n\r\nhtml,body{margin:0;padding:0;overflow:hidden;background:transparent;}\r\n*{font-family:var(--font-body);color:var(--text);opacity:1;}\r\nh1,h2{margin:0;font-family:var(--font-head);}\r\np{margin:0;color:var(--text-muted);}\r\nbutton{border:none;outline:none;cursor:pointer;}\r\n\r\n#menu-container{\r\n  position:absolute;top:50%;left:50%;\r\n  transform:translate(-50%,-50%);\r\n  width:1280px;height:720px;\r\n  display:flex;justify-content:center;align-items:center;\r\n}\r\n\r\n#menu-wrapper{\r\n  position:relative;\r\n  width:92%;height:90%;\r\n  background:rgba(25,25,25,0.45);\r\n  border:1px solid rgba(255,255,255,0.2);\r\n  border-radius:20px;\r\n  overflow:hidden;\r\n  backdrop-filter:blur(25px);\r\n  -webkit-backdrop-filter:blur(25px);\r\n  box-shadow:0 8px 32px 0 rgba(0,0,0,0.2),inset 0 1px 1px rgba(255,255,255,0.1);\r\n  display:flex;flex-direction:column;\r\n}\r\n\r\n#menu-wrapper::before{\r\n  content:'';position:absolute;top:0;left:0;right:0;\r\n  height:1px;\r\n  background:transparent;\r\n  z-index:10;pointer-events:none;display:none;\r\n}\r\n\r\n#menu-wrapper.toclose{animation:150ms ease-in toclose forwards;}\r\n#menu-wrapper.toopen{animation:200ms cubic-bezier(.34,1.4,.64,1) toopen forwards;}\r\n\r\nheader{\r\n  position:relative;z-index:5;\r\n  display:flex;justify-content:space-between;align-items:center;\r\n  height:46px;min-height:46px;\r\n  padding:0 18px;\r\n  background:transparent;\r\n  border-bottom:1px solid var(--border);\r\n  flex-shrink:0;\r\n}\r\n\r\nheader .page-title{\r\n  font-family:var(--font-head);\r\n  font-size:0.75em;\r\n  font-weight:700;\r\n  letter-spacing:0.22em;\r\n  text-transform:uppercase;\r\n  background:linear-gradient(90deg,#7A42F4,#3A86FF,#a07af4,#7A42F4);\r\n  background-size:200% auto;\r\n  -webkit-background-clip:text;-webkit-text-fill-color:transparent;\r\n  animation:shimmer 5s linear infinite;\r\n}\r\n\r\nheader #credits{display:flex;align-items:center;gap:10px;height:46px;}\r\nheader #logo{display:block;height:28px;width:auto;filter:drop-shadow(0 0 6px rgba(122,66,244,0.6));}\r\n\r\nheader #close-button{\r\n  display:flex;align-items:center;justify-content:center;\r\n  width:26px;height:26px;\r\n  fill:none;stroke:var(--text-dim);stroke-width:1.6;\r\n  cursor:pointer;\r\n  border-radius:5px;\r\n  border:1px solid transparent;\r\n  background:transparent;\r\n  transition:all 160ms;\r\n  padding:5px;\r\n}\r\nheader #close-button:hover{\r\n  stroke:var(--text);background:rgba(255,77,109,0.1);\r\n  border-color:rgba(255,77,109,0.35);\r\n}\r\n\r\nmain{\r\n  display:flex;flex-direction:row;\r\n  flex:1;min-height:0;\r\n  position:relative;z-index:2;\r\n}\r\n\r\n#navbar-container{\r\n  display:flex;flex-direction:column;\r\n  width:172px;min-width:172px;\r\n  background:rgba(15,15,15,0.3);backdrop-filter:blur(25px);-webkit-backdrop-filter:blur(25px);\r\n  border-right:1px solid rgba(255,255,255,0.1);\r\n  padding:0;\r\n  gap:0;\r\n  position:relative;flex-shrink:0;overflow:hidden;\r\n  justify-content:space-evenly;\r\n  }\r\n\r\n.open-menu{\r\n  position:relative;\r\n  display:flex;flex-direction:row;\r\n  align-items:center;justify-content:flex-start;\r\n  gap:10px;\r\n  width:100%;height:66px;\r\n  background:transparent;\r\n  border:none;\r\n  border-left:3px solid transparent;\r\n  border-bottom:1px solid rgba(255,255,255,0.05);\r\n  color:var(--text-dim);opacity:0.7;\r\n  transition:color 140ms,border-color 140ms,background 140ms,transform 100ms,opacity 100ms;\r\n  cursor:pointer;\r\n  padding:0 18px;\r\n  overflow:hidden;box-sizing:border-box;\r\n}\r\n\r\n.open-menu:hover{\r\n  color:rgba(255,255,255,0.85);opacity:1;\r\n  background:rgba(255,255,255,0.04);\r\n  border-left-color:rgba(122,66,244,0.5);\r\n}\r\n\r\n.open-menu:active{\r\n  transform:scale(0.96);\r\n  opacity:0.75;\r\n}\r\n\r\n.open-menu.active{\r\n  color:var(--text);\r\n  background:rgba(122,66,244,0.12);\r\n  border-left:3px solid var(--accent);\r\n  pointer-events:none;\r\n}\r\n\r\n.open-menu.active .nav-icon{\r\n  filter:drop-shadow(0 0 5px rgba(122,66,244,0.9));\r\n}\r\n\r\n.nav-icon{width:24px;height:24px;transition:all 140ms;flex-shrink:0;}\r\n\r\n.nav-label{\r\n  font-family:var(--font-head);\r\n  font-size:0.93em;\r\n  letter-spacing:0.04em;\r\n  font-weight:700;\r\n  text-transform:uppercase;\r\n  line-height:1;\r\n  transition:all 140ms;\r\n}\r\n\r\n.open-menu .ripple{\r\n  position:absolute;z-index:5;\r\n  background:rgba(122,66,244,0.15);\r\n  border-radius:50%;opacity:0;\r\n  animation:ripple 550ms;\r\n  pointer-events:none;\r\n}\r\n\r\n#page-container{\r\n  flex:1;min-width:0;\r\n  overflow-y:auto;overflow-x:hidden;\r\n  scroll-behavior:smooth;\r\n  padding:0;\r\n}\r\n\r\n#page-container::-webkit-scrollbar{width:2px;}\r\n#page-container::-webkit-scrollbar-track{background:transparent;}\r\n#page-container::-webkit-scrollbar-thumb{background:rgba(122,66,244,0.25);border-radius:2px;}\r\n#page-container::-webkit-scrollbar-thumb:hover{background:rgba(122,66,244,0.45);}\r\n\r\n.menu-page{display:none;}\r\n.menu-page.opened{\r\n  display:block;\r\n  padding:16px 20px;\r\n  animation:slide-in-top 140ms ease-out;\r\n}\r\n\r\n.menu-page .page-title{\r\n  font-family:var(--font-head);\r\n  font-size:1.05em;font-weight:700;\r\n  letter-spacing:0.05em;\r\n  color:var(--text);\r\n  text-transform:uppercase;\r\n  margin-bottom:2px;\r\n  display:flex;align-items:center;gap:8px;\r\n}\r\n.menu-page .page-title::before{\r\n  content:'';display:inline-block;\r\n  width:2px;height:0.9em;\r\n  background:linear-gradient(180deg,var(--accent),var(--accent2));\r\n  border-radius:2px;flex-shrink:0;\r\n}\r\n\r\n.page-description{\r\n  font-size:0.75em;color:var(--text-dim);\r\n  margin-bottom:14px;\r\n  letter-spacing:0.01em;\r\n  padding-left:10px;\r\n  font-weight:400;\r\n}\r\n\r\n.menu-page>.section{\r\n  margin-bottom:10px;\r\n  background:transparent;\r\n  border:1px solid var(--border);\r\n  border-radius:7px;\r\n  overflow:visible;\r\n  transition:border-color 200ms;\r\n  position:relative;\r\n}\r\n.menu-page>.section:hover{border-color:rgba(122,66,244,0.22);}\r\n\r\n.section-title{\r\n  font-family:var(--font-head);\r\n  font-size:0.68em;\r\n  font-weight:600;\r\n  letter-spacing:0.12em;\r\n  text-transform:uppercase;\r\n  color:rgba(122,66,244,0.6);\r\n  padding:6px 12px;\r\n  background:rgba(122,66,244,0.03);\r\n  border-bottom:1px solid var(--border);\r\n  display:flex;align-items:center;gap:6px;\r\n}\r\n.section-title::before{\r\n  content:'';width:3px;height:3px;\r\n  background:var(--accent);border-radius:50%;\r\n  box-shadow:0 0 5px var(--accent);flex-shrink:0;\r\n  opacity:0.7;\r\n}\r\n\r\n.section-content{display:flex;flex-direction:column;gap:0;}\r\n.small-section{font-size:0.85rem;}\r\n\r\n.section-content.split{flex-direction:row;gap:0;}\r\n.content-split{flex:1;display:flex;flex-direction:column;}\r\n.content-split:first-child{border-right:1px solid rgba(255,255,255,0.05);}\r\n\r\n.content-option{\r\n  display:flex;justify-content:space-between;align-items:center;\r\n  min-height:42px;padding:6px 12px;\r\n  border-bottom:1px solid rgba(255,255,255,0.03);\r\n  transition:background 150ms;\r\n  position:relative;\r\n  overflow:visible;\r\n}\r\n.content-option:last-child{border-bottom:none;}\r\n.content-option:hover{background:rgba(122,66,244,0.04);}\r\n\r\n.content-option.centered{justify-content:center;}\r\n.content-option.left-flex{justify-content:flex-start;gap:12px;}\r\n.content-option.text{justify-content:flex-start;}\r\n\r\n.option-title{\r\n  font-size:1.06em;\r\n  font-weight:500;\r\n  color:rgba(215,215,230,0.8);\r\n  letter-spacing:0.01em;\r\n  transition:color 150ms;\r\n}\r\n.content-option:hover .option-title{color:#FFFFFF;}\r\n\r\n.option-content{display:flex;align-items:center;gap:7px;}\r\n\r\n.text-value{\r\n  font-family:var(--font-head);\r\n  font-size:0.8em;color:var(--accent);\r\n  font-weight:600;\r\n}\r\n.simplified{\r\n  font-family:var(--font-body)!important;\r\n  font-size:0.78em!important;\r\n  color:var(--text-dim)!important;\r\n  font-weight:400!important;\r\n  line-height:1.6;\r\n}\r\n.highlight{color:var(--accent)!important;}\r\n\r\n\r\n.hotkeyInput{\r\n  min-width:48px;height:24px;\r\n  background:rgba(255,255,255,0.04);\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:4px;\r\n  font-family:var(--font-head);\r\n  font-size:0.63em;font-weight:600;\r\n  color:rgba(200,175,255,0.8);\r\n  letter-spacing:0.04em;\r\n  padding:0 7px;\r\n  transition:all 140ms;\r\n  display:flex;align-items:center;justify-content:center;\r\n}\r\n.hotkeyInput:hover{\r\n  background:rgba(122,66,244,0.12);\r\n  border-color:rgba(122,66,244,0.5);\r\n}\r\n.hotkeyInput.active{\r\n  background:rgba(122,66,244,0.18);\r\n  border-color:var(--accent);\r\n  box-shadow:0 0 0 2px rgba(122,66,244,0.2);\r\n  animation:dot-blink 0.8s ease infinite;\r\n}\r\n.hotkeyInput.red{\r\n  background:rgba(255,77,109,0.06)!important;\r\n  border-color:rgba(255,77,109,0.35)!important;\r\n  color:#ff4d6d!important;\r\n}\r\n\r\n.switch-checkbox{\r\n  position:relative;width:52px;height:30px;flex-shrink:0;\r\n}\r\n.switch-checkbox input{position:absolute;opacity:0;width:0;height:0;}\r\n\r\n.switch-checkbox span{\r\n  position:absolute;inset:0;\r\n  background:rgba(255,255,255,0.05);\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:10px;\r\n  cursor:pointer;\r\n  transition:all 220ms;\r\n}\r\n.switch-checkbox span::before{\r\n  content:'';position:absolute;\r\n  left:3px;top:50%;transform:translateY(-50%);\r\n  width:20px;height:20px;\r\n  background:rgba(255,255,255,0.25);\r\n  border-radius:50%;\r\n  transition:all 220ms cubic-bezier(.34,1.4,.64,1);\r\n}\r\n.switch-checkbox input:checked + span{\r\n  background:rgba(122,66,244,0.18);\r\n  border-color:rgba(122,66,244,0.55);\r\n}\r\n.switch-checkbox input:checked + span::before{\r\n  left:calc(100% - 23px);\r\n  background:#7A42F4;\r\n  box-shadow:0 0 7px rgba(122,66,244,0.7);\r\n}\r\n\r\n.option-button{\r\n  padding:5px 16px;\r\n  background:rgba(122,66,244,0.1);\r\n  border:1px solid rgba(122,66,244,0.35);\r\n  border-radius:5px;\r\n  font-family:var(--font-head);\r\n  font-size:0.66em;font-weight:600;\r\n  letter-spacing:0.06em;\r\n  color:#FFFFFF;\r\n  text-transform:uppercase;\r\n  transition:all 140ms;\r\n}\r\n.option-button:hover{\r\n  background:rgba(122,66,244,0.22);\r\n  border-color:rgba(122,66,244,0.65);\r\n  box-shadow:0 0 12px rgba(122,66,244,0.2);\r\n}\r\n\r\n.ryn-social-btn:hover{\r\n  background:rgba(122,66,244,0.22)!important;\r\n  border-color:rgba(122,66,244,0.7)!important;\r\n  box-shadow:0 0 12px rgba(122,66,244,0.25);\r\n  transform:translateY(-1px);\r\n}\r\n.ryn-social-btn svg{width:19px;height:19px;}\r\n.ryn-social-big:hover{\r\n  background:rgba(122,66,244,0.13)!important;\r\n  border-color:rgba(122,66,244,0.8)!important;\r\n  box-shadow:0 0 22px rgba(122,66,244,0.3);\r\n  transform:translateY(-3px);\r\n}\r\n.ryn-social-big svg{width:44px;height:44px;}\r\n\r\n.option-button.red{\r\n  background:rgba(255,77,109,0.08)!important;\r\n  border-color:rgba(255,77,109,0.35)!important;\r\n  color:#ff4d6d!important;\r\n}\r\n.option-button.red:hover{\r\n  background:rgba(255,77,109,0.15)!important;\r\n  border-color:rgba(255,77,109,0.6)!important;\r\n  box-shadow:0 0 10px rgba(255,77,109,0.2)!important;\r\n}\r\n\r\n.input{\r\n  height:24px;width:175px;\r\n  background:rgba(255,255,255,0.04);\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:4px;\r\n  font-family:var(--font-body);\r\n  font-size:0.72em;font-weight:400;\r\n  color:var(--text);\r\n  text-align:center;\r\n  transition:all 140ms;\r\n  padding:0 7px;\r\n}\r\n.input:focus{\r\n  outline:none;\r\n  border-color:rgba(122,66,244,0.5);\r\n  box-shadow:0 0 0 2px rgba(122,66,244,0.1);\r\n  background:rgba(122,66,244,0.05);\r\n}\r\n\r\ninput[id][type=\"color\"]{\r\n  width:46px;height:22px;\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:4px;\r\n  padding:1px;\r\n  background:transparent;\r\n  cursor:pointer;\r\n  transition:border-color 140ms;\r\n}\r\ninput[id][type=\"color\"]:hover{border-color:rgba(122,66,244,0.5);}\r\n\r\n.reset-color{\r\n  width:16px;height:9px;\r\n  background:var(--data-color,var(--accent));\r\n  border-radius:5px;\r\n  border:none;cursor:pointer;\r\n  box-shadow:0 0 4px currentColor;\r\n  flex-shrink:0;\r\n}\r\n\r\n.slider{display:flex;align-items:center;gap:7px;}\r\n.slider input[type=\"range\"]{\r\n  -webkit-appearance:none;\r\n  width:100px;height:2px;\r\n  background:linear-gradient(90deg,var(--accent2) var(--val,50%),rgba(255,255,255,0.07) var(--val,50%));\r\n  border-radius:2px;\r\n  border:none;outline:none;cursor:pointer;\r\n}\r\n.slider input[type=\"range\"]::-webkit-slider-thumb{\r\n  -webkit-appearance:none;\r\n  width:11px;height:11px;\r\n  border-radius:50%;\r\n  background:var(--accent2);\r\n  box-shadow:0 0 5px rgba(58,134,255,0.5);\r\n  border:2px solid var(--bg);\r\n  transition:transform 120ms;\r\n}\r\n.slider input[type=\"range\"]::-webkit-slider-thumb:hover{transform:scale(1.25);}\r\n.slider-value{\r\n  font-family:var(--font-head);\r\n  font-size:0.63em;color:var(--accent2);\r\n  min-width:28px;text-align:right;font-weight:600;\r\n}\r\n\r\n.disconnect-button{\r\n  width:16px;height:16px;\r\n  fill:rgba(255,255,255,0.12);\r\n  cursor:pointer;transition:fill 180ms;flex-shrink:0;\r\n}\r\n.content-option:hover .disconnect-button{fill:rgba(255,77,109,0.45);}\r\n.disconnect-button:hover{fill:#cc4444!important;}\r\n\r\n.key-badge{\r\n  display:inline-flex;align-items:center;justify-content:center;\r\n  min-width:24px;height:18px;padding:0 4px;\r\n  background:rgba(255,255,255,0.04);\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:3px;\r\n  font-family:var(--font-head);\r\n  font-size:0.6em;font-weight:600;\r\n  color:rgba(180,155,255,0.75);\r\n}\r\n\r\n#bot-container{padding:2px 0;}\r\n\r\n.icon{width:48px;height:48px;}\r\n.small-icon{width:16px;height:16px;}\r\n\r\n.red{\r\n  background:rgba(255,77,109,0.06)!important;\r\n  border-color:rgba(255,77,109,0.3)!important;\r\n  color:#ff4d6d!important;\r\n}\r\n\r\n#ryn-search-wrap{position:relative;display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:7px;padding:0 10px;height:30px;transition:border-color 160ms,box-shadow 160ms;min-width:185px;}\r\n#ryn-search-wrap:focus-within{border-color:rgba(122,66,244,0.55);box-shadow:0 0 0 2px rgba(122,66,244,0.12);background:rgba(122,66,244,0.05);}\r\n#ryn-search-input{flex:1;background:transparent;border:none;outline:none;font-family:var(--font-body);font-size:0.75em;color:var(--text);min-width:0;}\r\n#ryn-search-input::placeholder{color:rgba(200,200,215,0.3);}\r\n#ryn-search-clear{font-size:0.65em;color:rgba(200,200,215,0.3);cursor:pointer;flex-shrink:0;display:none;transition:color 120ms;line-height:1;}\r\n#ryn-search-clear:hover{color:rgba(255,77,109,0.8);}\r\n#ryn-search-dropdown{display:none;position:absolute;top:calc(100% + 6px);right:0;width:280px;max-height:320px;overflow-y:auto;background:rgba(18,15,30,0.98);border:1px solid rgba(122,66,244,0.3);border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.7);z-index:9999;padding:4px;}\r\n#ryn-search-dropdown::-webkit-scrollbar{width:2px;}\r\n#ryn-search-dropdown::-webkit-scrollbar-thumb{background:rgba(122,66,244,0.3);border-radius:2px;}\r\n.ryn-si{display:flex;flex-direction:column;gap:2px;padding:7px 10px;border-radius:5px;cursor:pointer;transition:background 120ms;border:1px solid transparent;}\r\n.ryn-si:hover,.ryn-si.ryn-fx{background:rgba(122,66,244,0.12);border-color:rgba(122,66,244,0.22);}\r\n.ryn-st{font-size:0.8em;font-weight:600;color:#FFFFFF;line-height:1.3;}\r\n.ryn-st mark{background:rgba(122,66,244,0.4);color:#FFFFFF;border-radius:2px;padding:0 1px;}\r\n.ryn-sp{font-size:0.68em;color:rgba(122,66,244,0.55);font-family:var(--font-head);letter-spacing:0.06em;text-transform:uppercase;}\r\n.ryn-se{text-align:center;padding:18px 12px;font-size:0.77em;color:rgba(200,200,215,0.3);font-style:italic;}\r\n.ryn-sl{font-size:0.62em;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(122,66,244,0.4);padding:5px 10px 2px;margin-top:2px;}\r\n\r\n.menu-page[data-id=\"3\"] .content-option{\r\n  position:relative;\r\n  border-radius:7px;\r\n  padding-inline:10px;\r\n  transition:background 150ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .content-option:hover{background:rgba(122,66,244,0.05);}\r\n\r\n.menu-page[data-id=\"3\"] .content-option::before{\r\n  content:'';position:absolute;left:0;top:7px;bottom:7px;\r\n  width:2px;border-radius:0 2px 2px 0;\r\n  background:var(--accent);\r\n  opacity:0;transition:opacity 200ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .content-option:has(input[type=\"checkbox\"]:checked)::before{opacity:1;}\r\n.menu-page[data-id=\"3\"] .content-option:has(input[type=\"checkbox\"]:checked) .option-title{color:var(--text);}\r\n\r\n.menu-page[data-id=\"3\"] .option-title{\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n  transition:color 150ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .option-content{gap:9px;}\r\n\r\n.menu-page[data-id=\"3\"] input[type=\"color\"]{\r\n  width:21px;height:21px;padding:0;\r\n  border:none;border-radius:50%;\r\n  background:transparent;cursor:pointer;overflow:hidden;\r\n  box-shadow:0 0 0 1px rgba(255,255,255,0.16),0 2px 5px rgba(0,0,0,0.4);\r\n  transition:transform 160ms ease,box-shadow 160ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] input[type=\"color\"]::-webkit-color-swatch-wrapper{padding:0;}\r\n.menu-page[data-id=\"3\"] input[type=\"color\"]::-webkit-color-swatch{border:none;border-radius:50%;}\r\n.menu-page[data-id=\"3\"] input[type=\"color\"]:hover{\r\n  transform:scale(1.14);\r\n  box-shadow:0 0 0 1px rgba(255,255,255,0.34),0 3px 9px rgba(0,0,0,0.55);\r\n}\r\n.menu-page[data-id=\"3\"] .content-option:has(input[type=\"checkbox\"]:checked) input[type=\"color\"]{\r\n  box-shadow:0 0 0 1px rgba(255,255,255,0.3),0 0 9px rgba(122,66,244,0.4);\r\n}\r\n\r\n.menu-page[data-id=\"3\"] .reset-color{\r\n  width:11px;height:11px;border-radius:50%;\r\n  opacity:0;\r\n  transition:opacity 160ms ease,transform 160ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .content-option:hover .reset-color{opacity:0.85;}\r\n.menu-page[data-id=\"3\"] .reset-color:hover{opacity:1;transform:scale(1.28);}\r\n\r\n.menu-page[data-id=\"3\"] .section-title{\r\n  display:flex;align-items:center;gap:8px;\r\n}\r\n.menu-page[data-id=\"3\"] .section-title::before{\r\n  content:'';width:5px;height:5px;border-radius:50%;flex-shrink:0;\r\n  background:rgba(255,255,255,0.14);\r\n  transition:background 240ms ease,box-shadow 240ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .section:has(input[type=\"checkbox\"]:checked) .section-title::before{\r\n  background:var(--accent);box-shadow:0 0 8px rgba(122,66,244,0.75);\r\n}\r\n\r\n.menu-page[data-id=\"2\"] .content-option{\r\n  position:relative;\r\n  border-radius:7px;\r\n  padding-inline:10px;\r\n  transition:background 150ms ease;\r\n}\r\n.menu-page[data-id=\"2\"] .content-option:hover{background:rgba(122,66,244,0.05);}\r\nlabel.option-title{\r\n  cursor:pointer;user-select:none;\r\n  flex:1;min-width:0;\r\n  transition:color 150ms ease;\r\n}\r\nlabel.option-title:hover{color:var(--text);}\r\nlabel.option-title:active{opacity:0.7;}\r\n\r\n.menu-page[data-id=\"2\"] .content-option::before{\r\n  content:'';position:absolute;left:0;top:7px;bottom:7px;\r\n  width:2px;border-radius:0 2px 2px 0;\r\n  background:var(--accent);\r\n  opacity:0;transition:opacity 200ms ease;\r\n}\r\n.menu-page[data-id=\"2\"] .content-option:has(input[type=\"checkbox\"]:checked)::before{opacity:1;}\r\n.menu-page[data-id=\"2\"] .content-option:has(input[type=\"checkbox\"]:checked) .option-title{color:var(--text);}\r\n\r\n.menu-page[data-id=\"2\"] .section-title{\r\n  display:flex;flex-direction:column;align-items:flex-start;gap:3px;\r\n}\r\n.sec-sub{\r\n  font-family:var(--font-body);\r\n  font-size:0.78em;font-weight:400;letter-spacing:0;\r\n  text-transform:none;color:var(--text-dim);\r\n  line-height:1.45;\r\n}\r\n\r\n.menu-page[data-id=\"2\"] .section-title::after{\r\n  content:'';position:absolute;top:14px;right:14px;\r\n  width:5px;height:5px;border-radius:50%;\r\n  background:rgba(255,255,255,0.14);\r\n  transition:background 240ms ease,box-shadow 240ms ease;\r\n}\r\n.menu-page[data-id=\"2\"] .section{position:relative;}\r\n.menu-page[data-id=\"2\"] .section:has(input[type=\"checkbox\"]:checked) .section-title::after{\r\n  background:var(--accent);box-shadow:0 0 8px rgba(122,66,244,0.75);\r\n}\r\n\n.menu-page[data-id=\"1\"] .key-grid{\n  display:grid;\n  grid-template-columns:repeat(auto-fill,minmax(228px,1fr));\n  gap:8px;\n  padding:10px 12px;\n}\n.menu-page[data-id=\"1\"] .key-tile{\n  display:flex;align-items:center;justify-content:space-between;gap:10px;\n  min-height:38px;padding:7px 10px;\n  background:rgba(255,255,255,0.02);\n  border:1px solid rgba(255,255,255,0.06);\n  border-radius:8px;\n  transition:background 150ms,border-color 150ms,transform 150ms;\n}\n.menu-page[data-id=\"1\"] .key-tile:hover{\n  background:rgba(122,66,244,0.07);\n  border-color:rgba(122,66,244,0.4);\n  transform:translateY(-1px);\n}\n.menu-page[data-id=\"1\"] .key-tile .option-title{\n  font-size:0.86em;font-weight:500;\n  color:rgba(215,215,230,0.85);\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n}\n.menu-page[data-id=\"1\"] .key-tile .hotkeyInput{\n  min-width:58px;height:26px;flex-shrink:0;\n}\n.menu-page[data-id=\"1\"] .key-tile:has(.hotkeyInput.active){\n  border-color:var(--accent);\n  background:rgba(122,66,244,0.1);\n}\n.menu-page[data-id=\"1\"] .key-tile:has(.hotkeyInput.red){\n  border-color:rgba(255,77,109,0.4);\n  background:rgba(255,77,109,0.05);\n}\n\n.sub-options{\n  border-left:2px solid rgba(122,66,244,0.35);\n  margin:0 0 0 12px;\n  transition:opacity 200ms;\n}\n.sub-options .content-option{\n  padding-left:16px;\n  min-height:38px;\n}\n.sub-options .option-title{\n  font-size:0.95em;\n  color:rgba(200,200,215,0.7);\n}\n.sub-options .content-option:last-child{border-bottom:none;}\n.content-option:has(> .switch-checkbox > input:not(:checked)) + .sub-options{\n  opacity:0.3;\n  pointer-events:none;\n}\n";
+  const Header_default = "";
+  const Navbar_default = "<div id=\"navbar-container\">\n  <div class=\"rail-brand\">\n    <span class=\"rail-mark\">RYN</span>\n    <span class=\"rail-sub\">Type 2</span>\n  </div>\n\n  <div id=\"ryn-search-wrap\">\n    <input id=\"ryn-search-input\" type=\"text\" placeholder=\"Search settings\" autocomplete=\"off\" spellcheck=\"false\">\n    <span id=\"ryn-search-clear\" title=\"Clear\">&#10005;</span>\n    <div id=\"ryn-search-dropdown\"></div>\n  </div>\n\n  <div class=\"rail-label\">Categories</div>\n  <nav>\n    <button data-id=\"1\" class=\"open-menu active\"><span class=\"nav-index\">01</span><span class=\"nav-label\">Keybinds</span></button>\n    <button data-id=\"3\" class=\"open-menu\"><span class=\"nav-index\">02</span><span class=\"nav-label\">Visual</span></button>\n    <button data-id=\"2\" class=\"open-menu\"><span class=\"nav-index\">03</span><span class=\"nav-label\">Combat</span></button>\n    <button data-id=\"4\" class=\"open-menu\"><span class=\"nav-index\">04</span><span class=\"nav-label\">Misc</span></button>\n    <button data-id=\"7\" class=\"open-menu\"><span class=\"nav-index\">05</span><span class=\"nav-label\">Music</span></button>\n    <button data-id=\"5\" class=\"open-menu\"><span class=\"nav-index\">06</span><span class=\"nav-label\">Bots</span></button>\n  </nav>\n\n  <div class=\"rail-label\">In this category</div>\n  <div id=\"nav-outline\"></div>\n\n  <div class=\"rail-foot\">\n    <span id=\"ryn-version\">Ryn Type 2</span>\n    <svg id=\"close-button\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" title=\"Close menu\">\n      <line x1=\"5\" y1=\"5\" x2=\"19\" y2=\"19\" stroke-linecap=\"round\"/>\n      <line x1=\"19\" y1=\"5\" x2=\"5\" y2=\"19\" stroke-linecap=\"round\"/>\n    </svg>\n  </div>\n</div>";
+  const Devtool_default = "";
+  const Keybinds_default = "<div class=\"menu-page opened\" data-id=\"1\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Keybinds</h1>\n        <p class=\"page-description\">Click a key to start editing, then press the key or mouse button you want. Backspace clears a binding. A key used twice is marked as a conflict on both rows.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Items &amp; Weapons<span class=\"sec-sub\">Hotbar placement and the weapon slots.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Food</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_food\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Wall</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_wall\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spike\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Windmill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_windmill\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Farm</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_farm\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Trap</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_trap\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Turret</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_turret\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spawn</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spawn\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Client<span class=\"sec-sub\">Opening this menu and firing the instakill sequence.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Menu</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_toggleMenu\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Instakill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_instakill\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Quick Actions<span class=\"sec-sub\">One-press build patterns and on/off switches for the automations.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Quad Spikes</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_fourSpikes\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Quad Traps</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_fourTraps\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Boost Spike Rush</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_boostSpikes\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Automill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoMillKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Dash</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_dashMovementKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Auto Grind</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoGrindKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Autoplacer</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoplacerKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Controls<span class=\"sec-sub\">Everything that commands the bots you have connected.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spawn Bot</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spawnBot\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Kill All Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_killAllBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Hold Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_holdBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Release Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_releaseBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Bot Auto-Attack</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAutoAttack\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Auto Farm</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAutoFarm\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Repel Alts</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_repelAlts\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Bot Random Movement</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_scatterBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Avoid Shield Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAvoidShieldKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Volley Fire</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botVolleyKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Freeze Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_freezeBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Lock bot position</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_lockBotPosition\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n</div>";
+  const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Combat</h1>\n        <p class=\"page-description\">Every automation the client runs during a fight, ordered by the moment it fires: the kill sequence first, then how it places, how it survives, and what it does with the rest of the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Kill Sequences<span class=\"sec-sub\">Timed weapon and hat chains that try to finish a target outright.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_toolSpearInsta\">Tool Spear Insta</label>\n                    <span class=\"opt-desc\">Tool hammer into polearm burst.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_toolSpearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeGearInsta\">Spike Gear Insta</label>\n                    <span class=\"opt-desc\">Spike placement combined with a gear swap on the same tick.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeGearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\n                    <span class=\"opt-desc\">Ranged finisher chaining musket and bow shots.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_musketBowInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Sync<span class=\"sec-sub\">Landing separate sources of damage on the same server tick.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\n                    <span class=\"opt-desc\">Lines up your hits with whatever else is about to damage the target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\n                    <span class=\"opt-desc\">Times your swing to a turret shot landing.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_velocityTick\">Velocity Tick</label>\n                    <span class=\"opt-desc\">Uses the target's movement to predict the tick worth hitting.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_velocityTick\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSync\">Spike sync</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSyncHammer\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Placement<span class=\"sec-sub\">Where spikes and traps go, and how fast they get replaced.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacer\">Autoplacer</label>\n                    <span class=\"opt-desc\">Keeps spikes going down around you without holding the key.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoplacer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoplacer radius</span>\n                    <span class=\"opt-desc\">How far from you the autoplacer is allowed to build.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Placer scanners</span>\n                    <span class=\"opt-desc\">How many spots the autoplacer looks at once. The first one is aimed at the enemy; each of the others owns its own slice of the ring around you and never builds in another's, so the open ground on your other sides gets used instead of ignored. 1 is the enemy-facing scanner alone.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerScanners\" type=\"range\" step=\"1\" min=\"1\" max=\"6\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_prePlace\">Preplace</label>\n                    <span class=\"opt-desc\">Puts the next spike down before the target arrives at it.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_prePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_replace\">Replace</label>\n                    <span class=\"opt-desc\">Rebuilds a broken spike the moment it goes down.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_replace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\n                    <span class=\"opt-desc\">Builds to block an incoming placement against you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_placementDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapKB\">Trap KB</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapKB\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Healing, shielding and the hats that keep you alive.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\n                    <span class=\"opt-desc\">Eats food as soon as you take damage.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoheal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoShield\">Auto Shield</label>\n                    <span class=\"opt-desc\">Raises the shield against incoming melee.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_rangedShield\">Ranged Shield</label>\n                    <span class=\"opt-desc\">Also shields against projectiles.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_rangedShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_kbSpike\">KB Spike</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_kbSpike\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_empDefense\">Emp Defense</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_empDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoemp\">Auto emp</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoemp\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_soldierDefault\">Soldier default</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_soldierDefault\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeSoldier\">Safe Soldier</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeSoldier\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_shadowWings\">Shadow Wings</label>\n                    <span class=\"opt-desc\">Wears Shadow Wings with Soldier instead of Angel Wings: 10% move speed in place of 3hp/s regen.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_shadowWings\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeWalk\">Safe walk</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeWalk\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Anti Systems<span class=\"sec-sub\">Reactions to what other players and the world do to you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\n                    <span class=\"opt-desc\">Reacts to an enemy closing in on you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_antienemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antianimal\">Anti animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antianimal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antispike\">Anti spike</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antispike\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiSpikePush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiRetrap\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you wear, and when it changes.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\n                    <span class=\"opt-desc\">Swaps to the hat that suits the biome you are standing in.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_biomehats\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\n                    <span class=\"opt-desc\">Picks gear from the threat in front of you rather than a fixed set.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_adaptiveGearSwitching\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_tailPriority\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_cowboyWhenSafe\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\n                    <span class=\"opt-desc\">Pushes a target toward your own spikes.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto Push Range</span>\n                    <span class=\"opt-desc\">How close a target has to be before autopush engages.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\n                    <span class=\"opt-desc\">Short burst movement instead of a steady walk.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_dashMovement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\n                    <span class=\"opt-desc\">Breaks the structures standing between you and a target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autobreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_breakPosition\">Break Position</label>\n                        <span class=\"opt-desc\">Which trap Autobreak takes. Inside: only the trap you are caught in. Outside: only traps you are not in. Spikes break the same either way.</span>\n                    </div>\n                    <select id=\"_breakPosition\" class=\"ryn-select\">\n                        <option value=\"inside\">Inside</option>\n                        <option value=\"outside\">Outside</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_automill\">Automill</label>\n                    <span class=\"opt-desc\">Leaves windmills behind you while you move.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_automill\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\n                    <span class=\"opt-desc\">Gathers resources on its own when nothing is threatening you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoGrind\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetPrimary\">Grind Until (primary)</label>\n                        <span class=\"opt-desc\">Which variant to take your primary weapon to. Grinding idles once both slots reach their target, and picks straight back up if you raise one.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetPrimary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                    </select>\n                </div>\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetSecondary\">Grind Until (secondary)</label>\n                        <span class=\"opt-desc\">The same for your secondary. Only the great hammer is ground here, so this does nothing while you carry anything else.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetSecondary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPlay\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoSteal\">Autosteal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoSteal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_turretSteal\">Turret steal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSteal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapAnimal\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
+  const Visuals_default = "<div class=\"menu-page\" data-id=\"3\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Visual</h1>\n        <p class=\"page-description\">Everything the client draws over the game. Turn off what you do not read during a fight — the fewer overlays are on, the less there is between you and the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Names<span class=\"sec-sub\">How players are labelled on the field.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">My Name</span>\n                    <span class=\"opt-desc\">Draws your own nickname in a colour of your choosing.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_myNameColorValue\" type=\"color\" title=\"Select Color\">\n                    <label class=\"switch-checkbox\"><input id=\"_myNameColor\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Mark RYN Players</span>\n                    <span class=\"opt-desc\">Flags other players running this client.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_markRynPlayers\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Player ID</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_showPlayerID\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Player HUD<span class=\"sec-sub\">Readouts drawn on and around players.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Weapon Reload Bar</span>\n                    <span class=\"opt-desc\">Shows how far every weapon is through its cooldown.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_weaponReloadBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Render HP</span>\n                    <span class=\"opt-desc\">Draws a health value on players instead of a bar alone.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_renderHP\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Position Prediction</span>\n                    <span class=\"opt-desc\">Marks where a moving player is expected to be on the next tick.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_positionPrediction\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">My Turret Reload Bar</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_playerTurretReloadBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Display player angle</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_displayPlayerAngle\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">World<span class=\"sec-sub\">Tint and weather drawn over the map itself.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Purple Tint</span>\n                    <span class=\"opt-desc\">Recolours world objects so structures read faster.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_objectTint\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Tint Transparency</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_objectTintOpacity\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_weather\">Rain &amp; Snow</label>\n                    <span class=\"opt-desc\">Rain across the map, turning to snow inside the snow biome.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_weather\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Intensity</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_weatherAmount\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_deathCorpse\">Death Corpses</label>\n                    <span class=\"opt-desc\">Leaves a body where a player you killed died, wearing a halo and angel wings &mdash; or a cowboy hat and a devil tail if they were the one carrying the skull. It holds on the spot, then floats up and fades away. Local and visual only.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_deathCorpse\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Structures<span class=\"sec-sub\">Who owns a building, and how much of it is left.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Structure Readout (Mine/Clan)</span>\n                    <span class=\"opt-desc\">Owner name and a health bar over your own and your clan's structures, within 500 units.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_itemHealthBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Structure Readout (Enemy)</span>\n                    <span class=\"opt-desc\">The same over everything that is not yours.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_itemHealthBarEnemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Health Bar Colour</span>\n                    <span class=\"opt-desc\">The fill inside the bar, for every structure.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_itemHealthBarColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Structure Colours<span class=\"sec-sub\">Spikes and traps recoloured by who placed them.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_structureColors\">Structure Colours</label>\n                    <span class=\"opt-desc\">Tints every spike and trap by its owner, so an enemy build reads at a glance. Ownership is the client's own team detection. Purely visual.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_structureColors\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Colour Strength</span>\n                    <span class=\"opt-desc\">How much of the original sprite the tint covers.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_structureColorStrength\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Own Spike</span>\n                    <span class=\"opt-desc\">Spikes you placed.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_ownSpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Ally Spike</span>\n                    <span class=\"opt-desc\">Spikes placed by your clan.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_allySpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enemy Spike</span>\n                    <span class=\"opt-desc\">Everyone else's spikes.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_enemySpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Own Trap</span>\n                    <span class=\"opt-desc\">Traps you placed.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_ownTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Ally Trap</span>\n                    <span class=\"opt-desc\">Traps placed by your clan.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_allyTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enemy Trap</span>\n                    <span class=\"opt-desc\">Everyone else's traps.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_enemyTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Hitboxes<span class=\"sec-sub\">Debug outlines. Useful while learning a range, noisy otherwise.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Weapon hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_weaponHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Collision hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_collisionHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Placement hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_placementHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Possible placement</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_possiblePlacement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Interface<span class=\"sec-sub\">The game's own interface and how much it draws.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Hide game HUD</span>\n                    <span class=\"opt-desc\">Removes moomoo's own interface and leaves the map alone.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_hideHUD\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Melee Animation</span>\n                    <span class=\"opt-desc\">Grip-based swing, thrust and chop animations for melee weapons. Off restores moomoo's own spin. Shields, every bow and the musket are never touched either way.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_meleeAnimation\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_visualSmoothing\">Visual Smoothing</label>\n                    <span class=\"opt-desc\">Keeps motion even rather than dropping frames to keep up. Off lets Low Quality Mode skip every second frame when the rate collapses.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_visualSmoothing\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_renderOptimization\">Rendering Optimization</label>\n                    <span class=\"opt-desc\">Caches the canvas contexts and skips canvas state writes that would not change anything.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_renderOptimization\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_performanceOptimization\">Performance Optimization</label>\n                    <span class=\"opt-desc\">Skips per-object overlay work for overlays that are switched off. Never touches anything the modules act on.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_performanceOptimization\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Low Quality Mode</span>\n                    <span class=\"opt-desc\">Cuts rendering detail. Turn this on if the game drops frames.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_lowQuality\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
+  const Misc_default = "<div class=\"menu-page\" data-id=\"4\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Misc</h1>\n        <p class=\"page-description\">Everything around the fight: what happens on a kill, what gets typed into chat for you and for the bots, how this menu behaves, and the counters the client has kept since you installed it.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Match<span class=\"sec-sub\">What the client does when a round starts or ends.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Kill Message</span>\n                    <span class=\"opt-desc\">Sends this line in chat every time you get a kill.</span>\n                </div>\n                <div class=\"option-content\">\n                    <input id=\"_killMessageText\" class=\"input\" type=\"text\" maxlength=\"30\" placeholder=\"Message\">\n                    <label class=\"switch-checkbox\"><input id=\"_killMessage\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Provoke on Kill</span>\n                    <span class=\"opt-desc\">Reacts in chat when someone kills you instead.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_deathProvoke\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autospawn</span>\n                    <span class=\"opt-desc\">Respawns you as soon as the death screen appears.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autospawn\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoaccept</span>\n                    <span class=\"opt-desc\">Accepts incoming clan requests without asking.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoaccept\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Auto Chat<span class=\"sec-sub\">Lines you post on a timer. They cycle in the order listed.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enable</span>\n                    <span class=\"opt-desc\">Starts posting your messages while you are in game.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoChat\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Interval</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoChatInterval\" type=\"range\" step=\"1\" min=\"1\" max=\"60\" data-suffix=\"s\">\n                </label>\n            </div>\n            <div id=\"autoChatMsgList\"></div>\n            <div class=\"content-option centered\">\n                <button id=\"addAutoChatMsg\" class=\"option-button\">Add message</button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Auto Chat<span class=\"sec-sub\">The same thing, typed by every connected bot.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enable Player Chat</span>\n                    <span class=\"opt-desc\">Lets the bots post their own list of lines.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoBotChat\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div id=\"autoBotChatMsgList\"></div>\n            <div class=\"content-option centered\">\n                <button id=\"addAutoBotChatMsg\" class=\"option-button\">Add player message</button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Menu<span class=\"sec-sub\">How this interface itself behaves.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">See through the menu</span>\n                    <span class=\"opt-desc\">Lets the game show faintly behind this panel while it is open.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_menuTransparency\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Session<span class=\"sec-sub\">Counters kept by the client. They persist between games.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Total kills</span></div>\n                <span id=\"_totalKills\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Global kills with bots</span></div>\n                <span id=\"_globalKills\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Deaths</span></div>\n                <span id=\"_deaths\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Autosync</span></div>\n                <span id=\"_autoSyncTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike sync hammer</span></div>\n                <span id=\"_spikeSyncHammerTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike sync</span></div>\n                <span id=\"_spikeSyncTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Velocity tick</span></div>\n                <span id=\"_velocityTickTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Client</span></div>\n                <span id=\"author\" class=\"text-value\">Ryn Type 2</span>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Reset<span class=\"sec-sub\">Puts every setting on every page back to its shipped value.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Reset all settings</span>\n                    <span class=\"opt-desc\">Keybinds, combat, visual, misc and bot options all return to defaults. Your music library is not touched.</span>\n                </div>\n                <button id=\"resetSettings\" class=\"option-button red\">Reset settings</button>\n            </div>\n        </div>\n    </div>\n</div>";
+  const Bots_default = "<div class=\"menu-page\" data-id=\"5\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Bots</h1>\n        <p class=\"page-description\">Connect alternate clients, name them, and decide how they follow, fight, build and farm. Everything below applies to every bot you have connected.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Fleet<span class=\"sec-sub\">Add a bot, give it a name, connect it. Connected bots appear underneath.</span></div>\n        <div class=\"section-content\">\n            <div id=\"bot-container\"></div>\n            <div id=\"dynamic-bot-list\"></div>\n            <div class=\"content-option stacked\" id=\"_botBulkRow\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Name every bot</span>\n                    <span class=\"opt-desc\">One name for the whole fleet. Every new row is pre-filled with it, so bots you add from here on join under it. <b>Apply to all</b> also gives it to the rows and bots you already have &mdash; a bot that is alive keeps the name it spawned with until it next respawns.</span>\n                </div>\n                <div class=\"inline\">\n                    <input id=\"_botBulkName\" class=\"input\" type=\"text\" maxlength=\"15\" placeholder=\"Enter name\" autocomplete=\"off\" spellcheck=\"false\">\n                    <button id=\"_botBulkNameApply\" class=\"option-button\">Apply to all</button>\n                </div>\n            </div>\n            <div class=\"content-option centered\">\n                <button id=\"add-bot-dynamic\" class=\"option-button primary tall\">Add bot</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Clan joins</span>\n                    <span class=\"opt-desc\">Restarts the join rotation for any bot that is still outside your clan. Bots already in it are skipped.</span>\n                </div>\n                <button id=\"_clanRecheck\" class=\"option-button\">Re-check clan joins</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto random bot names</span>\n                    <span class=\"opt-desc\">Pre-fills each new row with a random 1&ndash;7 character name.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoRandomBotNames\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bots own clan</span>\n                    <span class=\"opt-desc\">Each bot creates its own clan instead of joining yours.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botIndividualClans\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Behaviour<span class=\"sec-sub\">What the bots do while they are following you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Follow cursor</span>\n                    <span class=\"opt-desc\">Bots move toward where you are pointing rather than to you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_followCursor\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Stop movement radius</span>\n                    <span class=\"opt-desc\">How close a bot gets to its target point before it stops.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_movementRadius\" type=\"range\" step=\"25\" min=\"25\" max=\"250\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Auto Break</span>\n                    <span class=\"opt-desc\">Bots break structures standing in their way.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAutoBreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Ranged Kiting</span>\n                    <span class=\"opt-desc\">Bots holding a ranged weapon back off instead of closing.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botRangedKite\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Kite distance</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botKiteDistance\" type=\"range\" step=\"25\" min=\"150\" max=\"1200\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Volley Fire</span>\n                    <span class=\"opt-desc\">Bots fire in waves rather than all at once.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botVolley\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">First wave size</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botVolleyWave\" type=\"range\" step=\"1\" min=\"1\" max=\"20\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Avoid Shield Bots</span>\n                    <span class=\"opt-desc\">Bots steer away from a target that is holding a shield up.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAvoidShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Be Angel</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_botBeAngel\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Formation<span class=\"sec-sub\">The shape the fleet holds around you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Shape</span>\n                    <span class=\"opt-desc\">Pick a formation, and bind a key to any of them from inside the picker.</span>\n                </div>\n                <div id=\"_formationGrid\"></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Circle rotation</span>\n                    <span class=\"opt-desc\">Rotates the formation around you instead of holding it still.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_circleRotation\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Circle radius</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_circleRadius\" type=\"range\" step=\"25\" min=\"50\" max=\"600\">\n                </label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Loadout<span class=\"sec-sub\">What each bot carries. &ldquo;Copy from me&rdquo; mirrors your own weapon.</span></div>\n        <div class=\"section-content\">\n            <div class=\"stack\">\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Primary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-weapon-selector\">\n                        <div class=\"bot-weapon-btn\" data-wid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"0\" title=\"Tool Hammer\">Tool Hammer</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"1\" title=\"Hand Axe\">Hand Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"2\" title=\"Great Axe\">Great Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"3\" title=\"Short Sword\">Short Sword</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"4\" title=\"Katana\">Katana</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"5\" title=\"Polearm\">Polearm</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"6\" title=\"Bat\">Bat</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"7\" title=\"Daggers\">Daggers</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"8\" title=\"Stick\">Stick</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Secondary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-sec-weapon-selector\">\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"9\" title=\"Hunting Bow\">Hunting Bow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"10\" title=\"Great Hammer\">Great Hammer</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"11\" title=\"Wooden Shield\">Wooden Shield</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"12\" title=\"Crossbow\">Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"13\" title=\"Repeater Crossbow\">Repeater Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"14\" title=\"Mc Grabby\">Mc Grabby</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"15\" title=\"Musket\">Musket</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-sec-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Age 4 building</div>\n                    <div class=\"wpn-grid\" id=\"bot-age4-selector\">\n                        <div class=\"bot-weapon-btn\" data-age4id=\"0\" title=\"Trap\">Trap</div>\n                        <div class=\"bot-weapon-btn\" data-age4id=\"1\" title=\"Boost Pad\">Boost Pad</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-age4-label\">Trap (default)</span></div>\n                </div>\n            </div>\n\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Platform w/ Musket</span>\n                    <span class=\"opt-desc\">Bots carrying a musket build a platform to shoot from.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_platformMusket\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Auto Farm<span class=\"sec-sub\">Bots gather on their own and come back when they are done.</span></div>\n        <div class=\"section-content\">\n            <div class=\"stack\">\n                <div class=\"field\">\n                    <div class=\"field-head\">Farm mode</div>\n                    <div class=\"seg\">\n                        <button id=\"_farmModeSingle\" class=\"seg-btn\">Single</button>\n                        <button id=\"_farmModeNearest\" class=\"seg-btn\">Nearest</button>\n                    </div>\n                    <p class=\"field-note\">In <b>Single</b> mode every bot goes for one resource type. In <b>Nearest</b> mode each bot takes whatever is closest to it.</p>\n                </div>\n\n                <div class=\"field\" id=\"_farmTypeRow\">\n                    <div class=\"field-head\">Resource type</div>\n                    <div class=\"seg\">\n                        <button data-farm-type=\"0\" class=\"farm-type-btn\">Wood</button>\n                        <button data-farm-type=\"1\" class=\"farm-type-btn\">Food</button>\n                        <button data-farm-type=\"2\" class=\"farm-type-btn\">Stone</button>\n                        <button data-farm-type=\"3\" class=\"farm-type-btn\">Gold</button>\n                    </div>\n                    <input id=\"_botFarmType\" type=\"hidden\" value=\"0\">\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"field-head\">Limit</div>\n                    <div class=\"inline\">\n                        <input id=\"_botFarmLimit\" class=\"input\" type=\"number\" min=\"0\" max=\"9999\" step=\"50\" value=\"0\">\n                        <p class=\"field-note\" style=\"margin-top:0;\">Bots stop and return to you at this amount. <b>0</b> means no limit.</p>\n                    </div>\n                </div>\n            </div>\n        </div>\n    </div>\n</div>";
+  const Music_default = "<div class=\"menu-page\" data-id=\"7\">\n<style>\n@keyframes ryn-eq{0%,100%{height:4px;}50%{height:16px;}}\n\n.rm-root{display:flex;flex-direction:column;max-width:1180px;margin:0 auto;}\n\n/* ---------- now playing ---------- */\n.rm-player{\n  display:grid;\n  grid-template-columns:auto minmax(0,1fr) auto;\n  grid-template-areas:\"art meta actions\" \"art transport transport\";\n  column-gap:26px;row-gap:22px;align-items:center;\n  padding:26px 0 30px;\n  border-bottom:1px solid var(--line);\n}\n.rm-art{\n  grid-area:art;\n  width:96px;height:96px;flex-shrink:0;\n  display:flex;align-items:flex-end;justify-content:center;gap:4px;\n  padding-bottom:22px;\n  border-radius:var(--r3);\n  background:linear-gradient(150deg,#221D33,#131320);\n  border:1px solid var(--line);\n  position:relative;\n  transition:border-color 260ms var(--ease);\n}\n.rm-art::after{\n  content:'\\266B';\n  position:absolute;inset:0;\n  display:flex;align-items:center;justify-content:center;\n  font-size:30px;color:var(--tx-4);\n  transition:opacity 220ms var(--ease);\n}\n.rm-art.playing{border-color:var(--sage-40);}\n.rm-art.playing::after{opacity:0;}\n.rm-eq{display:none;align-items:flex-end;gap:4px;height:18px;}\n.rm-art.playing .rm-eq{display:flex;}\n.rm-eq-bar{width:3px;border-radius:2px;background:var(--sage);animation:ryn-eq .95s ease-in-out infinite;}\n.rm-eq-bar:nth-child(2){animation-delay:.16s;}\n.rm-eq-bar:nth-child(3){animation-delay:.32s;}\n\n.rm-meta{grid-area:meta;min-width:0;}\n.rm-kicker{\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.24em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:9px;\n}\n.rm-title{\n  font-size:clamp(22px,2.1vw,29px);font-weight:800;line-height:1.12;\n  letter-spacing:-.028em;color:var(--tx-1);\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n}\n.rm-artist{\n  margin-top:7px;font-size:14px;font-weight:600;color:var(--tx-3);\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n}\n.rm-album-badge{\n  display:inline-block;margin-top:10px;\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--iris-hi);\n}\n.rm-album-badge:empty{display:none;}\n\n.rm-actions{grid-area:actions;display:flex;gap:8px;align-self:start;}\n.rm-like-btn,.rm-save-now-btn{\n  width:42px;height:42px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);border:1px solid var(--line);\n  font-size:16px;line-height:1;color:var(--tx-3);cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.rm-like-btn:hover,.rm-save-now-btn:hover{background:rgba(255,255,255,.08);color:var(--tx-1);border-color:var(--line-2);}\n.rm-like-btn.liked,.rm-like-btn.on{color:var(--rose);border-color:rgba(217,163,171,.4);background:var(--rose-12);}\n.rm-save-now-btn.on{color:var(--sky);border-color:var(--sky-45);background:var(--sky-12);}\n\n.rm-transport{grid-area:transport;display:flex;align-items:center;gap:24px;min-width:0;}\n.rm-ctrl{display:flex;align-items:center;gap:8px;flex-shrink:0;}\n.rm-btn{\n  width:38px;height:38px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r2);\n  background:transparent;border:1px solid transparent;\n  color:var(--tx-3);font-size:12.5px;cursor:pointer;\n  transition:background 150ms var(--ease),color 150ms var(--ease),border-color 150ms var(--ease);\n}\n.rm-btn:hover{background:rgba(255,255,255,.06);color:var(--tx-1);}\n.rm-btn.rm-on,.rm-btn.on{color:var(--sage);border-color:var(--sage-40);background:var(--sage-14);}\n.rm-play-btn{\n  width:52px;height:52px;flex-shrink:0;\n  border-radius:16px;\n  background:var(--tx-1);border:none;color:#0A0A0D;\n  font-size:15.5px;\n  transition:transform 150ms var(--ease),background 150ms var(--ease);\n}\n.rm-play-btn:hover{background:#FFFFFF;transform:scale(1.04);}\n.rm-play-btn:active{transform:scale(.97);}\n\n.rm-prog-wrap{flex:1;min-width:0;display:flex;align-items:center;gap:14px;}\n.rm-prog-rail{\n  flex:1;min-width:0;height:5px;border-radius:999px;cursor:pointer;\n  background:rgba(255,255,255,.08);position:relative;\n}\n.rm-prog-fill{\n  height:100%;border-radius:999px;width:0;\n  background:var(--sky);position:relative;\n  transition:width 120ms linear;\n}\n.rm-prog-fill::after{\n  content:'';position:absolute;right:-5px;top:50%;\n  width:11px;height:11px;border-radius:50%;background:#EEF4FA;\n  transform:translateY(-50%) scale(0);\n  transition:transform 150ms var(--ease);\n  box-shadow:0 1px 4px rgba(0,0,0,.6);\n}\n.rm-prog-wrap:hover .rm-prog-fill::after{transform:translateY(-50%) scale(1);}\n.rm-time{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);flex-shrink:0;\n}\n.rm-vol{display:flex;align-items:center;gap:10px;flex-shrink:0;}\n.rm-vol-icon{font-size:13px;color:var(--tx-4);}\n#music-volume{\n  -webkit-appearance:none;appearance:none;\n  width:110px;height:18px;background:transparent;cursor:pointer;\n}\n#music-volume::-webkit-slider-runnable-track{height:4px;border-radius:999px;background:rgba(255,255,255,.09);}\n#music-volume::-webkit-slider-thumb{\n  -webkit-appearance:none;width:12px;height:12px;margin-top:-4px;\n  border-radius:50%;background:#EEF4FA;border:1px solid rgba(0,0,0,.35);\n  transition:transform 130ms var(--ease);\n}\n#music-volume:hover::-webkit-slider-thumb{transform:scale(1.15);}\n.rm-vol-val{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);min-width:34px;text-align:right;\n}\n\n/* ---------- sections ---------- */\n.rm-sec{border-bottom:1px solid var(--line);}\n.rm-sec-head{\n  display:flex;align-items:center;gap:12px;\n  padding:22px 2px;cursor:pointer;user-select:none;\n}\n.rm-sec-dot{\n  width:5px;height:5px;border-radius:50%;flex-shrink:0;\n  background:var(--tx-4);transition:background 200ms var(--ease);\n}\n.rm-sec.open .rm-sec-dot{background:var(--iris-hi);}\n.rm-sec-title{\n  flex:1;font-family:var(--mono);font-size:11.5px;font-weight:700;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-2);\n}\n.rm-sec.open .rm-sec-title{color:var(--iris-hi);}\n.rm-sec-arrow{font-size:9px;color:var(--tx-4);transition:transform 200ms var(--ease);}\n.rm-sec.open .rm-sec-arrow{transform:rotate(180deg);}\n.rm-sec-body{display:none;flex-direction:column;gap:14px;padding:0 2px 26px;}\n.rm-sec.open .rm-sec-body{display:flex;animation:soft-in 180ms var(--ease);}\n\n/* ---------- library ---------- */\n.rm-filter-bar{display:flex;gap:7px;flex-wrap:wrap;}\n.rm-filter-btn{\n  height:34px;padding:0 16px;border-radius:999px;\n  background:rgba(255,255,255,.04);border:1px solid var(--line);\n  font-size:12.5px;font-weight:700;color:var(--tx-3);cursor:pointer;\n  transition:background 150ms var(--ease),color 150ms var(--ease),border-color 150ms var(--ease);\n}\n.rm-filter-btn:hover{background:rgba(255,255,255,.08);color:var(--tx-1);}\n.rm-filter-btn.active{background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;}\n\n#song-list{display:flex;flex-direction:column;}\n.rm-song-row{\n  display:flex;align-items:center;gap:15px;\n  padding:12px 13px;border-radius:var(--r2);cursor:pointer;\n  position:relative;\n  transition:background 140ms var(--ease);\n}\n.rm-song-row:hover{background:rgba(255,255,255,.035);}\n.rm-song-row.active{background:var(--sage-14);}\n.rm-song-row.active::before{\n  content:'';position:absolute;left:0;top:10px;bottom:10px;\n  width:2px;border-radius:0 2px 2px 0;background:var(--sage);\n}\n.rm-snum{\n  width:23px;flex-shrink:0;text-align:center;\n  font-family:var(--mono);font-size:12.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);\n}\n.rm-song-row.active .rm-snum{color:var(--sage);}\n.rm-stitle{\n  flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n}\n.rm-sartist{\n  flex-shrink:1;min-width:0;max-width:30%;\n  font-size:12.5px;font-weight:500;color:var(--tx-4);\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n}\n.rm-s-icons{display:flex;gap:4px;flex-shrink:0;opacity:0;transition:opacity 150ms var(--ease);}\n.rm-song-row:hover .rm-s-icons,.rm-song-row.active .rm-s-icons{opacity:1;}\n.rm-s-like,.rm-s-save,.rm-sdel{\n  width:30px;height:30px;flex-shrink:0;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r1);font-size:12.5px;line-height:1;\n  color:var(--tx-4);cursor:pointer;\n  transition:background 140ms var(--ease),color 140ms var(--ease);\n}\n.rm-s-like:hover,.rm-sdel:hover{background:var(--rose-12);color:var(--rose);}\n.rm-s-save:hover{background:var(--sky-12);color:var(--sky);}\n.rm-s-like.on{color:var(--rose);}\n.rm-s-save.on{color:var(--sky);}\n.rm-song-row:not(:hover) .rm-s-icons:has(.on){opacity:1;}\n.rm-empty{\n  padding:26px 0;text-align:center;\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n\n/* ---------- albums ---------- */\n.rm-album-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}\n.rm-album-card{\n  position:relative;padding:14px;border-radius:var(--r3);cursor:pointer;\n  background:rgba(255,255,255,.03);border:1px solid var(--line);\n  transition:background 160ms var(--ease),border-color 160ms var(--ease),transform 160ms var(--ease);\n}\n.rm-album-card:hover{background:rgba(255,255,255,.06);border-color:var(--line-2);transform:translateY(-2px);}\n.rm-album-card.active{background:var(--iris-12);border-color:var(--iris-45);}\n.rm-album-icon{\n  display:flex;align-items:center;justify-content:center;\n  width:100%;aspect-ratio:1.6;border-radius:var(--r2);margin-bottom:11px;\n  font-size:22px;\n  background:linear-gradient(150deg,#221D33,#131320);\n}\n.rm-album-name{font-size:13.5px;font-weight:700;color:var(--tx-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}\n.rm-album-count{margin-top:3px;font-size:11.5px;font-weight:500;color:var(--tx-4);}\n.rm-album-del{\n  position:absolute;top:8px;right:8px;\n  width:22px;height:22px;border-radius:var(--r1);\n  display:flex;align-items:center;justify-content:center;\n  background:rgba(0,0,0,.55);color:var(--tx-3);\n  font-size:10px;cursor:pointer;opacity:0;\n  transition:opacity 150ms var(--ease),color 150ms var(--ease);\n}\n.rm-album-card:hover .rm-album-del{opacity:1;}\n.rm-album-del:hover{color:var(--rose);}\n\n/* ---------- forms ---------- */\n.rm-form{display:flex;flex-direction:column;gap:9px;max-width:620px;}\n.rm-inp{\n  width:100%;height:42px;padding:0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);border:1px solid var(--line-2);\n  color:var(--tx-1);font-size:13.5px;font-weight:600;\n  outline:none;\n  transition:border-color 150ms var(--ease),background 150ms var(--ease);\n}\n.rm-inp::placeholder{color:var(--tx-4);font-weight:500;}\n.rm-inp:focus{border-color:var(--sky-45);background:var(--sky-12);}\ninput[type=\"file\"].rm-inp{padding:10px 12px;height:auto;font-size:12.5px;font-weight:500;cursor:pointer;}\n.rm-lrc{\n  padding:14px;border-radius:var(--r3);\n  background:rgba(255,255,255,.022);border:1px solid var(--line);\n}\n.rm-lrc-head{\n  display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n#lrc-status{font-family:var(--mono);font-size:11.5px;letter-spacing:0;text-transform:none;color:var(--sky);}\ntextarea.rm-inp{\n  height:98px;padding:11px 13px;resize:vertical;\n  font-family:var(--mono);font-size:12.5px;font-weight:500;line-height:1.6;\n}\n.rm-check{\n  display:flex;align-items:center;gap:9px;margin-top:11px;\n  font-size:12.5px;font-weight:600;color:var(--tx-3);cursor:pointer;\n}\n.rm-check input{accent-color:#A6D7B2;width:15px;height:15px;cursor:pointer;}\n.rm-row{display:flex;gap:9px;}\n\n/* ---------- sync ---------- */\n.rm-sync-row{\n  display:flex;align-items:center;justify-content:space-between;gap:16px;\n  padding:12px 14px;border-radius:var(--r2);\n  transition:background 140ms var(--ease);\n}\n.rm-sync-row:hover{background:rgba(255,255,255,.028);}\n.rm-sync-label{flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);}\n.rm-sync-note{padding:0 14px 8px;font-size:12.5px;font-weight:500;line-height:1.5;color:var(--tx-4);}\n.rm-badge{\n  display:inline-block;margin-left:9px;padding:2px 8px;border-radius:999px;\n  background:var(--iris-12);color:var(--iris-hi);\n  font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;\n  vertical-align:middle;\n}\n.rm-divider{height:1px;background:var(--line);margin:6px 0;}\n.rm-status{\n  font-family:var(--mono);font-size:11.5px;font-weight:500;\n  color:var(--tx-4);min-height:16px;\n}\n#bm-dbg-box{\n  margin:0;padding:11px 13px;border-radius:var(--r2);\n  background:rgba(0,0,0,.4);border:1px solid var(--line);\n  font-family:var(--mono);font-size:11.5px;color:var(--tx-3);\n  white-space:pre-wrap;max-height:150px;overflow-y:auto;\n}\n\n/* ---------- toast + guide ---------- */\n.rm-toast{\n  display:none;position:fixed;left:50%;bottom:28px;\n  transform:translateX(-50%);\n  padding:11px 20px;border-radius:999px;z-index:99999;\n  background:var(--tx-1);color:#0A0A0D;\n  font-size:12.5px;font-weight:700;\n  box-shadow:0 16px 40px -12px rgba(0,0,0,.8);\n}\n.rm-guide{\n  padding:18px 20px;margin-bottom:4px;\n  border-radius:var(--r3);\n  background:rgba(255,255,255,.022);border:1px solid var(--line);\n}\n.rm-guide summary{\n  cursor:pointer;list-style:none;\n  font-size:13.5px;font-weight:700;color:var(--tx-2);\n  display:flex;align-items:center;gap:10px;\n}\n.rm-guide summary::-webkit-details-marker{display:none;}\n.rm-guide summary::before{\n  content:'?';flex-shrink:0;width:20px;height:20px;border-radius:50%;\n  background:var(--iris-12);color:var(--iris-hi);\n  font-family:var(--mono);font-size:11px;font-weight:700;\n  display:grid;place-items:center;\n}\n.rm-guide[open] summary{margin-bottom:14px;color:var(--tx-1);}\n.rm-guide ol{margin:0;padding-left:20px;color:var(--tx-3);font-size:12.5px;line-height:2;}\n.rm-guide code{\n  background:rgba(255,255,255,.06);color:var(--sky);\n  padding:2px 7px;border-radius:5px;font-family:var(--mono);font-size:11.5px;\n}\n.rm-guide a{color:var(--sky);border-bottom:1px solid rgba(155,197,232,.35);}\n.rm-guide a:hover{color:var(--tx-1);border-bottom-color:var(--tx-1);}\n.rm-guide-note{margin-top:14px;color:var(--tx-4);font-size:11.5px;line-height:1.75;}\n</style>\n\n<div id=\"rm-toast\" class=\"rm-toast\"></div>\n\n<div class=\"page-head\">\n    <h1 class=\"page-title\">Music</h1>\n    <p class=\"page-description\">A local library that plays inside the client and can type synced lyrics into chat for you, for your bots, or for both at once.</p>\n</div>\n\n<div class=\"rm-root\">\n\n  <div class=\"rm-player\">\n    <div class=\"rm-art\" id=\"rm-art\">\n      <div class=\"rm-eq\"><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div></div>\n    </div>\n    <div class=\"rm-meta\">\n      <div class=\"rm-kicker\">Now playing</div>\n      <div id=\"music-title\" class=\"rm-title\">No song selected</div>\n      <div id=\"music-artist\" class=\"rm-artist\">--</div>\n      <div id=\"music-album-badge\" class=\"rm-album-badge\"></div>\n    </div>\n    <div class=\"rm-actions\">\n      <button id=\"rm-like-now\" class=\"rm-like-btn\" title=\"Like\">&#9825;</button>\n      <button id=\"rm-save-now\" class=\"rm-save-now-btn\" title=\"Save\">&#9733;</button>\n    </div>\n    <div class=\"rm-transport\">\n      <div class=\"rm-ctrl\">\n        <button id=\"music-prev\" class=\"rm-btn\" title=\"Previous\">&#9664;&#9664;</button>\n        <button id=\"music-play\" class=\"rm-btn rm-play-btn\" title=\"Play / pause\">&#9654;</button>\n        <button id=\"music-next\" class=\"rm-btn\" title=\"Next\">&#9654;&#9654;</button>\n        <button id=\"music-loop\" class=\"rm-btn\" title=\"Loop\">&#8635;</button>\n        <button id=\"music-shuffle\" class=\"rm-btn\" title=\"Shuffle\" style=\"font-size:10px;letter-spacing:.08em;font-weight:700;\">SHF</button>\n      </div>\n      <div class=\"rm-prog-wrap\">\n        <span id=\"music-time-current\" class=\"rm-time\">0:00</span>\n        <div id=\"music-progress-bar\" class=\"rm-prog-rail\"><div id=\"music-progress-fill\" class=\"rm-prog-fill\"></div></div>\n        <span id=\"music-time-total\" class=\"rm-time\">0:00</span>\n      </div>\n      <div class=\"rm-vol\">\n        <span class=\"rm-vol-icon\">&#9834;</span>\n        <input id=\"music-volume\" type=\"range\" min=\"0\" max=\"100\" value=\"70\">\n        <span id=\"music-volume-label\" class=\"rm-vol-val\">70%</span>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec open\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Library</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div id=\"rm-filter-bar\" class=\"rm-filter-bar\">\n        <button class=\"rm-filter-btn active\" data-filter=\"\">All songs</button>\n        <button class=\"rm-filter-btn\" data-filter=\"__liked\">&#9829; Liked</button>\n      </div>\n      <div id=\"song-list\"></div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec open\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Albums</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div id=\"rm-album-grid\" class=\"rm-album-grid\"></div>\n      <div class=\"rm-row\" style=\"max-width:480px;\">\n        <input id=\"album-name-input\" class=\"rm-inp\" type=\"text\" placeholder=\"New album name\" maxlength=\"30\">\n        <button id=\"add-album\" class=\"option-button\">Add</button>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Add song</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <details class=\"rm-guide\">\n        <summary>How to add a song with its lyrics</summary>\n        <ol>\n          <li>Find the song on <a href=\"https://www.youtube.com/\" target=\"_blank\" rel=\"noreferrer\">youtube.com</a> and copy its link.</li>\n          <li>Turn the link into a file on <a href=\"https://ytmp3.gl/\" target=\"_blank\" rel=\"noreferrer\">ytmp3.gl</a> and download the <code>.mp3</code>.</li>\n          <li>Search the same song on <a href=\"https://lrclib.net/\" target=\"_blank\" rel=\"noreferrer\">lrclib.net</a> and download the <b>synced</b> lyrics as <code>.lrc</code>.</li>\n          <li>Fill in the <b>Title</b> below and pick the <code>.mp3</code> in the file box, or paste a direct link in <b>URL</b>.</li>\n          <li>In the <b>LRC sync</b> box, pick the <code>.lrc</code> file &mdash; or paste its lines into the text area.</li>\n          <li>Press <b>Add song</b>. It shows up in the library with its lyrics attached.</li>\n        </ol>\n        <div class=\"rm-guide-note\">The <code>.lrc</code> has to be the synced kind &mdash; the one whose lines start with a timestamp like <code>[01:23.45]</code>. Plain lyrics still show up, but they will not follow the song. If the words drift, an <code>.lrc</code> from a different release of the track is usually the reason.</div>\n      </details>\n      <div class=\"rm-form\">\n        <input id=\"song-title-input\" class=\"rm-inp\" type=\"text\" placeholder=\"Title *\" maxlength=\"50\">\n        <input id=\"song-artist-input\" class=\"rm-inp\" type=\"text\" placeholder=\"Artist\" maxlength=\"30\">\n        <input id=\"song-url-input\" class=\"rm-inp\" type=\"text\" placeholder=\"URL (.mp3  .ogg  .wav)\">\n        <input id=\"song-file-input\" class=\"rm-inp\" type=\"file\" accept=\".mp3,.ogg,.wav,.flac,.aac,.m4a\">\n        <select id=\"song-album-select\" class=\"rm-inp ryn-select\"><option value=\"\">No album</option></select>\n        <div class=\"rm-lrc\">\n          <div class=\"rm-lrc-head\"><span>LRC sync</span><span id=\"lrc-status\"></span></div>\n          <input id=\"lrc-file-input\" class=\"rm-inp\" type=\"file\" accept=\".lrc,.txt\" style=\"margin-bottom:9px;\">\n          <textarea id=\"song-lyrics-input\" class=\"rm-inp\" placeholder=\"[0:15] Line 1&#10;[0:30] Line 2\"></textarea>\n          <label class=\"rm-check\"><input id=\"song-autosync\" type=\"checkbox\"> Auto-play and sync when added</label>\n        </div>\n        <div class=\"rm-row\">\n          <button id=\"add-song\" class=\"option-button primary wide\">Add song</button>\n          <button id=\"save-song-btn\" class=\"option-button\">Save lyrics</button>\n        </div>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Chat sync</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Enable chat sync</span><label class=\"switch-checkbox\"><input id=\"music-chat-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Mixed sync<span class=\"rm-badge\">Me + bots</span></span><label class=\"switch-checkbox\"><input id=\"music-mixed-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">You: line &#8594; bots: line &#8594; you &hellip;</div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Bots only sync<span class=\"rm-badge\">Bots</span></span><label class=\"switch-checkbox\"><input id=\"music-bots-only-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">Bot 1: line 1 &bull; bot 2: line 2 &bull; bot 3: line 3 &hellip;</div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Unified sync<span class=\"rm-badge\">All</span></span><label class=\"switch-checkbox\"><input id=\"music-unified-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">You and every bot post the same line at the same moment.</div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Auto delay<span id=\"bm-auto-delay-badge\" class=\"rm-badge\">off</span></span><label class=\"switch-checkbox\"><input id=\"music-auto-delay\" type=\"checkbox\" checked><span></span></label></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Sync bot<span id=\"bm-sync-bot-badge\" class=\"rm-badge\">off</span></span><button id=\"music-sync-bot-btn\" class=\"option-button\">OFF</button></div>\n      <div id=\"bm-manual-delay-row\" class=\"rm-sync-row\" style=\"display:none;\"><span class=\"rm-sync-label\">Delay</span><label class=\"slider\"><span class=\"slider-value\">0ms</span><input id=\"music-sync-delay\" type=\"range\" min=\"-3000\" max=\"3000\" step=\"50\" value=\"0\"></label></div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-row\" style=\"align-items:center;\">\n        <button id=\"bm-test-chat\" class=\"option-button\">Test chat</button>\n        <span id=\"bm-test-chat-status\" class=\"rm-status\" style=\"align-self:center;\"></span>\n      </div>\n      <button id=\"bm-send-all-lyrics\" class=\"option-button wide\">&#9836; Send All Lyrics: OFF</button>\n      <div id=\"bm-send-lyrics-status\" class=\"rm-status\" style=\"text-align:center;\"></div>\n      <div id=\"bm-dbg-wrap\" style=\"display:none;\"><pre id=\"bm-dbg-box\"></pre></div>\n      <button id=\"bm-dbg-toggle\" class=\"option-button wide\">Show Debug Log</button>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Backup &amp; restore</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <p class=\"rm-sync-note\" style=\"padding-left:0;\">Export the whole library to a JSON file and bring it back on another machine.</p>\n      <div class=\"rm-row\" style=\"max-width:420px;\">\n        <button id=\"music-export-btn\" class=\"option-button wide\">Export</button>\n        <button id=\"music-import-btn\" class=\"option-button wide\">Import</button>\n        <input id=\"music-import-file\" type=\"file\" accept=\".json\" style=\"display:none;\">\n      </div>\n      <div id=\"music-backup-status\" class=\"rm-status\"></div>\n    </div>\n  </div>\n\n</div>\n</div>";
+  const styles_default = "@import url(\"https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap\");\n\n/* ============================================================\n   RYN TYPE 2 — interface stylesheet\n   Ground: near-black neutral. Iris (muted purple) = navigation.\n   Sage (soft light green) = enabled. Sky (light blue) = values,\n   focus and interaction. Nothing else carries colour.\n   ============================================================ */\n\n:root{\n  --ink-0:#07070A;\n  --ink-1:#0C0C11;\n  --ink-2:#101016;\n  --ink-3:#15151C;\n  --ink-4:#1B1B24;\n\n  --line:rgba(255,255,255,0.055);\n  --line-2:rgba(255,255,255,0.10);\n  --line-3:rgba(255,255,255,0.16);\n\n  --iris:#8E76CE;\n  --iris-hi:#A894E0;\n  --iris-05:rgba(142,118,206,0.05);\n  --iris-12:rgba(142,118,206,0.12);\n  --iris-18:rgba(142,118,206,0.18);\n  --iris-45:rgba(142,118,206,0.45);\n\n  --sage:#A6D7B2;\n  --sage-14:rgba(166,215,178,0.14);\n  --sage-40:rgba(166,215,178,0.40);\n\n  --sky:#9BC5E8;\n  --sky-12:rgba(155,197,232,0.12);\n  --sky-45:rgba(155,197,232,0.45);\n\n  --rose:#D9A3AB;\n  --rose-12:rgba(217,163,171,0.12);\n\n  --tx-1:#F3F2F7;\n  --tx-2:#ACA9BA;\n  --tx-3:#726F80;\n  --tx-4:#4E4B5A;\n\n  --r1:6px;\n  --r2:10px;\n  --r3:14px;\n  --r4:22px;\n\n  --s1:4px;  --s2:8px;   --s3:12px;  --s4:16px;\n  --s5:24px; --s6:32px;  --s7:44px;  --s8:64px;\n\n  --ease:cubic-bezier(.2,.8,.3,1);\n  --font:'Manrope','Segoe UI',system-ui,sans-serif;\n  --mono:'Space Grotesk','Manrope',system-ui,sans-serif;\n\n  /* legacy aliases kept so any stray rule still resolves */\n  --accent:#8E76CE;\n  --accent2:#9BC5E8;\n  --border:rgba(255,255,255,0.055);\n  --text:#F3F2F7;\n  --text-muted:#ACA9BA;\n  --text-dim:#726F80;\n}\n\n*{box-sizing:border-box;-webkit-user-select:none;user-select:none;}\nhtml,body{margin:0;padding:0;height:100%;overflow:hidden;background:transparent;}\nbody{font-family:var(--font);color:var(--tx-1);-webkit-font-smoothing:antialiased;}\nh1,h2,h3,p{margin:0;}\nbutton{font-family:inherit;border:none;outline:none;background:none;cursor:pointer;color:inherit;}\ninput,textarea,select{font-family:inherit;}\ninput,textarea{-webkit-user-select:text;user-select:text;}\na{color:var(--sky);text-decoration:none;}\n\n@keyframes toopen{from{opacity:0;transform:translateY(8px) scale(.994);}to{opacity:1;transform:none;}}\n@keyframes toclose{from{opacity:1;transform:none;}to{opacity:0;transform:translateY(6px) scale(.994);}}\n@keyframes page-in{from{opacity:0;transform:translateX(10px);}to{opacity:1;transform:none;}}\n@keyframes cap-pulse{0%,100%{opacity:1;}50%{opacity:.55;}}\n@keyframes ripple{from{opacity:.22;transform:scale(0);}to{opacity:0;transform:scale(1.3);}}\n@keyframes soft-in{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:none;}}\n\n/* ------------------------------------------------------------------\n   SHELL\n   ------------------------------------------------------------------ */\n\n#menu-container{\n  position:absolute;inset:0;\n  display:flex;align-items:center;justify-content:center;\n  padding:18px;\n}\n\n#menu-wrapper{\n  position:relative;\n  width:min(1100px,100%);\n  height:min(690px,100%);\n  min-width:860px;min-height:520px;\n  display:flex;\n  background:var(--ink-1);\n  border:1px solid var(--line-2);\n  border-radius:var(--r4);\n  overflow:hidden;\n  box-shadow:0 48px 110px -34px rgba(0,0,0,.92),0 0 0 1px rgba(0,0,0,.4);\n  transform:scale(var(--ryn-scale,1));\n  transform-origin:center center;\n}\n#menu-container.transparent #menu-wrapper{background:rgba(12,12,17,0.90);}\n#menu-wrapper.toopen{animation:180ms var(--ease) toopen both;}\n#menu-wrapper.toclose{animation:140ms ease-in toclose both;}\n\nmain{display:flex;flex:1;min-width:0;min-height:0;}\n\n/* the old top bar is gone — everything identifying lives in the rail */\nheader{display:none;}\n\n/* ------------------------------------------------------------------\n   NAVIGATION RAIL\n   ------------------------------------------------------------------ */\n\n#navbar-container{\n  width:236px;min-width:236px;flex-shrink:0;\n  display:flex;flex-direction:column;\n  background:var(--ink-2);\n  border-right:1px solid var(--line);\n  padding:22px 12px 12px;\n}\n\n.rail-brand{display:flex;align-items:baseline;gap:9px;padding:0 12px 18px;}\n.rail-mark{\n  font-family:var(--mono);font-weight:700;font-size:25px;line-height:1;\n  letter-spacing:-.02em;color:var(--tx-1);\n}\n.rail-sub{\n  font-family:var(--mono);font-weight:600;font-size:10.5px;line-height:1;\n  letter-spacing:.24em;text-transform:uppercase;color:var(--iris-hi);\n}\n\n.rail-label{\n  font-family:var(--mono);font-weight:600;font-size:10px;\n  letter-spacing:.22em;text-transform:uppercase;color:var(--tx-4);\n  padding:0 12px;margin:20px 0 7px;\n}\n\n#navbar-container nav{display:flex;flex-direction:column;gap:2px;}\n\n.open-menu{\n  position:relative;\n  display:flex;align-items:center;gap:13px;\n  width:100%;padding:12px 13px;\n  border-radius:var(--r2);\n  background:transparent;\n  color:var(--tx-2);\n  text-align:left;\n  overflow:hidden;\n  transition:background 150ms var(--ease),color 150ms var(--ease);\n}\n.open-menu .nav-index{\n  font-family:var(--mono);font-weight:600;font-size:11px;line-height:1;\n  letter-spacing:.06em;color:var(--tx-4);\n  width:20px;flex-shrink:0;\n  transition:color 150ms var(--ease);\n}\n.open-menu .nav-label{\n  font-weight:800;font-size:15px;line-height:1.1;letter-spacing:-.012em;\n}\n.open-menu:hover{background:rgba(255,255,255,.035);color:var(--tx-1);}\n.open-menu:active{background:rgba(255,255,255,.06);}\n.open-menu.active{background:var(--iris-12);color:#FFFFFF;}\n.open-menu.active .nav-index{color:var(--iris-hi);}\n.open-menu.active::before{\n  content:'';position:absolute;left:0;top:11px;bottom:11px;\n  width:3px;border-radius:0 3px 3px 0;background:var(--iris);\n}\n.open-menu .ripple{\n  position:absolute;border-radius:50%;\n  background:rgba(255,255,255,.07);\n  opacity:0;pointer-events:none;\n  animation:ripple 420ms ease-out;\n}\n\n/* live outline of the open category */\n#nav-outline{\n  display:flex;flex-direction:column;gap:1px;\n  margin-top:4px;padding-left:6px;\n  overflow-y:auto;flex:1;min-height:0;\n}\n#nav-outline::-webkit-scrollbar{width:6px;}\n#nav-outline::-webkit-scrollbar-thumb{background:rgba(255,255,255,.07);border-radius:6px;}\n.outline-item{\n  position:relative;\n  padding:7px 10px 7px 16px;\n  border-radius:var(--r1);\n  font-size:12.5px;font-weight:600;line-height:1.3;\n  color:var(--tx-3);text-align:left;\n  transition:color 140ms var(--ease),background 140ms var(--ease);\n}\n.outline-item::before{\n  content:'';position:absolute;left:4px;top:50%;\n  width:4px;height:4px;margin-top:-2px;border-radius:50%;\n  background:var(--tx-4);\n  transition:background 160ms var(--ease),transform 160ms var(--ease);\n}\n.outline-item:hover{color:var(--tx-1);background:rgba(255,255,255,.03);}\n.outline-item.current{color:var(--tx-1);}\n.outline-item.current::before{background:var(--iris-hi);transform:scale(1.35);}\n\n.rail-foot{\n  margin-top:auto;padding-top:16px;\n  border-top:1px solid var(--line);\n  display:flex;align-items:center;gap:10px;\n}\n#ryn-version{\n  font-family:var(--mono);font-size:10.5px;font-weight:500;\n  letter-spacing:.14em;text-transform:uppercase;color:var(--tx-4);\n  padding-left:12px;margin-right:auto;\n}\n#close-button{\n  width:34px;height:34px;padding:8px;flex-shrink:0;\n  border-radius:var(--r2);\n  fill:none;stroke:var(--tx-3);stroke-width:1.9;\n  background:transparent;cursor:pointer;\n  transition:background 150ms var(--ease),stroke 150ms var(--ease);\n}\n#close-button:hover{background:rgba(255,255,255,.06);stroke:var(--tx-1);}\n#close-button:active{background:rgba(255,255,255,.09);}\n\n/* search lives in the rail head */\n#ryn-search-wrap{\n  position:relative;\n  display:flex;align-items:center;gap:8px;\n  height:40px;padding:0 13px;\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line-2);\n  border-radius:var(--r2);\n  transition:border-color 160ms var(--ease),background 160ms var(--ease),box-shadow 160ms var(--ease);\n}\n#ryn-search-wrap:focus-within{\n  border-color:var(--sky-45);\n  background:var(--sky-12);\n  box-shadow:0 0 0 3px rgba(155,197,232,.10);\n}\n#ryn-search-wrap::before{\n  content:'';flex-shrink:0;width:15px;height:15px;\n  background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23726F80' stroke-width='1.6' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='4.6'/%3E%3Cpath d='M10.4 10.4L14 14'/%3E%3C/svg%3E\");\n  background-repeat:no-repeat;background-position:center;background-size:contain;\n}\n#ryn-search-input{\n  flex:1;min-width:0;\n  background:transparent;border:none;outline:none;\n  font-size:13.5px;font-weight:600;color:var(--tx-1);\n}\n#ryn-search-input::placeholder{color:var(--tx-4);font-weight:500;}\n#ryn-search-clear{\n  display:none;flex-shrink:0;\n  font-size:11px;line-height:1;color:var(--tx-4);cursor:pointer;\n  transition:color 140ms;\n}\n#ryn-search-clear:hover{color:var(--tx-1);}\n#ryn-search-dropdown{\n  display:none;position:absolute;top:calc(100% + 8px);left:0;\n  width:320px;max-height:340px;overflow-y:auto;\n  padding:6px;\n  background:var(--ink-3);\n  border:1px solid var(--line-2);\n  border-radius:var(--r3);\n  box-shadow:0 26px 60px -18px rgba(0,0,0,.9);\n  z-index:9999;\n  animation:soft-in 150ms var(--ease);\n}\n#ryn-search-dropdown::-webkit-scrollbar{width:8px;}\n#ryn-search-dropdown::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:8px;border:2px solid transparent;background-clip:padding-box;}\n.ryn-si{\n  display:flex;flex-direction:column;gap:3px;\n  padding:9px 11px;border-radius:var(--r2);cursor:pointer;\n  transition:background 130ms var(--ease);\n}\n.ryn-si:hover,.ryn-si.ryn-fx{background:var(--iris-12);}\n.ryn-st{font-size:13px;font-weight:700;color:var(--tx-1);line-height:1.3;}\n.ryn-st mark{background:var(--iris-45);color:#fff;border-radius:3px;padding:0 2px;}\n.ryn-sp{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--tx-4);}\n.ryn-se{text-align:center;padding:22px 12px;font-size:12.5px;font-weight:600;color:var(--tx-4);}\n.ryn-sl{\n  font-family:var(--mono);font-size:9.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--iris-hi);\n  padding:9px 11px 4px;\n}\n\n/* ------------------------------------------------------------------\n   CONTENT COLUMN — one continuous vertical flow, full available width\n   ------------------------------------------------------------------ */\n\n#page-container{\n  flex:1;min-width:0;\n  overflow-y:auto;overflow-x:hidden;\n  background:var(--ink-1);\n}\n#page-container::-webkit-scrollbar{width:12px;}\n#page-container::-webkit-scrollbar-track{background:transparent;}\n#page-container::-webkit-scrollbar-thumb{\n  background:rgba(255,255,255,.09);\n  border-radius:12px;\n  border:4px solid transparent;\n  background-clip:padding-box;\n}\n#page-container::-webkit-scrollbar-thumb:hover{background:rgba(142,118,206,.55);background-clip:padding-box;}\n\n.menu-page{display:none;}\n.menu-page.opened{\n  display:block;\n  padding:34px clamp(20px,2.6vw,38px) 92px;\n  animation:page-in 190ms var(--ease);\n}\n.page-head{\n  max-width:1180px;margin:0 auto 6px;\n  padding-bottom:24px;\n  border-bottom:1px solid var(--line);\n}\n.menu-page .page-title{\n  font-size:clamp(27px,2.5vw,33px);font-weight:800;line-height:1.03;\n  letter-spacing:-.03em;color:var(--tx-1);\n}\n.page-description{\n  margin-top:12px;max-width:74ch;\n  font-size:13.5px;font-weight:500;line-height:1.6;color:var(--tx-3);\n}\n\n.section{max-width:1180px;margin:0 auto;padding-top:36px;}\n.section-title{\n  display:flex;flex-direction:column;gap:7px;\n  padding:0 2px 13px;\n  border-bottom:1px solid var(--line);\n  font-family:var(--mono);font-size:11.5px;font-weight:700;\n  letter-spacing:.19em;text-transform:uppercase;color:var(--iris-hi);\n}\nh2.section-title{font-family:var(--mono);}\n.sec-sub{\n  font-family:var(--font);font-size:12.5px;font-weight:500;\n  letter-spacing:0;text-transform:none;line-height:1.55;color:var(--tx-3);\n}\n.section-content{display:flex;flex-direction:column;padding-top:4px;}\n\n/* ------------------------------------------------------------------\n   SETTING ROW\n   ------------------------------------------------------------------ */\n\n.content-option{\n  position:relative;\n  display:flex;align-items:center;justify-content:space-between;gap:24px;\n  min-height:60px;\n  padding:13px 15px 13px 17px;\n  border-radius:var(--r2);\n  border-bottom:1px solid rgba(255,255,255,.032);\n  transition:background 150ms var(--ease);\n}\n.content-option:last-child{border-bottom:none;}\n.content-option:hover{background:rgba(255,255,255,.026);}\n.content-option::before{\n  content:'';position:absolute;left:0;top:14px;bottom:14px;\n  width:2px;border-radius:0 2px 2px 0;\n  background:var(--sage);\n  opacity:0;\n  transition:opacity 190ms var(--ease);\n}\n.content-option:has(input[type=\"checkbox\"]:checked)::before{opacity:.85;}\n\n.content-option.centered{justify-content:center;}\n.content-option.left-flex{justify-content:flex-start;gap:14px;}\n.content-option.text{justify-content:flex-start;}\n.content-option.stacked{flex-direction:column;align-items:stretch;gap:14px;}\n\n.opt-main{display:flex;flex-direction:column;gap:5px;min-width:0;flex:1;}\n.option-title{\n  font-size:15.5px;font-weight:700;line-height:1.32;\n  letter-spacing:-.008em;color:var(--tx-1);\n}\nlabel.option-title{cursor:pointer;}\nlabel.option-title:active{opacity:.75;}\n.opt-desc{\n  font-size:12.5px;font-weight:500;line-height:1.5;\n  color:var(--tx-3);max-width:74ch;\n}\n.content-option.quiet .option-title{font-size:14.5px;font-weight:600;color:var(--tx-2);}\n.content-option.quiet{min-height:54px;}\n.content-option.quiet:hover .option-title{color:var(--tx-1);}\n.option-content{display:flex;align-items:center;gap:12px;flex-shrink:0;}.ryn-select{appearance:none;-webkit-appearance:none;background:rgba(255,255,255,.06);color:inherit;border:1px solid rgba(255,255,255,.18);border-radius:7px;padding:5px 26px 5px 10px;font:inherit;font-size:12px;cursor:pointer;flex-shrink:0;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 14px) calc(50% + 1px),calc(100% - 9px) calc(50% + 1px);background-size:5px 5px,5px 5px;background-repeat:no-repeat;}.ryn-select:hover{border-color:rgba(255,255,255,.32);}.ryn-select:focus{outline:none;border-color:var(--iris);}.ryn-select option{background:#1a1526;color:#fff;}\n\n.text-value{\n  font-family:var(--mono);font-size:15px;font-weight:700;\n  color:var(--sky);font-variant-numeric:tabular-nums;\n}\n.simplified{font-size:12.5px;font-weight:500;color:var(--tx-3);line-height:1.6;}\n.highlight{color:var(--iris-hi);}\n\n/* nested detail rows under a parent toggle */\n.sub-options{\n  margin:2px 0 6px 18px;\n  padding-left:16px;\n  border-left:1px solid var(--line-2);\n  transition:opacity 200ms var(--ease);\n}\n.sub-options .content-option{min-height:50px;padding-top:9px;padding-bottom:9px;}\n.sub-options .option-title{font-size:14px;font-weight:600;color:var(--tx-2);}\n.sub-options .content-option:hover .option-title{color:var(--tx-1);}\n.content-option:has(> .switch-checkbox > input:not(:checked)) + .sub-options{\n  opacity:.32;pointer-events:none;\n}\n\n/* ------------------------------------------------------------------\n   CONTROLS\n   ------------------------------------------------------------------ */\n\n/* toggle */\n.switch-checkbox{position:relative;width:48px;height:27px;flex-shrink:0;}\n.switch-checkbox input{position:absolute;opacity:0;width:0;height:0;}\n.switch-checkbox span{\n  position:absolute;inset:0;\n  border-radius:10px;cursor:pointer;\n  background:rgba(255,255,255,.06);\n  border:1px solid rgba(255,255,255,.11);\n  transition:background 180ms var(--ease),border-color 180ms var(--ease);\n}\n.switch-checkbox span::before{\n  content:'';position:absolute;left:4px;top:50%;\n  width:18px;height:18px;border-radius:6px;\n  background:rgba(255,255,255,.32);\n  transform:translateY(-50%);\n  transition:transform 190ms var(--ease),background 190ms var(--ease);\n}\n.switch-checkbox span:hover{border-color:rgba(255,255,255,.2);}\n.switch-checkbox input:checked + span{\n  background:var(--sage-14);\n  border-color:var(--sage-40);\n}\n.switch-checkbox input:checked + span::before{\n  transform:translateY(-50%) translateX(21px);\n  background:var(--sage);\n}\n.switch-checkbox input:focus-visible + span{box-shadow:0 0 0 3px rgba(155,197,232,.20);}\n\n/* keycap */\n.hotkeyInput{\n  display:flex;align-items:center;justify-content:center;\n  min-width:82px;height:42px;padding:0 15px;\n  border-radius:10px;\n  background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.028));\n  border:1px solid rgba(255,255,255,.115);\n  box-shadow:0 2px 0 rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.10);\n  font-family:var(--mono);font-size:13.5px;font-weight:700;\n  letter-spacing:.07em;text-transform:uppercase;color:var(--tx-1);\n  transition:transform 120ms var(--ease),border-color 150ms var(--ease),\n             background 150ms var(--ease),box-shadow 150ms var(--ease),color 150ms var(--ease);\n}\n.hotkeyInput:hover{border-color:var(--sky-45);color:#fff;}\n.hotkeyInput:active{transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.06);}\n.hotkeyInput.active{\n  border-color:var(--iris);background:var(--iris-18);color:var(--iris-hi);\n  box-shadow:inset 0 1px 0 rgba(255,255,255,.08);\n  transform:translateY(2px);\n  animation:cap-pulse 1.15s ease-in-out infinite;\n}\n.hotkeyInput.red{\n  border-color:rgba(217,163,171,.5);background:var(--rose-12);color:var(--rose);\n}\n.key-state{\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--tx-4);\n  min-width:78px;text-align:right;\n}\n.key-state::after{content:'';}\n.content-option:has(.hotkeyInput.red) .key-state::after{content:'Conflict';color:var(--rose);}\n.content-option:has(.hotkeyInput.active) .key-state::after{content:'Press a key';color:var(--iris-hi);}\n.content-option:has(.hotkeyInput.red) .key-state,\n.content-option:has(.hotkeyInput.active) .key-state{color:inherit;}\n\n/* button */\n.option-button{\n  display:inline-flex;align-items:center;justify-content:center;gap:8px;\n  height:42px;padding:0 21px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.05);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);\n  font-size:13.5px;font-weight:700;letter-spacing:.005em;\n  white-space:nowrap;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),\n             transform 110ms var(--ease),color 150ms var(--ease);\n}\n.option-button:hover{background:rgba(255,255,255,.085);border-color:var(--line-3);}\n.option-button:active{transform:translateY(1px);background:rgba(255,255,255,.11);}\n.option-button:disabled{opacity:.4;pointer-events:none;}\n.option-button.primary{\n  background:var(--iris-18);border-color:var(--iris-45);color:#EFEAFF;\n}\n.option-button.primary:hover{background:rgba(142,118,206,.26);border-color:rgba(142,118,206,.7);}\n.option-button.wide{width:100%;}\n.option-button.tall{height:48px;padding:0 28px;font-size:14.5px;}\n.option-button.red,.option-button.danger{\n  background:transparent;border-color:rgba(217,163,171,.28);color:var(--rose);\n}\n.option-button.red:hover,.option-button.danger:hover{\n  background:var(--rose-12);border-color:rgba(217,163,171,.5);color:#F0CDD2;\n}\n.option-button.icon-only{width:42px;padding:0;}\n\n/* segmented control */\n.seg{display:flex;gap:6px;flex-wrap:wrap;max-width:680px;}\n.seg-btn,.farm-type-btn{\n  flex:1;min-width:92px;height:44px;padding:0 15px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line);\n  color:var(--tx-3);\n  font-family:var(--font);font-size:13.5px;font-weight:700;\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.seg-btn:hover,.farm-type-btn:hover{background:rgba(255,255,255,.06);color:var(--tx-1);}\n.seg-btn.seg-active,.farm-type-btn.seg-active{\n  background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;\n}\n\n/* text / number input */\n.input{\n  height:42px;width:235px;padding:0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);\n  font-size:13.5px;font-weight:600;text-align:left;\n  transition:border-color 150ms var(--ease),background 150ms var(--ease),box-shadow 150ms var(--ease);\n}\n.input::placeholder{color:var(--tx-4);font-weight:500;}\n.input:focus{\n  outline:none;border-color:var(--sky-45);\n  background:var(--sky-12);\n  box-shadow:0 0 0 3px rgba(155,197,232,.11);\n}\ninput[type=\"number\"].input{width:122px;font-family:var(--mono);font-variant-numeric:tabular-nums;}\n.input.invalid{border-color:rgba(217,163,171,.6);background:var(--rose-12);}\n\n/* rows the client builds for auto chat: input plus a remove control */\n.chat-row{min-height:58px;}\n.chat-row .input{flex:1;min-width:0;}\n\n/* colour */\ninput[id][type=\"color\"]{\n  width:36px;height:36px;padding:0;\n  border:none;border-radius:9px;background:transparent;cursor:pointer;\n  box-shadow:0 0 0 1px rgba(255,255,255,.16);\n  transition:box-shadow 160ms var(--ease),transform 160ms var(--ease);\n}\ninput[id][type=\"color\"]::-webkit-color-swatch-wrapper{padding:3px;}\ninput[id][type=\"color\"]::-webkit-color-swatch{border:none;border-radius:7px;}\ninput[id][type=\"color\"]:hover{transform:scale(1.06);box-shadow:0 0 0 1px rgba(255,255,255,.34);}\n.reset-color{\n  width:15px;height:15px;flex-shrink:0;\n  border-radius:50%;border:1px solid rgba(255,255,255,.22);\n  background:var(--data-color,var(--iris));\n  opacity:0;cursor:pointer;\n  transition:opacity 160ms var(--ease),transform 160ms var(--ease);\n}\n.content-option:hover .reset-color{opacity:.85;}\n.reset-color:hover{opacity:1;transform:scale(1.2);}\n\n/* slider */\n.slider{display:flex;align-items:center;gap:18px;flex-shrink:0;}\n.slider input[type=\"range\"]{order:1;}\n.slider-value{\n  order:2;\n  font-family:var(--mono);font-size:13.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;\n  color:var(--sky);min-width:58px;text-align:right;\n}\n.slider input[type=\"range\"]{\n  -webkit-appearance:none;appearance:none;\n  width:clamp(150px,17vw,250px);height:22px;\n  background:transparent;cursor:pointer;outline:none;border:none;\n}\n.slider input[type=\"range\"]::-webkit-slider-runnable-track{\n  height:4px;border-radius:999px;\n  background:linear-gradient(90deg,var(--sky) var(--val,0%),rgba(255,255,255,.09) var(--val,0%));\n}\n.slider input[type=\"range\"]::-webkit-slider-thumb{\n  -webkit-appearance:none;\n  width:15px;height:15px;margin-top:-5.5px;\n  border-radius:50%;background:#EEF4FA;\n  border:1px solid rgba(0,0,0,.35);\n  box-shadow:0 1px 4px rgba(0,0,0,.55);\n  transition:transform 130ms var(--ease),box-shadow 130ms var(--ease);\n}\n.slider input[type=\"range\"]:hover::-webkit-slider-thumb{transform:scale(1.14);}\n.slider input[type=\"range\"]:active::-webkit-slider-thumb{\n  transform:scale(1.06);box-shadow:0 0 0 6px rgba(155,197,232,.16);\n}\n\n/* select */\nselect.ryn-select{\n  height:42px;padding:0 38px 0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);font-size:13.5px;font-weight:600;\n  -webkit-appearance:none;appearance:none;cursor:pointer;\n  background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7' viewBox='0 0 11 7'%3E%3Cpath d='M1 1l4.5 4.5L10 1' stroke='%239BC5E8' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\");\n  background-repeat:no-repeat;background-position:right 14px center;\n  transition:border-color 150ms var(--ease);\n}\nselect.ryn-select:focus{outline:none;border-color:var(--sky-45);}\nselect.ryn-select option{background:var(--ink-3);color:var(--tx-1);}\n\n/* misc atoms */\n.icon{width:20px;height:20px;}\n.small-icon{width:15px;height:15px;}\n.key-badge{\n  display:inline-flex;align-items:center;justify-content:center;\n  min-width:26px;height:20px;padding:0 6px;\n  border-radius:var(--r1);\n  background:rgba(255,255,255,.05);border:1px solid var(--line-2);\n  font-family:var(--mono);font-size:10.5px;font-weight:600;color:var(--tx-2);\n}\n.note{\n  max-width:1180px;margin:14px auto 0;\n  padding:14px 18px;\n  border-left:2px solid var(--line-2);\n  font-size:12.5px;font-weight:500;line-height:1.6;color:var(--tx-3);\n}\n\n/* ------------------------------------------------------------------\n   BOTS\n   ------------------------------------------------------------------ */\n\n#bot-container{display:flex;flex-direction:column;}\n#bot-container:empty{display:none;}\n.content-option[data-bot-id]{\n  background:rgba(255,255,255,.028);\n  border:1px solid var(--line);border-bottom:1px solid var(--line);\n  margin-bottom:6px;min-height:52px;\n}\n.content-option[data-bot-id] .option-title{font-family:var(--mono);font-size:13.5px;font-weight:600;}\n.disconnect-button{\n  width:16px;height:16px;flex-shrink:0;\n  fill:var(--tx-4);cursor:pointer;\n  transition:fill 150ms var(--ease);\n}\n.content-option:hover .disconnect-button{fill:var(--tx-2);}\n.disconnect-button:hover{fill:var(--rose)!important;}\n\n#connectingBot{\n  padding:14px 18px;margin-bottom:6px;\n  border-radius:var(--r2);\n  border:1px dashed var(--line-2);\n  font-family:var(--mono);font-size:12px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--tx-4);\n}\n\n#dynamic-bot-list{display:flex;flex-direction:column;gap:8px;}\n.bot-row{\n  display:flex;align-items:center;gap:10px;\n  padding:10px 12px;\n  background:rgba(255,255,255,.028);\n  border:1px solid var(--line);\n  border-radius:var(--r2);\n  transition:border-color 150ms var(--ease),opacity 150ms var(--ease);\n}\n.bot-row:hover{border-color:var(--line-2);}\n.bot-row.connected{background:var(--sage-14);border-color:var(--sage-40);}\n.bot-row-label{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  letter-spacing:.12em;text-transform:uppercase;color:var(--tx-4);\n  min-width:74px;flex-shrink:0;\n}\n.bot-row-name{flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}\n.bot-row-name .pending{color:var(--tx-4);font-weight:600;}\n.bot-row .input{flex:1;min-width:0;width:auto;}\n.bot-row-check{width:17px;height:17px;flex-shrink:0;fill:var(--sage);}\n.icon-btn{\n  display:flex;align-items:center;justify-content:center;\n  width:42px;height:42px;flex-shrink:0;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.045);\n  border:1px solid var(--line-2);\n  font-size:15px;line-height:1;color:var(--tx-2);\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.icon-btn:hover{background:rgba(255,255,255,.08);border-color:var(--line-3);color:var(--tx-1);}\n.icon-btn.danger:hover{background:var(--rose-12);border-color:rgba(217,163,171,.45);color:var(--rose);}\n\n/* option grids (weapons, age-4 building) */\n.wpn-label{\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:12px;\n}\n.wpn-grid{\n  display:grid;grid-template-columns:repeat(auto-fill,minmax(124px,1fr));\n  gap:8px;\n}\n.bot-weapon-btn,.bot-sec-weapon-btn{\n  display:flex;align-items:center;justify-content:center;\n  min-height:54px;padding:10px 12px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.03);\n  border:1px solid var(--line);\n  color:var(--tx-3);\n  font-size:13px;font-weight:600;text-align:center;line-height:1.3;\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.bot-weapon-btn:hover,.bot-sec-weapon-btn:hover{\n  background:rgba(255,255,255,.06);border-color:var(--line-2);color:var(--tx-1);\n}\n.bot-weapon-btn.wpn-active,.bot-sec-weapon-btn.wpn-active{\n  background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;\n}\n.wpn-selected-bar{\n  display:flex;align-items:center;gap:10px;\n  margin-top:12px;padding:11px 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.025);\n  border:1px solid var(--line);\n}\n.wpn-selected-dot{\n  width:6px;height:6px;flex-shrink:0;border-radius:50%;background:var(--iris-hi);\n}\n.wpn-selected-text{font-size:13px;font-weight:600;color:var(--tx-2);}\n\n.stack{display:flex;flex-direction:column;gap:22px;padding-top:8px;}\n.field{display:flex;flex-direction:column;gap:0;}\n.field-head{\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:10px;\n}\n.field-note{margin-top:10px;font-size:12.5px;font-weight:500;line-height:1.55;color:var(--tx-3);}\n.field-note b{color:var(--tx-2);font-weight:700;}\n.inline{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}\n#_botBulkRow .input{flex:1;min-width:180px;width:auto;}\n.bot-row-id{\n  font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.06em;\n  color:var(--tx-4);flex-shrink:0;padding:0 9px;height:25px;\n  display:flex;align-items:center;white-space:nowrap;\n  border:1px solid var(--line);border-radius:var(--r2);\n}\n\n#_formationGrid{width:100%;}\n\n/* ------------------------------------------------------------------\n   FORMATION POPUP (built in JS, lives on document.body)\n   ------------------------------------------------------------------ */\n\n.fsel-trigger{\n  display:flex;align-items:center;gap:12px;\n  width:100%;padding:13px 14px;max-width:680px;\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line-2);\n  border-radius:var(--r2);\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease);\n}\n.fsel-trigger:hover{background:rgba(255,255,255,.06);border-color:var(--line-3);}\n.fsel-trigger.open{border-color:var(--iris-45);background:var(--iris-12);}\n.fsel-trigger .fsel-icon{width:26px;flex-shrink:0;text-align:center;font-size:16px;color:var(--iris-hi);}\n.fsel-trigger .fsel-label{flex:1;font-size:14.5px;font-weight:700;color:var(--tx-1);}\n.fsel-trigger .fsel-arrow{font-size:10px;color:var(--tx-4);transition:transform 170ms var(--ease);}\n.fsel-trigger.open .fsel-arrow{transform:rotate(180deg);}\n\n.fsel-popup{\n  position:fixed;z-index:99999;width:300px;\n  display:flex;flex-direction:column;overflow:hidden;\n  background:var(--ink-3);\n  border:1px solid var(--line-2);\n  border-radius:var(--r3);\n  box-shadow:0 30px 70px -20px rgba(0,0,0,.92);\n}\n.fsel-popup.toopen{animation:soft-in 160ms var(--ease);}\n.fsel-popup-header{\n  display:flex;align-items:center;gap:10px;\n  padding:12px 14px;\n  border-bottom:1px solid var(--line);\n  cursor:grab;\n}\n.fsel-popup-header:active{cursor:grabbing;}\n.fsel-popup-title{\n  flex:1;font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n.fsel-popup-close{\n  width:22px;height:22px;flex-shrink:0;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r1);font-size:11px;color:var(--tx-4);cursor:pointer;\n  transition:background 140ms,color 140ms;\n}\n.fsel-popup-close:hover{background:rgba(255,255,255,.07);color:var(--tx-1);}\n.fsel-popup-body{\n  display:grid;grid-template-columns:repeat(4,1fr);gap:8px;\n  padding:12px;max-height:280px;overflow-y:auto;\n}\n.fsel-popup-body::-webkit-scrollbar{width:8px;}\n.fsel-popup-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:8px;border:2px solid transparent;background-clip:padding-box;}\n.fcat-btn{\n  position:relative;\n  display:flex;align-items:center;justify-content:center;\n  aspect-ratio:1;border-radius:var(--r2);\n  background:rgba(255,255,255,.03);\n  border:1px solid var(--line);\n  color:var(--tx-2);font-size:17px;cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.fcat-btn:hover{background:rgba(255,255,255,.07);border-color:var(--line-2);color:var(--tx-1);}\n.fcat-btn.active{background:var(--iris-18);border-color:var(--iris-45);color:#fff;}\n.fcat-tip{\n  display:none;position:absolute;top:calc(100% + 6px);left:50%;\n  transform:translateX(-50%);\n  padding:4px 9px;border-radius:var(--r1);\n  background:var(--ink-4);border:1px solid var(--line-2);\n  font-family:var(--font);font-size:11px;font-weight:600;color:var(--tx-1);\n  white-space:nowrap;pointer-events:none;z-index:5;\n}\n.fcat-btn:hover .fcat-tip{display:block;}\n.fcat-key{\n  position:absolute;top:3px;right:3px;\n  min-width:17px;height:15px;padding:0 3px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:4px;\n  background:rgba(0,0,0,.45);border:1px solid var(--line);\n  font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--tx-3);\n  line-height:1;cursor:pointer;\n  transition:background 130ms,border-color 130ms,color 130ms;\n}\n.fcat-key:hover{background:rgba(255,255,255,.10);color:var(--tx-1);}\n.fcat-key.set{background:var(--iris-18);border-color:var(--iris-45);color:#EFEAFF;}\n.fcat-key.recording{background:var(--sky-12);border-color:var(--sky-45);color:var(--sky);animation:cap-pulse 1.1s ease-in-out infinite;}\n.fcat-reset{\n  position:absolute;bottom:3px;left:3px;\n  width:15px;height:15px;display:none;\n  align-items:center;justify-content:center;\n  border-radius:4px;\n  background:var(--rose-12);border:1px solid rgba(217,163,171,.3);\n  font-size:9px;line-height:1;color:var(--rose);cursor:pointer;\n}\n.fcat-reset.show{display:flex;}\n.fcat-reset:hover{background:rgba(217,163,171,.24);}\n.fsel-popup-footer{padding:10px 12px;border-top:1px solid var(--line);}\n.fsel-reset-all{\n  width:100%;padding:9px 0;\n  border-radius:var(--r2);\n  background:transparent;border:1px solid rgba(217,163,171,.26);\n  font-family:var(--font);font-size:12px;font-weight:700;\n  color:var(--rose);text-align:center;cursor:pointer;\n  transition:background 140ms,border-color 140ms;\n}\n.fsel-reset-all:hover{background:var(--rose-12);border-color:rgba(217,163,171,.48);}";
   const Game_default = "#ryn-menu-frame {\r\n    position: absolute;\r\n    top: 0;\r\n    left: 0;\r\n    bottom: 0;\r\n    right: 0;\r\n    width: 100%;\r\n    height: 100%;\r\n    border: none;\r\n    outline: none;\r\n    z-index: 10;\r\n}\r\n\r\n#promoImgHolder,\r\n.menuHeader,\r\n.menuText,\r\n#guideCard,\r\n#gameName,\r\n#pingDisplay,\r\n#partyButton,\r\n#onetrust-consent-sdk,\r\n.adMenuCard,\r\n#topInfoHolder > div:not([id]):not([class]),\r\n#touch-controls-fullscreen,\r\n#altcha,\r\n#joinPartyButton {\r\n    display: none!important;\r\n}\r\n\r\n.menuCard {\r\n    box-shadow: none;\r\n}\r\n\r\n#setupCard {\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 12px;\r\n    background: rgba(25,25,25,0.45);\r\n    backdrop-filter: blur(25px);\r\n    -webkit-backdrop-filter: blur(25px);\r\n    border: 1px solid rgba(255,255,255,0.2);\r\n    border-radius: 20px;\r\n    box-shadow: 0 8px 32px 0 rgba(0,0,0,0.2), inset 0 1px 1px rgba(255,255,255,0.1);\r\n    max-height: auto;\r\n    width: 280px;\r\n}\r\n\r\n#setupCard > * {\r\n    margin: 0!important;\r\n}\r\n\r\n#linksContainer2 {\r\n    background: #6d6d6d77;\r\n}\r\n\r\n#bottomContainer {\r\n    bottom: 20px;\r\n}\r\n\r\n#topInfoHolder {\r\n    display: flex;\r\n    flex-direction: column;\r\n    justify-content: right;\r\n    align-items: flex-end;\r\n    gap: 10px;\r\n}\r\n\r\n#killCounter, #totalKillCounter {\r\n    position: static;\r\n    margin: 0;\r\n    background-image: url(../img/icons/skull.png);\r\n}\r\n\r\n.actionBarItem {\r\n    position: relative;\r\n    border: 2px solid rgba(80,30,160,0.45) !important;\r\n    border-radius: 4px !important;\r\n}\r\n\r\n.itemCounter {\r\n    position: absolute;\r\n    top: 3px;\r\n    right: 3px;\r\n    font-size: 0.95em;\r\n    color: white;\r\n    text-shadow: #3d3f42 2px 0px 0px, #3d3f42 1.75517px 0.958851px 0px, #3d3f42 1.0806px 1.68294px 0px, #3d3f42 0.141474px 1.99499px 0px, #3d3f42 -0.832294px 1.81859px 0px, #3d3f42 -1.60229px 1.19694px 0px, #3d3f42 -1.97998px 0.28224px 0px, #3d3f42 -1.87291px -0.701566px 0px, #3d3f42 -1.30729px -1.5136px 0px, #3d3f42 -0.421592px -1.95506px 0px, #3d3f42 0.567324px -1.91785px 0px, #3d3f42 1.41734px -1.41108px 0px, #3d3f42 1.92034px -0.558831px 0px;\r\n}\r\n\r\n.itemCounter.hidden {\r\n    display: none;\r\n}\r\n\r\n#ryn-topright-hud { position: fixed; top: 12px; right: 12px; z-index: 9999; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; pointer-events: none; font-family: \"Hammersmith One\", Arial, sans-serif; }\r\n.ryn-hud-row { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 160px; }\r\n.ryn-hud-bar-bg { width: 160px; height: 8px; background: rgba(0,0,0,0.55); border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }\r\n.ryn-hud-bar-fill { height: 100%; border-radius: 4px; transition: width 0.15s ease; }\r\n#ryn-hud-hp-fill { background: linear-gradient(90deg,#cc5151,#e05151); }\r\n#ryn-hud-r1-fill { background: linear-gradient(90deg,#f0b429,#f0c060); }\r\n#ryn-hud-r2-fill { background: linear-gradient(90deg,#51cc88,#60e0a0); }\r\n.ryn-hud-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.6); text-shadow: 0 1px 3px rgba(0,0,0,0.9); }\r\n.ryn-hud-val { font-size: 11px; color: rgba(255,255,255,0.9); text-shadow: 0 1px 4px rgba(0,0,0,0.9); letter-spacing: 0.05em; }\r\n\r\n#rynStats {\r\n    position: absolute;\r\n    color: rgb(225, 210, 255);\r\n    font: 13px \"Hammersmith One\";\r\n    bottom: 210px;\r\n    left: 20px;\r\n\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 5px;\r\n}\r\n\r\n.hidden {\r\n    display: none!important;\r\n}";
   const Store_default = "#ryn-store-container {\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 10px;\r\n    max-width: 400px;\r\n    width: 100%;\r\n\r\n    position: absolute;\r\n    top: 50%;\r\n    left: 50%;\r\n    transform: translate(-50%, -50%) scale(0.9);\r\n}\r\n\r\n#ryn-store-toggle {\r\n    display: flex;\r\n    justify-content: center;\r\n    align-items: center;\r\n    padding: 10px;\r\n    background-color: rgba(0, 0, 0, 0.15);\r\n    color: #fff;\r\n    border-radius: 4px;\r\n    cursor: pointer;\r\n    font-size: 20px;\r\n    pointer-events: all;\r\n}\r\n\r\n#ryn-store-items {\r\n    background-color: rgba(0, 0, 0, 0.15);\r\n    max-height: 200px;\r\n    height: 100%;\r\n    padding: 10px;\r\n    overflow-y: scroll;\r\n    border-radius: 4px;\r\n    pointer-events: all;\r\n    scrollbar-width: none;\r\n}\r\n\r\n#ryn-store-items::-webkit-scrollbar {\r\n    display: none;\r\n    width: 0;\r\n    height: 0;\r\n    background: transparent;\r\n}\r\n\r\n.storeItemContainer {\r\n    display: flex;\r\n    align-items: center;\r\n    gap: 10px;\r\n    padding: 5px;\r\n    height: 50px;\r\n    box-sizing: border-box;\r\n    overflow: hidden;\r\n}\r\n\r\n.storeHat {\r\n    display: flex;\r\n    justify-content: center;\r\n    align-items: center;\r\n    width: 45px;\r\n    height: 45px;\r\n    margin-top: -5px;\r\n    pointer-events: none;\r\n}\r\n\r\n.storeItemName {\r\n    color: #fff;\r\n    font-size: 20px;\r\n}\r\n\r\n.equipButton {\r\n    margin-left: auto;\r\n    color: #80eefc;\r\n    cursor: pointer;\r\n    font-size: 35px;\r\n}";
   const Hats = {
@@ -2548,20 +2570,6 @@ window.grbtp = 35;
     }
   }
   const Entity_default = Entity;
-  // novastorm 15473 and X- Precision 14681 — byte for byte the same block in
-  // both — reach out to 350 for a turret shot. canPossiblyInstakill's +25 only
-  // counts a turret when the enemy is already inside weapon reach, which is
-  // most of a turret's useful range missing.
-  const ANTI_TURRET_RANGE = 350;
-  const ANTI_TURRET_DAMAGE = 25;
-  // "Prediction for autosteal turret": on 25 health or less, with almost
-  // nothing else predicted, assume the turret is coming.
-  const ANTI_TURRET_LOW_HEALTH = 25;
-  // The velocity tick's own band. Closer than this and the ordinary weapon
-  // terms already cover it.
-  const ANTI_VELOCITY_TICK_MIN = 150;
-  const ANTI_VELOCITY_TICK_HAT = 53;
-
   class EnemyManager {
     client;
     dangerousEnemies=[];
@@ -2597,7 +2605,6 @@ window.grbtp = 35;
     nearestSpikePlacerAngle=null;
     prevNearestSpikePlacerAngle=null;
     nearestEnemyToNearestEnemy=null;
-    enemyCanPlaceSpike=false;
     possibleToKnockback=false;
     potentialSpikeKnockbackDamage=0;
     potentialSpikeDamage=0;
@@ -2608,6 +2615,7 @@ window.grbtp = 35;
     rangedBowInsta=false;
     toolHammerInsta=false;
     spikeSyncThreat=false;
+    velocityTickThreat=false;
     nearestLowEntity=null;
     nearestLowHPObjectPrev=null;
     nearestLowHPObject=null;
@@ -2661,7 +2669,6 @@ window.grbtp = 35;
       this.nearestSpike = null;
       this.nearestKBTrapEnemy = null;
       this.nearestKBTrap = null;
-      this.enemyCanPlaceSpike = false;
       this.possibleToKnockback = false;
       this.potentialSpikeKnockbackDamage = 0;
       this.potentialSpikeDamage = 0;
@@ -2671,6 +2678,7 @@ window.grbtp = 35;
       this.rangedBowInsta = false;
       this.toolHammerInsta = false;
       this.spikeSyncThreat = false;
+      this.velocityTickThreat = false;
       this.nearestLowHPObjectPrev = this.nearestLowHPObject;
       this.nearestLowHPObject = null;
       this.nearestSyncEnemy = null;
@@ -2719,7 +2727,7 @@ window.grbtp = 35;
       return this.isNear(target1, target2) ? target1 : target2;
     }
     instaThreat() {
-      return this.reverseInsta || this.rangedBowInsta || this.toolHammerInsta || this.primaryDamage + this.potentialSpikeKnockbackDamage >= 100;
+      return this.velocityTickThreat || this.reverseInsta || this.rangedBowInsta || this.toolHammerInsta || this.primaryDamage + this.potentialSpikeKnockbackDamage >= 100;
     }
     shouldIgnoreModule() {
       return this.instaThreat() || this.detectedDangerEnemy || this.spikeSyncThreat;
@@ -2759,7 +2767,6 @@ window.grbtp = 35;
       if (enemy.canPlaceSpikeObject) {
         this.potentialSpikeDamage = Math.max(this.potentialSpikeDamage, enemy.spikeDamage);
       }
-      this.antiLongRangeTurret(enemy);
       this.potentialDamage += enemy.potentialDamage;
       this.primaryDamage = Math.max(enemy.primaryDamage, this.primaryDamage);
       if (enemy.prevDanger !== enemy.danger && enemy.danger >= 2) {
@@ -2777,69 +2784,9 @@ window.grbtp = 35;
       if (enemy.spikeSyncThreat) {
         this.spikeSyncThreat = true;
       }
-    }
-    // The two turret predictions canPossiblyInstakill cannot make. Its +25
-    // requires the enemy to be inside weapon reach; these fire from up to 350,
-    // and both are lifted from novastorm 15473 / X- Precision 14681:
-    //
-    //     // PREDICT TURRET HIT
-    //     if (getDistance(enemy, myPlayer) <= 350 && turretReload == 1) {
-    //         if (collidingspike && lastPrimaryReload == 1 && primaryReload < 1) turretDmgPot += 25;
-    //         else if (willcollide && primaryReload < 1) turretDmgPot += 25;
-    //         else if (myPlayer.health <= 25 && (hit + turret + spike) < 25) turretDmgPot += 25;
-    //     }
-    //
-    //     // VELOCITY TICK ANTI
-    //     if (dist > 150 && dist < 350) {
-    //         if (turretReload < 1 && primaryReload == 1 && enemy.skinIndex == 53) {
-    //             turretDmgPot += 25;
-    //             hitDmgPot += primaryDmg;
-    //         }
-    //     }
-    //
-    // The first two cases are the moment a spike is already doing the other
-    // half of the work: I am standing on one, or a hit is about to put me on
-    // one, and their primary has just gone. The turret is what finishes it.
-    //
-    // The second block is the anti to the offence this client already carries
-    // as `velocityTick`. Someone in turret gear at that distance with a loaded
-    // primary and a spent turret is lining a velocity tick up.
-    //
-    // collidingSpike and willCollideSpike are the owner's own — checkCollision
-    // sets them inside its `if (isOwner)` block, and it has already run for
-    // myPlayer before this loop starts.
-    antiLongRangeTurret(enemy) {
-      const {myPlayer: myPlayer, PlayerManager: PlayerManager} = this.client;
-      const distance = myPlayer.pos.current.distance(enemy.pos.current);
-      if (distance > ANTI_TURRET_RANGE) {
-        return;
+      if (enemy.velocityTicking) {
+        this.velocityTickThreat = true;
       }
-      const primaryReloaded = enemy.isReloaded(0, 1);
-      const turretReloaded = enemy.isReloaded(2, 1);
-      if (turretReloaded) {
-        // `lastPrimaryReload == 1 && primaryReload < 1`: ready last tick and not
-        // now, which is the tick they swung.
-        const primaryJustFired = enemy.reload[0].previous >= enemy.reload[0].max && !primaryReloaded;
-        const predictedSoFar = this.potentialDamage + enemy.potentialDamage + this.potentialSpikeDamage;
-        if (this.collidingSpike && primaryJustFired
-            || this.willCollideSpike && !primaryReloaded
-            || myPlayer.currentHealth <= ANTI_TURRET_LOW_HEALTH && predictedSoFar < ANTI_TURRET_LOW_HEALTH) {
-          enemy.potentialDamage += ANTI_TURRET_DAMAGE;
-        }
-        return;
-      }
-      // novastorm's band is `dist > 150 && dist < 350` — strictly inside both
-      // ends, where the turret test above is `<= 350`.
-      if (distance <= ANTI_VELOCITY_TICK_MIN || distance >= ANTI_TURRET_RANGE) {
-        return;
-      }
-      if (!primaryReloaded || enemy.hatID !== ANTI_VELOCITY_TICK_HAT) {
-        return;
-      }
-      const primary = enemy.weapon.primary;
-      const lookingShield = PlayerManager.lookingShield(myPlayer, enemy);
-      enemy.potentialDamage += ANTI_TURRET_DAMAGE +
-        (primary !== null && primary !== undefined ? enemy.getMaxWeaponDamage(primary, lookingShield) : 0);
     }
     checkCollision(target, isOwner = false) {
       target.isTrapped = false;
@@ -2979,20 +2926,47 @@ window.grbtp = 35;
               }
             }
           }
-          if (isEnemyObjectToMyPlayer && (isSpike || isCactus) && !myPlayer.isTrapped) {
+          // KB spike: they swing, we fly, we land on a spike. Novastorm sweeps
+          // the knockback segment through the spike's box rather than testing
+          // an angular cone, and it runs that sweep from two origins — where we
+          // are now and where we are extrapolated to next tick.
+          //
+          // The cone this replaces was cheap but wrong in two ways that matter
+          // exactly when the anti is needed. Math.asin() of a ratio above 1
+          // is NaN, and every comparison against NaN is false, so a spike
+          // sitting closer to us than its own combined scale — point blank,
+          // the case worth catching — silently failed the test. And requiring
+          // the spike to be further from the enemy than we are (`overlapping`)
+          // discarded every spike we get shoved past sideways, which is most
+          // of them once the enemy is not lined up directly behind it.
+          //
+          // pos.future is RYN's own extrapolation and is the same quantity
+          // Novastorm calls xVel/yVel: current + (current - previous). Each
+          // sweep pairs our origin with the enemy's from the same frame, so
+          // the knockback direction is read consistently.
+          //
+          // This block is the only thing that raises possibleToKnockback or
+          // potentialSpikeKnockbackDamage, so _kbSpike gates the whole feature
+          // from one place: the spike-tick counter, instaThreat() and the
+          // autoheal damage term all go quiet together when it is off.
+          if (Settings_default._kbSpike && isEnemyObjectToMyPlayer && (isSpike || isCactus) && !myPlayer.isTrapped) {
             const KBDistance = target.getActualMaxKnockback(myPlayer);
-            const spikeScale = object.collisionScale + myPlayer.collisionScale;
-            const angleToEnemy = pos2.angle(pos1);
-            const angleToSpike = pos2.angle(pos3);
-            const distanceToSpike1 = pos2.distance(pos3);
-            const offset = Math.asin(2 * spikeScale / (2 * distanceToSpike1));
-            const angleDistance = getAngleDist(angleToEnemy, angleToSpike);
-            const intersecting = angleDistance <= offset;
-            const overlapping = distanceToTarget <= distanceToSpike1;
-            const inRange2 = KBDistance !== 0 && myPlayer.collidingObject(object, KBDistance);
-            if (intersecting && overlapping && inRange2) {
-              this.possibleToKnockback = true;
-              this.potentialSpikeKnockbackDamage = Math.max(this.potentialSpikeKnockbackDamage, object.getDamage());
+            if (KBDistance !== 0 && myPlayer.collidingObject(object, KBDistance)) {
+              const reach = myPlayer.collisionScale + object.collisionScale;
+              const boxX1 = pos3.x - reach;
+              const boxY1 = pos3.y - reach;
+              const boxX2 = pos3.x + reach;
+              const boxY2 = pos3.y + reach;
+              const frames = [ [ myPlayer.pos.current, pos2 ], [ myPlayer.pos.future, target.pos.future ] ];
+              for (let i = 0; i < frames.length; i++) {
+                const [ from, enemyFrom ] = frames[i];
+                const landing = from.addDirection(enemyFrom.angle(from), KBDistance);
+                if (lineInRect(boxX1, boxY1, boxX2, boxY2, from.x, from.y, landing.x, landing.y)) {
+                  this.possibleToKnockback = true;
+                  this.potentialSpikeKnockbackDamage = Math.max(this.potentialSpikeKnockbackDamage, object.getDamage());
+                  break;
+                }
+              }
             }
           }
           if (isEnemyObject && (isSpike || isCactus) && target.collidingObject(object) && this.isNear(target, this.enemySpikeCollider)) {
@@ -3275,10 +3249,27 @@ window.grbtp = 35;
   const HatPredictor_default = HatPredictor;
   const scale_value = window.grbtp;
   delete window.grbtp;
+  // Novastorm's velocity tick anti reads the gap between the two extrapolated
+  // positions and only fires inside this band: past it the enemy is too far to
+  // arrive, inside it they are already close enough that the ordinary primary
+  // range check has them.
+  const VELOCITY_TICK_MIN_RANGE = 150;
+  const VELOCITY_TICK_MAX_RANGE = 350;
   class Player extends Entity_default {
     currentItem=-1;
     clanName=null;
     isLeader=false;
+    // The game's skull marker, straight off the wire. The server sends it as
+    // `iconIndex` in the player update and the bundle draws the skull sprite
+    // when it reads 1; `update()` below has always been handed it and thrown
+    // it away. Kept now so the corpse renderer can tell the kill leader from
+    // everyone else without deriving a leader of its own.
+    hasSkull=false;
+    // The tick this player was last present in a player update. Written once
+    // per player per tick by PlayerManager.updatePlayer; a value behind the
+    // current tick means the server has stopped reporting them. Zero means
+    // "not a candidate for a corpse" — never seen, or already given one.
+    corpseSeenTick=0;
     prevNickname=null;
     nickname=null;
     skinID=0;
@@ -3330,6 +3321,7 @@ window.grbtp = 35;
     toolHammerInsta=false;
     rangedBowInsta=false;
     spikeSyncThreat=false;
+    velocityTicking=false;
     onPlatform=false;
     tickDamage=100;
     stackedDamage=0;
@@ -3424,6 +3416,7 @@ window.grbtp = 35;
       this.variant.current = weaponVariant;
       this.clanName = clanName;
       this.isLeader = !!isLeader;
+      this.hasSkull = hasSkull === 1;
       this.onPlatform = !!onPlatform;
       this.prevHat = this.hatID;
       this.hatID = hatID;
@@ -3451,6 +3444,7 @@ window.grbtp = 35;
       this.toolHammerInsta = false;
       this.rangedBowInsta = false;
       this.spikeSyncThreat = false;
+      this.velocityTicking = false;
       this.predictItems();
       this.predictWeapons();
       this.updateReloads();
@@ -3509,12 +3503,22 @@ window.grbtp = 35;
       } else if (this.receivedDamage !== null) {
         const step = Date.now() - this.receivedDamage;
         this.receivedDamage = null;
+        // novastorm's shame model, exactly:
+        //
+        //     if (o <= 120) tmpObj.shameCount = tmpObj.shameCount + 1;
+        //     else tmpObj.shameCount = Math.max(0, tmpObj.shameCount - 2);
+        //
+        // Floor at 0, and no ceiling. RYN used to clamp the top to 7, which
+        // hid how far over the line a run of early apples had put you: the
+        // heal gate is `shameCount < 7`, so a capped 7 was one good heal away
+        // from healing again no matter how many bad ones came before it. Left
+        // uncapped it climbs the way the server's own count does, and takes as
+        // many clean heals to walk back down.
         if (step <= 120) {
           this.shameCount += 1;
         } else {
-          this.shameCount -= 2;
+          this.shameCount = Math.max(0, this.shameCount - 2);
         }
-        this.shameCount = clamp(this.shameCount, 0, 7);
       }
       const diffDmg = difference === 5 || difference === 2 || difference === 4;
       const isDmgOverTime = diffDmg && currentHealth < previousHealth;
@@ -3935,6 +3939,40 @@ window.grbtp = 35;
       if (this.isReloaded(2, 1) && includeTurret && !lookingShield) {
         this.potentialDamage += 25;
       }
+
+      // Velocity tick anti, from Novastorm. A turret-gear enemy who has just
+      // fired — turret still cycling — with a primary ready, closing on us but
+      // not yet in melee range. The swing lands as they arrive, and the branch
+      // above cannot see it: `collidingPrimary` only reaches weapon range + 130,
+      // roughly 270, while this setup starts at 350.
+      //
+      //     if (getDistance(enemy.xVel, enemy.yVel, myPlayer.xVel, myPlayer.yVel) > 150 && < 350)
+      //         if (turretReload[sid] < 1 && primaryReload[sid] == 1 && skinIndex == 53)
+      //
+      // Novastorm's xVel/yVel is the extrapolated position, so this is a gap
+      // between the two `pos.future`s, and its `turretReload < 1` is a turret
+      // mid-cycle, which is `!isReloaded(2, 1)` here.
+      //
+      // Novastorm also adds a flat +25 turret on this branch. RYN does not: the
+      // shot that turret already fired is a live projectile, and
+      // ProjectileManager has been counting it into potentialDamage since it
+      // spawned. Novastorm has no such tracking, so the +25 is how it pays for
+      // that shot at all — adding it here would pay for it twice and heal into
+      // a threat already accounted for.
+      if (!collidingPrimary && primaryReloaded && !lookingShield && this.hatID === 53 && !this.isReloaded(2, 1)) {
+        const closing = myPlayer.pos.future.distance(this.pos.future);
+        if (closing > VELOCITY_TICK_MIN_RANGE && closing < VELOCITY_TICK_MAX_RANGE) {
+          this.potentialDamage += primaryDamage;
+        }
+      }
+      // The enemy side of Glotus's velocity tick: they are in primary and
+      // turret range, their turret has just gone off (empty reload) and a
+      // diamond polearm is ready. That is the same combination our own module
+      // sets up below, seen from the other end, so it is read as an insta
+      // threat rather than as ordinary primary damage.
+      if (collidingPrimary && collidingTurret && this.isEmptyReload(2) && primaryReloaded && isDiamondPolearm) {
+        this.velocityTicking = true;
+      }
       if (collidingPrimary && collidingSecondary && collidingTurret && this.isEmptyReload(1) && this.isEmptyReload(2) && primaryReloaded) {
         this.reverseInsta = true;
       }
@@ -4226,11 +4264,77 @@ window.grbtp = 35;
       }
     }
   };
+  // Minimap marker palette. The bundle hard-codes these four colours inline in
+  // its minimap draw, so three of them are swapped by hook (see mapSelfColor /
+  // mapTeamColor / mapDeathMarker) and the fourth is drawn by _mapPreRender,
+  // which the game has no equivalent for. Kept together here so the whole
+  // legend is one edit rather than four scattered ones.
+  //
+  //   self  — your own dot, "#fff" in the bundle
+  //   team  — clan mates, "rgba(255,255,255,0.35)", which read as grey
+  //   bot   — bots that joined through this client; RYN's own, no bundle colour
+  //   death — the "x" where you died, "#fc5553"
+  const MAP_COLORS = {
+    self: "#9b5cf6",
+    team: "#5ed46a",
+    bot: "#4aa3ff",
+    death: "#ff6ec7"
+  };
+  // ==========================================================================
+  // The food resource's texture.
+  //
+  // Food is resource type 1 — the berry bush in the green and snow biomes, the
+  // cactus in the desert. The game builds its sprite in El(), which caches one
+  // canvas per type/scale/biome and hands it to the object draw; the draw then
+  // centres it with `drawImage(sprite, x - sprite.width / 2, ...)`.
+  //
+  // RYN already intercepts exactly that canvas — the resourceTint hook wraps
+  // El()'s return in Renderer._objectTint before it reaches drawImage — so the
+  // texture is swapped there, at the same dimensions, and nothing else has to
+  // change. Spawning, collision, gathering, healing and the inventory never
+  // look at a sprite, so none of them can notice.
+  //
+  // The image is the sakura PNG as supplied, resampled to 256 square and
+  // embedded: a userscript is a single file with no asset directory, so a data
+  // URI is the only way to ship a texture, and 1254 square of it would have
+  // added a megabyte of base64 for detail that a sprite of at most ~205 pixels
+  // (bushScales tops out at 95, and El sizes the canvas 2.1 * scale + 5.5)
+  // cannot show. Nothing else about it is touched: same framing, same colours,
+  // same transparent background.
+  // ==========================================================================
+  const FOOD_RESOURCE_TYPE = 1;
+  const FOOD_TEXTURE_SRC = "data:image/png;base64,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";
+  // At most a handful of live entries — one per distinct sprite size, and the
+  // game only ever asks for the three bush scales. The cap is for a server that
+  // sends something stranger.
+  const FOOD_TEXTURE_CACHE_MAX = 32;
+  let _foodTextureImage = null;
+
+  function _foodTexture() {
+    if (_foodTextureImage === null) {
+      const image = new Image;
+      // The game's own sprite loaders use this same flag, and _objectTint
+      // already reads it, so an unloaded texture is a case everything here
+      // knows how to sit out.
+      image.isLoaded = false;
+      image.onload = function() {
+        this.isLoaded = true;
+        this.onload = null;
+      };
+      image.src = FOOD_TEXTURE_SRC;
+      _foodTextureImage = image;
+    }
+    return _foodTextureImage;
+  }
+
   const Renderer = new class {
+    _mapColors=MAP_COLORS;
     _renderObjects=[];
-    totalTimes=[];
     lastLogTime=performance.now();
     _dtSamples=[];
+    _dtSum=0;
+    _dtIndex=0;
+    _frameCount=0;
     _dtSmoothed=0;
     _lastFrameTime=performance.now();
     _frameSkipCounter=0;
@@ -4241,6 +4345,44 @@ window.grbtp = 35;
     };
     _namePatchApplied=false;
     _tintCache=new WeakMap;
+    _foodCache=new Map;
+    // The sakura sprite that stands in for a food resource's own, or null when
+    // this is not food or the texture has not finished loading — in which case
+    // the caller keeps the sprite the game built and the bush draws as it
+    // always did.
+    //
+    // The replacement canvas is the same width and height as the one it stands
+    // in for, so the game's centred draw places it exactly where the bush was,
+    // and the source is square, so filling a square canvas cannot stretch it.
+    // Nothing is painted underneath: the PNG's transparency is the sprite's, and
+    // the ground shows through around the flower the way it did around the bush.
+    _foodSprite(sprite, entity) {
+      if (!entity || entity.isItem || entity.type !== FOOD_RESOURCE_TYPE) {
+        return null;
+      }
+      const texture = _foodTexture();
+      if (!texture.isLoaded) {
+        return null;
+      }
+      const width = sprite.width || 0;
+      const height = sprite.height || 0;
+      if (!width || !height) {
+        return null;
+      }
+      const key = width + "x" + height;
+      let canvas = this._foodCache.get(key);
+      if (canvas === void 0) {
+        if (this._foodCache.size >= FOOD_TEXTURE_CACHE_MAX) {
+          this._foodCache.clear();
+        }
+        canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(texture, 0, 0, width, height);
+        this._foodCache.set(key, canvas);
+      }
+      return canvas;
+    }
     _matchesNickname(text, nick) {
       if (!text || !nick) return false;
       if (text === nick) return true;
@@ -4256,11 +4398,18 @@ window.grbtp = 35;
       const origFillText = proto.fillText;
       const self = this;
       proto.fillText = function(text, x, y, maxWidth) {
-        const myNick = client && client.myPlayer && client.myPlayer.nickname;
+        // Every string the game draws goes through here — names, chat, damage
+        // numbers, the whole HUD, several dozen calls a frame. When neither
+        // colouring option is on there is nothing to decide, so the nickname
+        // read and the string comparisons behind it are not done at all.
         let overrideColor = null;
-        if (Settings_default._myNameColor && self._matchesNickname(text, myNick)) {
-          overrideColor = Settings_default._myNameColorValue;
-        } else if (RYN_IS_OWNER_BUILD && Settings_default._markRynPlayers && RYNPresence.hasName(text)) {
+        if (Settings_default._myNameColor) {
+          const myNick = client && client.myPlayer && client.myPlayer.nickname;
+          if (self._matchesNickname(text, myNick)) {
+            overrideColor = Settings_default._myNameColorValue;
+          }
+        }
+        if (overrideColor === null && RYN_IS_OWNER_BUILD && Settings_default._markRynPlayers && RYNPresence.hasName(text)) {
           overrideColor = RYN_RED_NAME;
         }
         if (overrideColor) {
@@ -4291,14 +4440,89 @@ window.grbtp = 35;
       const pct = clamp(Settings_default._objectTintOpacity, 0, 100);
       return 1 - pct / 100;
     }
-    _objectTint(sprite) {
-      if (!Settings_default._objectTint || !sprite) {
+    // Which of the six structure colours a placed item should wear, or null if
+    // it is not a spike or a trap or the feature is off. Ownership comes from
+    // the client's own team detection — the same isMyPlayerByID/isTeammateByID
+    // pair every module and the health bars already use — so a structure is
+    // coloured by exactly the relationship the rest of the client acts on.
+    _structureColor(entity) {
+      if (!Settings_default._structureColors || !entity) {
+        return null;
+      }
+      const sid = entity.sid;
+      if (sid === void 0) {
+        return null;
+      }
+      // This runs inside the game's own draw, where a throw would take the
+      // frame with it, and the first frames can land before the managers are
+      // built.
+      const manager = client && client.ObjectManager;
+      const object = manager && manager.objects.get(sid);
+      if (!object) {
+        return null;
+      }
+      const group = object.itemGroup;
+      const isSpike = group === 2;
+      if (!isSpike && group !== 5) {
+        return null;
+      }
+      const myPlayer = client.myPlayer;
+      const owner = object.ownerID;
+      if (!myPlayer || owner === null || owner === void 0) {
+        return null;
+      }
+      if (myPlayer.isMyPlayerByID(owner)) {
+        return isSpike ? Settings_default._ownSpikeColor : Settings_default._ownTrapColor;
+      }
+      if (myPlayer.isTeammateByID(owner)) {
+        return isSpike ? Settings_default._allySpikeColor : Settings_default._allyTrapColor;
+      }
+      return isSpike ? Settings_default._enemySpikeColor : Settings_default._enemyTrapColor;
+    }
+
+    // `entity` is the object being drawn: a placed item from the building draw,
+    // a resource from the resource draw. Animals and anything else still reach
+    // here with one argument and take the purple path they always took.
+    //
+    // Structure colours win over the purple tint when both are on: the purple
+    // tint exists to separate structures from terrain, the structure colours to
+    // separate them from each other, and the second answer contains the first.
+    _objectTint(sprite, entity) {
+      if (!sprite || sprite.isLoaded === false) {
         return sprite;
       }
-      if (sprite.isLoaded === false) {
-        return sprite;
+      // Food wears the sakura texture. Swapped before anything below looks at
+      // the sprite, and at the same dimensions, so the tint, the tint cache and
+      // the game's own draw all carry on exactly as they were.
+      const food = this._foodSprite(sprite, entity);
+      if (food !== null) {
+        sprite = food;
       }
-      const cached = this._tintCache.get(sprite);
+      // Structure colours are a placed-item question. A resource has a sid too,
+      // so handing one to _structureColor would put a map lookup in the draw
+      // path for every bush on screen to reach the same null it always did.
+      let color = this._structureColor(entity && entity.isItem ? entity : null);
+      let strength;
+      if (color === null) {
+        if (!Settings_default._objectTint) {
+          return sprite;
+        }
+        color = OBJECT_TINT_COLOR;
+        strength = OBJECT_TINT_STRENGTH;
+      } else {
+        strength = clamp(Settings_default._structureColorStrength, 0, 100) / 100;
+      }
+      // One sprite is shared by every object of the same item and scale, so the
+      // cache is per sprite and then per tint — at most seven entries, and a
+      // colour the user changes simply adds one rather than invalidating a
+      // frame's worth of work.
+      let variants = this._tintCache.get(sprite);
+      if (variants === void 0) {
+        variants = new Map;
+        this._tintCache.set(sprite, variants);
+      }
+      const key = color + "|" + strength;
+      const cached = variants.get(key);
       if (cached !== void 0) {
         return cached;
       }
@@ -4312,11 +4536,13 @@ window.grbtp = 35;
       canvas.height = height;
       const ctx = canvas.getContext("2d");
       ctx.drawImage(sprite, 0, 0, width, height);
+      // source-atop paints only where the sprite already has pixels, so the
+      // silhouette, the outline and the shading all survive the recolour.
       ctx.globalCompositeOperation = "source-atop";
-      ctx.globalAlpha = OBJECT_TINT_STRENGTH;
-      ctx.fillStyle = OBJECT_TINT_COLOR;
+      ctx.globalAlpha = strength;
+      ctx.fillStyle = color;
       ctx.fillRect(0, 0, width, height);
-      this._tintCache.set(sprite, canvas);
+      variants.set(key, canvas);
       return canvas;
     }
     _drawAnimal(ctx, sprite, size) {
@@ -4327,16 +4553,51 @@ window.grbtp = 35;
     }
     _preRender() {
       ZoomHandler_default.smoothUpdate();
+      // Advances the shaft-grip system's own frame counter and idle-sway phase
+      // off the timestamp already sampled here, so it reads no clock of its own.
+      WeaponAnim_default.frame(this._lastFrameTime);
       this.patchMyNameColor();
+    }
+    // The game canvas and its context do not change for the life of the page,
+    // so they are looked up once instead of once a frame. `_gameCtx` is also
+    // what the consolidated frame driver hands the overlay passes.
+    _gameCanvas=null;
+    _gameCtx=null;
+    _smoothingState=null;
+    gameCtx() {
+      if (!Settings_default._renderOptimization || this._gameCtx === null || !this._gameCanvas || !this._gameCanvas.isConnected) {
+        const canvas = document.querySelector("#gameCanvas");
+        if (!canvas) {
+          return null;
+        }
+        this._gameCanvas = canvas;
+        this._gameCtx = canvas.getContext("2d");
+        this._smoothingState = null;
+      }
+      return this._gameCtx;
     }
     _postRender() {
       const now = performance.now();
       const rawDt = now - this._lastFrameTime;
       this._lastFrameTime = now;
-      this._dtSamples.push(rawDt);
-      if (this._dtSamples.length > 8) this._dtSamples.shift();
-      this._dtSmoothed = this._dtSamples.reduce((a, b) => a + b, 0) / this._dtSamples.length;
-      if (Settings_default._lowQuality && this._dtSmoothed > 0) {
+      // Ring buffer with a running sum. The old version pushed, shifted and
+      // then reduced over the whole window every frame, which allocated a
+      // closure per frame to average eight numbers.
+      const samples = this._dtSamples;
+      if (samples.length < 8) {
+        samples.push(rawDt);
+        this._dtSum += rawDt;
+      } else {
+        this._dtSum += rawDt - samples[this._dtIndex];
+        samples[this._dtIndex] = rawDt;
+        this._dtIndex = (this._dtIndex + 1) % 8;
+      }
+      this._dtSmoothed = this._dtSum / samples.length;
+      // Visual Smoothing holds this frame skipper off. It halves the client's
+      // own post-render work when the frame rate collapses, but it does it by
+      // dropping every second frame, and an alternating frame is exactly the
+      // stutter the smoothing setting exists to avoid.
+      if (Settings_default._lowQuality && !Settings_default._visualSmoothing && this._dtSmoothed > 0) {
         const currentFps = 1000 / this._dtSmoothed;
         if (currentFps < 25) {
           this._frameSkipCounter++;
@@ -4345,17 +4606,20 @@ window.grbtp = 35;
           this._frameSkipCounter = 0;
         }
       }
-      while (this.totalTimes.length > 0 && this.totalTimes[0] <= now - 1e3) {
-        this.totalTimes.shift();
-      }
-      this.totalTimes.push(now);
-      const fps = this.totalTimes.length;
-      if (now - this.lastLogTime >= 1e3) {
-        GameUI_default.updateFPS(fps);
+      // Frames per second, counted rather than accumulated into a list of
+      // timestamps that was scanned and shifted every frame to report a number
+      // once a second.
+      this._frameCount++;
+      const since = now - this.lastLogTime;
+      if (since >= 1e3) {
+        GameUI_default.updateFPS(Math.round(this._frameCount * 1e3 / since));
+        this._frameCount = 0;
         this.lastLogTime = now;
       }
-      const canvas = document.querySelector("#gameCanvas");
-      const ctx = canvas.getContext("2d");
+      const ctx = this.gameCtx();
+      if (ctx === null) {
+        return;
+      }
       if (Settings_default._lowQuality) {
         if (!ctx.__lqPatched) {
           const proto = Object.getPrototypeOf(ctx);
@@ -4371,7 +4635,7 @@ window.grbtp = 35;
           }
           ctx.__lqPatched = true;
         }
-        ctx.imageSmoothingEnabled = false;
+        this._setSmoothing(ctx, false);
       } else {
         if (ctx.__lqPatched) {
           const proto = Object.getPrototypeOf(ctx);
@@ -4379,8 +4643,18 @@ window.grbtp = 35;
           if (origDesc) Object.defineProperty(proto, "shadowBlur", origDesc);
           ctx.__lqPatched = false;
         }
-        ctx.imageSmoothingEnabled = true;
+        this._setSmoothing(ctx, true);
       }
+    }
+    // Writing a canvas state property is not free even when the value is
+    // unchanged, and this one was written on every frame forever. It now moves
+    // only when it actually changes.
+    _setSmoothing(ctx, on) {
+      if (Settings_default._renderOptimization && this._smoothingState === on) {
+        return;
+      }
+      this._smoothingState = on;
+      ctx.imageSmoothingEnabled = on;
     }
     _mapPreRender(ctx) {
       if (Settings_default._lowQuality) {
@@ -4415,6 +4689,26 @@ window.grbtp = 35;
         ctx.arc(pos.x, pos.y, markSize, 0, 2 * Math.PI);
         ctx.fill();
       }
+      // Bots that joined through this client, drawn here rather than through a
+      // hook because the game has no concept of them. This runs before the
+      // bundle paints its own markers, so a bot standing on top of you ends up
+      // under your dot instead of hiding it.
+      //
+      // client.clients holds every PlayerClient this tab opened, including ones
+      // still connecting — inGame is what says a bot has actually spawned and
+      // has a position worth drawing.
+      try {
+        ctx.fillStyle = MAP_COLORS.bot;
+        client.clients.forEach(bot => {
+          const p = bot && bot.myPlayer;
+          if (!p || !p.inGame) return;
+          const at = p.pos.current;
+          if (!at) return;
+          ctx.beginPath();
+          ctx.arc(at.x / Config_default.mapScale * width, at.y / Config_default.mapScale * height, 7, 0, 2 * Math.PI);
+          ctx.fill();
+        });
+      } catch (e) {}
       ctx.restore();
     }
     drawNorthArrow(ctx, x, y, angle) {
@@ -4966,32 +5260,6 @@ window.grbtp = 35;
       ctx.fillText(player.shameCount, x, y);
       ctx.restore();
     }
-    circularBar(ctx, object, perc, angle, color, offset = 0, sizeMult = 1) {
-      const _offset = RYN._offset;
-      const x = object.x + object.xWiggle - _offset.x;
-      const y = object.y + object.yWiggle - _offset.y;
-      const height = Config_default.barHeight * .5 * sizeMult;
-      const defaultScale = 10 + height / 2;
-      const scale = defaultScale + 1 + offset;
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(angle);
-      ctx.lineCap = "round";
-      ctx.strokeStyle = "#3b3b3b";
-      ctx.lineWidth = height;
-      ctx.beginPath();
-      ctx.arc(0, 0, scale, 0, perc * 2 * Math.PI);
-      ctx.stroke();
-      ctx.closePath();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = height / 3;
-      ctx.beginPath();
-      ctx.arc(0, 0, scale, 0, perc * 2 * Math.PI);
-      ctx.stroke();
-      ctx.closePath();
-      ctx.restore();
-      return defaultScale - 3;
-    }
   };
   const Renderer_default = Renderer;
   const Animals = [ {
@@ -5236,9 +5504,19 @@ window.grbtp = 35;
       }
       const dist = myPlayer.getItemPlaceScale(id);
       for (let i = 0; i < angles.length; i++) {
-        const angle = angles[i];
-        const pos = myPlayer.pos.current.addDirection(angle, dist);
-        Renderer_default.itemSprite(ctx, id, pos.x, pos.y, angle, Settings_default._placementPreviewOpacity ?? .35);
+        const entry = angles[i];
+        // An entry is either a bare angle or an angle that names its own item.
+        // One tick can queue a spike and a trap together — the placer's ladder
+        // always could, and the extra scanners do it routinely — and
+        // `placeAngles[0]` can only name one of the two, so a build that says
+        // what it is gets drawn as what it is instead of as its neighbour.
+        const plain = typeof entry === "number";
+        const angle = plain ? entry : entry.angle;
+        const entryId = plain || entry.type === type ? id : myPlayer.getItemByType(entry.type);
+        if (entryId === null || entryId === undefined) continue;
+        const entryDist = entryId === id ? dist : myPlayer.getItemPlaceScale(entryId);
+        const pos = myPlayer.pos.current.addDirection(angle, entryDist);
+        Renderer_default.itemSprite(ctx, entryId, pos.x, pos.y, angle, Settings_default._placementPreviewOpacity ?? .35);
       }
     }
     drawEntityHP(ctx, entity) {
@@ -6585,6 +6863,10 @@ window.grbtp = 35;
     players=[];
     enemies=[];
     prevPlayers=new Set;
+    // Counts player updates. Only the corpse renderer reads it, to tell "the
+    // server stopped reporting this player on exactly this tick" from "this
+    // player went out of view a while ago".
+    corpseTick=0;
     animalData=new Map;
     clanData=new Map;
     start=Date.now();
@@ -6696,11 +6978,13 @@ window.grbtp = 35;
       this.step = now - this.start;
       this.start = now;
       const {myPlayer: myPlayer, isOwner: isOwner, EnemyManager: EnemyManager2} = this.client;
+      const corpseTick = ++this.corpseTick;
       for (let i = 0; i < buffer.length; i += 13) {
         const id = buffer[i];
         const player = this.playerData.get(id);
         this.players.push(player);
         player.update(id, buffer[i + 1], buffer[i + 2], buffer[i + 3], buffer[i + 4], buffer[i + 5], buffer[i + 6], buffer[i + 7], buffer[i + 8], buffer[i + 9], buffer[i + 10], buffer[i + 11], buffer[i + 12]);
+        player.corpseSeenTick = corpseTick;
         if (!this.client.isBotByID(id) && !myPlayer.isMyPlayerByID(id) && myPlayer.isTeammateByID(id) && EnemyManager2.isNear(player, this.nearestTeammate, myPlayer)) {
           this.nearestTeammate = player;
         } else if (myPlayer.isEnemyByID(id)) {
@@ -6743,6 +7027,9 @@ window.grbtp = 35;
       ObjectManager2.postTick();
       if (myPlayer.inGame) {
         myPlayer.tickUpdate();
+        // Purely visual, and last: it reads the kill flag tickUpdate has just
+        // raised and writes nothing any module will see.
+        CorpseHandler.tick(this);
       }
       ObjectManager2.deletedObjects.clear();
       if ((Settings_default._autospawn || !isOwner) && !myPlayer.inGame) {
@@ -7398,10 +7685,9 @@ window.grbtp = 35;
     _globalKills=0;
     _deaths=0;
     _autoSyncTimes=0;
-    _knockbackTickTimes=0;
-    _velocityTickTimes=0;
     _spikeSyncHammerTimes=0;
     _spikeSyncTimes=0;
+    _velocityTickTimes=0;
     constructor(client2) {
       this.client = client2;
     }
@@ -7410,10 +7696,9 @@ window.grbtp = 35;
       this.globalKills = Settings_default._globalKills;
       this.deaths = Settings_default._deaths;
       this.autoSyncTimes = Settings_default._autoSyncTimes;
-      this.knockbackTickTimes = Settings_default._knockbackTickTimes;
-      this.velocityTickTimes = Settings_default._velocityTickTimes;
       this.spikeSyncHammerTimes = Settings_default._spikeSyncHammerTimes;
       this.spikeSyncTimes = Settings_default._spikeSyncTimes;
+      this.velocityTickTimes = Settings_default._velocityTickTimes;
     }
     get totalKills() {
       return this._totalKills;
@@ -7427,17 +7712,14 @@ window.grbtp = 35;
     get autoSyncTimes() {
       return this._autoSyncTimes;
     }
-    get knockbackTickTimes() {
-      return this._knockbackTickTimes;
-    }
-    get velocityTickTimes() {
-      return this._velocityTickTimes;
-    }
     get spikeSyncHammerTimes() {
       return this._spikeSyncHammerTimes;
     }
     get spikeSyncTimes() {
       return this._spikeSyncTimes;
+    }
+    get velocityTickTimes() {
+      return this._velocityTickTimes;
     }
     set totalKills(value) {
       this._totalKills += value;
@@ -7467,20 +7749,6 @@ window.grbtp = 35;
       }
       UI_default.updateStats("_autoSyncTimes", this._autoSyncTimes);
     }
-    set knockbackTickTimes(value) {
-      this._knockbackTickTimes += value;
-      if (!this.client.isOwner) {
-        return;
-      }
-      UI_default.updateStats("_knockbackTickTimes", this._knockbackTickTimes);
-    }
-    set velocityTickTimes(value) {
-      this._velocityTickTimes += value;
-      if (!this.client.isOwner) {
-        return;
-      }
-      UI_default.updateStats("_velocityTickTimes", this._velocityTickTimes);
-    }
     set spikeSyncHammerTimes(value) {
       this._spikeSyncHammerTimes += value;
       if (!this.client.isOwner) {
@@ -7494,6 +7762,13 @@ window.grbtp = 35;
         return;
       }
       UI_default.updateStats("_spikeSyncTimes", this._spikeSyncTimes);
+    }
+    set velocityTickTimes(value) {
+      this._velocityTickTimes += value;
+      if (!this.client.isOwner) {
+        return;
+      }
+      UI_default.updateStats("_velocityTickTimes", this._velocityTickTimes);
     }
   }
   class InputHandler {
@@ -7817,10 +8092,12 @@ window.grbtp = 35;
         try {
           const {isOwner: _sbIsOwner, clients: _sbClients} = this.client;
           if (_sbIsOwner) {
-            // Flipping one flag is the whole toggle. The loop below reconciles
-            // every bot to it each frame, which is what lets a bot spawned mid
-            // session pick the mode up, and what stops the state going stale
-            // when the bot the old code sampled happens to be dead.
+            // Flipping one flag is the whole toggle. BotExplorer reconciles
+            // every bot to it on its own tick, which is what lets a bot spawned
+            // mid session pick the mode up, and what stops the state going
+            // stale when the bot the old code sampled happens to be dead. The
+            // loop below is only so the fleet turns for home on this keypress
+            // rather than on its next tick.
             Settings_default._botsScattered = !Settings_default._botsScattered;
             SaveSettings();
             if (!Settings_default._botsScattered) {
@@ -7833,7 +8110,6 @@ window.grbtp = 35;
                 _sbMH._scatterReturnDeadline = Date.now() + SCATTER_RETURN_TIMEOUT_MS;
                 _sbMH._scatterBreaking = false;
                 _sbMH._scatterBreakTarget = null;
-                _sbMH._scatterNextDecisionTime = 0;
               }
             }
           }
@@ -7910,12 +8186,13 @@ window.grbtp = 35;
       }
       if (Settings_default._autoGrindKey && event.code === Settings_default._autoGrindKey) {
         try {
-          const grindMod = window.client?._ModuleHandler?.staticModules?.autoGrind;
-          if (Settings_default._autoGrind || !grindMod || !grindMod.isFullyUpgraded()) {
-            Settings_default._autoGrind = !Settings_default._autoGrind;
-            const grindEl = UI_default.frame && UI_default.frame.document && UI_default.frame.document.getElementById("_autoGrind");
-            if (grindEl) grindEl.checked = Settings_default._autoGrind;
-          }
+          // Always toggles, like the automill and dash keys above. It used to
+          // refuse to switch on while the weapons were at their target, which
+          // made the key dead exactly when you raised the target to grind
+          // further.
+          Settings_default._autoGrind = !Settings_default._autoGrind;
+          const grindEl = UI_default.frame && UI_default.frame.document && UI_default.frame.document.getElementById("_autoGrind");
+          if (grindEl) grindEl.checked = Settings_default._autoGrind;
         } catch (_) {}
       }
       if (Settings_default._autoplacerKey && event.code === Settings_default._autoplacerKey) {
@@ -8699,6 +8976,50 @@ window.grbtp = 35;
       }
       return 0;
     }
+    // Break Position. This filters which trap Auto Break is allowed to take as
+    // a target, and nothing else: spikes, cacti and every other structure are
+    // returned unchanged in both modes, and no other module reads it.
+    //
+    //   inside  — only the trap the player is actually caught in. That is
+    //             myPlayer.trappedIn by name, not "the nearest trap", so two
+    //             overlapping traps cannot make it pick the wrong one.
+    //   outside — every enemy trap except the one the player is standing in.
+    //
+    // isTrapped and trappedIn are set by EnemyManager each tick from collision
+    // against the objects' real positions, so this reads the player's actual
+    // relationship to the trap rather than anything that was drawn.
+    // Whether one specific trap clears the current mode. Only traps are ever
+    // filtered; every other structure is this setting's business not at all.
+    _trapAllowedByMode(myPlayer, trap) {
+      const inTrap = myPlayer.isTrapped ? myPlayer.trappedIn : null;
+      if (Settings_default._breakPosition === "outside") {
+        return trap !== inTrap;
+      }
+      return inTrap !== null && trap === inTrap;
+    }
+    _breakTrapTarget(myPlayer, nearestTrap) {
+      if (Settings_default._breakPosition === "outside") {
+        return nearestTrap !== null && this._trapAllowedByMode(myPlayer, nearestTrap) ? nearestTrap : null;
+      }
+      return myPlayer.isTrapped ? myPlayer.trappedIn : null;
+    }
+    // Filtering EnemyManager.nearestTrap alone was not enough to hold the mode:
+    // a trap the mode rules out came straight back through the general
+    // fallbacks. EnemyManager files a trap (type 15) into nearestEnemyObject
+    // and secondNearestEnemyObject alongside spikes and walls, and
+    // getDestroyingObject falls back to those whenever it has no trap and no
+    // spike to work with — so `inside` still broke a neighbour's trap any time
+    // one happened to be the closest enemy structure, which is the single
+    // thing that mode exists to prevent.
+    //
+    // Every object on its way to becoming a break target clears the mode here.
+    // Non-traps pass through untouched, so spikes still break the same either
+    // way.
+    _allowedBreakTarget(myPlayer, obj) {
+      if (!obj) return null;
+      if (obj.type !== 15) return obj;
+      return this._trapAllowedByMode(myPlayer, obj) ? obj : null;
+    }
     getDestroyingObject() {
       const {EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
       const pos0 = myPlayer.pos.current;
@@ -8706,9 +9027,12 @@ window.grbtp = 35;
       const secondary = myPlayer.getItemByType(1);
       const isPrimary = primary !== 8 && primary !== 5 && primary !== 6;
       const isHammer = secondary === 10;
-      const nearestTrap = EnemyManager2.nearestTrap;
+      // A trap the mode rules out simply is not offered, so the spike and
+      // enemy-first fallbacks below run exactly as they do when there is no
+      // trap in reach at all.
+      const nearestTrap = this._breakTrapTarget(myPlayer, EnemyManager2.nearestTrap);
       const nearestSpike = EnemyManager2.nearestSpike;
-      const fallback = EnemyManager2.nearestEnemyObject || EnemyManager2.secondNearestEnemyObject;
+      const fallback = this._allowedBreakTarget(myPlayer, EnemyManager2.nearestEnemyObject) || this._allowedBreakTarget(myPlayer, EnemyManager2.secondNearestEnemyObject);
       const reachable = t => t && this.getDestroyingWeapon(t) !== null;
       const enemyFirst = () => reachable(fallback) ? fallback : null;
       if (!nearestSpike && !nearestTrap) {
@@ -8783,6 +9107,10 @@ window.grbtp = 35;
         const obj = ObjectManager2.objects.get(id);
         if (!obj || !(obj instanceof PlayerObject)) return;
         if (!PlayerManager2.isEnemyByID(obj.ownerID, myPlayer)) return;
+        // The other door a ruled-out trap used to walk back through: this
+        // picks structures around a trapped enemy and scores traps highest of
+        // all, so `inside` broke them even while standing free.
+        if (obj.type === 15 && !this._trapAllowedByMode(myPlayer, obj)) return;
         if (obj.health > hammerDmg) return;
         const distToMe = myPos.distance(obj.pos.current);
         if (distToMe > (hammerWD?.range ?? 110) + obj.collisionScale) return;
@@ -8802,14 +9130,6 @@ window.grbtp = 35;
     postTick() {
       const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler, ObjectManager: ObjectManager3, PlayerManager: PlayerManager3} = this.client;
       if (!Settings_default._autobreak) {
-        return;
-      }
-      // Novastorm's Anti Smart Tick sets `autoBreak = false` when breaking out of
-      // the trap would fly me into their spike. This module runs before AntiInsta,
-      // so the latch it sets is read on the tick after — which is the tick that
-      // matters, because the situation it detects lasts until the trap or the
-      // spike is gone.
-      if (ModuleHandler.staticModules.antiInsta?.blockBreak) {
         return;
       }
       if (ModuleHandler.moduleActive && !myPlayer.isTrapped) {
@@ -9124,14 +9444,36 @@ window.grbtp = 35;
   // enough to wall the side they are standing on.
   const LUNA_TRAPPED_MAX_BUILDS = 3;
 
-  // Modules that own a spike tick or a sync. They all run before the placer,
+  // ── Extra scanners ────────────────────────────────────────────────────────
+  // The ladder below is one scanner and it is aimed at the enemy: every angle
+  // it proposes is proposed for what it does to *them* — the spike that
+  // catches them, the trap that retraps them, the push that throws them onto
+  // something we already own. With one target on the board that reasoning only
+  // ever looks at the arc of the ring facing them, so however much open ground
+  // there is on the other three sides, none of it is ever considered.
+  //
+  // The extra scanners are what looks at it. The ring is cut into
+  // `_autoplacerScanners` equal sectors with sector 0 centred on the direction
+  // to the enemy: the ladder keeps that one, and each extra scanner owns
+  // exactly one of the others. A scanner only ever proposes angles inside its
+  // own sector, so no two of them can pick the same ground, none can wander
+  // into another's arc, and they never have to be resolved against each other
+  // — the geometry does it, for free, before any candidate exists.
+  //
+  // One build per scanner per tick. Five packets each is enough that a single
+  // sector allowed to empty itself would spend the whole allowance before the
+  // rest were looked at; one apiece fills the ring evenly instead.
+  const LUNA_MAX_SCANNERS = 6;
+  const LUNA_SECTOR_MAX_BUILDS = 1;
+
+  // Modules that own a sync or a trap tick. They all run before the placer,
   // and whichever claims the tick puts its name in ModuleHandler.activeModule.
   // If one of them owns the tick the placer stays out of its way rather than
   // spending the packets it needs. This guard is RYN's, not Luna's — Luna has
   // no module ordering to collide with.
-  const LUNA_SPIKE_TICK_MODULES = new Set([ "spikeSync", "spikeSyncHammer", "spikeTrap", "teammateSpikeTrap" ]);
-  function lunaSpikeTickBusy(ModuleHandler) {
-    return LUNA_SPIKE_TICK_MODULES.has(ModuleHandler.activeModule);
+  const LUNA_TICK_OWNER_MODULES = new Set([ "spikeSync", "spikeSyncHammer", "spikeTrap", "teammateSpikeTrap" ]);
+  function lunaTickOwnerBusy(ModuleHandler) {
+    return LUNA_TICK_OWNER_MODULES.has(ModuleHandler.activeModule);
   }
 
   class AutoPlacer {
@@ -9156,6 +9498,7 @@ window.grbtp = 35;
       this._angleCacheTick = -1;
       this._lastPrePlaceObj = null;
       this._spamPrePlacer = false;
+      SpikeOpportunity.reset();
     }
 
     // UTILS.lineInRect, unchanged.
@@ -9286,6 +9629,78 @@ window.grbtp = 35;
         scale: item.scale,
         preplace: preplace
       });
+    }
+
+    // Shortest way round between two angles.
+    _angleGap(a, b) {
+      let d = Math.abs(a - b) % (Math.PI * 2);
+      if (d > Math.PI) d = Math.PI * 2 - d;
+      return d;
+    }
+
+    // Which sector an angle falls in, counting from the one centred on `base`.
+    // Sector 0 spans base ± half a sector — the arc facing the enemy, which
+    // belongs to the ladder — and the extra scanners take 1..count-1 going
+    // round from it. Every angle answers exactly one sector, which is what
+    // makes the sectors a partition rather than a preference.
+    _sectorOf(angle, base, count) {
+      const span = Math.PI * 2 / count;
+      let rel = (angle - base + span / 2) % (Math.PI * 2);
+      if (rel < 0) rel += Math.PI * 2;
+      return Math.floor(rel / span) % count;
+    }
+
+    // The one angle a scanner takes out of its own sector. Packed against
+    // something first, for the same reason the ladder prefers `perfect` — a
+    // build with a neighbour cannot be walked around — and then whichever sits
+    // nearest the sector's own centre, so a scanner works the middle of its arc
+    // rather than drifting onto the edge it shares with the next one.
+    _sectorPick(angles, base, sector, count, center, los) {
+      let best = null, bestKey = Infinity;
+      for (const a of angles) {
+        // Only ground nothing is standing on, and nothing the server has just
+        // refused: `placeable` is Luna's _canPlace, and the ban list is the
+        // resend guard the tick above fills in.
+        if (!a.placeable) continue;
+        if (this._bannedAngles.has(a.angle)) continue;
+        if (this._sectorOf(a.angle, base, count) !== sector) continue;
+        // The two tests the ladder applies to any build it makes for a reason
+        // other than catching the target: never wall off my own path, and never
+        // wall off my line to theirs. A scanner filling open ground has no
+        // claim worth either of those.
+        const {blockFuture: blockFuture, blockEnemy: blockEnemy} = los(a);
+        if (blockFuture || blockEnemy) continue;
+        const key = (a.perfect ? 0 : Math.PI * 2) + this._angleGap(a.angle, center);
+        if (key >= bestKey) continue;
+        bestKey = key;
+        best = a;
+      }
+      return best;
+    }
+
+    // One pass over the sectors the ladder does not own. Trap before spike, as
+    // in the trapped fallback: a build that pins is worth more than one that
+    // chips, and a capped or missing item is not an empty sector — it is an
+    // item that could not be scanned, so the other one still gets its turn.
+    _scanSectors(count, items, base, myPos, myPlayer, los) {
+      const span = Math.PI * 2 / count;
+      for (let sector = 1; sector < count; sector++) {
+        const center = base + sector * span;
+        let built = 0;
+        for (const [ itemId, itemType, angles ] of items) {
+          if (built >= LUNA_SECTOR_MAX_BUILDS) break;
+          if (itemId === null || itemId === undefined) continue;
+          if (!myPlayer.canPlace(itemType)) continue;
+          const pick = this._sectorPick(angles, base, sector, count, center, los);
+          if (!pick) continue;
+          // The ladder's own queue, so a scanner cannot claim ground the ladder
+          // already took this tick — _addPredictObject rejects anything landing
+          // on a build already queued — and the send below stays the only thing
+          // that touches the wire.
+          this._addPredictObject(pick.id, pick.angle, false, myPos);
+          built++;
+        }
+      }
     }
 
     // Luna getPrePlaceObject: the object whose slot is about to open. Either
@@ -9419,11 +9834,34 @@ window.grbtp = 35;
       return angles.filter(a => this._lineInRect(a.x - pad(a), a.y - pad(a), a.x + pad(a), a.y + pad(a), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y))[0] ?? null;
     }
 
+    // Novastorm's *other* knockback model, the one `_closestSpikeToKb` above
+    // is not: the spike worth building because the primary swing that is
+    // already coming will throw them onto it, or onto one we own.
+    //
+    // Same shape as the Luna picks around it — one angle out of the scanned
+    // set, chosen once per tick, compared by identity in the ladder — so it
+    // slots into `isAutoPlaceAngle` beside them rather than beside a second
+    // way of choosing. The context is solved once and each angle costs a box
+    // test, so this adds one pass over angles already in hand.
+    _bestPrimaryKbSpike(spikeAngles, ctx) {
+      if (!ctx || spikeAngles.length === 0) return null;
+      let best = null, bestScore = 0;
+      for (const a of spikeAngles) {
+        const score = SpikeOpportunity.score(ctx, a.x, a.y, a.scale);
+        if (score <= bestScore) continue;
+        bestScore = score;
+        best = a;
+      }
+      // A candidate that neither ends the push nor catches the rebound scores
+      // nothing, and nothing is not an opportunity.
+      return bestScore > 0 ? best : null;
+    }
+
     postTick() {
       const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2, PacketManager: PacketManager2} = this.client;
       if (!Settings_default._autoplacer) return;
       if (!myPlayer || !myPlayer.inGame) return;
-      if (lunaSpikeTickBusy(ModuleHandler)) return;
+      if (lunaTickOwnerBusy(ModuleHandler)) return;
 
       this._tick = ModuleHandler.tickCount;
       for (const [angle, expiry] of this._bannedAngles) {
@@ -9524,6 +9962,18 @@ window.grbtp = 35;
         const closestTrapToEnemy = this._closestToEnemy(validTrap, enemyPos, enemyFut, a => a.scale);
         const closestSpikeToKb = this._closestSpikeToKb(validSpike, spikesOur, enemyPos, enemyFut, enemyScale, 1);
 
+        // The primary knockback chain. Solved against where they are rather
+        // than where they will be: the swing this reasons about is the one
+        // available now, and getPrimaryKnockback already tests the future
+        // positions when it decides the enemy is in range.
+        const kbCtx = SpikeOpportunity.context(this.client, enemy, enemyPos, enemyScale, spikesOur, "now");
+        const primaryKbSpike = this._bestPrimaryKbSpike(validSpike, kbCtx);
+        // A trap only loses its slot when there is both a chain worth
+        // protecting and a spike actually queued to exploit it. Without the
+        // second half the veto would spend the tick on nothing, so the trap
+        // ladder below is left exactly as it was.
+        const vetoTraps = primaryKbSpike !== null && kbCtx !== null && kbCtx.strength >= SO_TRAP_VETO_STRENGTH;
+
         const isAutoPlaceAngle = config => {
           if (myPos.distance(enemyPos) > (Settings_default._autoplacerRadius ?? 350)) return false;
           const isSpike = config.id === spikeId && !this._isItemLimit(spikeId, myPlayer);
@@ -9534,10 +9984,27 @@ window.grbtp = 35;
             if (enemyTrapped && closestSpikeToEnemy && config === closestSpikeToEnemy) return true;
             // 2: the spike whose knockback throws them onto another spike
             if (closestSpikeToKb && config === closestSpikeToKb) return true;
+            // 2b: the spike the primary swing is about to throw them onto,
+            // or that catches the rebound off one we already own. Sits below
+            // Luna's own knockback pick because that one builds the push as
+            // well as the landing; this one only has to be standing there.
+            if (primaryKbSpike && config === primaryKbSpike) return true;
             // 3: spikes that do not wall off my own path or my view of them
             if (enemyTrapped && !blockFuture && !blockEnemy) return true;
           }
           if (isTrap) {
+            // A trap across the knockback path sets lockMove on contact: they
+            // stop where they stand and the push is spent for nothing. Only
+            // the traps actually standing in the way are given up, and only
+            // to a spike that is taking the opportunity. The second test is
+            // the same argument about ground rather than geometry: the passes
+            // below run perfect angles before placeable ones across both
+            // items, so a perfect trap can otherwise reach _addPredictObject
+            // first and take the slot the spike was chosen for.
+            if (vetoTraps) {
+              if (SpikeOpportunity.onPath(kbCtx, config.x, config.y, config.scale)) return false;
+              if (Math.hypot(config.x - primaryKbSpike.x, config.y - primaryKbSpike.y) < config.scale + primaryKbSpike.scale) return false;
+            }
             // 1: the trap that retraps them as they move
             if (closestTrapToEnemy && config === closestTrapToEnemy && neitherTrapped) return true;
             // 2: any trap, while neither of us is pinned
@@ -9598,6 +10065,18 @@ window.grbtp = 35;
       }
 
       // ────────────────────────────────────────────────────────────────────
+      // EXTRA SCANNERS — the sectors the ladder above does not own
+      // ────────────────────────────────────────────────────────────────────
+      // Runs last, so everything the ladder chose is already queued and a
+      // scanner can only add to it. The same radius gate the ladder places
+      // under: an enemy too far away to build against is not a reason to ring
+      // myself in, and out here there is no target to be near.
+      const scanners = Math.max(1, Math.min(LUNA_MAX_SCANNERS, Math.round(Settings_default._autoplacerScanners ?? 1)));
+      if (scanners > 1 && myPos.distance(enemyPos) <= (Settings_default._autoplacerRadius ?? 350)) {
+        this._scanSectors(scanners, [ [ trapId, LUNA_TRAP_TYPE, this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null) ], [ spikeId, LUNA_SPIKE_TYPE, this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null) ] ], Math.atan2(enemyPos.y - myPos.y, enemyPos.x - myPos.x), myPos, myPlayer, _los);
+      }
+
+      // ────────────────────────────────────────────────────────────────────
       // SEND — auto place only. Preplace and replace are the engine's.
       // ────────────────────────────────────────────────────────────────────
       const typeOf = obj => obj.id === trapId ? LUNA_TRAP_TYPE : LUNA_SPIKE_TYPE;
@@ -9610,7 +10089,13 @@ window.grbtp = 35;
         ModuleHandler.place(type, obj.angle);
         ModuleHandler.placedOnce = true;
         ModuleHandler.placeAngles[0] = type;
-        ModuleHandler.placeAngles[1].push(obj.angle);
+        // Tagged with its own item, because this queue mixes them: the ladder
+        // and the scanners both feed it, and the preview draws each build as
+        // the item it actually is rather than as whatever went out last.
+        ModuleHandler.placeAngles[1].push({
+          angle: obj.angle,
+          type: type
+        });
         ModuleHandler.moduleActive = true;
         this._placedAngles.push(obj.angle);
       };
@@ -9797,12 +10282,265 @@ window.grbtp = 35;
     synergyTrapHold: 2.2,
     synergyEnclose: 1.5,
     redundancy: 1.9,
+    // primary knockback chain — see SpikeOpportunity below. The evaluator
+    // returns roughly 0..3.2, so this lands the term in the same band as
+    // `rebound`, which is the same class of thing measured the other way up.
+    primaryKb: 1.4,
+    // predictive building steal — see StealForecast below. Every one of these
+    // is multiplied by a measured destruction confidence, so a building that
+    // has merely been hit contributes nothing and only one that is genuinely
+    // about to fall reaches this band. `steal` is set just under `rebound`:
+    // taking an enemy's slot is worth about as much as a good knockback and
+    // deliberately not more, so a live opportunity still outranks a predicted
+    // one.
+    steal: 4.2,
+    stealDeny: 2.4,
+    stealChain: 1.2,
     // gates and search
     minValue: .9,
     maxPlacements: 3,
     beamWidth: 4,
     branch: 6,
     staleTargetShift: 90
+  };
+
+  // ── Spike opportunity evaluator ───────────────────────────────────────────
+  // Novastorm reasons about knockback in two separate places, and only one of
+  // them had been carried across into this client.
+  //
+  //   1. `closestSpikeToKb` — the *candidate spike's own* push. Already here
+  //      twice over: verbatim in AutoPlacer._closestSpikeToKb, and through
+  //      SiegeAnalysis.knockInto in the engine's scorer. Nothing below
+  //      touches it.
+  //
+  //   2. `canVelocitySpikeTick` and the KNOCKBACK ANTI block — the *primary
+  //      attack's* push:
+  //
+  //          pos = enemy + 111 * (0.3 + weapon.knock) * dir(player -> enemy)
+  //
+  //      Novastorm uses that to decide when a tick is live, and to predict
+  //      being shoved onto a spike itself. Nothing used it to decide where to
+  //      build.
+  //
+  // The game agrees with the second form exactly. A melee hit does
+  //
+  //      Ai = 0.3 * (victim.weightM || 1) + (weapon.knock || 0)
+  //      victim.xVel += Ai * cos(W);  victim.yVel += Ai * sin(W)
+  //
+  // with W the direction from attacker to victim, so the push axis is
+  // player -> enemy and nothing else. RYN already precomputes 111 * (0.3 +
+  // knock) per weapon as `knockback`, and already exposes it, gated on reload
+  // and range, as ClientPlayer.getPrimaryKnockback — which until now had no
+  // callers.
+  //
+  // What this evaluates is that second chain:
+  //
+  //      Player  --primary-->  Enemy  --knockback-->  friendly Spike
+  //
+  // It answers a question the first model cannot. `closestSpikeToKb` asks
+  // "which spike, once built, would push them onto another spike" — it needs
+  // the new spike to do the pushing. This asks "the swing is happening
+  // anyway; which build makes the swing worth more", which is a different and
+  // usually cheaper opportunity, and it is the one that decides spike against
+  // trap: a trap sitting on the knockback path sets lockMove on contact and
+  // throws the push away.
+  //
+  // Every expensive part of the chain depends on the player, the enemy and the
+  // weapon, and not at all on which angle is being considered. So it is solved
+  // once per tick per position source and each candidate costs one box test.
+  // ==========================================================================
+
+  // How far off the push axis a spike may sit and still count as something the
+  // enemy is being driven into. Novastorm's own alignment filter has no
+  // ceiling — it keeps the best of whatever already intersects the segment,
+  // which is right when the only job is ranking spikes. Here the result has to
+  // be able to lose to a trap, so a glancing chain has to be able to score low.
+  const SO_MAX_ALIGN = Math.PI / 3;
+
+  // Below this the weapon does not move anyone far enough to matter. The
+  // smallest real value is a knockless primary at 33.3.
+  const SO_MIN_TRAVEL = 20;
+
+  // Two spikes count as a pair when the directions to them from the enemy sit
+  // within this of each other — SiegeAnalysis.knockInto uses 0.4 rad for the
+  // same "double spike" idea and this is read off that.
+  const SO_PAIR_SPREAD = .4;
+
+  // The evaluator's own currency. Consumers map these onto their own scale
+  // rather than adding them to it raw.
+  const SO_TERMINAL = 1;
+  const SO_ALIGN_BONUS = .75;
+  const SO_CHAIN = .85;
+  const SO_CONTACT = .6;
+  const SO_PAIR = .5;
+
+  // A chain has to be at least this strong before it is allowed to argue with
+  // a trap. One bare intersection with sloppy alignment is not an argument.
+  const SO_TRAP_VETO_STRENGTH = 1.25;
+
+  const SpikeOpportunity = {
+    _tick: -1,
+    _ctx: new Map,
+    reset() {
+      this._tick = -1;
+      this._ctx.clear();
+    },
+
+    // The candidate-independent half: is a primary swing available, where does
+    // it throw them, and which spikes we already own are standing on that line.
+    // Memoised per (tick, key) so auto place and the engine share one solve.
+    context(client, enemy, enemyRef, enemyScale, spikes, key) {
+      const ModuleHandler = client._ModuleHandler;
+      if (!ModuleHandler) return null;
+      const tick = ModuleHandler.tickCount;
+      if (this._tick !== tick) {
+        this._tick = tick;
+        this._ctx.clear();
+      }
+      const cacheKey = key + "|" + (enemy ? enemy.id : "n");
+      if (this._ctx.has(cacheKey)) return this._ctx.get(cacheKey);
+      const ctx = this._solve(client, enemy, enemyRef, enemyScale, spikes);
+      this._ctx.set(cacheKey, ctx);
+      return ctx;
+    },
+
+    _solve(client, enemy, enemyRef, enemyScale, spikes) {
+      const myPlayer = client.myPlayer;
+      if (!myPlayer || !enemy || !enemyRef || !spikes) return null;
+
+      // Novastorm gates the whole idea on the swing being able to land.
+      // getPrimaryKnockback is RYN's own version of that gate — it returns the
+      // weapon's travel only while the primary is inside a tick of being ready
+      // and the enemy is inside its range, and 0 otherwise. A swing that
+      // cannot happen moves nobody, so there is no opportunity to score.
+      const travel = myPlayer.getPrimaryKnockback(enemy);
+      if (!travel || travel < SO_MIN_TRAVEL) return null;
+
+      const myPos = myPlayer.pos.current;
+      const push = Math.atan2(enemyRef.y - myPos.y, enemyRef.x - myPos.x);
+      const landX = enemyRef.x + travel * Math.cos(push);
+      const landY = enemyRef.y + travel * Math.sin(push);
+
+      // Which of our spikes the push already ends on. Alignment is measured
+      // the way Novastorm measures it — the angle between the push and
+      // enemy -> spike — but against the primary axis rather than the
+      // candidate spike's axis.
+      let best = null;
+      let pairs = 0;
+      const hitAngles = [];
+      for (const sp of spikes) {
+        const s = sp.pos.current;
+        const r = sp.collisionScale + enemyScale;
+        if (!lineInRect(s.x - r, s.y - r, s.x + r, s.y + r, enemyRef.x, enemyRef.y, landX, landY)) continue;
+        const toSpike = Math.atan2(s.y - enemyRef.y, s.x - enemyRef.x);
+        const align = getAngleDist(push, toSpike);
+        if (align > SO_MAX_ALIGN) continue;
+        hitAngles.push(toSpike);
+        if (best === null || align < best.align) {
+          best = {
+            obj: sp,
+            x: s.x,
+            y: s.y,
+            r: r,
+            align: align,
+            dir: toSpike
+          };
+        }
+      }
+      // Pairing is counted against the spike the push actually ends on, not
+      // against whichever happened to be scanned first, so the count does not
+      // depend on grid order.
+      if (best && hitAngles.length > 1) {
+        for (const a of hitAngles) {
+          if (a !== best.dir && getAngleDist(best.dir, a) <= SO_PAIR_SPREAD) pairs++;
+        }
+      }
+
+      // The rebound. A spike collision adds 1.5 to velocity along spike ->
+      // player (the game's `T = 1.5 * (weightM || 1)`), which under the
+      // 0.993/ms decay carries RPE_KB_TRAVEL — so the enemy comes back down
+      // the line they arrived on. A second surface waiting there is the
+      // sandwich, and it is the only multi-spike arrangement the mechanics
+      // actually support.
+      let restX = 0, restY = 0, chainX = 0, chainY = 0;
+      if (best) {
+        const backDir = Math.atan2(enemyRef.y - best.y, enemyRef.x - best.x);
+        restX = best.x + best.r * Math.cos(backDir);
+        restY = best.y + best.r * Math.sin(backDir);
+        chainX = restX + RPE_KB_TRAVEL * Math.cos(backDir);
+        chainY = restY + RPE_KB_TRAVEL * Math.sin(backDir);
+      }
+
+      // How much the chain is worth before any candidate is considered. This
+      // is what decides spike against trap; the per-candidate score decides
+      // which spike.
+      let strength = 0;
+      if (best) {
+        strength = SO_TERMINAL + SO_ALIGN_BONUS * (1 - best.align / SO_MAX_ALIGN);
+        if (pairs > 0) strength += SO_PAIR;
+      }
+
+      return {
+        travel: travel,
+        push: push,
+        enemyX: enemyRef.x,
+        enemyY: enemyRef.y,
+        enemyScale: enemyScale,
+        landX: landX,
+        landY: landY,
+        best: best,
+        pairs: pairs,
+        restX: restX,
+        restY: restY,
+        chainX: chainX,
+        chainY: chainY,
+        strength: strength
+      };
+    },
+
+    // The candidate-dependent half. Deliberately excludes ctx.strength: a flat
+    // bonus every angle receives equally cannot choose between angles, and
+    // adding it here would let any spike anywhere ride on a chain it plays no
+    // part in. Callers that want the chain's own worth read ctx.strength.
+    score(ctx, cx, cy, footR) {
+      if (!ctx) return 0;
+      const r = footR + ctx.enemyScale;
+      let score = 0;
+
+      // The candidate stands on the knockback line: the swing ends on this
+      // build. This is the case that creates an opportunity where there was
+      // none, so it is scored whether or not an existing spike also catches.
+      if (lineInRect(cx - r, cy - r, cx + r, cy + r, ctx.enemyX, ctx.enemyY, ctx.landX, ctx.landY)) {
+        const align = getAngleDist(ctx.push, Math.atan2(cy - ctx.enemyY, cx - ctx.enemyX));
+        if (align <= SO_MAX_ALIGN) {
+          score += SO_TERMINAL + SO_ALIGN_BONUS * (1 - align / SO_MAX_ALIGN);
+        }
+      }
+
+      if (ctx.best) {
+        // The rebound off the spike that already catches them lands back on
+        // this candidate.
+        if (lineInRect(cx - r, cy - r, cx + r, cy + r, ctx.restX, ctx.restY, ctx.chainX, ctx.chainY)) {
+          score += SO_CHAIN;
+        }
+        // Standing on them while the swing does the work. Worth counting only
+        // because a chain exists — plain contact is already priced by both
+        // consumers, and crediting it again here would double-pay it.
+        if (Math.hypot(cx - ctx.enemyX, cy - ctx.enemyY) < r + 8) {
+          score += SO_CONTACT;
+        }
+      }
+      return score;
+    },
+
+    // Does a build here sit on the ground the knockback has to cross? A trap
+    // there is not neutral: contact sets lockMove, the enemy stops where they
+    // stand and the push is spent for nothing.
+    onPath(ctx, cx, cy, footR) {
+      if (!ctx) return false;
+      const r = footR + ctx.enemyScale;
+      return lineInRect(cx - r, cy - r, cx + r, cy + r, ctx.enemyX, ctx.enemyY, ctx.landX, ctx.landY);
+    }
   };
 
   // ── Geometry ──────────────────────────────────────────────────────────────
@@ -10187,6 +10925,185 @@ window.grbtp = 35;
     };
   }
 
+  // ── Predictive destruction ────────────────────────────────────────────────
+  // How close a building is to being destroyed, and how much that estimate is
+  // worth believing.
+  //
+  // The engine already forecast breaks: `attrition` divided an object's health
+  // by one actor's damage and called anything inside two hits doomed. That is
+  // enough to notice a slot opening. It is not enough to *steal* one. A wall is
+  // worked on by several weapons at once, some of them still reloading, and the
+  // difference between "was hit once" and "is about to die" is exactly what
+  // decides whether reserving the ground pays for itself.
+  //
+  // So the forecast is measured rather than assumed, from three readings:
+  //
+  //   potential   what every actor that can currently reach the object would
+  //               land on its next swing, summed. Two enemies hitting the same
+  //               wall kill it in half the swings, and the per-actor minimum
+  //               the old forecast took could not say that.
+  //   observed    health actually lost, tick by tick. The client already
+  //               decrements PlayerObject.health when it resolves an attack
+  //               packet, so a running delta costs one subtraction per tracked
+  //               object and needs no new packet handling.
+  //   cadence     how many separate hits have landed and how recently. One hit
+  //               is an event; two inside the window is a demolition.
+  //
+  // Confidence is their product against remaining health, so a single hit on a
+  // full wall scores near zero and a wall at 20% under two loaded weapons
+  // scores near one. The one case that needs no history is a loaded weapon in
+  // range that alone out-damages what is left: that is a statement about this
+  // swing, not about a trend.
+  //
+  // This is not a second prediction engine. It holds no positions, no targets
+  // and no schedule; it is a decaying number per object, read by `attrition`
+  // inside the engine's own PREDICT stage and by nothing else.
+  const RPE_STEAL_HISTORY_TICKS = 14;
+  // How far ahead a break is worth preparing for. Past this the reservation
+  // would be held through more course changes than it can survive, and the
+  // old forecast's own horizon — "inside two hits" — is the floor of it.
+  const RPE_STEAL_MAX_LEAD = 3;
+  // Below this a forecast is not worth writing down, let alone acting on.
+  // Booking is free and firing is not, so the bar to book is the same one the
+  // scheduler already applies before anything reaches the wire.
+  const RPE_STEAL_BOOK_CONFIDENCE = .3;
+  // Objects the forecaster will hold history for. A wall is five or six; this
+  // is several walls, and past it the least recently touched record is dropped
+  // to make room.
+  const RPE_STEAL_MAX_TRACKED = 32;
+  // Actors whose swings are counted. Me, the current target, and the two next
+  // nearest enemies covers every fight the placer is allowed to build in;
+  // beyond that the extra grid queries buy nothing the nearest few did not
+  // already say.
+  const RPE_STEAL_MAX_ACTORS = 4;
+  // Steal opportunities carried forward in one tick. A wall is five or six
+  // builds and only one of them is usually about to fall, but a demolition
+  // takes several at once and the chain has to be able to see past the first.
+  const RPE_STEAL_MAX_CANDIDATES = 3;
+  // How far an enemy may be from a slot before taking it stops denying them
+  // anything.
+  const RPE_STEAL_ENEMY_RANGE = 320;
+
+  class StealForecast {
+    tracks=new Map;
+    clear() {
+      this.tracks.clear();
+    }
+    forget(id) {
+      this.tracks.delete(id);
+    }
+    // History is kept as a decaying pair of numbers rather than a buffer of
+    // samples: one multiply and one compare per tracked object per tick, no
+    // allocation, and no array to shift.
+    _observe(object, tick) {
+      let rec = this.tracks.get(object.id);
+      if (!rec) {
+        if (this.tracks.size >= RPE_STEAL_MAX_TRACKED) this._evictStalest();
+        rec = {
+          id: object.id,
+          health: object.health,
+          hits: 0,
+          damage: 0,
+          lastHitTick: -1,
+          lastTick: tick
+        };
+        this.tracks.set(object.id, rec);
+        return rec;
+      }
+      if (rec.lastTick === tick) return rec;
+      const gap = Math.max(1, tick - rec.lastTick);
+      const keep = Math.pow(1 - 1 / RPE_STEAL_HISTORY_TICKS, gap);
+      rec.hits *= keep;
+      rec.damage *= keep;
+      const lost = rec.health - object.health;
+      if (lost > 0) {
+        rec.hits += 1;
+        rec.damage += lost;
+        rec.lastHitTick = tick;
+      } else if (object.health > rec.health) {
+        // Health going up means this is not the object the history describes —
+        // the id was reused, or the game corrected us. Start again rather than
+        // carry a story about something else.
+        rec.hits = 0;
+        rec.damage = 0;
+        rec.lastHitTick = -1;
+      }
+      rec.health = object.health;
+      rec.lastTick = tick;
+      return rec;
+    }
+
+    // `potential` is what would land on the object if every actor in reach
+    // swung; `ready` is the part of that which is off reload right now.
+    assess(object, tick, potential, ready) {
+      const rec = this._observe(object, tick);
+      const health = Math.max(0, object.health);
+      if (health <= 0) {
+        return {
+          ticks: 0,
+          confidence: 1
+        };
+      }
+      // Damage the object is actually losing per tick, from observation alone.
+      // This is what still says something while every weapon in reach is mid
+      // reload.
+      const rate = rec.damage / RPE_STEAL_HISTORY_TICKS;
+      // Two independent readings of how long it has left. The swing model is
+      // the one that matters when a weapon is loaded; the observed rate is the
+      // one that survives when none is.
+      const bySwing = ready > 0 ? Math.max(1, Math.ceil(health / ready)) : Infinity;
+      const byRate = rate > 0 ? Math.max(1, Math.ceil(health / rate)) : Infinity;
+      const ticks = Math.min(bySwing, byRate);
+      if (!isFinite(ticks)) {
+        return {
+          ticks: Infinity,
+          confidence: 0
+        };
+      }
+      // A break needs all three of these to be true, which is why they are
+      // multiplied rather than added: something has to be able to kill it, it
+      // has to happen soon, and there has to be a reason to think the swing is
+      // actually coming.
+      const pressure = potential <= 0 ? 0 : Math.min(1, potential / health);
+      const imminence = Math.max(0, 1 - (ticks - 1) / (RPE_STEAL_MAX_LEAD + 1));
+      const struck = Math.min(1, rec.hits / 2);
+      const recency = rec.lastHitTick < 0 ? 0 : Math.max(0, 1 - (tick - rec.lastHitTick) / RPE_STEAL_HISTORY_TICKS);
+      // One loaded weapon that out-damages what is left needs no history: it
+      // is a prediction about a single swing. Everything short of that is a
+      // prediction about a trend, and a trend has to have been observed.
+      const evidence = ready >= health ? 1 : struck * recency;
+      return {
+        ticks: ticks,
+        confidence: Math.min(1, pressure * imminence * evidence)
+      };
+    }
+
+    // Anything nobody has been able to reach for a window is not a break in
+    // progress, and its history describes a fight that has moved on. Called
+    // once per tick from the engine's PREDICT stage, which is what keeps the
+    // map the size of the current fight rather than the size of the session.
+    expire(tick) {
+      for (const [id, rec] of this.tracks) {
+        if (tick - rec.lastTick > RPE_STEAL_HISTORY_TICKS) this.tracks.delete(id);
+      }
+    }
+    // The cap is a safety valve, not a working limit — `expire` above keeps
+    // the map to what has been hit recently, and reaching this means several
+    // walls are coming down at once. One eviction makes room for one insert,
+    // and the least recently touched is the one least likely to be asked
+    // about again.
+    _evictStalest() {
+      let stalest = null, oldest = Infinity;
+      for (const [id, rec] of this.tracks) {
+        if (rec.lastTick < oldest) {
+          oldest = rec.lastTick;
+          stalest = id;
+        }
+      }
+      if (stalest !== null) this.tracks.delete(stalest);
+    }
+  }
+
   // ── World model ───────────────────────────────────────────────────────────
   // One sweep per tick, read by everything downstream. Replaces the several
   // separate scans the old placer ran.
@@ -10365,6 +11282,22 @@ window.grbtp = 35;
         const t = frame.targetTrapped.pos.current;
         push(GeometrySolver.nearestFree(apertures, Math.atan2(t.y - myPos.y, t.x - myPos.x)), "intent");
       }
+      // Where the primary swing is about to throw them, and where they come
+      // back to off a spike that catches them. Nothing else in this list asks
+      // about either direction, so without them the angle that ends a
+      // knockback is only ever proposed by accident — the scorer would have
+      // the term and never be handed a candidate to spend it on. Duplicates
+      // fold into `seen`, so a chain pointing at ground already proposed for
+      // another reason costs nothing.
+      if (frame.kb) {
+        for (const kbCtx of [ frame.kb.now, frame.kb.next ]) {
+          if (!kbCtx) continue;
+          push(GeometrySolver.nearestFree(apertures, Math.atan2(kbCtx.landY - myPos.y, kbCtx.landX - myPos.x)), "kb");
+          if (kbCtx.best) {
+            push(GeometrySolver.nearestFree(apertures, Math.atan2(kbCtx.restY - myPos.y, kbCtx.restX - myPos.x)), "kbChain");
+          }
+        }
+      }
       return out;
     }
   }
@@ -10448,6 +11381,23 @@ window.grbtp = 35;
             }
           }
         }
+        // The primary knockback chain. `rebound` above asks what this build
+        // would push them into; this asks what the swing that is already
+        // coming would push them into, and whether this build is standing
+        // where that ends. Preplace reads the predicted frame, because the
+        // whole point of a prediction is the target has not arrived yet.
+        if (frame.kb) {
+          const kbCtx = ctx.mode === RPE_MODE.PREPLACE ? frame.kb.next : frame.kb.now;
+          const opportunity = SpikeOpportunity.score(kbCtx, cand.x, cand.y, p.footR);
+          if (opportunity > 0) {
+            const primaryKb = w.primaryKb * opportunity;
+            tactical += primaryKb;
+            // Counted as reach so `_interacts` sees it: a spike that ends a
+            // knockback is doing something to someone, which is exactly the
+            // test that gate was written for.
+            reach += primaryKb;
+          }
+        }
       }
       if (p.isTrap) {
         // A trap is worth what it is likely to catch. Sitting outside the arc
@@ -10484,6 +11434,40 @@ window.grbtp = 35;
         }
       }
       terms.recovery = recovery;
+
+      // Building steal ------------------------------------------------------
+      // Ground an enemy build is standing on and is about to stop standing on.
+      // Every part of this is multiplied by the measured destruction
+      // confidence, so a wall that has merely been hit contributes nothing and
+      // only one genuinely about to fall competes with a live contact — which
+      // is what keeps this an addition to the existing score rather than an
+      // override of it. A candidate with no steal context scores exactly what
+      // it scored before.
+      let steal = 0;
+      if (cand.steal) {
+        const s = cand.steal;
+        // Coverage is how much of the vacated footprint this build actually
+        // occupies. Taking the slot is the point; standing next to it is a
+        // different and much smaller thing, and without this the nearest legal
+        // angle on the ring would score as a steal however far away it landed.
+        steal = w.steal * s.confidence * s.coverage;
+        // Denial: the value of being first is that they cannot rebuild here,
+        // which is only worth something while they are close enough to want to.
+        if (s.enemyDistance < w.distanceFalloff) {
+          steal += w.stealDeny * s.confidence * (1 - s.enemyDistance / w.distanceFalloff);
+        }
+        // A slot out of a run of builds is worth more than a lone one: that is
+        // what turns a breached wall into a trap, and it is why the chain keeps
+        // paying as the rest of the wall comes down.
+        if (s.cluster > 1) {
+          steal += w.stealChain * s.confidence * Math.min(1, (s.cluster - 1) / 3);
+        }
+        // Counted as reach so `_interacts` sees it: taking ground out from
+        // under an enemy is doing something to someone, which is the test that
+        // gate was written for.
+        cand.reach += steal;
+      }
+      terms.steal = steal;
 
       // Enclosure ---------------------------------------------------------
       // How much of the ring around a pinned target this build takes away.
@@ -11035,7 +12019,16 @@ window.grbtp = 35;
         let reason = null;
         if (tick >= rec.expiresTick || tick >= rec.hardExpiry) reason = "expired";
         else if (rec.targetId !== frame.targetId) reason = "targetChanged";
-        else if (rec.kind === "vacating" && !engine.client.ObjectManager.objects.has(rec.vacates)) reason = "vacated";
+        // A record waiting on a specific object has nothing left to wait for
+        // once that object is gone. The one moment it is allowed to survive its
+        // object is inside onVacated, which runs while the deletion is being
+        // handled and the object is still in the map — that is when the record
+        // fires. Reaching a sweep with the object already gone means it did
+        // not, so the opportunity is over rather than pending.
+        else if ((rec.kind === "vacating" || rec.kind === "steal") && !engine.client.ObjectManager.objects.has(rec.vacates)) reason = "vacated";
+        // Stealing a slot is only worth the ground while the enemy is still
+        // near enough to want it back.
+        else if (rec.steal && Math.hypot(frame.targetPos.x - rec.x, frame.targetPos.y - rec.y) > RPE_STEAL_ENEMY_RANGE) reason = "enemyLeft";
         else {
           // Still on our ring? We move, so a point that was reachable may not
           // be any more.
@@ -11131,24 +12124,32 @@ window.grbtp = 35;
   };
   // One scorer, three emphases. The terms are identical everywhere; what
   // changes is how much each mode cares about each of them.
+  //
+  // The steal emphasis is the one place the three modes disagree about it, and
+  // for one reason: preplace is betting on a break that has not happened, while
+  // replace is acting on the deletion packet that says it has. The same ground
+  // is worth more once it is certain.
   const RPE_MODE_WEIGHTS = {
     auto: {
       recovery: 0,
       timing: 1,
       followUp: 1,
-      staleness: 1
+      staleness: 1,
+      steal: 1
     },
     preplace: {
       recovery: 0,
       timing: 1.5,
       followUp: 1.2,
-      staleness: 1
+      staleness: 1,
+      steal: 1
     },
     replace: {
       recovery: 1,
       timing: 1.2,
       followUp: .8,
-      staleness: .6
+      staleness: .6,
+      steal: 1.25
     }
   };
 
@@ -11225,6 +12226,17 @@ window.grbtp = 35;
     due(cand, tick) {
       if (cand.mode !== RPE_MODE.PREPLACE) return true;
       if (cand.confidence < RPE_PREPLACE_MIN_CONFIDENCE) return false;
+      // A steal is due when the ground is actually free, never when the
+      // forecast said it would be. This is the whole reason the forecast is
+      // worth having: the prediction buys the *preparation* — position, item,
+      // angle, a held reservation — and the deletion packet buys the send. Fire
+      // early into a building still standing and the server refuses it, which
+      // costs five packets and leaves the item held, which is exactly the cost
+      // the preparation exists to avoid.
+      //
+      // `vacated` is stamped at promotion: true while onVacated is handling
+      // this record's object, or once the object has left the world.
+      if (cand.kind === "steal") return !!cand.vacated;
       if (cand.kind === "vacating") return tick >= cand.dueTick;
       return cand.interceptTick <= RPE_PREPLACE_FIRE_LEAD;
     }
@@ -11258,6 +12270,13 @@ window.grbtp = 35;
     memory=new PlacementMemory;
     motion=new TargetMotion;
     book=new PreplaceBook;
+    // The break forecast. Shares the engine's tick, its object handles and its
+    // reset; it owns no scan, no schedule and no packets of its own.
+    forecast=new StealForecast;
+    // The object whose deletion is being handled right now, if any. Set for the
+    // duration of onVacated so a booked steal can tell "the ground is opening
+    // this instant" from "the forecast thinks it will".
+    _vacatingId=null;
     stats={
       candidates: 0,
       viable: 0,
@@ -11269,6 +12288,7 @@ window.grbtp = 35;
       booked: 0,
       preplaced: 0,
       replaced: 0,
+      stolen: 0,
       dropped: 0,
       directed: 0
     };
@@ -11290,6 +12310,8 @@ window.grbtp = 35;
     _blockers=null;
     _blockersTick=-1;
     _exits=null;
+    _sweep=null;
+    _sweepTick=-1;
     constructor(client2) {
       this.client = client2;
       this._threat = new ThreatAnalyzer(client2);
@@ -11305,6 +12327,8 @@ window.grbtp = 35;
       this.memory.sends.clear();
       this.motion.tracks.clear();
       this.book.records.length = 0;
+      this.forecast.clear();
+      this._vacatingId = null;
       this._profiles.clear();
       this._profileTick = -1;
       this._plan = [];
@@ -11313,6 +12337,9 @@ window.grbtp = 35;
       this._planTargetPos = null;
       this._blockers = null;
       this._blockersTick = -1;
+      this._sweep = null;
+      this._sweepTick = -1;
+      SpikeOpportunity.reset();
     }
 
     // ── shared services ─────────────────────────────────────────────────────
@@ -11376,6 +12403,14 @@ window.grbtp = 35;
         this._blockersTick = frame.tick;
         this._generator.cache.clear();
       }
+      // The primary knockback chain, solved once for the two position sources
+      // the modes use: replace and auto reason about where the target is,
+      // preplace about where it is going. Hung on the frame so the angle
+      // solver and the scorer read one answer instead of asking separately.
+      frame.kb = {
+        now: SpikeOpportunity.context(this.client, frame.target, frame.targetPos, frame.targetScale, frame.ourSpikes, "now"),
+        next: SpikeOpportunity.context(this.client, frame.target, frame.targetNext, frame.targetScale, frame.ourSpikes, "next")
+      };
       // Escape analysis around the target is shared by every candidate that
       // wants to know whether it closes a way out.
       this._exits = null;
@@ -11405,6 +12440,7 @@ window.grbtp = 35;
       const tick = frame.tick;
       this.memory.expire(tick, frame.myPos);
       this.motion.expire(tick);
+      this.forecast.expire(tick);
       frame.motion = this.motion.observe(frame.target, tick);
       this.stats.dropped = this.book.sweep(tick, frame, this);
       if (this._planIsStale(frame)) this._plan = [];
@@ -11423,41 +12459,106 @@ window.grbtp = 35;
       return shift > this.weights.staleTargetShift;
     }
 
-    // Every object either of us is about to destroy, and how many hits it has
-    // left. A slot about to open is worth building into before it does.
-    attrition(frame) {
-      const {ObjectManager: ObjectManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+    // One weapon's swing, as the forecast sees it.
+    //
+    // Reload is a field rather than a filter. A weapon still reloading is not
+    // damage that can land now, but it is very much part of what the object in
+    // front of it is about to face, and dropping the actor entirely — which is
+    // what the original did — throws that away. Keeping it lets the forecast
+    // say "this cannot survive what is pointed at it" separately from "this
+    // dies on the next swing", which are different claims and are believed to
+    // different degrees.
+    //
+    // `legacy` marks an actor the original break forecast was allowed to
+    // count, so the reading it produced can still be produced unchanged. The
+    // caller narrows it to actors that are actually loaded, because that is
+    // the test the original applied before building the actor at all.
+    _actor(entity, pos, weaponID, slot, isTank, legacy, fallbackDmg) {
+      if (weaponID === null || weaponID === undefined || weaponID < 0) return null;
+      const wd = DataHandler_default?.getWeapon?.(weaponID);
+      if (!wd) return null;
+      const dmg = entity.getBuildingDamage?.(weaponID, isTank) ?? fallbackDmg ?? 0;
+      if (dmg <= 0) return null;
+      const reload = entity.reload?.[slot];
+      return {
+        x: pos.x,
+        y: pos.y,
+        range: wd.range ?? 0,
+        dmg: dmg,
+        ready: !!reload && reload.current >= reload.max,
+        legacy: !!legacy
+      };
+    }
+
+    // One sweep of who is hitting what, memoised for the tick. Both readings
+    // below are taken from it, so adding the second one costs no extra grid
+    // queries — and it costs fewer than before, because the sweep used to run
+    // once per build type and now runs once per tick.
+    //
+    //   legacy    the original forecast, unchanged: fewest hits to destruction
+    //             from my next swing or the current target's, and nothing else.
+    //             `attrition` reads this and only this.
+    //   damage    every actor in reach, summed. Two enemies working the same
+    //             wall kill it in half the swings, which a per-actor minimum
+    //             cannot say. The steal forecast reads this.
+    _attritionSweep(frame) {
+      if (this._sweepTick === frame.tick && this._sweep) return this._sweep;
+      const {ObjectManager: ObjectManager2, myPlayer: myPlayer, PlayerManager: PlayerManager2, _ModuleHandler: ModuleHandler} = this.client;
       const actors = [];
       const predictType = ModuleHandler._getPredictWeapon();
       const myWeapon = predictType === 0 || predictType === 1 ? myPlayer.getItemByType(predictType) : null;
-      if (myWeapon !== null && myWeapon !== undefined && myWeapon >= 0 && myPlayer.isReloaded && myPlayer.isReloaded(predictType, 1)) {
-        const wd = DataHandler_default?.getWeapon?.(myWeapon);
-        if (wd) actors.push({
-          x: frame.myPos.x,
-          y: frame.myPos.y,
-          range: wd.range ?? 0,
-          dmg: myPlayer.getBuildingDamage?.(myWeapon, ModuleHandler.canBuy(0, 40)) ?? 0
-        });
+      if (myWeapon !== null && myWeapon !== undefined && myWeapon >= 0) {
+        const mine = this._actor(myPlayer, frame.myPos, myWeapon, predictType, ModuleHandler.canBuy(0, 40), true);
+        if (mine) {
+          // My own reload is read through the client's own predictor rather
+          // than the raw counter, because that is what decides whether my next
+          // swing actually goes out. This is the test the original used.
+          mine.ready = !!(myPlayer.isReloaded && myPlayer.isReloaded(predictType, 1));
+          mine.legacy = mine.ready;
+          actors.push(mine);
+        }
       }
       const target = frame.target;
       for (const slot of [ 0, 1 ]) {
         const id = slot === 0 ? target.weapon?.primary : target.weapon?.secondary;
-        if (id === null || id === undefined) continue;
-        const reload = target.reload?.[slot];
-        if (!reload || reload.current < reload.max) continue;
-        const wd = DataHandler_default?.getWeapon?.(id);
-        if (!wd) continue;
-        actors.push({
-          x: frame.targetPos.x,
-          y: frame.targetPos.y,
-          range: wd.range ?? 0,
-          dmg: target.getBuildingDamage?.(id, true) ?? 50
-        });
+        // The 50 is the original's fallback for a target that cannot be asked
+        // what its weapon does to a building.
+        const actor = this._actor(target, frame.targetPos, id, slot, true, true, 50);
+        // The original required a fully reloaded weapon before the actor
+        // existed at all. Here the actor always exists and its readiness is a
+        // field, but only a ready one counts as legacy — so the legacy reading
+        // sees exactly the actors it always saw.
+        if (actor) {
+          actor.legacy = actor.ready;
+          actors.push(actor);
+        }
       }
-      if (actors.length === 0) return [];
-      const doomed = new Map;
+      // Everyone else in the fight. These are new, and they are deliberately
+      // not legacy: they widen what the steal forecast can see without
+      // widening what the original preplace path acts on.
+      const others = [];
+      for (const enemy of PlayerManager2.enemies) {
+        // By id, not by identity: the target already contributed above and
+        // counting its weapons twice would halve every deadline it appears in.
+        if (!enemy || enemy.id === myPlayer.id || enemy.id === frame.targetId) continue;
+        const d = frame.myPos.distance(enemy.pos.current);
+        if (d > RPE_STEAL_ENEMY_RANGE + 200) continue;
+        others.push([ d, enemy ]);
+      }
+      // Deterministically ordered and deterministically truncated, so the same
+      // board produces the same actor list every tick whatever order the
+      // player map happened to iterate in.
+      others.sort((a, b) => a[0] - b[0] || a[1].id - b[1].id);
+      for (const [, enemy] of others.slice(0, RPE_STEAL_MAX_ACTORS - 2)) {
+        for (const slot of [ 0, 1 ]) {
+          const id = slot === 0 ? enemy.weapon?.primary : enemy.weapon?.secondary;
+          const actor = this._actor(enemy, enemy.pos.current, id, slot, true, false);
+          if (actor) actors.push(actor);
+        }
+      }
+
+      const legacy = new Map, damage = new Map;
       for (const actor of actors) {
-        if (actor.dmg <= 0) continue;
         const cells = Math.ceil((actor.range + 120) / ObjectManager2.grid2D.cellSize) + 1;
         ObjectManager2.grid2D.query(actor.x, actor.y, cells, id => {
           const obj = ObjectManager2.objects.get(id);
@@ -11467,14 +12568,35 @@ window.grbtp = 35;
           if (Items[obj.type] && Items[obj.type].hideFromEnemy) return false;
           const pos = obj.pos.current;
           if (Math.hypot(actor.x - pos.x, actor.y - pos.y) - obj.scale > actor.range) return false;
-          const hits = Math.ceil(obj.health / actor.dmg);
-          const prev = doomed.get(obj);
-          if (prev === undefined || hits < prev) doomed.set(obj, hits);
+          if (actor.legacy) {
+            const hits = Math.ceil(obj.health / actor.dmg);
+            const prev = legacy.get(obj);
+            if (prev === undefined || hits < prev) legacy.set(obj, hits);
+          }
+          let entry = damage.get(obj);
+          if (entry === undefined) {
+            entry = { potential: 0, ready: 0 };
+            damage.set(obj, entry);
+          }
+          entry.potential += actor.dmg;
+          if (actor.ready) entry.ready += actor.dmg;
           return false;
         });
       }
+      this._sweep = { legacy: legacy, damage: damage };
+      this._sweepTick = frame.tick;
+      return this._sweep;
+    }
+
+    // Every object either of us is about to destroy, and how many hits it has
+    // left. A slot about to open is worth building into before it does.
+    //
+    // Unchanged: same actors, same arithmetic, same gate, same ordering, same
+    // three results. Only the grid sweep underneath is shared now.
+    attrition(frame) {
+      const {legacy: legacy} = this._attritionSweep(frame);
       const out = [];
-      for (const [obj, hits] of doomed) {
+      for (const [obj, hits] of legacy) {
         if (hits > 2) continue;
         out.push({
           object: obj,
@@ -11484,6 +12606,83 @@ window.grbtp = 35;
       }
       out.sort((a, b) => a.urgency - b.urgency);
       return out.slice(0, 3);
+    }
+
+    // The enemy builds worth stealing: about to fall, believably so, and near
+    // enough that taking the slot denies them something.
+    //
+    // This is the same sweep read the other way. Where `attrition` asks "how
+    // many swings until this is gone", it asks "how much of what is hitting
+    // this would kill it, is that actually landing, and is it about to" — the
+    // three readings StealForecast multiplies. A building hit once by a
+    // reloading weapon scores near zero here and produces no candidate at all.
+    stealTargets(frame) {
+      const {damage: damage} = this._attritionSweep(frame);
+      if (damage.size === 0) return [];
+      const {myPlayer: myPlayer, PlayerManager: PlayerManager2} = this.client;
+      const out = [];
+      for (const [obj, dealt] of damage) {
+        // The object whose deletion is being handled has already resolved into
+        // whatever was booked for it, and the sweep it appears in was taken
+        // before it died. Forecasting it again would book ground for a break
+        // that has already happened.
+        if (obj.id === this._vacatingId) continue;
+        if (!PlayerManager2.isEnemyByID(obj.ownerID, myPlayer)) continue;
+        // The same bound the book applies when it sweeps, applied before
+        // anything is booked: taking ground the enemy has already walked away
+        // from denies them nothing, and a record booked outside this would be
+        // dropped on the next sweep anyway.
+        const toEnemy = frame.targetPos.distance(obj.pos.current);
+        if (toEnemy > RPE_STEAL_ENEMY_RANGE) continue;
+        const verdict = this.forecast.assess(obj, frame.tick, dealt.potential, dealt.ready);
+        if (verdict.ticks > RPE_STEAL_MAX_LEAD) continue;
+        if (verdict.confidence < RPE_STEAL_BOOK_CONFIDENCE) continue;
+        out.push({
+          object: obj,
+          ticks: verdict.ticks,
+          confidence: verdict.confidence,
+          // Soonest first, and among equals the one we believe in most. Ties
+          // broken by id so two identical opportunities resolve the same way
+          // on every tick.
+          urgency: verdict.ticks - verdict.confidence + toEnemy * .002
+        });
+      }
+      out.sort((a, b) => a.urgency - b.urgency || a.object.id - b.object.id);
+      // A wall is five or six builds, and the chain only continues if more
+      // than the single most urgent one is ever offered.
+      return out.slice(0, RPE_STEAL_MAX_CANDIDATES);
+    }
+
+    // How many enemy builds stand around a point. Read off the frame's own
+    // sweep, so it costs a loop over a list that is already in hand rather
+    // than a grid query of its own.
+    _clusterAt(frame, x, y, exclude) {
+      let n = 0;
+      for (const obj of frame.enemyObjects) {
+        if (obj === exclude) continue;
+        if (Math.hypot(obj.pos.current.x - x, obj.pos.current.y - y) < 160) n++;
+      }
+      return n;
+    }
+
+    // The steal context a candidate carries into the scorer. Coverage is the
+    // measure that keeps "take the slot" apart from "build somewhere near the
+    // slot": it is how much of the vacated footprint this build actually lands
+    // on, and it is zero the moment the two do not touch.
+    _stealContext(frame, cand, x, y, radius, confidence, objectId, cluster) {
+      const reach = cand.profile.footR + radius;
+      const d = Math.hypot(cand.x - x, cand.y - y);
+      if (d >= reach) return null;
+      return {
+        objectId: objectId,
+        x: x,
+        y: y,
+        radius: radius,
+        confidence: confidence,
+        coverage: 1 - d / reach,
+        enemyDistance: Math.hypot(frame.targetPos.x - x, frame.targetPos.y - y),
+        cluster: cluster
+      };
     }
 
     // ── GENERATE ────────────────────────────────────────────────────────────
@@ -11591,6 +12790,81 @@ window.grbtp = 35;
           excludes: obj
         }));
       }
+      this._generateSteal(pool, profile, frame, open);
+    }
+
+    // ── Building steal ────────────────────────────────────────────────────
+    // An enemy build about to fall is a slot about to open under someone who
+    // wants it back. The loop above already handles a slot opening; what it
+    // will not do is hold ground it can already reach, because for our own
+    // builds that would be paying twice for the same geometry. For an enemy
+    // build the ground *is* the point: whoever occupies it first owns it, and
+    // waiting for the deletion packet before deciding where to build hands
+    // them the rebuild.
+    //
+    // So the decision is taken now and the send is not. What gets written down
+    // is the whole placement — position, item, angle, the ground held against
+    // everything else in the engine — and the deletion packet is the only thing
+    // still missing. That is the entire feature: `onVacated` promotes the
+    // record and the executor sends it, so the work between "the wall fell" and
+    // "the build is on the wire" is a validation, not a decision.
+    //
+    // Which mechanism ends up carrying it is not a mode this chooses, it is
+    // whichever occupies the ground earliest:
+    //
+    //   PREPLACE  booked here while the build still stands; fires the instant
+    //             its deletion is handled, using the prepared answer.
+    //   REPLACE   the same tick, for freed enemy ground nothing had booked —
+    //             `_generateReplace` scores it with the same steal terms.
+    //   AUTO      the existing placer, once the ground is simply open and
+    //             ordinary placement rules already cover it. Untouched.
+    //
+    // Nothing here is a separate engine: the candidates below are the engine's
+    // own candidates with a steal context attached, and they compete for the
+    // tick's packets against everything else through the same scorer, the same
+    // ledger, the same beam search and the same executor.
+    _generateSteal(pool, profile, frame, open) {
+      for (const entry of this.stealTargets(frame)) {
+        const obj = entry.object;
+        const objPos = obj.pos.current;
+        // The ring is the only place a build can land, so the perfect takeover
+        // is the ring angle whose footprint sits deepest inside the dying
+        // build's own. That is the radial direction, kept when it is legal and
+        // snapped to the nearest legal ground when it is not. There is no
+        // "nearest object" fallback: a candidate that does not actually reach
+        // the slot fails the coverage test below and is never created.
+        const freed = this._generator.apertures(profile, frame.myPos.x, frame.myPos.y, this._blockers, obj);
+        if (!freed.length) continue;
+        const want = Math.atan2(objPos.y - frame.myPos.y, objPos.x - frame.myPos.x);
+        const angle = GeometrySolver.nearestFree(freed, want);
+        if (angle === null) continue;
+        const x = frame.myPos.x + profile.ringR * Math.cos(angle);
+        const y = frame.myPos.y + profile.ringR * Math.sin(angle);
+        // Ground already spoken for, by the book or by anything on the wire,
+        // is not offered twice. This is what keeps a steal from colliding with
+        // the vacating candidate above, with the other build type, or with a
+        // steal booked on the previous tick.
+        if (this.book.has(x, y, profile.footR)) continue;
+        const steal = this._stealContext(frame, {
+          profile: profile,
+          x: x,
+          y: y
+        }, objPos.x, objPos.y, obj.scale, entry.confidence, obj.id, this._clusterAt(frame, objPos.x, objPos.y, obj));
+        if (!steal) continue;
+        const cand = this._candidate(profile, angle, freed, RPE_MODE.PREPLACE, {
+          source: "steal",
+          kind: "steal",
+          confidence: entry.confidence,
+          interceptTick: entry.ticks,
+          // The deadline is what the forecast is for; the scheduler still will
+          // not send until the ground is actually free.
+          dueTick: frame.tick + Math.max(1, entry.ticks),
+          vacates: obj.id,
+          excludes: obj
+        });
+        cand.steal = steal;
+        pool.push(cand);
+      }
     }
     _generateReplace(pool, profile, frame, trigger) {
       const object = trigger.vacated;
@@ -11605,13 +12879,27 @@ window.grbtp = 35;
         angle: snapped,
         source: "freed"
       });
+      // Ground that just came free under an enemy build is a steal that has
+      // already resolved: there is nothing left to predict, so the confidence
+      // is 1 and the only question the scorer still has to answer is how much
+      // of the freed footprint each candidate actually covers. This is the
+      // third of the three mechanisms, and it needs no decision of its own —
+      // it is simply what runs on the deletion packet for ground nothing had
+      // booked, or alongside the booked record when something had.
+      const stolen = !!trigger.replace.enemyOwned;
+      const cluster = stolen ? this._clusterAt(frame, trigger.replace.x, trigger.replace.y, object) : 0;
       for (const proposal of proposals) {
-        pool.push(this._candidate(profile, proposal.angle, apertures, RPE_MODE.REPLACE, {
+        const cand = this._candidate(profile, proposal.angle, apertures, RPE_MODE.REPLACE, {
           source: proposal.source,
           dueTick: frame.tick,
           vacates: object.id,
           excludes: object
-        }));
+        });
+        if (stolen) {
+          const steal = this._stealContext(frame, cand, trigger.replace.x, trigger.replace.y, trigger.replace.radius, 1, object.id, cluster);
+          if (steal) cand.steal = steal;
+        }
+        pool.push(cand);
       }
     }
 
@@ -11655,6 +12943,7 @@ window.grbtp = 35;
       for (const rec of this.book.pending()) {
         const profile = this.profileFor(rec.type);
         if (!profile) continue;
+        const excludes = rec.vacates !== null ? this.client.ObjectManager.objects.get(rec.vacates) || null : null;
         const cand = {
           profile: profile,
           angle: Math.atan2(rec.y - frame.myPos.y, rec.x - frame.myPos.x),
@@ -11667,7 +12956,13 @@ window.grbtp = 35;
           dueTick: rec.deadlineTick,
           kind: rec.kind,
           vacates: rec.vacates,
-          excludes: rec.vacates !== null ? this.client.ObjectManager.objects.get(rec.vacates) || null : null,
+          excludes: excludes,
+          // The ground is open when the object has left the world, or right
+          // now while its deletion is being handled — onVacated runs before the
+          // object is dropped from the map, so identity is the only way to tell
+          // that moment from any other tick the object is still standing.
+          vacated: rec.vacates !== null && (excludes === null || rec.vacates === this._vacatingId),
+          steal: rec.steal || null,
           x: rec.x,
           y: rec.y,
           value: rec.value,
@@ -11734,7 +13029,10 @@ window.grbtp = 35;
           ringR: cand.profile.ringR,
           targetId: frame.targetId,
           heading: frame.motion ? frame.motion.heading : null,
-          headingTolerance: cand.kind === "vacating" ? Math.PI : .7,
+          // A slot in a wall does not move when the target turns, so a record
+          // waiting on one is not invalidated by a course change the way an
+          // interception is.
+          headingTolerance: cand.kind === "vacating" || cand.kind === "steal" ? Math.PI : .7,
           createdTick: frame.tick,
           expiresTick: frame.tick + cand.interceptTick + 2,
           hardExpiry: frame.tick + RPE_PREPLACE_MAX_AGE,
@@ -11745,6 +13043,11 @@ window.grbtp = 35;
           expected: cand.expected,
           kind: cand.kind,
           vacates: cand.vacates,
+          // The whole reservation, and deliberately small: an id, a position, a
+          // radius, a confidence and a count. The object handle is not kept —
+          // it is looked up by id when the record is promoted, so a record can
+          // never hold a destroyed object alive.
+          steal: cand.steal || null,
           terms: cand.terms,
           token: token
         });
@@ -11901,6 +13204,7 @@ window.grbtp = 35;
       const profile = this.profileFor(rec.type);
       if (!profile) return null;
       const myPos = this.client.myPlayer.pos.current;
+      const excludes = rec.vacates !== null ? this.client.ObjectManager.objects.get(rec.vacates) || null : null;
       const cand = {
         profile: profile,
         angle: Math.atan2(rec.y - myPos.y, rec.x - myPos.x),
@@ -11908,7 +13212,9 @@ window.grbtp = 35;
         kind: rec.kind, priority: RPE_PRIORITY.ANTICIPATION,
         confidence: rec.confidence, interceptTick: rec.interceptTick,
         dueTick: rec.deadlineTick, vacates: rec.vacates,
-        excludes: rec.vacates !== null ? this.client.ObjectManager.objects.get(rec.vacates) || null : null,
+        excludes: excludes,
+        vacated: rec.vacates !== null && (excludes === null || rec.vacates === this._vacatingId),
+        steal: rec.steal || null,
         x: rec.x, y: rec.y, value: rec.value, expected: rec.expected,
         terms: rec.terms || {}, reach: rec.value,
         bookRecord: rec, bookToken: rec.token,
@@ -12009,6 +13315,7 @@ window.grbtp = 35;
         }
         if (cand.mode === RPE_MODE.PREPLACE) this.stats.preplaced += 1;
         else if (cand.mode === RPE_MODE.REPLACE) this.stats.replaced += 1;
+        if (cand.steal) this.stats.stolen += 1;
       }
       return sent;
     }
@@ -12090,26 +13397,59 @@ window.grbtp = 35;
       if (frame.myPos.distance(object.pos.current) > RPE_REPLACE_RANGE) return;
       if (frame.range > RPE_REPLACE_RANGE) return;
       // The object is still in the world while its deletion is handled, so
-      // every legality question below is asked with it taken out.
+      // every legality question below is asked with it taken out. That applies
+      // to the knockback chain too: a push that ends on a spike which has just
+      // died is not a chain, and the frame's spike list is the sensed one from
+      // before the deletion. Dropping it from the lists and clearing the
+      // evaluator's per-tick memo makes sense() re-solve against what is
+      // actually still standing. `targetTrapped` is deliberately left alone —
+      // _replaceContext reads it to find out whether the dead object was the
+      // thing holding them.
       this._blockersTick = -1;
+      const stillStanding = o => o !== object;
+      frame.ourSpikes = frame.ourSpikes.filter(stillStanding);
+      frame.ourTraps = frame.ourTraps.filter(stillStanding);
+      SpikeOpportunity.reset();
       this.sense();
 
       // Anything that was waiting for exactly this object is due now. It does
       // not get a private path to the wire — it rejoins the pool and is
       // planned, validated and sent with everything else.
+      //
+      // This is where a prepared steal is cashed in. The record already holds
+      // the position, the item, the angle and the ground; the deletion packet
+      // is the last thing it was missing, so the work between "the wall fell"
+      // and "the build is on the wire" is a promotion and a validation, not a
+      // fresh decision. That is the whole margin the enemy has to rebuild in.
       for (const rec of this.book.pending()) {
-        if (rec.vacates === object.id) rec.deadlineTick = frame.tick;
+        if (rec.vacates !== object.id) continue;
+        rec.deadlineTick = frame.tick;
+        // The forecast has resolved. What it thought the odds were stops
+        // mattering the moment the ground is actually open.
+        rec.confidence = 1;
+        rec.expected = rec.value;
+        if (rec.steal) rec.steal.confidence = 1;
       }
+      // The history for this object describes something that no longer exists,
+      // and the chain continues from what is still standing: the remaining
+      // builds keep their own records, so the next forecast starts from what
+      // has already been observed about them rather than from nothing.
+      this.forecast.forget(object.id);
       const modes = [];
       if (Settings_default._prePlace) modes.push(RPE_MODE.PREPLACE);
       if (Settings_default._replace) modes.push(RPE_MODE.REPLACE);
       if (modes.length === 0) return;
       this.stats.substituted = 0;
-      this.cycle({
-        modes: modes,
-        vacated: object,
-        replace: this._replaceContext(object, frame)
-      });
+      this._vacatingId = object.id;
+      try {
+        this.cycle({
+          modes: modes,
+          vacated: object,
+          replace: this._replaceContext(object, frame)
+        });
+      } finally {
+        this._vacatingId = null;
+      }
     }
 
     // What the dead object was doing decides what its ground is worth. A trap
@@ -12128,6 +13468,11 @@ window.grbtp = 35;
         touchedTarget: toTarget < object.scale + frame.targetScale + 8,
         wasTrap: !!(item && item.trap),
         wasDamage: !!(item && item.dmg),
+        // Whose build died decides whether this is a recovery or a takeover.
+        // Getting our own ground back and taking theirs free the same geometry
+        // and are worth different things, which is a question for the scoring
+        // context rather than for a branch that picks an angle.
+        enemyOwned: object instanceof PlayerObject && this.client.PlayerManager.isEnemyByID(object.ownerID, this.client.myPlayer),
         distToTarget: toTarget
       };
     }
@@ -12247,204 +13592,6 @@ window.grbtp = 35;
               }
           }
       }
-  }
-  class AntiTrapProtect {
-    moduleName="antiTrapProtect";
-    client;
-    _protected=false;
-    constructor(client2) {
-      this.client = client2;
-    }
-    _canPlace(id, angle, myPos, ObjectManager2) {
-      const item = Items[id];
-      if (!item) return false;
-      const dist = 35 + item.scale + (item.placeOffset || 0);
-      const cx = myPos.x + dist * Math.cos(angle);
-      const cy = myPos.y + dist * Math.sin(angle);
-      let collision = false;
-      ObjectManager2.grid2D.query(cx, cy, 4, objId => {
-        if (collision) return;
-        const obj = ObjectManager2.objects.get(objId);
-        if (!obj) return;
-        const blockS = obj.placementScale;
-        if (Math.hypot(cx - obj.pos.current.x, cy - obj.pos.current.y) < item.scale + blockS) {
-          collision = true;
-        }
-      });
-      if (collision) return false;
-      const mid = 14400 / 2, riverHalf = 310;
-      if (cy >= mid - riverHalf && cy <= mid + riverHalf) return false;
-      return true;
-    }
-    postTick() {
-      if (!Settings_default._antiTrapProtect) return;
-      const {myPlayer: myPlayer, ObjectManager: ObjectManager2, _ModuleHandler: ModuleHandler} = this.client;
-      if (!myPlayer || !myPlayer.inGame) return;
-      if (ModuleHandler.moduleActive) return;
-      const trap = myPlayer.trappedIn;
-      if (trap === null) {
-        this._protected = false;
-        return;
-      }
-      if (this._protected) return;
-      const myPos = myPlayer.pos.current;
-      const trapPos = trap.pos.current;
-      const aimToTrap = myPos.angle(trapPos);
-      const protectDir = aimToTrap + Math.PI;
-      let placedAny = false;
-      if (myPlayer.canPlace(4)) {
-        const spikeID = myPlayer.getItemByType(4);
-        for (let off = -Math.PI / 2; off <= Math.PI / 2 + 1e-6; off += Math.PI / 6) {
-          const angle = protectDir + off;
-          if (this._canPlace(spikeID, angle, myPos, ObjectManager2)) {
-            ModuleHandler.requestPlace(4, angle, "antiTrapProtect");
-            placedAny = true;
-          }
-        }
-      }
-      if (myPlayer.canPlace(3)) {
-        const wallID = myPlayer.getItemByType(3);
-        for (let off = -Math.PI / 3; off <= Math.PI / 3 + 1e-6; off += Math.PI / 6) {
-          const angle = protectDir + off;
-          if (this._canPlace(wallID, angle, myPos, ObjectManager2)) {
-            ModuleHandler.requestPlace(3, angle, "antiTrapProtect");
-            placedAny = true;
-          }
-        }
-      }
-      if (placedAny) {
-        ModuleHandler.placedOnce = true;
-        ModuleHandler.moduleActive = true;
-      }
-      this._protected = true;
-    }
-    reset() {
-      this._protected = false;
-    }
-  }
-  class AntiTrapStar {
-    moduleName="antiTrapStar";
-    client;
-    _protected=false;
-    constructor(client2) {
-      this.client = client2;
-    }
-    _getSpikeAngleWidth(d) {
-      if (d <= 20) return {
-        possible: false,
-        tachyon: 0
-      };
-      const cosTheta = (d * d - 4224) / (100 * d);
-      const clamped = Math.max(-1, Math.min(1, cosTheta));
-      return {
-        possible: true,
-        tachyon: Math.acos(clamped)
-      };
-    }
-    _canPlace(id, angle, myPos, ObjectManager2) {
-      const item = Items[id];
-      if (!item) return false;
-      const dist = 35 + item.scale + (item.placeOffset || 0);
-      const cx = myPos.x + dist * Math.cos(angle);
-      const cy = myPos.y + dist * Math.sin(angle);
-      let collision = false;
-      ObjectManager2.grid2D.query(cx, cy, 4, objId => {
-        if (collision) return;
-        const obj = ObjectManager2.objects.get(objId);
-        if (!obj) return;
-        if (Math.hypot(cx - obj.pos.current.x, cy - obj.pos.current.y) < item.scale + obj.placementScale) collision = true;
-      });
-      if (collision) return false;
-      const mid = 14400 / 2, riverHalf = 310;
-      if (cy >= mid - riverHalf && cy <= mid + riverHalf) return false;
-      return true;
-    }
-    _protect(aim, agnes, myPos, ObjectManager2, ModuleHandler, spikeID) {
-      if (!agnes.possible) return false;
-      let count = 0, currPlaced = null;
-      const fail = agnes.tachyon - 0.0676;
-      const tryPlace = a => {
-        if ((currPlaced === null || Math.abs(this._angDiff(currPlaced, a)) > 1.36) && this._canPlace(spikeID, a, myPos, ObjectManager2)) {
-          ModuleHandler.requestPlace(4, a, "antiTrapStar");
-          currPlaced = a;
-          count++;
-          return true;
-        }
-        return false;
-      };
-      if (this._canPlace(spikeID, aim + fail, myPos, ObjectManager2)) {
-        ModuleHandler.requestPlace(4, aim + fail, "antiTrapStar");
-        currPlaced = aim + fail;
-        count++;
-      }
-      if (this._canPlace(spikeID, aim - fail, myPos, ObjectManager2)) {
-        ModuleHandler.requestPlace(4, aim - fail, "antiTrapStar");
-        currPlaced = aim - fail;
-        count++;
-        if (count >= 2) return true;
-      }
-      if (tryPlace(aim + fail * 0.5) && count >= 2) return true;
-      if (tryPlace(aim - fail * 0.5) && count >= 2) return true;
-      if (tryPlace(aim + fail * 0.25) && count >= 2) return true;
-      if (tryPlace(aim - fail * 0.25) && count >= 2) return true;
-      tryPlace(aim);
-      if (count !== 1) return count > 0;
-      if (this._canPlace(spikeID, currPlaced + 1.36, myPos, ObjectManager2)) ModuleHandler.requestPlace(4, currPlaced + 1.36, "antiTrapStar"); else if (this._canPlace(spikeID, currPlaced - 1.36, myPos, ObjectManager2)) ModuleHandler.requestPlace(4, currPlaced - 1.36, "antiTrapStar");
-      return true;
-    }
-    _angDiff(a, b) {
-      let d = Math.abs(a - b) % (2 * Math.PI);
-      if (d > Math.PI) d = 2 * Math.PI - d;
-      return d;
-    }
-    postTick() {
-      if (!Settings_default._antiTrapStar) {
-        this._protected = false;
-        return;
-      }
-      const {myPlayer: myPlayer, ObjectManager: ObjectManager2, EnemyManager: EnemyManager2, _ModuleHandler: ModuleHandler, PlayerManager: PlayerManager2} = this.client;
-      if (!myPlayer || !myPlayer.inGame || ModuleHandler.moduleActive) return;
-      if (myPlayer.trappedIn) {
-        this._protected = false;
-        return;
-      }
-      if (!myPlayer.canPlace(4)) return;
-      const enemy = EnemyManager2.nearestEnemy;
-      if (!enemy) {
-        this._protected = false;
-        return;
-      }
-      const myPos = myPlayer.pos.current;
-      let nearTrap = null, nearTrapDist = Infinity;
-      ObjectManager2.grid2D.query(myPos.x, myPos.y, 3, id => {
-        const o = ObjectManager2.objects.get(id);
-        if (!o || !(o instanceof PlayerObject) || o.type !== 15) return;
-        if (!PlayerManager2.isEnemyByID(o.ownerID, myPlayer)) return;
-        const d = myPos.distance(o.pos.current);
-        if (d < nearTrapDist) {
-          nearTrap = o;
-          nearTrapDist = d;
-        }
-      });
-      if (!nearTrap || enemy.pos.current.distance(myPos) > 200) {
-        this._protected = false;
-        return;
-      }
-      if (this._protected) return;
-      const trapPos = nearTrap.pos.current;
-      const trapAim = myPos.angle(trapPos);
-      const agnes = this._getSpikeAngleWidth(nearTrapDist);
-      const spikeID = myPlayer.getItemByType(4);
-      const placed = this._protect(trapAim + Math.PI, agnes, myPos, ObjectManager2, ModuleHandler, spikeID);
-      if (placed) {
-        ModuleHandler.placedOnce = true;
-        ModuleHandler.moduleActive = true;
-        this._protected = true;
-      }
-    }
-    reset() {
-      this._protected = false;
-    }
   }
   class AutoSync {
     moduleName="autoSync";
@@ -13009,130 +14156,6 @@ window.grbtp = 35;
     }
   }
   const AdaptiveGearSwitching_default = AdaptiveGearSwitching;
-  class AntiSync {
-    moduleName="antiSync";
-    client;
-    _lastDamageTime=0;
-    _incomingAttacks=[];
-    _syncKillThreshold=15;
-    _dodgeActive=false;
-    _dodgeCooldown=500;
-    _lastDodgeTime=0;
-    _SHAME_SAFE_DELAY=139;
-    _pendingHealDeadline=null;
-    _pendingHealsNeeded=0;
-    constructor(client2) {
-      this.client = client2;
-    }
-    _detectIncomingAttack(nearestEnemy) {
-      if (!nearestEnemy) return false;
-      const primaryReloaded = this.client._ModuleHandler.staticModules.reloading.isReloaded(0);
-      const secondaryReloaded = this.client._ModuleHandler.staticModules.reloading.isReloaded(1);
-      if (primaryReloaded && secondaryReloaded) {
-        const dist = this.client.myPlayer.pos.current.distance(nearestEnemy.pos.current);
-        const enemyRange = (DataHandler_default.getWeapon(nearestEnemy.getItemByType(0) ?? 0)?.range ?? 35) + this.client.myPlayer.hitScale;
-        if (dist < enemyRange * 1.2) {
-          return true;
-        }
-      }
-      return false;
-    }
-    _predictSyncMoment(myPlayer, nearestEnemy) {
-      if (!nearestEnemy) return Infinity;
-      const healthPercent = myPlayer.tempHealth / myPlayer.maxHealth;
-      const enemyReady = this.client._ModuleHandler.staticModules.reloading.isEnemyReloaded?.(nearestEnemy, 0);
-      if (healthPercent < 0.3 && enemyReady && this._detectIncomingAttack(nearestEnemy)) {
-        return 0;
-      }
-      return Infinity;
-    }
-    _executeDodge(myPlayer, nearestEnemy) {
-      const ModuleHandler = this.client._ModuleHandler;
-      const angleToEnemy = myPlayer.pos.current.angle(nearestEnemy.pos.current);
-      const dodgeAngles = [ angleToEnemy + Math.PI / 2, angleToEnemy - Math.PI / 2, angleToEnemy + Math.PI ];
-      const randomDodge = dodgeAngles[Math.floor(Math.random() * dodgeAngles.length)];
-      ModuleHandler.startMovement({
-        x: Math.cos(randomDodge),
-        y: Math.sin(randomDodge)
-      });
-      ModuleHandler.forceHat = 7;
-      ModuleHandler.shouldAttack = false;
-      this._dodgeActive = true;
-      this._lastDodgeTime = Date.now();
-    }
-    _monitorDamage(myPlayer) {
-      const currentTime = Date.now();
-      const timeSinceLastDamage = currentTime - this._lastDamageTime;
-      if (myPlayer.tempHealth < (this._lastKnownHealth ?? myPlayer.maxHealth)) {
-        this._lastDamageTime = currentTime;
-        this._incomingAttacks.push({
-          timestamp: currentTime,
-          damageAmount: (this._lastKnownHealth ?? myPlayer.maxHealth) - myPlayer.tempHealth
-        });
-        if (this._incomingAttacks.length > 5) {
-          this._incomingAttacks.shift();
-        }
-        return true;
-      }
-      this._lastKnownHealth = myPlayer.tempHealth;
-      return false;
-    }
-    _isSyncKillDetected() {
-      if (this._incomingAttacks.length < 2) return false;
-      const recentAttacks = this._incomingAttacks.slice(-2);
-      const timeDiff = Math.abs(recentAttacks[1].timestamp - recentAttacks[0].timestamp);
-      return timeDiff < this._syncKillThreshold;
-    }
-    postTick() {
-      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, _ModuleHandler: ModuleHandler} = this.client;
-      if (!Settings_default._antiSync || myPlayer.shameActive) {
-        return;
-      }
-      const nearestEnemy = EnemyManager2.nearestEnemy;
-      if (!nearestEnemy) return;
-      const damageTaken = this._monitorDamage(myPlayer);
-      if (this._pendingHealDeadline !== null) {
-        if (Date.now() >= this._pendingHealDeadline) {
-          for (let i = 0; i < this._pendingHealsNeeded; i++) {
-            ModuleHandler.heal();
-          }
-          this._pendingHealDeadline = null;
-          this._pendingHealsNeeded = 0;
-        }
-        ModuleHandler.shouldAttack = false;
-        ModuleHandler.moduleActive = false;
-        return;
-      }
-      if (this._isSyncKillDetected()) {
-        const foodID = myPlayer.getItemByType(2);
-        const restore = Items[foodID].restore;
-        const healsNeeded = Math.ceil((myPlayer.maxHealth - myPlayer.tempHealth) / restore) + 2;
-        const safeToEatInstantly = myPlayer.isSandbox || myPlayer.shameCount < 7;
-        if (safeToEatInstantly) {
-          for (let i = 0; i < healsNeeded; i++) {
-            ModuleHandler.heal();
-          }
-        } else {
-          this._pendingHealDeadline = Date.now() + this._SHAME_SAFE_DELAY;
-          this._pendingHealsNeeded = healsNeeded;
-        }
-        this._executeDodge(myPlayer, nearestEnemy);
-        ModuleHandler.shouldAttack = false;
-        ModuleHandler.moduleActive = false;
-        return;
-      }
-      const syncDanger = this._predictSyncMoment(myPlayer, nearestEnemy);
-      if (syncDanger === 0) {
-        if (Date.now() - this._lastDodgeTime > this._dodgeCooldown) {
-          this._executeDodge(myPlayer, nearestEnemy);
-          this.client.StatsManager.antiSyncDodges = (this.client.StatsManager.antiSyncDodges ?? 0) + 1;
-        }
-      }
-      const now = Date.now();
-      this._incomingAttacks = this._incomingAttacks.filter(attack => now - attack.timestamp < 1000);
-    }
-  }
-  const AntiSync_default = AntiSync;
   class ToolHammerSpearInsta {
     moduleName="toolHammerSpearInsta";
     client;
@@ -13194,137 +14217,6 @@ window.grbtp = 35;
       this.nearestTarget = nearestEnemy;
     }
   }
-  // --------------------------------------------------------------------------
-  // Velocity tick — Glotus 5.5.5's, whole.
-  //
-  // Turret gear and a diamond polearm in one tick. It is a two-tick move and
-  // the second tick is the point, so read them together:
-  //
-  //   ARM   at 220-245 from where they will be, wear turret gear (53) and set
-  //         moveTo toward them. The turret's range is 700, so the shot lands
-  //         from here; the walk is what carries you into polearm range.
-  //   FIRE  next tick, hat 7, polearm, swing along the same angle, still
-  //         walking.
-  //
-  // The window is the whole trick and it is not a range check. 220-245 is where
-  // the turret's knockback leaves them after the shot: too close and the shot
-  // pushes them out of the polearm's 142 before the swing, too far and the walk
-  // cannot close it. Copying the window without `moveTo` is the mistake that
-  // makes only the turret land — the distance never closes, and the polearm
-  // swings at nothing.
-  //
-  // canSend is Glotus's own read of whether the moment is worth spending:
-  // either their melee is one tick off reloaded (atExact(type, 1)) — so they
-  // are about to commit and cannot dodge — or their predicted hat is one they
-  // can actually be hurt through. Hat 6 is soldier and hat 22 takes the
-  // knockback out, which is what isValidHat rules out.
-  //
-  // Not ported: Glotus's ANTI velocity tick — Player.velocityTicking and
-  // EnemyManager.velocityTickThreat, the flags it raises when someone does this
-  // to YOU. That is the other half of the same page in Glotus and a separate
-  // feature; this is the tick itself.
-  // --------------------------------------------------------------------------
-  // How far a pinned target may be and still be worth the combo. Nothing to do
-  // with the knockback window below — see _pinnedInMyTrap.
-  const VELOCITY_TICK_TRAP_RANGE = 200;
-  class VelocityTick {
-    moduleName="velocityTick";
-    client;
-    nearestTarget=null;
-    target=null;
-    minKB=220;
-    maxKB=245;
-    constructor(client2) {
-      this.client = client2;
-    }
-    // Soldier eats the damage; hat 22 eats the knockback the window depends on.
-    isValidHat(hatID) {
-      return hatID !== null && hatID !== 6 && hatID !== 22;
-    }
-
-    // ── the trap branch ─────────────────────────────────────────────────────
-    // 220-245 is not a range check. It is where the turret's knockback leaves
-    // them after the shot, which is why the window has both a floor and a
-    // ceiling, and why the walk exists to close it.
-    //
-    // A target standing in a trap cannot be knocked anywhere. The window has
-    // nothing left to describe, so with this on it is replaced by a plain
-    // "close enough to be worth it" — everything else about the combo is
-    // untouched, including canSend, so a soldier hat still calls it off.
-    //
-    // Their own trap does not count: being pinned by someone else does not
-    // mean they cannot be pushed out of my polearm's way.
-    _pinnedInMyTrap(nearestEnemy) {
-      if (!Settings_default._velocityTickTrap) return false;
-      const trappedIn = nearestEnemy.trappedIn;
-      if (!trappedIn) return false;
-      const {PlayerManager: PlayerManager2, myPlayer: myPlayer} = this.client;
-      return !PlayerManager2.isEnemyByID(trappedIn.ownerID, myPlayer);
-    }
-    postTick() {
-      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
-      this.target = null;
-      if (ModuleHandler.moduleActive || !Settings_default._velocityTick || ModuleHandler.moveTo !== "disable" || EnemyManager2.shouldIgnoreModule()) {
-        this.nearestTarget = null;
-        return;
-      }
-      const {reloading: reloading} = ModuleHandler.staticModules;
-      const nearestEnemy = EnemyManager2.nearestEnemy;
-      const primary = myPlayer.getItemByType(0);
-      const isPolearm = primary === 5;
-      const isDiamond = myPlayer.getWeaponVariant(primary).current >= 2;
-      const isReloadedPrimary = reloading.isReloaded(0, 1);
-      const isReloadedTurret = reloading.isReloaded(2);
-
-      // FIRE. Armed last tick, so the turret has gone out and the walk has had
-      // a tick to close the gap.
-      if (this.nearestTarget !== null) {
-        const pos12 = myPlayer.pos.current;
-        const pos22 = this.nearestTarget.pos.current;
-        const angle2 = pos12.angle(pos22);
-        ModuleHandler.moduleActive = true;
-        ModuleHandler.useAngle = angle2;
-        ModuleHandler.forceHat = 7;
-        ModuleHandler.forceWeapon = 0;
-        ModuleHandler.shouldAttack = true;
-        ModuleHandler.moveTo = angle2;
-        this.nearestTarget = null;
-        return;
-      }
-
-      if (nearestEnemy === null || !isPolearm || !isDiamond || !isReloadedPrimary || !isReloadedTurret) {
-        return;
-      }
-      this.target = nearestEnemy;
-      const pos1 = myPlayer.pos.current;
-      const pos2 = nearestEnemy.pos.future;
-      const dist1 = pos1.distance(pos2);
-      const angle = pos1.angle(pos2);
-      const {current: current} = nearestEnemy.weapon;
-      const type = DataHandler_default.getWeapon(current).type;
-      const almostReloaded = DataHandler_default.isMelee(current) && nearestEnemy.atExact(type, 1);
-      const detectFutureHat = this.isValidHat(nearestEnemy.futureHat);
-      const canSend = almostReloaded || detectFutureHat;
-      // The trap branch WIDENS the condition, it does not replace it. Replacing
-      // it threw away the 220-245 band for pinned targets, which is a shot the
-      // unmodified tick would have taken — a pinned enemy sitting in the
-      // knockback window is still in the knockback window.
-      const pinned = this._pinnedInMyTrap(nearestEnemy);
-      const inAttackRange = inRange(dist1, this.minKB, this.maxKB) ||
-        pinned && dist1 <= VELOCITY_TICK_TRAP_RANGE;
-
-      // ARM.
-      if (inAttackRange) {
-        if (canSend) {
-          ModuleHandler.moduleActive = true;
-          ModuleHandler.forceHat = 53;
-          ModuleHandler.moveTo = angle;
-          this.nearestTarget = nearestEnemy;
-          this.client.StatsManager.velocityTickTimes = 1;
-        }
-      }
-    }
-  }
   class Placer {
     moduleName="placer";
     client;
@@ -13344,7 +14236,6 @@ window.grbtp = 35;
         if (myPlayer.shameCount < 7) {
           ModuleHandler.heal();
           ModuleHandler.healedOnce = true;
-          ModuleHandler.didAntiInsta = true;
         }
         return;
       }
@@ -13710,15 +14601,9 @@ window.grbtp = 35;
   // defence; the 0.75 for soldier is the hat's own dmgMult.
   const ANTI_INSTA_DMG_CAP = 140;
   const ANTI_INSTA_SCUBA_BIAS = 5;
-  // The server counts a food UP by one if it arrives within 120ms of the hit
-  // and DOWN by two if it does not (18516). 125 is that 120 with a little room
-  // for the clock. Used by ModuleHandler.heal, which is where every automatic
-  // food press in the client goes through.
-  const SHAME_SAFE_WINDOW = 125;
   class AntiInsta {
     moduleName="antiInsta";
     client;
-    blockBreak=false;
     toggleAnti=false;
     healingCount=0;
     forceHeal=false;
@@ -13726,161 +14611,57 @@ window.grbtp = 35;
       this.client = client2;
     }
     reset() {
-      this.blockBreak = false;
       this.forceHeal = false;
     }
 
-    antiSmartTick(myPlayer, nearestEnemy, ModuleHandler, ObjectManager2, PlayerManager2) {
-      if (!nearestEnemy) return false;
-      const mySecondary = myPlayer.getItemByType(1);
-      if (mySecondary !== 10) return false;
-      const enemyPos = nearestEnemy.pos.current;
-      let enemyInOurTrap = false;
-      ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 2, id => {
-        if (enemyInOurTrap) return;
-        const obj = ObjectManager2.objects.get(id);
-        if (!obj || !(obj instanceof PlayerObject)) return;
-        if (obj.type !== 15) return;
-        if (PlayerManager2.isEnemyByID(obj.ownerID, nearestEnemy)) return;
-        if (enemyPos.distance(obj.pos.current) < obj.collisionScale) enemyInOurTrap = true;
-      });
-      if (enemyInOurTrap) return false;
-      if (!myPlayer.isTrapped || !myPlayer.trappedIn) return false;
-      const trapObj = myPlayer.trappedIn;
-      if (myPlayer.spikeDamage > 0) return false;
-      const myHammerDmg = myPlayer.getBuildingDamage(mySecondary, false);
-      if (trapObj.health > myHammerDmg) return false;
-      const spikesEnemy = [];
-      ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 4, id => {
-        const obj = ObjectManager2.objects.get(id);
-        if (!obj || !(obj instanceof PlayerObject)) return;
-        if (obj.itemGroup !== 2) return;
-        if (!PlayerManager2.isEnemyByID(obj.ownerID, myPlayer)) return;
-        spikesEnemy.push(obj);
-      });
-      const myPos = myPlayer.pos.current;
-      const spikeId = myPlayer.getItemByType(4) ?? 6;
-      const spikeItem = Items[spikeId];
-      const spikeScale = spikeItem.scale;
-      const placeOffset = spikeItem.placeOffset || 0;
-      const placeLength = 35 + spikeScale + placeOffset;
-      let shouldWait = false;
-      for (let i = 0; i < 36; i++) {
-        const angle = i * (Math.PI * 2 / 36);
-        const configX = enemyPos.x + placeLength * Math.cos(angle);
-        const configY = enemyPos.y + placeLength * Math.sin(angle);
-        const configPos = new Vector_default(configX, configY);
-        const canPlace = ObjectManager2.canPlaceItem(spikeId, configPos, 0.6 * spikeScale - spikeScale);
-        if (canPlace) {
-          const distToMe = Math.hypot(myPos.x - configX, myPos.y - configY);
-          if (distToMe < 35 + spikeScale) {
-            const knockbackAngle = Math.atan2(myPos.y - configY, myPos.x - configX);
-            const projX = myPos.x + 111 * Math.cos(knockbackAngle);
-            const projY = myPos.y + 111 * Math.sin(knockbackAngle);
-            for (const spike of spikesEnemy) {
-              const sp = spike.pos.current;
-              // Would the knockback path actually put my body on that spike:
-              // distance from the spike to the segment, against both radii.
-              const dx = projX - myPos.x, dy = projY - myPos.y;
-              const len2 = dx * dx + dy * dy;
-              let t = len2 > 1e-9 ? ((sp.x - myPos.x) * dx + (sp.y - myPos.y) * dy) / len2 : 0;
-              if (t < 0) t = 0; else if (t > 1) t = 1;
-              const cx = myPos.x + t * dx, cy = myPos.y + t * dy;
-              if (Math.hypot(sp.x - cx, sp.y - cy) <= spike.collisionScale + myPlayer.scale) {
-                shouldWait = true;
-                break;
-              }
-            }
-          }
-        }
-        if (shouldWait) break;
-      }
-      // Novastorm does not spend the anti the moment it sees the danger. It
-      // stops breaking out, and then stalls on whichever weapon is still
-      // reloading — holding a weapon that cannot swing costs nothing and keeps
-      // the trap intact for another tick. Only when both weapons are ready, so
-      // there is nothing left to stall on, does it commit:
-      //
-      //     autoBreak = false;
-      //     if (secondaryReload < 1)    predictWeapon = weapons[1];
-      //     else if (primaryReload < 1) predictWeapon = weapons[0];
-      //     else return true;
-      //
-      // What was here committed on `shouldWait` alone, which burnt the heal on
-      // ticks where simply not swinging would have done.
-      if (shouldWait && trapObj.health <= myHammerDmg) {
-        this.blockBreak = true;
-        const {reloading: reloading} = ModuleHandler.staticModules;
-        if (!reloading.isReloaded(1)) {
-          ModuleHandler.forceWeapon = 1;
-          return false;
-        }
-        if (!reloading.isReloaded(0)) {
-          ModuleHandler.forceWeapon = 0;
-          return false;
-        }
-        return true;
-      }
-      this.blockBreak = false;
-      return false;
+    // novastorm's `(tick - damageTick) > 0`. damageTick is set to tickCount + 1
+    // on damage exactly as novastorm sets it to tick + 1, so this reads true two
+    // ticks (~222ms) after a hit — past the 120ms window in which an apple adds
+    // shame rather than removing two.
+    isSaveHealTick() {
+      const {tickCount: tickCount, damageTick: damageTick} = this.client.myPlayer;
+      return tickCount - damageTick > 0;
     }
     // ------------------------------------------------------------------------
-    // Autoheal — novastorm's rule and nothing else.
+    // Autoheal — Novastorm's rule, whole.
     //
-    // The whole decision is five lines, at Novastorm_1.41.4.user.js:15686 and,
-    // identically, X_Precision_2.0.user.js:14895:
+    // Novastorm decides with one number. It accumulates every source of damage
+    // that could land this tick — spike contact, weapon hits in range and off
+    // reload, turrets, secondaries, poison — caps it at 140, adjusts for the hat
+    // that is actually on, and heals if that number reaches its health. On top
+    // of that it tops up whenever a tick passed without being hit:
     //
     //     if (currentHat == 6) totalDmgPot *= 0.75;
     //     if (currentHat == 7) totalDmgPot += 5;
     //     if (myPlayer.health <= totalDmgPot) healing = true;
-    //     if (((healing && myPlayer.shameCount < 7) || (tick - damageTick) > 0)
+    //     if (((healing && shameCount < 7) || (tick - damageTick) > 0)
     //         && myPlayer.health < 100) heal(100 - myPlayer.health);
     //
-    // and the action it calls, at Novastorm 12747:
+    // What was here instead was eight stacked special cases — trap about to
+    // break, melee+ranged combo in range, reverse insta, tool hammer, ranged
+    // bow, danger flags, health under 20 — each with its own hand-picked number
+    // of food presses. Every one of those cases is a specific way of arriving at
+    // "they can take my health bar off this tick", which is the number
+    // EnemyManager already computes and keeps in potentialDamage +
+    // potentialSpikeDamage. The cascade was a worse estimator of a quantity that
+    // was sitting right there, and each branch healed a different amount for no
+    // stated reason.
     //
-    //     function heal(value) {
-    //         for (let i = 0; i < value; i += items.list[myPlayer.items[0]].heal)
-    //             place(myPlayer.items[0], null);
-    //     }
-    //
-    // Two branches, an OR between them, and no third thing. The emergency one
-    // says they can take the bar off this tick and I would rather eat into a
-    // hit than die; the routine one says a tick went by without being hit, so
-    // top up. `heal(value)` presses once per `restore` of the gap — it does not
-    // ask what is already on the wire, whether the server is refusing food, or
-    // how many packets are left.
-    //
-    // What used to be here on top of this rule — an in-flight ledger, a
-    // wall-clock shame window, a shameActive early return — is gone, all of it.
-    // The decision below is novastorm's and nothing else. The one thing kept is
-    // the term that feeds it: EnemyManager's potentialDamage +
-    // potentialSpikeDamage is already novastorm's totalDmgPot, summed from the
-    // same five sources (spike contact, weapon hits in range and off reload,
-    // turret, secondary, poison), so the number is RYN's and the rule around it
-    // is novastorm's.
-    //
-    // Two of those costs came back, but not here — they are in
-    // ModuleHandler.heal, where every automatic food press in the client goes
-    // through, so they apply to this rule, to anti sync and to anti smart tick
-    // alike. They are the two the shame rule makes unarguable: food cannot be
-    // eaten at all during the 30s lock, and the first food after a hit is
-    // judged on when it lands. Neither changes WHEN this decides to heal, only
-    // whether the press it asks for is one the server will count against you.
-    // harness/auto-q.js is the measurement, and it runs heal's own method.
-    //
-    // Anti Smart Tick keeps its branch ahead of the rule. It has its own toggle
-    // and is not a heal decision — it is a refusal to break out of a trap into
-    // a spike, and eating is what it does with the tick instead.
+    // Two things are RYN's and stay, because novastorm has no equivalent:
+    //   · myPlayer.shameActive — do not spend food while the server is refusing
+    //     it anyway
+    //   · ModuleHandler.heal()'s shame guard, which queues a heal that lands
+    //     inside the post-damage window rather than dropping it
     // ------------------------------------------------------------------------
     postTick() {
       this.forceHeal = false;
-      // Cleared every tick and re-set below, so the latch cannot survive the
-      // situation that raised it — autoBreak reads it on the following tick.
-      this.blockBreak = false;
       if (!Settings_default._autoheal) {
         return;
       }
       const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2} = this.client;
+      if (myPlayer.shameActive) {
+        return;
+      }
       const foodID = myPlayer.getItemByType(2);
       if (foodID === null || foodID === void 0 || !Items[foodID]) {
         return;
@@ -13888,53 +14669,69 @@ window.grbtp = 35;
       const restore = Items[foodID].restore;
       const tempHealth = myPlayer.tempHealth;
       const maxHealth = myPlayer.maxHealth;
-      const nearestEnemy = EnemyManager2.nearestEnemy;
+      const shameCount = myPlayer.shameCount;
 
-      if (Settings_default._antiSmartTick && myPlayer.isTrapped && nearestEnemy) {
-        const {ObjectManager: ObjectManager2, PlayerManager: PlayerManager2} = this.client;
-        if (this.antiSmartTick(myPlayer, nearestEnemy, ModuleHandler, ObjectManager2, PlayerManager2)) {
-          ModuleHandler.healedOnce = true;
-          ModuleHandler.didAntiInsta = true;
-          ModuleHandler.shouldAttack = false;
-          const needTimes = Math.max(1, Math.ceil((maxHealth - tempHealth) / restore));
-          const hits = Math.max(needTimes + 1, 3);
-          for (let i = 0; i < hits; i++) ModuleHandler.heal();
-          return;
-        }
-      }
-
-      // novastorm 15626: totalDmgPot = spike + hit + turret + secondary + poison,
-      // capped at 140. EnemyManager has already summed exactly those this tick.
-      let totalDmgPot = EnemyManager2.potentialDamage + EnemyManager2.potentialSpikeDamage;
-      if (totalDmgPot > ANTI_INSTA_DMG_CAP) {
-        totalDmgPot = ANTI_INSTA_DMG_CAP;
-      }
-      // novastorm 15686: the hat the player is actually wearing.
-      const hatID = myPlayer.hatID;
-      if (hatID === 6) {
-        totalDmgPot *= Hats[6].dmgMult;
-      }
-      if (hatID === 7) {
-        totalDmgPot += ANTI_INSTA_SCUBA_BIAS;
-      }
-      // novastorm 15691.
-      const healing = tempHealth <= totalDmgPot;
-
-      // novastorm 15697, whole. `tick - damageTick > 0` is a tick that passed
-      // without being hit; damageTick is set to tickCount + 1 when damage lands
-      // (Player.updateHealth, 3426), which is novastorm's own arithmetic.
-      if (!(((healing && myPlayer.shameCount < 7) || myPlayer.tickCount - myPlayer.damageTick > 0)
-            && tempHealth < maxHealth)) {
+      if (tempHealth >= maxHealth) {
         return;
       }
 
-      // novastorm's heal(100 - health): one press per `restore` of the gap.
-      this.forceHeal = healing;
-      if (healing) {
-        ModuleHandler.didAntiInsta = true;
+      // Novastorm's totalDmgPot. EnemyManager has already summed weapon,
+      // turret, secondary and projectile damage into potentialDamage and
+      // resolved the spike term into potentialSpikeDamage this tick.
+      let dmgPot = EnemyManager2.potentialDamage + EnemyManager2.potentialSpikeDamage;
+      if (dmgPot > ANTI_INSTA_DMG_CAP) {
+        dmgPot = ANTI_INSTA_DMG_CAP;
       }
+      const hatID = myPlayer.hatID;
+      if (hatID === 6) {
+        dmgPot *= Hats[6].dmgMult;
+      }
+      if (hatID === 7) {
+        dmgPot += ANTI_INSTA_SCUBA_BIAS;
+      }
+      const healing = tempHealth <= dmgPot;
+
+      // novastorm's condition, whole:
+      //
+      //     if (((healing && myPlayer.shameCount < 7) || (tick - damageTick) > 0)
+      //         && myPlayer.health < 100) heal(100 - myPlayer.health);
+      //
+      // isSaveHealTick() IS that second half. RYN sets damageTick to
+      // tickCount + 1 exactly as novastorm sets it to tick + 1, so
+      // `tickCount - damageTick > 0` is true two ticks after a hit — about
+      // 222ms, already clear of the 120ms window in which an apple raises shame
+      // instead of lowering it.
+      //
+      // A 125ms wall-clock guard used to sit beside it. It was the looser of the
+      // two and never the binding one, so novastorm's tick test now stands
+      // alone, as it does there.
+      //
+      // The emergency branch deliberately does not wait: +1 shame is a better
+      // outcome than dying, which is the entire point of healing into a hit.
+      if (!((healing && shameCount < 7) || this.isSaveHealTick())) {
+        return;
+      }
+
+      // novastorm's heal(value): one food place per heal step until the deficit
+      // is covered, and no in-flight accounting.
+      //
+      //     function heal(value) {
+      //         for (let i = 0; i < value; i += items.list[myPlayer.items[0]].heal)
+      //             place(myPlayer.items[0], null);
+      //     }
+      //
+      // What was here subtracted the apples already sent and unacknowledged, so
+      // a tick inside the round trip healed nothing. novastorm re-sends the
+      // whole deficit every tick until the server's health echo comes back, and
+      // that re-send is the behaviour being restored here.
+      const needTimes = Math.ceil((maxHealth - tempHealth) / restore);
+      if (needTimes <= 0) {
+        return;
+      }
+
+      this.forceHeal = healing;
       ModuleHandler.healedOnce = true;
-      for (let i = 0; i < maxHealth - tempHealth; i += restore) {
+      for (let i = 0; i < needTimes; i++) {
         ModuleHandler.heal();
       }
     }
@@ -14040,6 +14837,21 @@ window.grbtp = 35;
       if (Settings_default._tailPriority && !Settings_default._cowboyWhenSafe && useTail && this.shouldUseTail()) {
         return 11;
       }
+      // Soldier's accessory. The branch below equips Angel Wings the moment an
+      // enemy is detected, which is the same moment ModuleHandler forces hat 6,
+      // so Angel Wings is what Soldier has always been worn with. This puts
+      // Shadow Wings there instead.
+      //
+      // The condition is the union of three views of the same state — the hat
+      // the server has confirmed, the hat being forced this tick, and the
+      // soldier latch — read the same way the turret and bull checks above read
+      // theirs. Taking the union rather than any one of them makes it sticky:
+      // a single-tick dropout in one term cannot flip the accessory, so the
+      // wings do not flicker at the edge of soldier's range.
+      const soldierActive = myPlayer.hatID === 6 || ModuleHandler.forceHat === 6 || ModuleHandler.shouldEquipSoldier;
+      if (soldierActive && Settings_default._shadowWings && useShadow) {
+        return 19;
+      }
       if (EnemyManager2.detectedEnemy || EnemyManager2.nearestEnemyInRangeOf(300, EnemyManager2.nearestEntity)) {
         const isEnemy = EnemyManager2.nearestEntity === EnemyManager2.nearestEnemy;
         const useAngel = ModuleHandler.canBuy(1, 13);
@@ -14058,9 +14870,15 @@ window.grbtp = 35;
         if (useBloodWings) return 18;
         return 0;
       }
-      // Standing still used to force Blood Wings (18). Removed: nothing about
-      // being stationary calls for a different accessory, and the branch below
-      // already covers the bot's angel case, so this is the ordinary path now.
+      // Standing still used to return Blood Wings here. getBestCurrentAcc runs
+      // every tick, so the moment you stopped moving this branch re-equipped
+      // them and kept re-equipping for as long as you stood there — there was
+      // no way to take them off by hand. Idle now falls through to the ordinary
+      // fallback below (tail, else none), which is what the rest of the method
+      // already does when nothing special applies.
+      if (!ModuleHandler.isMoving && myPlayer.speed <= 5) {
+        if (beAngel) return 13;
+      }
       if (beAngel) {
         return 13;
       }
@@ -14324,6 +15142,16 @@ window.grbtp = 35;
       }
     }
   }
+  // Where auto grind is allowed to stop. WeaponVariants is
+  // [normal, gold, diamond, ruby], so a target is just an index into it and
+  // "done" means the weapon sits at or past that index. Ruby is the default,
+  // which is the only thing this module used to do.
+  const GRIND_TARGETS = {
+    gold: 1,
+    diamond: 2,
+    ruby: 3
+  };
+  const GRIND_TARGET_FALLBACK = "ruby";
   class AutoGrind {
     moduleName="autoGrind";
     client;
@@ -14331,13 +15159,26 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
+    // Each slot carries its own target, so the primary can be taken to ruby
+    // while the hammer stops at gold, or the other way round. weaponType is the
+    // slot the rest of the module already speaks in: 0 primary, 1 secondary.
+    targetVariant(weaponType) {
+      const chosen = weaponType === 1 ? Settings_default._autoGrindTargetSecondary : Settings_default._autoGrindTargetPrimary;
+      const target = GRIND_TARGETS[chosen];
+      return target === undefined ? GRIND_TARGETS[GRIND_TARGET_FALLBACK] : target;
+    }
+    // A slot only counts against "done" when it holds something worth grading:
+    // the secondary grinds with the great hammer and nothing else, and the
+    // stick is the one primary this module refuses to swing. A slot that cannot
+    // be ground is satisfied rather than blocking, otherwise carrying no hammer
+    // left this permanently unfinished and kept the module awake for nothing.
     isFullyUpgraded() {
       const {myPlayer: myPlayer} = this.client;
       const primary = myPlayer.getItemByType(0);
       const secondary = myPlayer.getItemByType(1);
-      const upgradedSecondary = secondary === 10 && myPlayer.getWeaponVariant(secondary).current >= 3;
-      const upgradedPrimary = primary !== 8 && myPlayer.getWeaponVariant(primary).current >= 3;
-      return upgradedSecondary && upgradedPrimary;
+      const secondaryDone = secondary !== 10 || myPlayer.getWeaponVariant(secondary).current >= this.targetVariant(1);
+      const primaryDone = primary === 8 || myPlayer.getWeaponVariant(primary).current >= this.targetVariant(0);
+      return secondaryDone && primaryDone;
     }
     getGrindAction(nearestTurret) {
       const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
@@ -14346,9 +15187,9 @@ window.grbtp = 35;
       const secondary = myPlayer.getItemByType(1);
       const useTank = ModuleHandler.canBuy(0, 40);
       let weaponType = null;
-      if (secondary === 10 && myPlayer.getWeaponVariant(secondary).current < 3) {
+      if (secondary === 10 && myPlayer.getWeaponVariant(secondary).current < this.targetVariant(1)) {
         weaponType = 1;
-      } else if (primary !== 8 && myPlayer.getWeaponVariant(primary).current < 3) {
+      } else if (primary !== 8 && myPlayer.getWeaponVariant(primary).current < this.targetVariant(0)) {
         weaponType = 0;
       }
       if (weaponType === null) return null;
@@ -14403,13 +15244,12 @@ window.grbtp = 35;
     }
     postTick() {
       const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
+      // Idle while there is nothing to grind, rather than switching itself off.
+      // Turning the setting off here meant raising a target, or picking up a
+      // weapon that still needed grading, left the module silently disabled
+      // with no sign of it but an unticked box.
       if (this.isFullyUpgraded()) {
-        if (Settings_default._autoGrind) {
-          Settings_default._autoGrind = false;
-          this.grindAngle = null;
-          const grindEl = UI_default?.frame?.document?.getElementById("_autoGrind");
-          if (grindEl) grindEl.checked = false;
-        }
+        this.grindAngle = null;
         return;
       }
       if (!Settings_default._autoGrind || ModuleHandler.moduleActive || ModuleHandler.healedOnce || myPlayer.speed > 5) {
@@ -14476,6 +15316,16 @@ window.grbtp = 35;
   }
   // ModuleHandler.place() spends selectItem + attack + stopAttack + whichWeapon.
   const AUTOMILL_PLACE_COST = 5;
+  // Clearance between the three automill windmills, in world units.
+  //
+  // canPlaceItem rejects a spot when the centre distance is BELOW
+  // item.scale + neighbour.placementScale, so solving for exactly that bound
+  // puts the two outer mills on the reject line itself. It also has to cover
+  // the mixed-tier case: mills already on the ground keep the scale they were
+  // placed at (windmill 45) while a newly upgraded one is 47, and 2 units is
+  // the whole spread across the three tiers, so this clears the widest
+  // neighbour a mill can land next to as well as its own tier.
+  const AUTOMILL_ANGLE_MARGIN = 2;
   // ==========================================================================
   // Bot-only combat modules. Both live in ModuleHandler.botModules, so they run
   // for bots and never for the owner, and both go out through ModuleHandler —
@@ -14629,6 +15479,1039 @@ window.grbtp = 35;
       ModuleHandler.forceWeapon = useSecondary ? 1 : 0;
       ModuleHandler.shouldAttack = true;
       this.target = best[0].obj;
+    }
+  }
+
+  // ==========================================================================
+  // Persistent exploration — how a scattered bot crosses the server.
+  //
+  // What was here before was x18's wander: pick a heading uniformly at random,
+  // reject and re-roll it while it lands within 2 radians of the one it
+  // replaces, then walk it until 3300 units of straight-line distance have
+  // gone by, or 10 seconds pass, or the bot stops moving.
+  //
+  // A heading is not a destination. Re-rolling produces a random walk, and a
+  // random walk goes nowhere in particular — expected displacement after n legs
+  // grows with sqrt(n), so forty legs later a bot is still around the corner of
+  // the map it started in, having covered a lot of ground to get there. The
+  // forced turn made that worse rather than better: every accepted heading is
+  // more than 115 degrees off the last one, so every leg has a component that
+  // undoes the one before it. And the third re-roll condition fires on stopped,
+  // which is what a bot is every time it walks into something — so against an
+  // obstacle it re-rolled repeatedly, each time to a hard turn, which is the
+  // part that reads as a bot flailing rather than exploring.
+  //
+  // This replaces the heading with a destination and a path to it:
+  //
+  //     current position -> a distant sector -> a corridor to it -> travel
+  //     -> arrive -> another distant sector
+  //
+  // The bot commits to a destination and keeps it. Direction only changes for
+  // a reason — the route bends around something, the destination is reached or
+  // is proven unreachable, another bot is too close, or recovery from being
+  // stuck. There is no per-tick randomness anywhere in the steering.
+  //
+  // Layout, one concern per piece:
+  //
+  //   _expBlockerAt        what counts as solid, from the game's own collision
+  //   _expCorridorClear    can the player's disc be swept along this segment
+  //   _expClearHeading     nearest heading to the one we want that is clear
+  //   _expBuildPath        destination -> waypoint list
+  //   _expSpacingPass      bot-to-bot separation, one yielder per pair
+  //   _expOwnerState       per-owner shared state: claims, plan budget
+  //   BotExplorer          destination choice, following, stuck recovery,
+  //                        route-relevant breaking, movement execution
+  //
+  // Everything underneath is the client's existing machinery: ObjectManager's
+  // spatial grid for lookups, PlayerManager.canMoveOnTop for what is passable,
+  // ModuleHandler.startMovement (which runs MovementSimulation) to actually
+  // walk, and ModuleHandler's moduleActive/useAngle/forceWeapon/shouldAttack
+  // channel — the same one BotAutoBreak uses — to swing at something. Nothing
+  // here moves a player by any route the game does not already provide.
+  // ==========================================================================
+
+  // A bot walking home can be blocked, or the owner can be dead or across the
+  // map, and "returning" is a state that suppresses normal movement. Without a
+  // deadline a bot that never reaches the owner never moves normally again.
+  const SCATTER_RETURN_TIMEOUT_MS = 8e3;
+
+  const EXP_MAP = Config_default.mapScale;
+  // The map divided into sectors, which is the unit a destination is chosen in
+  // and the unit visit history is kept in. 6x6 of 2400 is coarse enough that
+  // 36 numbers describe where a bot has been, and fine enough that "somewhere
+  // else" is a real place rather than a quadrant.
+  const EXP_SECTOR_COLS = 6;
+  const EXP_SECTOR_SIZE = EXP_MAP / EXP_SECTOR_COLS;
+  // Keep destinations off the map wall; a point in the corner is a point the
+  // bot arrives at by grinding along the boundary.
+  const EXP_EDGE_MARGIN = 420;
+  // A destination has to be a journey. 3200 is more than a screen width, so
+  // "somewhere else" is somewhere the bot cannot currently see.
+  const EXP_MIN_TRAVEL = 3200;
+  const EXP_ARRIVE_RADIUS = 260;
+  const EXP_NODE_RADIUS = 130;
+  // Waypoint spacing, and how far ahead a corridor is probed. Beyond about this
+  // the bot has no object knowledge to plan with anyway — the server only sends
+  // what is near it — so a longer probe would be planning against an empty map.
+  const EXP_PROBE = 420;
+  const EXP_MAX_NODES = 5;
+  // How far apart the grid is queried along a corridor. This is a lookup
+  // stride, not a resolution: the distance test itself is exact against the
+  // whole segment, so this only has to be close enough that every object near
+  // the segment lands in some query's cells. A query with search=2 reaches at
+  // least 200 units past the object's own footprint, and the widest thing on
+  // the map is a tree at 175, so 150 leaves a wide margin.
+  const EXP_QUERY_STRIDE = 150;
+  // Where a corridor starts measuring, just past the player's own radius.
+  // Without it, a bot already pressed against a wall reads every heading as
+  // blocked, including the ones leading away from the wall.
+  const EXP_SEGMENT_START = 40;
+  // Slack beyond both collision radii before the corridor counts as passable.
+  // This is what lets a path go through a gate: a gap is a gap when the
+  // player's disc fits in it, and the game's collision says exactly when it
+  // does.
+  const EXP_CLEARANCE = 6;
+  const EXP_FAN_STEP = Math.PI / 12;
+  const EXP_FAN_LIMIT = Math.PI * 0.62;
+  const EXP_NO_BACKTRACK = Math.PI * 0.62;
+  // Movement is only re-sent when the heading actually moves. Below this the
+  // change is not worth a packet and re-sending it is exactly the jitter this
+  // system exists to remove.
+  const EXP_HEADING_DEADBAND = 0.06;
+  const EXP_MOVE_KEEPALIVE_MS = 2e3;
+  const EXP_REPATH_COOLDOWN_MS = 700;
+  const EXP_VALIDATE_MS = 300;
+  // Matches BOT_BREAK_STUCK_SPEED: Entity.speed is the distance covered last
+  // tick, so this is a fraction of a normal step rather than a true zero.
+  const EXP_STUCK_SPEED = 8;
+  const EXP_STUCK_TICKS = 6;
+  const EXP_PROGRESS_WINDOW_MS = 2500;
+  const EXP_PROGRESS_MIN = 160;
+  const EXP_RECOVERY_STEP_MS = 1200;
+  // Recovery steps before a destination is written off. Step 1 reroutes the
+  // other way round; from step 2 breaking is on the table, and the steps after
+  // it are the time a wall gets to come down before the bot decides the whole
+  // destination is the problem.
+  const EXP_RECOVERY_GIVE_UP = 6;
+  // How long a sector stays written off after the bot failed to reach it.
+  const EXP_SECTOR_FAIL_MS = 9e4;
+  // A sector counts as fully stale again after this long unvisited.
+  const EXP_SECTOR_FRESH_MS = 12e4;
+  // Hard cap on one destination, so a bot that is making slow progress rather
+  // than no progress still moves on eventually.
+  const EXP_DEST_TIMEOUT_MS = 9e4;
+  const EXP_DEST_HISTORY = 6;
+  const EXP_DEST_MIN_SEPARATION = 2200;
+  const EXP_SPACING_RADIUS = 260;
+  const EXP_SPACING_COOLDOWN_MS = 6e3;
+  const EXP_SPACING_INTERVAL_MS = 500;
+  const EXP_BREAK_ARC = Math.PI / 2.4;
+  // Path building is the only expensive thing here, so it runs on a budget
+  // shared by the whole fleet: at most this many plans per window, whatever the
+  // bot count. A bot waiting for a token still walks — see _headingFor.
+  const EXP_PLAN_WINDOW_MS = 100;
+  const EXP_PLAN_PER_WINDOW = 3;
+
+  const _expOwnerStates = new WeakMap;
+
+  function _expOwnerState(owner) {
+    let state = _expOwnerStates.get(owner);
+    if (state === undefined) {
+      state = {
+        spacingRan: 0,
+        planWindow: 0,
+        planTokens: EXP_PLAN_PER_WINDOW,
+        claims: new Map,
+        claimCounts: new Map
+      };
+      _expOwnerStates.set(owner, state);
+    }
+    return state;
+  }
+
+  function _expSectorAt(x, y) {
+    const sx = clamp(Math.floor(x / EXP_SECTOR_SIZE), 0, EXP_SECTOR_COLS - 1);
+    const sy = clamp(Math.floor(y / EXP_SECTOR_SIZE), 0, EXP_SECTOR_COLS - 1);
+    return sy * EXP_SECTOR_COLS + sx;
+  }
+
+  // One bot, one claimed sector. Two bots heading for the same corner of the
+  // map is the clustering this is here to prevent, and it is cheaper to avoid
+  // it at the moment of choosing than to separate them once they arrive.
+  function _expClaim(owner, bot, sector) {
+    const state = _expOwnerState(owner);
+    const previous = state.claims.get(bot);
+    if (previous !== undefined) {
+      const left = (state.claimCounts.get(previous) || 1) - 1;
+      if (left <= 0) {
+        state.claimCounts.delete(previous);
+      } else {
+        state.claimCounts.set(previous, left);
+      }
+    }
+    if (sector === null) {
+      state.claims.delete(bot);
+      return;
+    }
+    state.claims.set(bot, sector);
+    state.claimCounts.set(sector, (state.claimCounts.get(sector) || 0) + 1);
+  }
+
+  function _expClaimCount(owner, bot, sector) {
+    const state = _expOwnerState(owner);
+    let count = state.claimCounts.get(sector) || 0;
+    if (state.claims.get(bot) === sector) {
+      count -= 1;
+    }
+    return count;
+  }
+
+  function _expTakePlanToken(owner, now) {
+    const state = _expOwnerState(owner);
+    if (now - state.planWindow >= EXP_PLAN_WINDOW_MS) {
+      state.planWindow = now;
+      state.planTokens = EXP_PLAN_PER_WINDOW;
+    }
+    if (state.planTokens <= 0) {
+      return false;
+    }
+    state.planTokens -= 1;
+    return true;
+  }
+
+  // What is solid at this point, or null. Both this and _expFirstBlocker below
+  // decide "solid" the same way, and it is the game's own answer rather than a
+  // wall test of our own:
+  //
+  // PlayerManager.canMoveOnTop is ownership-aware — a boost pad, platform,
+  // healing pad, spawn pad, blocker, teleporter and your own clan's pit trap
+  // are all passable, an enemy pit trap is not, and no resource ever is. That
+  // is what gives the path its openings: a building with a gate has clear
+  // ground in the gate, and this reports it as clear, so a boundary is only a
+  // wall where the game actually makes it one.
+  //
+  // The old check queried only PlayerObject, so every tree, bush and rock on
+  // the map was invisible to it and paths were drawn straight through them.
+  function _expBlockerAt(client, x, y, clearance) {
+    const om = client.ObjectManager;
+    const pm = client.PlayerManager;
+    const myPlayer = client.myPlayer;
+    if (!om || !pm || !myPlayer) {
+      return null;
+    }
+    const selfScale = myPlayer.collisionScale || 35;
+    let hit = null;
+    om.grid2D.query(x, y, 2, id => {
+      const object = om.objects.get(id);
+      if (object === undefined || !object.pos) {
+        return false;
+      }
+      if (pm.canMoveOnTop(object)) {
+        return false;
+      }
+      const op = object.pos.current;
+      const need = (object.collisionScale || 0) + selfScale + clearance;
+      const dx = op.x - x;
+      const dy = op.y - y;
+      if (dx * dx + dy * dy < need * need) {
+        hit = object;
+        return true;
+      }
+      return false;
+    });
+    return hit;
+  }
+
+  // Sweep the player's disc along a segment and return the first thing it hits,
+  // or null.
+  //
+  // The test is the exact distance from each candidate's centre to the segment,
+  // not a distance at sampled points along it. Sampling would have to step
+  // finer than the smallest collision radius on the map to be sound — an enemy
+  // pit trap is 10 units — and a segment test is both correct at any length and
+  // cheaper, because the grid is only queried once per stride rather than once
+  // per sample.
+  const _expSeen = new Set;
+
+  function _expFirstBlocker(client, x0, y0, angle, dist) {
+    const om = client.ObjectManager;
+    const pm = client.PlayerManager;
+    const myPlayer = client.myPlayer;
+    if (!om || !pm || !myPlayer) {
+      return null;
+    }
+    const selfScale = myPlayer.collisionScale || 35;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const strides = Math.max(1, Math.ceil(dist / EXP_QUERY_STRIDE));
+    let best = null;
+    let bestAt = Infinity;
+    _expSeen.clear();
+    for (let i = 0; i <= strides; i++) {
+      const t = dist * i / strides;
+      om.grid2D.query(x0 + cos * t, y0 + sin * t, 2, id => {
+        if (_expSeen.has(id)) {
+          return false;
+        }
+        _expSeen.add(id);
+        const object = om.objects.get(id);
+        if (object === undefined || !object.pos) {
+          return false;
+        }
+        if (pm.canMoveOnTop(object)) {
+          return false;
+        }
+        const op = object.pos.current;
+        const px = op.x - x0;
+        const py = op.y - y0;
+        // Closest approach of the object's centre to the part of the segment
+        // that is actually ahead of the bot.
+        const at = clamp(px * cos + py * sin, EXP_SEGMENT_START, Math.max(EXP_SEGMENT_START, dist));
+        const dx = px - cos * at;
+        const dy = py - sin * at;
+        const need = (object.collisionScale || 0) + selfScale + EXP_CLEARANCE;
+        if (dx * dx + dy * dy >= need * need) {
+          return false;
+        }
+        if (at < bestAt) {
+          bestAt = at;
+          best = object;
+        }
+        return false;
+      });
+    }
+    return best;
+  }
+
+  function _expCorridorClear(client, x0, y0, angle, dist) {
+    return _expFirstBlocker(client, x0, y0, angle, dist) === null;
+  }
+
+  // The heading closest to the one we want that a corridor actually fits down.
+  // Fanning outward and stopping at the first hit means the route bends by the
+  // least it can, which is what keeps travel readable as travel rather than as
+  // a bot picking sides.
+  //
+  // `bias` decides which side is tried first at each offset. It is fixed for
+  // the whole leg, so a bot going around a building commits to one side of it
+  // instead of alternating on consecutive plans.
+  function _expClearHeading(client, x, y, want, dist, prevHeading, bias) {
+    if (_expCorridorClear(client, x, y, want, dist)) {
+      return want;
+    }
+    for (let off = EXP_FAN_STEP; off <= EXP_FAN_LIMIT + 1e-6; off += EXP_FAN_STEP) {
+      const first = want + off * bias;
+      const second = want - off * bias;
+      if ((prevHeading === null || getAngleDist(prevHeading, first) <= EXP_NO_BACKTRACK) && _expCorridorClear(client, x, y, first, dist)) {
+        return first;
+      }
+      if ((prevHeading === null || getAngleDist(prevHeading, second) <= EXP_NO_BACKTRACK) && _expCorridorClear(client, x, y, second, dist)) {
+        return second;
+      }
+    }
+    return null;
+  }
+
+  // Destination -> waypoints. Each step takes the heading that still points at
+  // the destination, bends it as little as the geometry allows, and drops a
+  // node at the end of the probe.
+  //
+  // Nodes past the first are planned against whatever the bot can currently
+  // see, which past a screen or so is nothing — so a long path is a straight
+  // line with a bend at the near end, which is the correct answer and costs
+  // almost nothing to produce. The near end is the part that gets revalidated
+  // and replanned as the world scrolls into view.
+  function _expBuildPath(client, from, dest, bias) {
+    const nodes = [];
+    let cx = from.x;
+    let cy = from.y;
+    let heading = null;
+    for (let i = 0; i < EXP_MAX_NODES; i++) {
+      const remaining = Math.hypot(dest.x - cx, dest.y - cy);
+      if (remaining <= EXP_ARRIVE_RADIUS) {
+        break;
+      }
+      const want = Math.atan2(dest.y - cy, dest.x - cx);
+      const leg = Math.min(EXP_PROBE, remaining);
+      const chosen = _expClearHeading(client, cx, cy, want, leg, heading, bias);
+      if (chosen === null) {
+        break;
+      }
+      cx = clamp(cx + Math.cos(chosen) * leg, EXP_EDGE_MARGIN, EXP_MAP - EXP_EDGE_MARGIN);
+      cy = clamp(cy + Math.sin(chosen) * leg, EXP_EDGE_MARGIN, EXP_MAP - EXP_EDGE_MARGIN);
+      heading = chosen;
+      nodes.push({
+        x: cx,
+        y: cy
+      });
+    }
+    return nodes.length === 0 ? null : nodes;
+  }
+
+  function _expMeanAngle(angles) {
+    let sx = 0, sy = 0;
+    for (let i = 0; i < angles.length; i++) {
+      sx += Math.cos(angles[i]);
+      sy += Math.sin(angles[i]);
+    }
+    if (sx === 0 && sy === 0) {
+      return angles[0] ?? 0;
+    }
+    return Math.atan2(sy, sx);
+  }
+
+  // Bot-to-bot separation.
+  //
+  // Both bots turning is how two bots end up mirroring each other forever, so
+  // per pair exactly one yields and it is decided the same way by whoever asks:
+  // the bot that committed to its destination most recently has the least
+  // invested in it and gives way, and an exact tie falls to the higher client
+  // index so the answer can never depend on iteration order.
+  //
+  // The bot that keeps its path is given the same cooldown as the one that
+  // yields. That is the hysteresis: it cannot be asked to yield to a third bot
+  // in the crowd it is currently walking out of.
+  function _expSpacingPass(owner, now) {
+    if (!owner || !owner.clients) {
+      return;
+    }
+    const shared = _expOwnerState(owner);
+    if (now - shared.spacingRan < EXP_SPACING_INTERVAL_MS) {
+      return;
+    }
+    shared.spacingRan = now;
+    // A killed bot's sector claim would otherwise sit there forever, making
+    // somewhere nobody is going look occupied to everyone else.
+    for (const bot of shared.claims.keys()) {
+      if (!owner.clients.has(bot)) {
+        _expClaim(owner, bot, null);
+      }
+    }
+    const list = [];
+    for (const bot of owner.clients) {
+      const mh = bot._ModuleHandler;
+      if (!mh || !mh._scatterActive) {
+        continue;
+      }
+      const explorer = mh.staticModules && mh.staticModules.botExplorer;
+      const state = explorer && explorer.state;
+      if (!state || !state.dest) {
+        continue;
+      }
+      const player = bot.myPlayer;
+      if (!player || !player.inGame || !player.pos) {
+        continue;
+      }
+      list.push({
+        state: state,
+        pos: player.pos.current,
+        index: owner.getClientIndex(bot)
+      });
+    }
+    const radius2 = EXP_SPACING_RADIUS * EXP_SPACING_RADIUS;
+    const moved = new Set;
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i];
+      if (moved.has(a)) {
+        continue;
+      }
+      for (let j = i + 1; j < list.length; j++) {
+        const b = list[j];
+        if (moved.has(b)) {
+          continue;
+        }
+        const dx = a.pos.x - b.pos.x;
+        const dy = a.pos.y - b.pos.y;
+        if (dx * dx + dy * dy > radius2) {
+          continue;
+        }
+        let give;
+        if (a.state.committedAt === b.state.committedAt) {
+          give = a.index > b.index ? a : b;
+        } else {
+          give = a.state.committedAt > b.state.committedAt ? a : b;
+        }
+        const keep = give === a ? b : a;
+        if (now < give.state.yieldUntil) {
+          continue;
+        }
+        give.state.wantsNewDest = true;
+        give.state.yieldAway = Math.atan2(give.pos.y - keep.pos.y, give.pos.x - keep.pos.x);
+        give.state.yieldUntil = now + EXP_SPACING_COOLDOWN_MS;
+        keep.state.yieldUntil = Math.max(keep.state.yieldUntil, now + EXP_SPACING_COOLDOWN_MS);
+        moved.add(give);
+        if (give === a) {
+          break;
+        }
+      }
+    }
+  }
+
+  class BotExplorer {
+    moduleName="botExplorer";
+    client;
+    state=null;
+    constructor(client2) {
+      this.client = client2;
+    }
+    reset() {
+      this._release();
+      this.state = null;
+    }
+    _release() {
+      try {
+        _expClaim(this.client.ownerClient, this.client, null);
+      } catch (_) {}
+    }
+    _newState(now) {
+      return {
+        dest: null,
+        destSector: null,
+        committedAt: 0,
+        legHeading: null,
+        turnBias: Math.random() < .5 ? -1 : 1,
+        path: null,
+        node: 0,
+        nextPlanAt: 0,
+        nextValidateAt: 0,
+        sentHeading: null,
+        sentAt: 0,
+        stuckTicks: 0,
+        noProgress: 0,
+        recovery: 0,
+        recoveryAt: now,
+        breakTarget: null,
+        progressAt: now,
+        progressDist: Infinity,
+        visited: new Map,
+        failed: new Map,
+        history: [],
+        yieldUntil: 0,
+        yieldAway: null,
+        wantsNewDest: false
+      };
+    }
+
+    // ── destination selection ───────────────────────────────────────────────
+    //
+    // Every sector is scored and the best one wins. Distance is the base, and
+    // the rest are the things that stop a fleet from wearing a groove between
+    // two places: a bearing away from the last leg, staleness, no sector
+    // another bot has already claimed, nothing within EXP_DEST_MIN_SEPARATION
+    // of the last few destinations, and nowhere the bot has already failed to
+    // reach. The random term is a tiebreak between near-equal sectors, not a
+    // direction — it never reaches the steering.
+    _pickDestination(now, pos, state) {
+      const owner = this.client.ownerClient;
+      const bias = state.yieldAway;
+      let best = null;
+      let bestScore = -Infinity;
+      let fallback = null;
+      let fallbackDist = -1;
+      for (let sy = 0; sy < EXP_SECTOR_COLS; sy++) {
+        for (let sx = 0; sx < EXP_SECTOR_COLS; sx++) {
+          const sector = sy * EXP_SECTOR_COLS + sx;
+          const cx = (sx + .5) * EXP_SECTOR_SIZE;
+          const cy = (sy + .5) * EXP_SECTOR_SIZE;
+          const dist = Math.hypot(cx - pos.x, cy - pos.y);
+          if (dist > fallbackDist) {
+            fallbackDist = dist;
+            fallback = {
+              sector: sector,
+              sx: sx,
+              sy: sy
+            };
+          }
+          const failedUntil = state.failed.get(sector);
+          if (failedUntil !== undefined) {
+            if (now < failedUntil) {
+              continue;
+            }
+            state.failed.delete(sector);
+          }
+          if (dist < EXP_MIN_TRAVEL) {
+            continue;
+          }
+          const heading = Math.atan2(cy - pos.y, cx - pos.x);
+          let score = dist / EXP_MAP;
+          if (state.legHeading !== null) {
+            score += getAngleDist(state.legHeading, heading) / Math.PI * .9;
+          }
+          const seen = state.visited.get(sector);
+          score += (seen === undefined ? 1 : Math.min(1, (now - seen) / EXP_SECTOR_FRESH_MS)) * .8;
+          score -= _expClaimCount(owner, this.client, sector) * 1.2;
+          for (let h = 0; h < state.history.length; h++) {
+            const past = state.history[h];
+            if (Math.hypot(past.x - cx, past.y - cy) < EXP_DEST_MIN_SEPARATION) {
+              score -= 1;
+              break;
+            }
+          }
+          if (bias !== null) {
+            score += (1 - getAngleDist(bias, heading) / Math.PI);
+          }
+          score += Math.random() * .15;
+          if (score > bestScore) {
+            bestScore = score;
+            best = {
+              sector: sector,
+              sx: sx,
+              sy: sy
+            };
+          }
+        }
+      }
+      // Nothing scored means every sector is either too close or written off,
+      // which on a 14400 map takes a bot that has failed almost everywhere.
+      // Take the farthest sector and let the failure timers expire.
+      if (best === null) {
+        best = fallback;
+        state.failed.clear();
+      }
+      if (best === null) {
+        return;
+      }
+      const spread = EXP_SECTOR_SIZE * .36;
+      let point = null;
+      for (let attempt = 0; attempt < 6; attempt++) {
+        let x = (best.sx + .5) * EXP_SECTOR_SIZE + (Math.random() * 2 - 1) * spread;
+        let y = (best.sy + .5) * EXP_SECTOR_SIZE + (Math.random() * 2 - 1) * spread;
+        // Standing in the river means being carried by the current, so it is
+        // not somewhere to aim for. Crossing it on the way is untouched.
+        if (pointInRiver({
+          y: y
+        })) {
+          y += (y < EXP_MAP / 2 ? -1 : 1) * (Config_default.riverWidth * .6 + 80);
+        }
+        x = clamp(x, EXP_EDGE_MARGIN, EXP_MAP - EXP_EDGE_MARGIN);
+        y = clamp(y, EXP_EDGE_MARGIN, EXP_MAP - EXP_EDGE_MARGIN);
+        const candidate = {
+          x: x,
+          y: y
+        };
+        // Only meaningful when the sector is already in view; further out the
+        // grid is empty and this always passes.
+        if (attempt < 5 && _expBlockerAt(this.client, x, y, 10)) {
+          continue;
+        }
+        point = candidate;
+        break;
+      }
+      if (point === null) {
+        return;
+      }
+      state.dest = point;
+      state.destSector = _expSectorAt(point.x, point.y);
+      state.committedAt = now;
+      state.legHeading = Math.atan2(point.y - pos.y, point.x - pos.x);
+      state.turnBias = Math.random() < .5 ? -1 : 1;
+      state.history.push(point);
+      if (state.history.length > EXP_DEST_HISTORY) {
+        state.history.shift();
+      }
+      state.path = null;
+      state.node = 0;
+      state.nextPlanAt = 0;
+      state.recovery = 0;
+      state.recoveryAt = now;
+      state.stuckTicks = 0;
+      state.noProgress = 0;
+      state.progressAt = now;
+      state.progressDist = Math.hypot(point.x - pos.x, point.y - pos.y);
+      state.breakTarget = null;
+      state.wantsNewDest = false;
+      state.yieldAway = null;
+      _expClaim(owner, this.client, state.destSector);
+      this.client._ModuleHandler._scatterDest = point;
+    }
+
+    // ── stuck detection ─────────────────────────────────────────────────────
+    //
+    // Two independent signals. Told to move and not moving is a collision the
+    // bot is holding against; distance to the destination not falling over a
+    // window is the slower failure where it is moving but getting nowhere —
+    // sliding along a wall, or walking a loop. Either one escalates.
+    _trackStuck(now, pos, state, mh, myPlayer) {
+      const wantsToMove = mh.move_dir !== null && mh.move_dir !== void 0;
+      const moving = (myPlayer.speed || 0) > EXP_STUCK_SPEED;
+      if (!wantsToMove || moving) {
+        state.stuckTicks = 0;
+      } else {
+        state.stuckTicks += 1;
+      }
+      if (now - state.progressAt >= EXP_PROGRESS_WINDOW_MS) {
+        const dist = Math.hypot(state.dest.x - pos.x, state.dest.y - pos.y);
+        const gained = state.progressDist - dist;
+        state.progressAt = now;
+        state.progressDist = dist;
+        if (gained < EXP_PROGRESS_MIN) {
+          state.noProgress += 1;
+        } else {
+          state.noProgress = 0;
+          state.recovery = 0;
+        }
+      }
+      const blocked = state.stuckTicks >= EXP_STUCK_TICKS || state.noProgress >= 1;
+      if (!blocked || now - state.recoveryAt < EXP_RECOVERY_STEP_MS) {
+        return;
+      }
+      // Bringing down the thing in the way is progress, so it buys the same
+      // reprieve reaching a waypoint would. The route it was blocking may be
+      // open now, so replan and stay in breaking mode for the next one along.
+      // Nothing coming down means the escalation below runs as normal, which is
+      // what bounds this: a wall the bot cannot actually break still gets given
+      // up on.
+      if (state.breakTarget !== null && !this.client.ObjectManager.objects.has(state.breakTarget)) {
+        state.breakTarget = null;
+        state.recovery = 2;
+        state.recoveryAt = now;
+        state.stuckTicks = 0;
+        state.noProgress = 0;
+        state.path = null;
+        state.nextPlanAt = 0;
+        return;
+      }
+      state.recoveryAt = now;
+      state.recovery += 1;
+      if (state.recovery < EXP_RECOVERY_GIVE_UP) {
+        // 1: replan, going round the other way this time. 2 and up: replan, and
+        // from here a breakable thing on the line of travel may be broken.
+        if (state.recovery === 1) {
+          state.turnBias = -state.turnBias;
+        }
+        state.path = null;
+        state.nextPlanAt = 0;
+        return;
+      }
+      // Out of attempts: the destination is not reachable from here. Write the
+      // sector off for a while so the next pick does not walk back into it.
+      if (state.destSector !== null) {
+        state.failed.set(state.destSector, now + EXP_SECTOR_FAIL_MS);
+      }
+      state.wantsNewDest = true;
+      state.recovery = 0;
+      state.stuckTicks = 0;
+      state.noProgress = 0;
+    }
+
+    // ── path ────────────────────────────────────────────────────────────────
+    _needsPath(now, pos, state) {
+      if (!state.path || state.node >= state.path.length) {
+        return true;
+      }
+      // Revalidating the leg in front of the bot is how the environment
+      // changing gets noticed: a wall that went up across the route, or one
+      // that came down, both show up here. isDestroyedObject is the client's
+      // own "a structure near me just vanished" flag, so a break is picked up
+      // on the next tick rather than at the next interval.
+      const om = this.client.ObjectManager;
+      if (now < state.nextValidateAt && !(om && om.isDestroyedObject())) {
+        return false;
+      }
+      state.nextValidateAt = now + EXP_VALIDATE_MS;
+      const node = state.path[state.node];
+      const dist = Math.hypot(node.x - pos.x, node.y - pos.y);
+      const angle = Math.atan2(node.y - pos.y, node.x - pos.x);
+      return !_expCorridorClear(this.client, pos.x, pos.y, angle, Math.min(dist, EXP_PROBE));
+    }
+    _plan(now, pos, state) {
+      if (now < state.nextPlanAt) {
+        return;
+      }
+      if (!_expTakePlanToken(this.client.ownerClient, now)) {
+        return;
+      }
+      state.nextPlanAt = now + EXP_REPATH_COOLDOWN_MS;
+      state.nextValidateAt = now + EXP_VALIDATE_MS;
+      state.path = _expBuildPath(this.client, pos, state.dest, state.turnBias);
+      state.node = 0;
+    }
+
+    // ── path following ──────────────────────────────────────────────────────
+    _headingFor(pos, state) {
+      if (state.path) {
+        while (state.node < state.path.length) {
+          const node = state.path[state.node];
+          if (Math.hypot(node.x - pos.x, node.y - pos.y) <= EXP_NODE_RADIUS) {
+            state.node += 1;
+            continue;
+          }
+          return Math.atan2(node.y - pos.y, node.x - pos.x);
+        }
+        state.path = null;
+      }
+      // No path yet — waiting on a plan token, or the planner found nothing.
+      // Hold the line to the destination, which is what the planner returns in
+      // open ground anyway. Waiting never means standing still.
+      return Math.atan2(state.dest.y - pos.y, state.dest.x - pos.x);
+    }
+
+    // ── breakable obstacles ─────────────────────────────────────────────────
+    //
+    // Reached only after routing around has already failed, and only for what
+    // is genuinely in the way. What decides that is the same swept-disc probe
+    // the path is built from: whatever it hits first along the heading the bot
+    // is walking is the obstacle, and it has to be destroyable and enemy-owned
+    // for breaking to be the route at all. A clan's own buildings take no
+    // damage, and a tree does not come down, so both of those are walls to go
+    // around rather than walls to hit — and nothing off to the side is touched
+    // however close the bot walks past it.
+    //
+    // The swing itself goes out through ModuleHandler exactly as BotAutoBreak
+    // does it: set the action for the tick, let UpdateAttack send it. No second
+    // attack path, and the reload gate is the client's own.
+    _routeBlockers(myPlayer, heading, reach) {
+      const om = this.client.ObjectManager;
+      const pm = this.client.PlayerManager;
+      const pos = myPlayer.pos.current;
+      const out = [];
+      om.grid2D.query(pos.x, pos.y, 2, id => {
+        const object = om.objects.get(id);
+        if (object === undefined || !(object instanceof PlayerObject)) {
+          return false;
+        }
+        if (!object.isDestroyable || object.canMoveOnTop()) {
+          return false;
+        }
+        if (!pm.isEnemyByID(object.ownerID, myPlayer)) {
+          return false;
+        }
+        const angle = pos.angle(object.pos.current);
+        if (getAngleDist(angle, heading) > EXP_BREAK_ARC) {
+          return false;
+        }
+        if (pos.distance(object.pos.current) - (object.collisionScale || 0) > reach) {
+          return false;
+        }
+        out.push({
+          obj: object,
+          angle: angle
+        });
+        return false;
+      });
+      return out;
+    }
+    _tryBreak(mh, myPlayer, heading, state) {
+      const pos = myPlayer.pos.current;
+      const ahead = _expFirstBlocker(this.client, pos.x, pos.y, heading, EXP_PROBE);
+      const breakable = ahead !== null && ahead instanceof PlayerObject && ahead.isDestroyable && !ahead.canMoveOnTop() && this.client.PlayerManager.isEnemyByID(ahead.ownerID, myPlayer);
+      if (!breakable) {
+        mh._scatterBreaking = false;
+        mh._scatterBreakTarget = null;
+        return false;
+      }
+      if (mh.moduleActive || mh.placedOnce) {
+        return false;
+      }
+      const reloading = mh.staticModules && mh.staticModules.reloading;
+      if (!reloading) {
+        return false;
+      }
+      const secondary = myPlayer.getItemByType(1);
+      const primary = myPlayer.getItemByType(0);
+      const useSecondary = secondary === 10;
+      const weaponID = useSecondary ? secondary : primary;
+      if (weaponID === null || weaponID === void 0) {
+        return false;
+      }
+      const weapon = DataHandler_default.getWeapon(weaponID);
+      if (!weapon || !reloading.isReloaded(useSecondary ? 1 : 0)) {
+        return false;
+      }
+      // Still walking up to it. Keep walking; the swing happens once it is in
+      // reach, which the steering below is already arranging.
+      const blockers = this._routeBlockers(myPlayer, heading, weapon.range ?? 0);
+      if (blockers.length === 0) {
+        return false;
+      }
+      blockers.sort((a, b) => a.obj.health - b.obj.health);
+      const aim = _expMeanAngle(blockers.map(b => b.angle));
+      mh.moduleActive = true;
+      mh.useAngle = aim;
+      mh.forceWeapon = useSecondary ? 1 : 0;
+      mh.shouldAttack = true;
+      mh._scatterBreaking = true;
+      mh._scatterBreakTarget = blockers[0].obj.id;
+      state.breakTarget = blockers[0].obj.id;
+      // UpdateAngle faces the bot at _scatterAngle while scattering, so the
+      // swing is what it should be looking at this tick.
+      mh._scatterAngle = aim;
+      return true;
+    }
+
+    // ── movement execution ──────────────────────────────────────────────────
+    //
+    // startMovement is the client's own entry point: it keeps move_dir and
+    // reverse_move_dir in step — Automill builds off the latter, which is what
+    // lets a bot mill as it roams — and runs MovementSimulation, so a step that
+    // walks into a spike is refused rather than sent.
+    //
+    // Re-sending the same heading achieves nothing (the server holds a move
+    // direction until it is changed) and re-sending a slightly different one
+    // every tick is the jitter. So a packet goes out on a real change, on the
+    // keepalive, or when the simulation refused the last one.
+    _steer(mh, heading, now, state) {
+      const changed = state.sentHeading === null || getAngleDist(state.sentHeading, heading) > EXP_HEADING_DEADBAND;
+      if (!changed && now - state.sentAt < EXP_MOVE_KEEPALIVE_MS) {
+        return;
+      }
+      state.sentHeading = heading;
+      state.sentAt = now;
+      if (mh.startMovement(heading) === false) {
+        // Refused by the collision simulation. Retry next tick instead of
+        // sitting on the keepalive.
+        state.sentHeading = null;
+      }
+    }
+
+    postTick() {
+      const client = this.client;
+      const mh = client._ModuleHandler;
+      const myPlayer = client.myPlayer;
+      if (!mh || !myPlayer || client.isOwner) {
+        return;
+      }
+      const now = Date.now();
+
+      // A bot in a duel is driven by Movement's own 1v1 branch, and that branch
+      // sits behind Movement.postTick's `_scatterActive` early return — so this
+      // has to give the flag up rather than merely decline to steer, or the
+      // duelling bot would stand still while random movement is switched on.
+      if (window._gbot1v1BotID !== null && client === window._gbot1v1BotID) {
+        if (mh._scatterActive || mh._scatterReturning) {
+          mh._scatterActive = false;
+          mh._scatterReturning = false;
+          mh._scatterBreaking = false;
+          mh._scatterBreakTarget = null;
+          mh._scatterAngle = void 0;
+          this._release();
+          this.state = null;
+        }
+        return;
+      }
+
+      // Reconcile with the toggle every tick. A bot that connected after random
+      // movement was switched on joins in here, and one that was mid-return
+      // when it was switched back on stops returning.
+      if (Settings_default._botsScattered) {
+        if (!mh._scatterActive) {
+          mh._scatterActive = true;
+          mh._scatterReturning = false;
+          mh._scatterBreaking = false;
+          mh._scatterBreakTarget = null;
+          this.state = null;
+        }
+      } else if (mh._scatterActive) {
+        mh._scatterActive = false;
+        mh._scatterReturning = true;
+        mh._scatterReturnDeadline = now + SCATTER_RETURN_TIMEOUT_MS;
+      }
+      if (!mh._scatterActive && !mh._scatterReturning) {
+        if (this.state !== null) {
+          this._release();
+          this.state = null;
+          mh._scatterAngle = void 0;
+        }
+        return;
+      }
+      if (!myPlayer.inGame || !myPlayer.pos) {
+        return;
+      }
+      if (this.state === null) {
+        this.state = this._newState(now);
+      }
+      const state = this.state;
+      const pos = myPlayer.pos.current;
+
+      // Anything with a stronger claim on where this bot walks keeps it. The
+      // same set Movement.postTick stands aside for.
+      if (Settings_default._botsFrozen || mh._autoFarmActive) {
+        return;
+      }
+      if (mh.staticModules.botRangedAttack && mh.staticModules.botRangedAttack.active) {
+        return;
+      }
+      {
+        const cleanup = window._gbot1v1WinCleanup;
+        if (cleanup && cleanup.active && cleanup.bot === client) {
+          return;
+        }
+      }
+      try {
+        if (typeof _isControlled === "function" && !_isControlled(client)) {
+          if (state.sentHeading !== null) {
+            state.sentHeading = null;
+            mh.startMovement(null);
+          }
+          return;
+        }
+      } catch (_) {}
+
+      if (mh._scatterReturning) {
+        const owner = client.ownerClient;
+        const ownerPlayer = owner && owner.myPlayer;
+        const ownerPos = ownerPlayer && ownerPlayer.pos && ownerPlayer.pos.current;
+        if (now >= (mh._scatterReturnDeadline || 0) || ownerPos && pos.distance(ownerPos) < 120) {
+          // Home or not, hand it back to normal movement — Movement.postTick
+          // only steps aside while one of these two flags is set.
+          mh._scatterReturning = false;
+          mh._scatterBreaking = false;
+          mh._scatterBreakTarget = null;
+          mh._scatterAngle = void 0;
+          this._release();
+          this.state = null;
+          mh.startMovement(null);
+          return;
+        }
+        if (ownerPos) {
+          const heading = Math.atan2(ownerPos.y - pos.y, ownerPos.x - pos.x);
+          mh._scatterAngle = heading;
+          this._steer(mh, heading, now, state);
+        }
+        return;
+      }
+
+      _expSpacingPass(client.ownerClient, now);
+
+      if (state.dest !== null) {
+        if (Math.hypot(state.dest.x - pos.x, state.dest.y - pos.y) <= EXP_ARRIVE_RADIUS) {
+          state.visited.set(state.destSector, now);
+          state.dest = null;
+        } else if (now - state.committedAt > EXP_DEST_TIMEOUT_MS) {
+          state.dest = null;
+        }
+      }
+      if (state.dest === null || state.wantsNewDest) {
+        this._pickDestination(now, pos, state);
+      }
+      if (state.dest === null) {
+        return;
+      }
+
+      // Sectors are marked visited on the way through as well as on arrival, so
+      // a bot that crosses a corner of the map does not treat it as unexplored
+      // ten minutes later.
+      state.visited.set(_expSectorAt(pos.x, pos.y), now);
+
+      this._trackStuck(now, pos, state, mh, myPlayer);
+      if (state.wantsNewDest) {
+        this._pickDestination(now, pos, state);
+        if (state.dest === null) {
+          return;
+        }
+      }
+      if (this._needsPath(now, pos, state)) {
+        this._plan(now, pos, state);
+      }
+      const heading = this._headingFor(pos, state);
+      mh._scatterAngle = heading;
+      if (state.recovery >= 2) {
+        this._tryBreak(mh, myPlayer, heading, state);
+      } else {
+        mh._scatterBreaking = false;
+        mh._scatterBreakTarget = null;
+      }
+      this._steer(mh, heading, now, state);
     }
   }
 
@@ -14950,59 +16833,44 @@ window.grbtp = 35;
       }
       const item = Items[myPlayer.getItemByType(5)];
       const distance = myPlayer.getItemPlaceScale(item.id);
-      const offset = Math.asin((2 * item.scale + 9e-13) / (2 * distance)) * 2;
+      // Space the trio by solving for the centre-to-centre gap the placement
+      // check actually demands, plus real clearance.
+      //
+      // This used to be asin((2 * scale + 9e-13) / (2 * distance)) * 2, which
+      // solves for a gap of exactly 2 * scale — and canPlaceItem rejects on
+      // `distance < scale + neighbour`, so that lands the two outer mills on
+      // the reject line itself. The 9e-13 was meant to lift them off it, but at
+      // this magnitude a double keeps under 1e-12 of it: the measured clearance
+      // was 8.8e-13 units. Whether the outer two survived came down to rounding,
+      // which is why the trio kept coming out as one or two mills.
+      //
+      // Upgrading made it worse for a second reason. The ring radius is
+      // playerScale + scale + placeOffset, so it steps 85 -> 87 when the mill
+      // goes 45 -> 47, and the new trio no longer sits on the same circle as
+      // the mills already on the ground. The margin below covers that overlap
+      // too, so an upgraded mill still fits beside the older ones.
+      const spacing = 2 * item.scale + AUTOMILL_ANGLE_MARGIN;
+      const offset = Math.asin(clamp(spacing / (2 * distance), -1, 1)) * 2;
       const leftAngle = angle - offset;
       const rightAngle = angle + offset;
-      // All three, or none — Glotus's rule, and the reason the wall comes out
-      // straight.
-      //
-      // This used to gate on the centre and then place whichever of the three
-      // fit, which is novastorm's shape (13805) and was defended here on the
-      // grounds that requiring all three means one rock behind you cancels the
-      // row. That is true and it is the smaller problem. Placing a partial row
-      // is what produces a wall of one mill here, two there and three
-      // somewhere else — and each straggler becomes a blocker for the next
-      // tick's trio, so the raggedness compounds. Measured over 60 ticks of
-      // walking past scattered rocks, 60.7% of the ticks that placed anything
-      // placed a partial row (harness/automill-shape.js).
-      //
-      // Losing the row to a rock costs almost nothing by comparison: automill
-      // runs every tick, and one tick later you are ~25 units further on, where
-      // the trio usually fits. Fewer mills, all of them in straight rows.
-      //
+      // Novastorm gates the trio on the centre mill being placeable, then tests
+      // each of the three on its own and places the ones that fit. Requiring all
+      // three, as this did, meant one rock behind you cancelled the whole thing.
       // The offset stays RYN's exact solve rather than novastorm's
-      // `toRad(scale + scale / 2)`, which is a degrees-for-radians
-      // approximation that only lands near the right answer for a windmill's
-      // scale. Glotus uses the same exact solve.
-      if (!this.canPlaceWindmill(angle) ||
-          !this.canPlaceWindmill(leftAngle) ||
-          !this.canPlaceWindmill(rightAngle)) {
+      // `toRad(scale + scale / 2)`, which is a degrees-for-radians approximation
+      // that only lands near the right answer for a windmill's scale.
+      if (!this.canPlaceWindmill(angle)) {
         return;
       }
-      // The budget is checked for the whole trio rather than per mill: sending
-      // two of three because the packet counter ran out is the same ragged row
-      // by another route.
       const budget = ModuleHandler.packetLimit - ModuleHandler.packetCount;
-      if (budget < 3 * AUTOMILL_PLACE_COST) {
-        return;
+      let spend = Math.floor(budget / AUTOMILL_PLACE_COST);
+      for (const a of [ angle, leftAngle, rightAngle ]) {
+        if (spend <= 0) break;
+        if (!myPlayer.canPlace(5)) break;
+        if (!this.canPlaceWindmill(a)) continue;
+        this.placeWindmill(a);
+        spend--;
       }
-      this.placeWindmill(angle);
-      this.placeWindmill(leftAngle);
-      this.placeWindmill(rightAngle);
-      this._report(3);
-    }
-
-    // Rows and mills SENT, which is a different number from mills that appear.
-    // If the ground shows fewer mills than this counted, the client and the
-    // server disagree about what was legal and the loss is on the wire; if it
-    // matches, the client is placing exactly what you see. Without the counter
-    // those two are indistinguishable from the outside, which is how this
-    // ended up being guessed at four times.
-    _report(n) {
-      if (!this.client.isOwner) return;
-      this._rows = (this._rows || 0) + 1;
-      this._mills = (this._mills || 0) + n;
-      GameUI_default.updateAutomill(this._rows + " rows, " + this._mills + " mills sent");
     }
   }
   const Automill_default = Automill;
@@ -15478,7 +17346,7 @@ window.grbtp = 35;
       }
       if (this._pendingBranding && Date.now() >= this._brandingTimer) {
         this._pendingBranding = false;
-        PacketManager2.chat("#Ryn Client");
+        PacketManager2.chat("#Ryn Type 2");
       }
     }
   }
@@ -15681,6 +17549,94 @@ window.grbtp = 35;
       }
       for (const angle2 of angles) {
         ModuleHandler.requestPlace(4, angle2, "spikeTrap");
+      }
+    }
+  }
+  // Glotus's Velocity Tick, ported whole.
+  //
+  // Turret plus diamond polearm landing in a single tick. It runs over two
+  // ticks: the first equips turret gear and walks into the enemy, the second
+  // swings the polearm as the turret shot lands. The band is the point of it —
+  // 220-245 is the gap where the walk-in closes to polearm range on exactly the
+  // tick the turret fires, so both arrive together.
+  //
+  // The setup tick only commits when the enemy cannot answer: either their
+  // melee is one tick off being reloaded (atExact) or they are mid hat-swap
+  // into something that is not soldier or an emp (isValidHat). Otherwise the
+  // walk-in just feeds them a free hit.
+  //
+  // Glotus also paints a red circle on the target while the module is armed.
+  // Not carried across, as requested — the module is the behaviour, the circle
+  // is only a debug overlay, and nothing else reads it.
+  class VelocityTick {
+    moduleName="velocityTick";
+    client;
+    nearestTarget=null;
+    target=null;
+    minKB=220;
+    maxKB=245;
+    constructor(client2) {
+      this.client = client2;
+    }
+    // Soldier and emp both blunt the tick, so a swap into either means they saw
+    // it coming. Anything else is a hat they cannot defend with.
+    isValidHat(hatID) {
+      return hatID !== null && hatID !== 6 && hatID !== 22;
+    }
+    postTick() {
+      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      this.target = null;
+      if (ModuleHandler.moduleActive || !Settings_default._velocityTick || ModuleHandler.moveTo !== "disable" || EnemyManager2.shouldIgnoreModule()) {
+        this.nearestTarget = null;
+        return;
+      }
+      const {reloading: reloading} = ModuleHandler.staticModules;
+      const nearestEnemy = EnemyManager2.nearestEnemy;
+      const primary = myPlayer.getItemByType(0);
+      const isPolearm = primary === 5;
+      const isDiamond = myPlayer.getWeaponVariant(primary).current >= 2;
+      const isReloadedPrimary = reloading.isReloaded(0, 1);
+      const isReloadedTurret = reloading.isReloaded(2);
+
+      // Second tick: the turret went off last tick from the hat swap below, so
+      // swing now and let the two land together.
+      if (this.nearestTarget !== null) {
+        const pos12 = myPlayer.pos.current;
+        const pos22 = this.nearestTarget.pos.current;
+        const angle2 = pos12.angle(pos22);
+        ModuleHandler.moduleActive = true;
+        ModuleHandler.useAngle = angle2;
+        ModuleHandler.forceHat = 7;
+        ModuleHandler.forceWeapon = 0;
+        ModuleHandler.shouldAttack = true;
+        ModuleHandler.moveTo = angle2;
+        this.nearestTarget = null;
+        return;
+      }
+      if (nearestEnemy === null || !isPolearm || !isDiamond || !isReloadedPrimary || !isReloadedTurret) {
+        return;
+      }
+      this.target = nearestEnemy;
+      const pos1 = myPlayer.pos.current;
+      const pos2 = nearestEnemy.pos.future;
+      const dist1 = pos1.distance(pos2);
+      const angle = pos1.angle(pos2);
+      const {current: current} = nearestEnemy.weapon;
+      const type = DataHandler_default.getWeapon(current).type;
+      const almostReloaded = DataHandler_default.isMelee(current) && nearestEnemy.atExact(type, 1);
+      const detectFutureHat = this.isValidHat(nearestEnemy.futureHat);
+      const canSend = almostReloaded || detectFutureHat;
+      const inAttackRange = inRange(dist1, this.minKB, this.maxKB);
+
+      // First tick: turret gear on, start closing. The shot leaves this tick.
+      if (inAttackRange) {
+        if (canSend) {
+          ModuleHandler.moduleActive = true;
+          ModuleHandler.forceHat = 53;
+          ModuleHandler.moveTo = angle;
+          this.nearestTarget = nearestEnemy;
+          this.client.StatsManager.velocityTickTimes = 1;
+        }
       }
     }
   }
@@ -16298,93 +18254,6 @@ window.grbtp = 35;
       ModuleHandler.shouldAttack = true;
     }
   }
-  // --------------------------------------------------------------------------
-  // Knockback tick — Glotus 5.5.5's KnockbackTick, whole.
-  //
-  // Hit them so the knockback carries them onto a spike. TrapKB below is the
-  // same idea aimed at traps; this is the spike half, and it was missing.
-  //
-  // Everything it reads, this client already worked out and then threw away.
-  // EnemyManager derives nearestEnemySpikeCollider and spikeCollider at 2923 —
-  // the enemy standing on the far side of a spike from you, and the spike they
-  // would be pushed into — in code that is byte for byte Glotus's, and before
-  // this nothing read either field. The pick is not "nearest spike": it keeps
-  // the pair whose angle from you to the spike best lines up with the angle
-  // from them to the spike, which is the one a hit actually drives them onto.
-  //
-  //     const intersecting = angleDistance <= offset;      // spike is behind them
-  //     const overlapping  = distanceToTarget <= distanceToSpike1;   // they are nearer than it
-  //     const inRange2     = KBDistance !== 0 && target.collidingObject(object, KBDistance);
-  //
-  // The reach test is the knockback budget, not a range: a primary alone moves
-  // them `weapon.knockback`, and the turret adds about 60 more. If the gap to
-  // the spike fits inside the primary's own knockback the swing is enough; if
-  // it only fits once the turret is counted, the turret goes out on the tick
-  // after, which is what useTurret latches.
-  // --------------------------------------------------------------------------
-  const KNOCKBACK_TICK_TURRET_KB = 60;
-  class KnockbackTick {
-    moduleName="knockbackTick";
-    client;
-    useTurret=false;
-    constructor(client2) {
-      this.client = client2;
-    }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-      if (ModuleHandler.moduleActive || !Settings_default._knockbackTick || EnemyManager2.shouldIgnoreModule()) {
-        this.useTurret = false;
-        return;
-      }
-      const nearestEnemySpikeCollider = EnemyManager2.nearestEnemySpikeCollider;
-      const spikeCollider = EnemyManager2.spikeCollider;
-      const reloading = ModuleHandler.staticModules.reloading;
-      const primary = myPlayer.getItemByType(0);
-      const primaryReloaded = reloading.isReloaded(0);
-      const turretReloaded = ModuleHandler.hasStoreItem(0, 53) && reloading.isReloaded(2);
-
-      // The follow-up: the primary alone could not cover the gap, so the turret
-      // shot goes out on its own tick to finish carrying them in.
-      if (this.useTurret) {
-        this.useTurret = false;
-        if (turretReloaded) {
-          ModuleHandler.moduleActive = true;
-          ModuleHandler.forceHat = 53;
-        }
-        return;
-      }
-
-      if (nearestEnemySpikeCollider !== null && !nearestEnemySpikeCollider.isTrapped && spikeCollider !== null && primaryReloaded) {
-        const pos1 = myPlayer.pos.current;
-        const pos2 = nearestEnemySpikeCollider.pos.current;
-        const pos3 = spikeCollider.pos.current;
-        const angleToEnemy = pos1.angle(pos2);
-        const distanceToSpike2 = pos2.distance(pos3);
-        const turretKnockback = KNOCKBACK_TICK_TURRET_KB;
-        const primaryKnockback = DataHandler_default.getWeapon(primary).knockback;
-        const knockback = primaryKnockback + turretKnockback;
-        const collisionScale = spikeCollider.collisionScale + nearestEnemySpikeCollider.collisionScale;
-        const collisionRangeTurret = collisionScale + knockback;
-        const isPrimaryEnough = distanceToSpike2 <= collisionScale + primaryKnockback;
-        if (distanceToSpike2 <= collisionRangeTurret) {
-          const spear = DataHandler_default.getWeapon(primary);
-          const hitRange = spear.range + nearestEnemySpikeCollider.hitScale;
-          if (myPlayer.collidingSimple(nearestEnemySpikeCollider, hitRange)) {
-            ModuleHandler.moduleActive = true;
-            ModuleHandler.useAngle = angleToEnemy;
-            ModuleHandler.forceHat = 7;
-            ModuleHandler.forceWeapon = 0;
-            ModuleHandler.shouldAttack = true;
-            if (!isPrimaryEnough) {
-              this.useTurret = true;
-            }
-            this.client.StatsManager.knockbackTickTimes = 1;
-            EnemyManager2.attemptSpikePlacement();
-          }
-        }
-      }
-    }
-  }
   class TrapKB {
     moduleName="trapKB";
     client;
@@ -16419,154 +18288,44 @@ window.grbtp = 35;
       ModuleHandler.shouldAttack = true;
     }
   }
-  // --------------------------------------------------------------------------
-  // Anti spike push — novastorm's rule and nothing else.
-  //
-  // isNearestEnemyPushPlayer(), Novastorm_1.41.4.user.js:14227 and, identically,
-  // X_Precision_2.0.user.js:13344:
-  //
-  //     if (!nearestEnemy) return false;
-  //     if (visibleObjects.filter((o) => o.id == 15 && dist(nearestEnemy, o) <= 50
-  //         && (o.owner.sid == myPlayer.sid || isAlly(o.owner.sid)))[0]) return false;
-  //     if ((nearestTrap && spikeDmgCount < 1)
-  //         && (myPlayer.weapons[0] == 6 || myPlayer.weapons[0] == 7)) {
-  //         const nearestSpike = enemySpikes.sort((a, b) =>
-  //             dist(myPlayer, a) - dist(myPlayer, b))[0];
-  //         if ((nearestTrap && nearestSpike)
-  //             && dist(nearestSpike, nearestTrap) <= (35 + nearestSpike.scale + nearestTrap.scale)
-  //             && dist(myPlayer.x2, myPlayer.y2, nearestEnemy.xVel, nearestEnemy.yVel)
-  //                <= (35 * 1.8 + items.weapons[myPlayer.weapons[0]].range)) {
-  //             antiPushAngle = atan2(nearestEnemy.y2 - myPlayer.y2,
-  //                                   nearestEnemy.x2 - myPlayer.x2);
-  //             return true;
-  //         }
-  //     }
-  //     return false;
-  //
-  // The reading: you are standing in their trap, an enemy spike sits against
-  // that trap, and you hold a bat or daggers — the two knockback primaries. One
-  // push and you are on the spike, so hit THEM first and the knockback moves
-  // them out of pushing range before they can line it up.
-  //
-  // And what being true buys, in novastorm's own tick: predictWeapon becomes
-  // weapons[0] (15237), getAttackDir() returns antiPushAngle ahead of autoBreak
-  // and everything under it (10287), the swing is held down (needAutoGather),
-  // and the hat becomes 7 rather than 40 while breaking.
-  //
-  // What was here instead tested a different geometry and a different weapon
-  // state: a spike within 25 of ME rather than one against the trap
-  // (EnemyManager.pushingOnSpike), collidingSpike rather than spikeDmgCount,
-  // the enemy's own trapped flag rather than whose trap they stand in, the
-  // enemy's hitScale rather than mine, turret gear rather than hat 7, and it
-  // waited on the primary's reload before committing. All of it is gone.
-  //
-  // Three quantities novastorm reads off its own globals are built from this
-  // client's world instead, and each is the same quantity:
-  //   · spikeDmgCount — kept below, from "damage landed this tick" and "a spike
-  //     is touching me", which is what novastorm's spikeDamages amounts to
-  //   · enemySpikes   — itemGroup 2 is exactly novastorm's `id > 5 && id < 10`
-  //   · xVel/yVel     — pos.future is current + (current - previous), which is
-  //     literally novastorm's `x2 * 2 - lastX`
-  // --------------------------------------------------------------------------
   class AntiSpikePush {
     moduleName="antiSpikePush";
     client;
-    _spikeDmgCount=0;
     constructor(client2) {
       this.client = client2;
     }
-    // novastorm 13911: spikeDamages non-empty this tick raises the count,
-    // empty resets it to zero.
-    _trackSpikeDamage(myPlayer, EnemyManager2) {
-      const tookDamage = myPlayer.tickCount - myPlayer.damageTick <= 0;
-      if (tookDamage && EnemyManager2.collidingSpike) {
-        this._spikeDmgCount += 1;
-      } else {
-        this._spikeDmgCount = 0;
-      }
-    }
-    // novastorm 13536: every visible spike that is neither mine nor an ally's,
-    // nearest to me first.
-    _nearestEnemySpike(myPlayer, ObjectManager2, PlayerManager2) {
-      const pos = myPlayer.pos.current;
-      const cells = Math.ceil(200 / ObjectManager2.grid2D.cellSize) + 1;
-      let best = null;
-      let bestDistance = Infinity;
-      ObjectManager2.grid2D.query(pos.x, pos.y, cells, id => {
-        const object = ObjectManager2.objects.get(id);
-        if (!object || !(object instanceof PlayerObject)) return false;
-        if (object.itemGroup !== 2) return false;
-        if (!PlayerManager2.isEnemyByID(object.ownerID, myPlayer)) return false;
-        const distance = pos.distance(object.pos.current);
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          best = object;
-        }
-        return false;
-      });
-      return best;
-    }
     postTick() {
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2} = this.client;
-      if (!myPlayer) {
-        return;
-      }
-      // Kept every tick, whatever the toggle says, or the count would freeze at
-      // whatever it held when the module was last allowed to run.
-      this._trackSpikeDamage(myPlayer, EnemyManager2);
+      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
       if (!Settings_default._antiSpikePush || ModuleHandler.moduleActive) {
         return;
       }
       const nearestEnemy = EnemyManager2.nearestEnemy;
-      if (nearestEnemy === null) {
+      if (nearestEnemy === null || !myPlayer.isTrapped || !EnemyManager2.pushingOnSpike || EnemyManager2.collidingSpike || nearestEnemy.isTrapped) {
         return;
       }
-
-      // novastorm's first line: a trap of ours on them means they are the one
-      // pinned, and being pushed is not the danger. trappedIn is the trap they
-      // are standing in, if any.
-      const trappedIn = nearestEnemy.trappedIn;
-      if (trappedIn && !PlayerManager2.isEnemyByID(trappedIn.ownerID, myPlayer)) {
-        return;
-      }
-
-      // (nearestTrap && spikeDmgCount < 1)
-      const nearestTrap = EnemyManager2.nearestTrap;
-      if (nearestTrap === null || this._spikeDmgCount >= 1) {
-        return;
-      }
-
-      // (weapons[0] == 6 || weapons[0] == 7) — bat or daggers
       const primary = myPlayer.getItemByType(0);
-      if (primary !== 6 && primary !== 7) {
+      const isDaggers = primary === 7 || primary === 6;
+      if (!isDaggers) {
         return;
       }
-
-      const nearestSpike = this._nearestEnemySpike(myPlayer, ObjectManager2, PlayerManager2);
-      if (nearestSpike === null) {
+      const primaryRange = DataHandler_default.getWeapon(primary).range + nearestEnemy.hitScale;
+      if (!myPlayer.collidingSimple(nearestEnemy, primaryRange)) {
         return;
       }
-
-      // dist(nearestSpike, nearestTrap) <= 35 + nearestSpike.scale + nearestTrap.scale
-      if (nearestSpike.pos.current.distance(nearestTrap.pos.current)
-          > 35 + nearestSpike.scale + nearestTrap.scale) {
-        return;
-      }
-
-      // dist(me, where they will be) <= 35 * 1.8 + my primary's range
-      const range = DataHandler_default.getWeapon(primary).range;
-      if (myPlayer.pos.current.distance(nearestEnemy.pos.future) > myPlayer.hitScale + range) {
-        return;
-      }
-
-      // antiPushAngle, and the three things novastorm does with it.
-      ModuleHandler.moduleActive = true;
-      ModuleHandler.forceWeapon = 0;
-      ModuleHandler.useAngle = myPlayer.pos.current.angle(nearestEnemy.pos.current);
-      ModuleHandler.shouldAttack = true;
+      const pos1 = myPlayer.pos.current;
+      const pos2 = nearestEnemy.pos.current;
+      const angle = pos1.angle(pos2);
       const {reloading: reloading} = ModuleHandler.staticModules;
-      if (reloading.isReloaded(0) && ModuleHandler.hasStoreItem(0, 7)) {
-        ModuleHandler.forceHat = 7;
+      const primaryReloaded = reloading.isReloaded(0);
+      const turretReloaded = ModuleHandler.hasStoreItem(0, 53) && reloading.isReloaded(2);
+      ModuleHandler.forceWeapon = 0;
+      if (primaryReloaded) {
+        ModuleHandler.moduleActive = true;
+        ModuleHandler.useAngle = angle;
+        if (turretReloaded) {
+          ModuleHandler.forceHat = 53;
+        }
+        ModuleHandler.shouldAttack = true;
       }
     }
   }
@@ -16617,7 +18376,6 @@ window.grbtp = 35;
     sentHatEquip;
     sentAccEquip;
     needToHeal;
-    didAntiInsta;
     placedOnce;
     healedOnce;
     totalPlaces;
@@ -16660,11 +18418,11 @@ window.grbtp = 35;
         defaultAcc: new DefaultAcc(client2),
         autoSync: new AutoSync(client2),
         adaptiveGearSwitching: new AdaptiveGearSwitching_default(client2),
-        antiSync: new AntiSync_default(client2),
         spikeSyncHammer: new SpikeSyncHammer(client2),
         spikeSync: new SpikeSync(client2),
         spikeTrap: new SpikeTrap(client2),
         teammateSpikeTrap: new TeammateSpikeTrap(client2),
+        velocityTick: new VelocityTick(client2),
         turretSync: new TurretSync(client2),
         toolHammerSpearInsta: new ToolHammerSpearInsta(client2),
         swordKatanaInsta: new SwordKatanaInsta(client2),
@@ -16691,15 +18449,12 @@ window.grbtp = 35;
         placementDefense: new PlacementDefense(client2),
         dashMovement: new DashMovement(client2),
         trapAnimal: new TrapAnimal(client2),
-        antiTrapProtect: new AntiTrapProtect(client2),
-        antiTrapStar: new AntiTrapStar(client2),
-        knockbackTick: new KnockbackTick(client2),
         antiRetrap: new AntiRetrap(client2),
         autoPush: new AutoPush_default(client2),
-        velocityTick: new VelocityTick(client2),
         autoPlay: new AutoPlay_default(client2),
         trapTick: new TrapTick_default(client2),
         botAutoBreak: new BotAutoBreak(client2),
+        botExplorer: new BotExplorer(client2),
         botRangedAttack: new BotRangedAttack(client2),
         autoPlacer: new AutoPlacer_default(client2),
         placementEngine: new RynPlacementEngine_default(client2),
@@ -16717,9 +18472,11 @@ window.grbtp = 35;
       };
       // botRangedAttack claims the tick before movement so it can take over
       // where the bot walks; botAutoBreak runs after, and only fires when the
-      // movement it just asked for did not happen.
-      this.botModules = [ this.staticModules.tempData, this.staticModules.clanJoiner, this.staticModules.botRangedAttack, this.staticModules.movement, this.staticModules.botAutoBreak ];
-      this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.spikeSyncHammer, this.staticModules.antiSync, this.staticModules.adaptiveGearSwitching, this.staticModules.spikeSync, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.autoBreak, this.staticModules.autoSteal, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.antiTrapProtect, this.staticModules.antiTrapStar, this.staticModules.knockbackTick, this.staticModules.antiRetrap, this.staticModules.autoPush, this.staticModules.velocityTick, this.staticModules.autoPlay, this.staticModules.autoPlacer, this.staticModules.placementEngine, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule, this.staticModules.rynLink ];
+      // movement it just asked for did not happen. botExplorer sits between
+      // them: it drives a scattered bot's movement, and Movement.postTick steps
+      // aside for it on the same _scatterActive flag it always has.
+      this.botModules = [ this.staticModules.tempData, this.staticModules.clanJoiner, this.staticModules.botRangedAttack, this.staticModules.botExplorer, this.staticModules.movement, this.staticModules.botAutoBreak ];
+      this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.spikeSyncHammer, this.staticModules.adaptiveGearSwitching, this.staticModules.spikeSync, this.staticModules.velocityTick, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.autoBreak, this.staticModules.autoSteal, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.antiRetrap, this.staticModules.autoPush, this.staticModules.autoPlay, this.staticModules.autoPlacer, this.staticModules.placementEngine, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule, this.staticModules.rynLink ];
       this.reset();
     }
     movementReset() {
@@ -16740,7 +18497,6 @@ window.grbtp = 35;
       this.sentHatEquip = false;
       this.sentAccEquip = false;
       this.needToHeal = false;
-      this.didAntiInsta = false;
       this.placedOnce = false;
       this.healedOnce = false;
       this.totalPlaces = 0;
@@ -16999,77 +18755,21 @@ window.grbtp = 35;
       this.stopAttack(angle);
       this.whichWeapon(this._getPredictWeapon());
     }
-    // One press of food. Novastorm's equivalent is place(myPlayer.items[0]) at
-    // 12747 — select, swing, put the weapon back — and it is unconditional.
-    // These are the same three sends, behind the two questions the game's own
-    // shame rule makes worth asking. Every automatic food press in the client
-    // comes through here, so this is the only place they have to be asked.
+    // novastorm's heal is a bare send — `place(myPlayer.items[0], null)` — with
+    // no budget test and no shame handling of its own. The shame rule is served
+    // entirely by the caller's `(tick - damageTick) > 0`, which is already two
+    // ticks clear of the 120ms window.
     //
-    // The rule, which X_Precision ships verbatim from the server at 18516:
-    //
-    //     if (this.hitTime) {
-    //         var timeSinceHit = Date.now() - this.hitTime;
-    //         this.hitTime = 0;                 // only the FIRST food after a
-    //         if (timeSinceHit <= 120) {        // hit is ever judged
-    //             this.shameCount++;
-    //             if (this.shameCount >= 8) { this.shameTimer = 30000; ... }
-    //         } else { this.shameCount -= 2; }
-    //     }
-    //     if (this.shameTimer <= 0) worked = item.consume(this);   // <- AFTER
+    // What stood here instead: a 130ms wall-clock guard that parked apples in a
+    // queue and drained them later, plus a `budget < 3` refusal. Both are gone.
+    // The queue delayed the emergency heal — the one case where eating +1 shame
+    // is the correct trade — and the refusal silently dropped apples on exactly
+    // the busy ticks that produce the damage worth healing.
     heal() {
-      const {myPlayer: myPlayer} = this.client;
-      // The 30 second lock refuses the food outright — consume is only reached
-      // when shameTimer <= 0 — but the arithmetic above that refusal still
-      // runs, so a press sent inside the lock cannot feed you and can take the
-      // count back to 8 and re-arm another 30 seconds. Worse, nothing lands, so
-      // tempHealth never rises, the heal rule asks again next tick, and it asks
-      // for thirty seconds: that is the Q that never lets go.
-      if (myPlayer && myPlayer.shameActive) {
-        return;
-      }
-      if (!this._foodIsShameSafe()) {
-        return;
-      }
       this.selectItem(2);
       this.attack(null, 1);
       this.whichWeapon(this._getPredictWeapon());
     }
-    // Only the first food after each hit is judged, and inside 120ms of that
-    // hit it counts UP by one instead of down by two. The press leaves now and
-    // lands half a round trip later; the hit happened half a round trip before
-    // this client saw it, so what the server measures is
-    // (now - receivedDamage) + pong.
-    //
-    // Waiting for that window is worth exactly one tick. Under damage every
-    // tick it never opens — receivedDamage is refreshed faster than the window
-    // closes — and a guard that waits for it forever is a guard that stops you
-    // eating at all. So: hold once, then go regardless.
-    //
-    // The answer is decided once per tick and remembered, so that a heal rule
-    // asking for four presses gets four or none, never one.
-    _foodIsShameSafe() {
-      if (this._foodFreeTick === this.tickCount) {
-        return true;
-      }
-      if (this._foodHeldTick === this.tickCount) {
-        return false;
-      }
-      const {myPlayer: myPlayer, SocketManager: SocketManager2} = this.client;
-      const hitAt = myPlayer && myPlayer.receivedDamage;
-      // receivedDamage is cleared the moment health is seen to rise, which is
-      // the same moment the server clears hitTime — so a press that follows one
-      // that already landed is never held.
-      const lands = !hitAt ? Infinity :
-        Date.now() - hitAt + (SocketManager2 ? SocketManager2.pong : 0);
-      if (lands >= SHAME_SAFE_WINDOW || this._foodHeldTick === this.tickCount - 1) {
-        this._foodFreeTick = this.tickCount;
-        return true;
-      }
-      this._foodHeldTick = this.tickCount;
-      return false;
-    }
-    _foodHeldTick=-1;
-    _foodFreeTick=-1;
     circleOffset=0;
     targetSpeed=65;
     activeModule=null;
@@ -17099,7 +18799,6 @@ window.grbtp = 35;
       this.sentAngle = 0;
       this.sentHatEquip = false;
       this.sentAccEquip = false;
-      this.didAntiInsta = false;
       this.placedOnce = false;
       this.healedOnce = false;
       this.totalPlaces = 0;
@@ -17165,7 +18864,6 @@ window.grbtp = 35;
       this.attackingState = this.attacking;
       if (isOwner) {
         this.client.InputHandler.postTick();
-        GameUI_default.updateFastQ(this.didAntiInsta);
         GameUI_default.updatePlaces(this.totalPlaces);
         GameUI_default.updateActiveModule(this.activeModule + ", " + this.tickCount);
         GameUI_default.updateEquipHat(`${this.store[0].last},  ${this.shouldEquipSoldier}`);
@@ -17236,6 +18934,9 @@ window.grbtp = 35;
   const PlayerClient_default = PlayerClient;
   const UI = new class {
     frame;
+    // Fleet slot numbers, handed out in order and never reused while the page
+    // is open, so "bot 3" means one bot.
+    botSequence=0;
     activeHotkeyInput=null;
     activeInput=null;
     toggleTimeout;
@@ -17249,7 +18950,24 @@ window.grbtp = 35;
       return this.activeHotkeyInput || this.activeInput;
     }
     getFrameContent() {
-      return `\n            <!DOCTYPE html>\n            <style>${styles_default}</style>\n            <div id="menu-container" class="transparent">\n                <div id="menu-wrapper">\n                    ${Header_default}\n\n                    <main>\n                        ${Navbar_default}\n                        \n                        <div id="page-container">\n                            ${Keybinds_default}\n                            ${Combat_default}\n                            ${Visuals_default}\n                            ${Misc_default}\n                            ${Bots_default}\n                            ${Devtool_default}\n                            ${Music_default}\n                                  </div>\n                    </main>\n                </div>\n            </div>\n        `;
+      return `<!DOCTYPE html>
+<style>${styles_default}</style>
+<div id="menu-container" class="transparent">
+  <div id="menu-wrapper">
+    <main>
+      ${Navbar_default}
+      <div id="page-container">
+        ${Keybinds_default}
+        ${Visuals_default}
+        ${Combat_default}
+        ${Misc_default}
+        ${Music_default}
+        ${Bots_default}
+        ${Devtool_default}
+      </div>
+    </main>
+  </div>
+</div>`;
     }
     injectStyles() {
       const style = document.createElement("style");
@@ -17609,6 +19327,7 @@ window.grbtp = 35;
         colorPickers: this.querySelectorAll("input[type='color'][id]"),
         textInputs: this.querySelectorAll("input[type='text'][id]"),
         sliders: this.querySelectorAll("input[type='range'][id]"),
+        selects: this.querySelectorAll("select[id]"),
         closeButton: this.querySelector("#close-button"),
         openMenuButtons: this.querySelectorAll(".open-menu[data-id]"),
         menuPages: this.querySelectorAll(".menu-page[data-id]"),
@@ -17620,8 +19339,17 @@ window.grbtp = 35;
         addBotDynamic: this.querySelector("#add-bot-dynamic"),
         dynamicBotList: this.querySelector("#dynamic-bot-list"),
         resetSettings: this.querySelector("#resetSettings"),
+        // Null when the menu has no row for this bot — which is the normal case
+        // for a bot connected through the dynamic list, since that builds its
+        // own row instead. It used to dereference the miss and throw, and the
+        // throw landed inside onFirstTickAfterSpawn, so everything after the
+        // call there was skipped: clientIDList never learned the bot's id, and
+        // bots did not recognise each other as friendly.
         botOption(id) {
           const option = that.querySelector(`.content-option[data-bot-id="${id}"]`);
+          if (option === null) {
+            return null;
+          }
           const title = option.querySelector(".option-title");
           const disconnect = option.querySelector(".disconnect-button");
           return {
@@ -17645,9 +19373,9 @@ window.grbtp = 35;
     }
     handleResize() {
       const {menuContainer: menuContainer} = this.getElements();
-      const scale = Math.min(.9, Math.min(window.innerWidth / 1280, window.innerHeight / 720));
+      const scale = Math.min(1, window.innerWidth / 920, window.innerHeight / 580);
       this.menuScale = scale;
-      menuContainer.style.transform = `translate(-50%, -50%) scale(${scale})`;
+      menuContainer.style.setProperty("--ryn-scale", scale.toFixed(4));
       const rynLobbyLogo = this.querySelector ? this.querySelector("#ryn-lobby-logo") : null;
       if (rynLobbyLogo) {
         const _inGame = !!(this.client && this.client.myPlayer && this.client.myPlayer.inGame);
@@ -17831,6 +19559,11 @@ window.grbtp = 35;
           if (sliderValue instanceof this.frame.window.HTMLSpanElement) {
             sliderValue.textContent = slider.value + (slider.dataset.suffix || "");
           }
+          const min = Number(slider.min) || 0;
+          const max = Number(slider.max);
+          const span = max - min;
+          const pct = span > 0 ? (Number(slider.value) - min) / span * 100 : 0;
+          slider.style.setProperty("--val", pct.toFixed(2) + "%");
         };
         slider.value = Settings_default[id].toString();
         updateSliderValue();
@@ -17850,6 +19583,28 @@ window.grbtp = 35;
           }
         };
         slider.onchange = () => slider.blur();
+      }
+    }
+    // Enum options (Break Position and anything added later) bind through the
+    // same Settings/SaveSettings path as every other control, so there is no
+    // second persistence mechanism for them.
+    attachSelects() {
+      const {selects: selects} = this.getElements();
+      for (const select of selects) {
+        const id = select.id;
+        if (!(id in Settings_default)) {
+          Logger.error(`attachSelects Error: Property "${id}" does not exist in settings`);
+          continue;
+        }
+        select.value = Settings_default[id];
+        select.onchange = () => {
+          if (id in Settings_default) {
+            Settings_default[id] = select.value;
+            SaveSettings();
+          } else {
+            Logger.error(`attachSelects Error: Property "${id}" was deleted from settings`);
+          }
+        };
       }
     }
     attachTextInputs() {
@@ -17887,12 +19642,19 @@ window.grbtp = 35;
       const html = `\n            <div class="content-option" data-bot-id="${player.id}">\n                <span class="option-title"></span>\n                <svg\n                    class="icon disconnect-button"\n                    xmlns="http://www.w3.org/2000/svg"\n                    viewBox="0 0 30 30"\n                    title="Kick bot"\n                >\n                    <path d="M 7 4 C 6.744125 4 6.4879687 4.0974687 6.2929688 4.2929688 L 4.2929688 6.2929688 C 3.9019687 6.6839688 3.9019687 7.3170313 4.2929688 7.7070312 L 11.585938 15 L 4.2929688 22.292969 C 3.9019687 22.683969 3.9019687 23.317031 4.2929688 23.707031 L 6.2929688 25.707031 C 6.6839688 26.098031 7.3170313 26.098031 7.7070312 25.707031 L 15 18.414062 L 22.292969 25.707031 C 22.682969 26.098031 23.317031 26.098031 23.707031 25.707031 L 25.707031 23.707031 C 26.098031 23.316031 26.098031 22.682969 25.707031 22.292969 L 18.414062 15 L 25.707031 7.7070312 C 26.098031 7.3170312 26.098031 6.6829688 25.707031 6.2929688 L 23.707031 4.2929688 C 23.316031 3.9019687 22.682969 3.9019687 22.292969 4.2929688 L 15 11.585938 L 7.7070312 4.2929688 C 7.5115312 4.0974687 7.255875 4 7 4 z"/>\n                </svg>\n            </div>\n        `;
       const div = document.createElement("div");
       div.innerHTML = html;
-      botContainer.appendChild(div.firstElementChild);
-      pageContainer.scrollTop = pageContainer.scrollHeight;
+      const botRow = div.firstElementChild;
+      botContainer.appendChild(botRow);
+      if (pageContainer) {
+        try {
+          botRow.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        } catch (_) {}
+      }
       const option = botOption(player.id);
-      option.disconnect.onclick = () => {
-        player.disconnect();
-      };
+      if (option !== null) {
+        option.disconnect.onclick = () => {
+          player.disconnect();
+        };
+      }
     }
     deleteBotOption(player) {
       if (!player.connectSuccess) {
@@ -17900,19 +19662,103 @@ window.grbtp = 35;
       }
       const {botOption: botOption} = this.getElements();
       const option = botOption(player.id);
-      option.option.remove();
+      if (option !== null) {
+        option.option.remove();
+      }
+    }
+    // The two ids a bot has, and what each one is for:
+    //
+    //   player.id          its slot in the fleet, handed out by handleBotCreation.
+    //                      Short, stable for the life of the connection, and what
+    //                      you mean when you say "bot 3".
+    //   player.myPlayer.id the id the server gave this connection. What the bot is
+    //                      called in packets and by every other client.
+    //
+    // Both are shown, because they answer different questions.
+    botRowFields(player) {
+      const myPlayer = player.myPlayer;
+      const live = myPlayer && myPlayer.nickname || "";
+      const wanted = player._botCustomName || "";
+      const name = live || wanted;
+      const gameID = myPlayer && typeof myPlayer.id === "number" && myPlayer.id >= 0 ? myPlayer.id : null;
+      return {
+        slot: player.id,
+        name: name,
+        // A rename cannot reach a bot that is already standing in the world, so
+        // when the two differ the row shows both: what it is called now, and
+        // what it will be called after its next spawn.
+        pending: wanted && live && wanted !== live ? wanted : null,
+        gameID: gameID
+      };
     }
     updateBotOption(player, type) {
       if (!player.connectSuccess) {
         return;
       }
-      const {botOption: botOption} = this.getElements();
-      const option = botOption(player.id);
-      switch (type) {
-       case "title":
-        option.title.textContent = `[${player.id}]: ${player.myPlayer.nickname}`;
-        break;
+      if (type !== "title") {
+        return;
       }
+      const {slot: slot, name: name, pending: pending, gameID: gameID} = this.botRowFields(player);
+      // The bot may have come in through either UI: a row in the dynamic list,
+      // or the older #bot-container option. Whichever exists gets updated, and
+      // neither existing is not an error — it only means the menu is not
+      // showing this bot right now.
+      const row = this.frame.document.querySelector(`.bot-row[data-bot-player-id="${slot}"]`);
+      if (row !== null) {
+        this.renderBotRow(row, player);
+        return;
+      }
+      const option = this.getElements().botOption(slot);
+      if (option !== null) {
+        const shown = pending === null ? name : `${name} → ${pending}`;
+        option.title.textContent = gameID === null ? `[${slot}]: ${shown}` : `[${slot}]: ${shown} (id ${gameID})`;
+      }
+    }
+    // A connected bot's row: tick, slot, name, server id, disconnect. Built in
+    // one place so the row drawn on connect and the row redrawn once the server
+    // has handed out an id cannot drift apart.
+    renderBotRow(rowEl, player) {
+      const doc = this.frame.document;
+      const {slot: slot, name: name, pending: pending, gameID: gameID} = this.botRowFields(player);
+      rowEl.dataset.botPlayerId = slot;
+      rowEl.style.cssText = "";
+      rowEl.className = "bot-row connected";
+      rowEl.innerHTML = "";
+      const check = doc.createElement("svg");
+      check.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      check.setAttribute("viewBox", "0 0 24 24");
+      check.setAttribute("class", "bot-row-check");
+      check.innerHTML = '<path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>';
+      const slotSpan = doc.createElement("span");
+      slotSpan.className = "bot-row-label";
+      slotSpan.textContent = "Bot " + slot;
+      slotSpan.title = "Fleet slot";
+      const nameSpan = doc.createElement("span");
+      nameSpan.className = "bot-row-name";
+      nameSpan.textContent = name;
+      if (pending !== null) {
+        const pendingSpan = doc.createElement("span");
+        pendingSpan.className = "pending";
+        pendingSpan.textContent = " → " + pending;
+        nameSpan.appendChild(pendingSpan);
+        nameSpan.title = "Renames to " + pending + " on its next respawn";
+      }
+      const idSpan = doc.createElement("span");
+      idSpan.className = "bot-row-id";
+      idSpan.textContent = gameID === null ? "id —" : "id " + gameID;
+      idSpan.title = gameID === null ? "Waiting for the server to hand out an id" : "In-game player id";
+      const delBtn = doc.createElement("button");
+      delBtn.className = "icon-btn danger";
+      delBtn.title = "Disconnect bot";
+      delBtn.textContent = "✕";
+      delBtn.onclick = () => {
+        player.disconnect();
+      };
+      rowEl.appendChild(check);
+      rowEl.appendChild(slotSpan);
+      rowEl.appendChild(nameSpan);
+      rowEl.appendChild(idSpan);
+      rowEl.appendChild(delBtn);
     }
     addBotConnecting() {
       const {botContainer: botContainer} = this.getElements();
@@ -17932,7 +19778,6 @@ window.grbtp = 35;
       if (addBotDynamic) addBotDynamic.click();
     }
     handleBotCreation(button, nameInputId = "bot-name-input", withDelay = false, rowId = null) {
-      let id = 0;
       button.onclick = async () => {
         const ws = client.SocketManager.socket;
         if (ws === null) {
@@ -17941,9 +19786,9 @@ window.grbtp = 35;
         const nameInput = this.querySelector("#" + nameInputId);
         const botName = nameInput && nameInput.value.trim() ? nameInput.value.trim() : "";
         if (!botName) {
-          nameInput && (nameInput.style.border = "1px solid #ff4444");
+          nameInput && nameInput.classList.add("invalid");
           setTimeout(() => {
-            nameInput && (nameInput.style.border = "1px solid #9090c8");
+            nameInput && nameInput.classList.remove("invalid");
           }, 1500);
           return;
         }
@@ -17970,39 +19815,18 @@ window.grbtp = 35;
           player._botCustomName = botName;
           player.SocketManager.init(socket);
           const onconnect = () => {
-            player.id = id++;
+            // One counter for the whole fleet. This used to be `let id = 0`
+            // inside handleBotCreation, and handleBotCreation is called once per
+            // row \u2014 so every row had its own counter sitting at zero and every
+            // bot came out as bot 0. Nothing could tell two bots apart, and the
+            // data-bot-id lookups all collided on the same key.
+            player.id = ++this.botSequence;
             client.clients.add(player);
             this.removeBotConnecting();
             if (rowId) {
               const rowEl = this.frame.document.getElementById(rowId);
               if (rowEl) {
-                rowEl.dataset.botPlayerId = player.id;
-                rowEl.style.cssText = "display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(144,144,200,0.07);border-radius:8px;border:1px solid #9090c844;";
-                rowEl.innerHTML = "";
-                const check = this.frame.document.createElement("svg");
-                check.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-                check.setAttribute("viewBox", "0 0 24 24");
-                check.style.cssText = "width:16px;height:16px;flex-shrink:0;fill:#9090c8;";
-                check.innerHTML = '<path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>';
-                const nameSpan = this.frame.document.createElement("span");
-                nameSpan.className = "option-title";
-                nameSpan.style.cssText = "flex:1;font-size:1.05em;color:#d8d8f8;font-weight:600;";
-                nameSpan.textContent = botName;
-                const delBtn = this.frame.document.createElement("button");
-                delBtn.style.cssText = "background:transparent;border:none;cursor:pointer;padding:4px;display:flex;align-items:center;";
-                delBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 30" style="width:18px;height:18px;fill:#9090c877;"><path d="M 7 4 C 6.744125 4 6.4879687 4.0974687 6.2929688 4.2929688 L 4.2929688 6.2929688 C 3.9019687 6.6839688 3.9019687 7.3170313 4.2929688 7.7070312 L 11.585938 15 L 4.2929688 22.292969 C 3.9019687 22.683969 3.9019687 23.317031 4.2929688 23.707031 L 6.2929688 25.707031 C 6.6839688 26.098031 7.3170313 26.098031 7.7070312 25.707031 L 15 18.414062 L 22.292969 25.707031 C 22.682969 26.098031 23.317031 26.098031 23.707031 25.707031 L 25.707031 23.707031 C 26.098031 23.316031 26.098031 22.682969 25.707031 22.292969 L 18.414062 15 L 25.707031 7.7070312 C 26.098031 7.3170312 26.098031 6.6829688 25.707031 6.2929688 L 23.707031 4.2929688 C 23.316031 3.9019687 22.682969 3.9019687 22.292969 4.2929688 L 15 11.585938 L 7.7070312 4.2929688 C 7.5115312 4.0974687 7.255875 4 7 4 z"/></svg>';
-                delBtn.onmouseenter = () => {
-                  delBtn.querySelector("svg").style.fill = "#cc5151";
-                };
-                delBtn.onmouseleave = () => {
-                  delBtn.querySelector("svg").style.fill = "#9090c877";
-                };
-                delBtn.onclick = () => {
-                  player.disconnect();
-                };
-                rowEl.appendChild(check);
-                rowEl.appendChild(nameSpan);
-                rowEl.appendChild(delBtn);
+                this.renderBotRow(rowEl, player);
               }
             } else {
               this.createBotOption(player);
@@ -18108,15 +19932,16 @@ window.grbtp = 35;
       const renderBotMsg = (msg, idx) => {
         if (!botListEl) return;
         const row = doc.createElement("div");
-        row.className = "content-option";
-        row.style.gap = "8px";
+        row.className = "content-option chat-row";
+        row.style.gap = "10px";
         const inp = doc.createElement("input");
         inp.type = "text";
         inp.className = "input";
         inp.maxLength = 50;
         inp.placeholder = "Bot Message " + (idx + 1);
         inp.value = msg || "";
-        inp.style.width = "190px";
+        inp.style.flex = "1";
+        inp.style.width = "auto";
         inp.onfocus = () => {
           this.activeInput = inp;
         };
@@ -18132,9 +19957,8 @@ window.grbtp = 35;
           SaveSettings();
         };
         const del = doc.createElement("button");
-        del.className = "option-button red";
-        del.style.cssText = "padding:4px 12px;font-size:1em;";
-        del.textContent = "X";
+        del.className = "icon-btn danger";
+        del.textContent = "\u2715";
         del.onclick = () => {
           const i = Array.from(botListEl.children).indexOf(row);
           if (i >= 0) Settings_default._autoBotChatMsgs.splice(i, 1);
@@ -18165,15 +19989,16 @@ window.grbtp = 35;
       };
       const renderMsg = (msg, idx) => {
         const row = doc.createElement("div");
-        row.className = "content-option";
-        row.style.gap = "8px";
+        row.className = "content-option chat-row";
+        row.style.gap = "10px";
         const inp = doc.createElement("input");
         inp.type = "text";
         inp.className = "input";
         inp.maxLength = 50;
         inp.placeholder = "Message " + (idx + 1);
         inp.value = msg || "";
-        inp.style.width = "190px";
+        inp.style.flex = "1";
+        inp.style.width = "auto";
         inp.onfocus = () => {
           this.activeInput = inp;
         };
@@ -18189,8 +20014,7 @@ window.grbtp = 35;
           SaveSettings();
         };
         const del = doc.createElement("button");
-        del.className = "option-button red";
-        del.style.cssText = "padding:4px 12px;font-size:1em;";
+        del.className = "icon-btn danger";
         del.textContent = "✕";
         del.onclick = () => {
           const i = Array.from(listEl.children).indexOf(row);
@@ -18211,13 +20035,6 @@ window.grbtp = 35;
         renderMsg("", Settings_default._autoChatMsgs.length - 1);
       };
     }
-    // moomoo caps a name at 15 characters, so the base is trimmed to leave room
-    // for the digits rather than letting the tail fall off — "Ryn" with 100
-    // bots must still end in 100, not in a truncated name.
-    _numberedBotName(base, n) {
-      const suffix = String(n);
-      return base.slice(0, Math.max(0, 15 - suffix.length)) + suffix;
-    }
     _generateRandomBotName() {
       const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
       const len = 1 + Math.floor(Math.random() * 7);
@@ -18226,6 +20043,83 @@ window.grbtp = 35;
         out += chars[Math.floor(Math.random() * chars.length)];
       }
       return out;
+    }
+    // ── one name for the whole fleet ────────────────────────────────────────
+    //
+    // The box itself is bound by attachTextInputs like every other text setting
+    // (it is `_botBulkName` in Settings, so it persists); this adds the two
+    // things that box is for.
+    //
+    // A moomoo name is chosen at spawn and cannot be changed while alive — the
+    // name travels in the spawn packet and nothing else sets it — so Apply can
+    // only set what each bot will spawn as next. A bot standing in the world
+    // keeps the name it has until it dies, and bots respawn themselves, so it
+    // catches up on its own. The button says so rather than pretending.
+    bulkName() {
+      return String(Settings_default._botBulkName || "").trim().slice(0, 15);
+    }
+    attachBulkNameUI(doc) {
+      const applyBtn = doc.getElementById("_botBulkNameApply");
+      const input = doc.getElementById("_botBulkName");
+      if (!applyBtn || !input) {
+        return;
+      }
+      const flash = text => {
+        applyBtn.textContent = text;
+        clearTimeout(applyBtn._resetTimer);
+        applyBtn._resetTimer = setTimeout(() => {
+          applyBtn.textContent = "Apply to all";
+        }, 2600);
+      };
+      applyBtn.onclick = () => {
+        // Read the box rather than the setting: onchange has not fired yet if
+        // the button is clicked straight after typing.
+        const name = String(input.value || "").trim().slice(0, 15);
+        if (!name) {
+          input.classList.add("invalid");
+          setTimeout(() => input.classList.remove("invalid"), 1500);
+          flash("Enter a name first");
+          return;
+        }
+        if (Settings_default._botBulkName !== name) {
+          Settings_default._botBulkName = name;
+          input.value = name;
+          SaveSettings();
+        }
+        // Rows still waiting to connect: they spawn under the new name.
+        let rows = 0;
+        for (const row of doc.querySelectorAll("#dynamic-bot-list .bot-row:not(.connected) input.input")) {
+          row.value = name;
+          rows += 1;
+        }
+        // Bots already connected: the name they will spawn under next.
+        // Nothing is forced to respawn here. A dead bot is already respawned by
+        // PlayerManager.postTick, which reads _botCustomName as it goes, so it
+        // picks the new name up by itself — and calling spawn() from here would
+        // also drag any bot being held at the menu into the game.
+        let live = 0;
+        let renamed = 0;
+        try {
+          for (const bot of client.clients) {
+            bot._botCustomName = name;
+            renamed += 1;
+            if (bot.myPlayer && bot.myPlayer.inGame) {
+              live += 1;
+            }
+            this.updateBotOption(bot, "title");
+          }
+        } catch (_) {}
+        const parts = [];
+        if (renamed) parts.push(renamed + " bot" + (renamed === 1 ? "" : "s"));
+        if (rows) parts.push(rows + " row" + (rows === 1 ? "" : "s"));
+        if (parts.length === 0) {
+          flash("Saved — new bots will use it");
+        } else if (live) {
+          flash(parts.join(" + ") + " — " + live + " on respawn");
+        } else {
+          flash(parts.join(" + ") + " named");
+        }
+      };
     }
     attachDynamicBotUI() {
       const doc = this.frame.document;
@@ -18239,6 +20133,7 @@ window.grbtp = 35;
           this._chatSync = botChatSyncChk.checked;
         };
       }
+      this.attachBulkNameUI(doc);
       let botCount = 0;
       addBotBtn.onclick = () => {
         botCount++;
@@ -18248,58 +20143,46 @@ window.grbtp = 35;
         const btnId = `dyn-bot-btn-${botCount}`;
         const row = doc.createElement("div");
         row.id = rowId;
-        row.style.cssText = "display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(201,162,39,0.05);border-radius:8px;border:1px solid #9090c833;";
+        row.className = "bot-row";
         const label = doc.createElement("span");
-        label.className = "option-title";
-        label.style.cssText = "min-width:80px;font-size:1.1em;color:#7070a8;";
-        label.textContent = `Bot ${botCount} Name`;
+        label.className = "bot-row-label";
+        label.textContent = `Bot ${botCount}`;
         const inp = doc.createElement("input");
         inp.id = inputId;
         inp.type = "text";
+        inp.className = "input";
         inp.placeholder = "e.g. Ryn " + (30 + botCount);
         inp.maxLength = 15;
-        inp.style.cssText = "background:transparent;border:1px solid #9090c8;border-radius:4px;color:#d8d8f8;padding:5px 8px;font-size:13px;outline:none;flex:1;min-width:0;";
         inp.onfocus = () => {
           this.activeInput = inp;
         };
         inp.onblur = () => {
           this.activeInput = null;
         };
-        // Prefilling the row's own input is deliberate: the connect button
-        // reads that field and nothing else, so one shared name flows through
-        // the existing path instead of a second one running beside it. Every
-        // row stays editable, so a single bot can still be renamed by hand.
-        const sharedName = (Settings_default._botNameAll || "").trim();
-        if (sharedName) {
-          inp.value = Settings_default._botNumberNames
-            ? this._numberedBotName(sharedName, botCount)
-            : sharedName;
+        // A fleet name is an explicit choice, so it wins over the random-name
+        // toggle rather than fighting it for the same box.
+        const fleetName = this.bulkName();
+        if (fleetName) {
+          inp.value = fleetName;
         } else if (Settings_default._autoRandomBotNames) {
           inp.value = this._generateRandomBotName();
         }
-        if (sharedName) inp.placeholder = sharedName;
         const diceBtn = doc.createElement("button");
         diceBtn.type = "button";
         diceBtn.title = "Random name (1-7 chars)";
-        diceBtn.style.cssText = "background:rgba(122,66,244,0.12);border:1.5px solid rgba(122,66,244,0.4);color:#c8b8ff;border-radius:6px;padding:6px 9px;cursor:pointer;font-size:1em;line-height:1;flex-shrink:0;transition:all 150ms;";
-        diceBtn.textContent = "🎲";
-        diceBtn.onmouseenter = () => {
-          diceBtn.style.background = "rgba(122,66,244,0.22)";
-        };
-        diceBtn.onmouseleave = () => {
-          diceBtn.style.background = "rgba(122,66,244,0.12)";
-        };
+        diceBtn.className = "icon-btn";
+        diceBtn.textContent = "\u2684";
         diceBtn.onclick = () => {
           inp.value = this._generateRandomBotName();
         };
         const connectBtn = doc.createElement("button");
         connectBtn.id = btnId;
-        connectBtn.className = "option-button";
-        connectBtn.style.cssText = "padding:8px 18px;font-size:1em;white-space:nowrap;";
-        connectBtn.textContent = `Connect Bot ${botCount}`;
+        connectBtn.className = "option-button primary";
+        connectBtn.textContent = "Connect";
         const delBtn = doc.createElement("button");
-        delBtn.style.cssText = "background:#853838;border:2px solid #6f2f2f;color:#c07878;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:0.9em;font-weight:800;";
-        delBtn.textContent = "✕";
+        delBtn.className = "icon-btn danger";
+        delBtn.title = "Remove row";
+        delBtn.textContent = "\u2715";
         delBtn.onclick = () => {
           row.remove();
         };
@@ -18311,8 +20194,10 @@ window.grbtp = 35;
         dynamicList.appendChild(row);
         const withDelay = !isFirst;
         this.handleBotCreation(connectBtn, inputId, withDelay, rowId);
-        const pageContainer = doc.querySelector("#page-container");
-        if (pageContainer) pageContainer.scrollTop = pageContainer.scrollHeight;
+        try {
+          row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        } catch (_) {}
+        inp.focus();
       };
     }
     // Restarts the rotation and reports what it found. Bots already in the clan
@@ -18385,12 +20270,6 @@ window.grbtp = 35;
       } ];
       const current = () => Settings_default._formation || "none";
       const btns = {};
-      if (!doc.getElementById("_formationStyles")) {
-        const st = doc.createElement("style");
-        st.id = "_formationStyles";
-        st.textContent = `\n                    #_formationGrid{\n                        position:relative;\n                        width:100%;\n                        display:block !important;\n                    }\n                    .fsel-trigger{\n                        display:flex;\n                        align-items:center;\n                        gap:10px;\n                        width:100%;\n                        padding:8px 12px;\n                        background:rgba(122,66,244,0.05);\n                        border:1.5px solid rgba(122,66,244,0.22);\n                        border-radius:8px;\n                        cursor:pointer;\n                        transition:all 150ms;\n                        box-sizing:border-box;\n                        user-select:none;\n                    }\n                    .fsel-trigger:hover{\n                        background:rgba(122,66,244,0.1);\n                        border-color:rgba(122,66,244,0.45);\n                    }\n                    .fsel-trigger.open{\n                        border-color:rgba(122,66,244,0.6);\n                        box-shadow:0 0 10px rgba(122,66,244,0.15);\n                    }\n                    .fsel-trigger .fsel-icon{\n                        font-size:1.25em;\n                        width:26px;\n                        text-align:center;\n                        flex-shrink:0;\n                        color:#c0a8ff;\n                    }\n                    .fsel-trigger .fsel-label{\n                        flex:1;\n                        font-size:0.8em;\n                        font-weight:600;\n                        letter-spacing:0.04em;\n                        color:rgba(220,215,235,0.9);\n                    }\n                    .fsel-trigger .fsel-arrow{\n                        font-size:0.7em;\n                        color:rgba(122,66,244,0.55);\n                        transition:transform 150ms;\n                        flex-shrink:0;\n                    }\n                    .fsel-trigger.open .fsel-arrow{\n                        transform:rotate(180deg);\n                    }\n                    .fsel-popup{\n                        position:fixed;\n                        z-index:99999;\n                        background:rgba(15,12,26,0.98);\n                        border:1px solid rgba(122,66,244,0.35);\n                        border-radius:10px;\n                        box-shadow:0 12px 32px rgba(0,0,0,0.65);\n                        width:280px;\n                        display:flex;\n                        flex-direction:column;\n                        transform-origin:top center;\n                        overflow:hidden;\n                    }\n                    .fsel-popup-header{\n                        display:flex;\n                        align-items:center;\n                        gap:8px;\n                        padding:7px 10px;\n                        background:rgba(122,66,244,0.08);\n                        border-bottom:1px solid rgba(122,66,244,0.2);\n                        cursor:grab;\n                        user-select:none;\n                        flex-shrink:0;\n                    }\n                    .fsel-popup-header:active{cursor:grabbing;}\n                    .fsel-popup-header .fsel-popup-title{\n                        flex:1;\n                        font-family:Orbitron,monospace;\n                        font-size:0.62em;\n                        font-weight:700;\n                        letter-spacing:0.14em;\n                        text-transform:uppercase;\n                        color:rgba(122,66,244,0.65);\n                    }\n                    .fsel-popup-close{\n                        width:18px;height:18px;\n                        display:flex;align-items:center;justify-content:center;\n                        border-radius:4px;\n                        font-size:0.75em;\n                        color:rgba(200,200,215,0.4);\n                        cursor:pointer;\n                        transition:all 140ms;\n                        flex-shrink:0;\n                    }\n                    .fsel-popup-close:hover{\n                        background:rgba(255,77,109,0.12);\n                        color:#ff4d6d;\n                    }\n                    .fsel-popup-body{\n                        display:grid;\n                        grid-template-columns:repeat(auto-fill, minmax(46px, 1fr));\n                        gap:5px;\n                        padding:8px;\n                        max-height:260px;\n                        overflow-y:auto;\n                    }\n                    .fsel-popup-body::-webkit-scrollbar{width:4px;}\n                    .fsel-popup-body::-webkit-scrollbar-track{background:transparent;}\n                    .fsel-popup-body::-webkit-scrollbar-thumb{background:rgba(122,66,244,0.3);border-radius:2px;}\n                    .fcat-btn{\n                        display:flex;\n                        flex-direction:column;\n                        align-items:center;\n                        justify-content:center;\n                        width:100%;\n                        aspect-ratio:1;\n                        min-width:36px;\n                        border-radius:7px;\n                        border:1.5px solid rgba(122,66,244,0.15);\n                        cursor:pointer;\n                        font-size:1.1em;\n                        transition:all 150ms;\n                        user-select:none;\n                        background:rgba(122,66,244,0.04);\n                        color:rgba(180,160,255,0.65);\n                        position:relative;\n                        box-sizing:border-box;\n                    }\n                    .fcat-btn:hover{\n                        background:rgba(122,66,244,0.12);\n                        border-color:rgba(122,66,244,0.45);\n                        color:#c0a8ff;\n                        transform:scale(1.07);\n                        box-shadow:0 0 10px rgba(122,66,244,0.15);\n                        z-index:10;\n                    }\n                    .fcat-btn.active{\n                        background:rgba(122,66,244,0.22);\n                        border-color:rgba(122,66,244,0.7);\n                        color:#e0d4ff;\n                        box-shadow:0 0 12px rgba(122,66,244,0.35);\n                        transform:scale(1.08);\n                    }\n                    .fcat-btn .fcat-tip{\n                        display:none;\n                        position:absolute;\n                        top:calc(100% + 5px);\n                        left:50%;\n                        transform:translateX(-50%);\n                        background:rgba(12,8,24,0.97);\n                        border:1px solid rgba(122,66,244,0.4);\n                        border-radius:5px;\n                        padding:3px 8px;\n                        font-size:0.6em;\n                        font-family:Orbitron,monospace;\n                        font-weight:700;\n                        letter-spacing:0.06em;\n                        color:#d0c8ff;\n                        white-space:nowrap;\n                        pointer-events:none;\n                        z-index:9999;\n                        box-shadow:0 4px 14px rgba(0,0,0,0.7);\n                    }\n                    .fcat-btn:hover .fcat-tip{\n                        display:block;\n                    }\n                    .fcat-key{\n                        position:absolute;\n                        top:2px;right:2px;\n                        min-width:15px;height:13px;\n                        display:flex;align-items:center;justify-content:center;\n                        background:rgba(0,0,0,0.45);\n                        border:1px solid rgba(122,66,244,0.3);\n                        border-radius:3px;\n                        font-family:Orbitron,monospace;\n                        font-size:0.34em;\n                        font-weight:700;\n                        letter-spacing:0.02em;\n                        color:rgba(200,185,255,0.75);\n                        padding:0 2px;\n                        line-height:1;\n                        transition:all 120ms;\n                        z-index:5;\n                    }\n                    .fcat-key:hover{\n                        background:rgba(122,66,244,0.3);\n                        border-color:rgba(122,66,244,0.7);\n                        color:#fff;\n                    }\n                    .fcat-key.set{\n                        background:rgba(122,66,244,0.22);\n                        border-color:rgba(122,66,244,0.55);\n                        color:#e0d4ff;\n                    }\n                    .fcat-key.recording{\n                        background:rgba(255,77,109,0.25);\n                        border-color:#ff4d6d;\n                        color:#fff;\n                        animation:dot-blink 0.8s ease infinite;\n                    }\n                    .fcat-reset{\n                        position:absolute;\n                        bottom:2px;left:2px;\n                        min-width:13px;height:13px;\n                        display:none;\n                        align-items:center;justify-content:center;\n                        background:rgba(255,77,109,0.15);\n                        border:1px solid rgba(255,77,109,0.4);\n                        border-radius:3px;\n                        font-size:0.55em;\n                        font-weight:700;\n                        line-height:1;\n                        color:#ff8fa3;\n                        cursor:pointer;\n                        z-index:5;\n                        transition:all 120ms;\n                    }\n                    .fcat-reset.show{display:flex;}\n                    .fcat-reset:hover{\n                        background:#ff4d6d;\n                        border-color:#ff4d6d;\n                        color:#fff;\n                    }\n                    .fsel-popup-footer{\n                        flex-shrink:0;\n                        padding:7px 8px;\n                        border-top:1px solid rgba(122,66,244,0.15);\n                    }\n                    .fsel-reset-all{\n                        width:100%;\n                        padding:6px 0;\n                        background:rgba(255,77,109,0.06);\n                        border:1px solid rgba(255,77,109,0.3);\n                        border-radius:6px;\n                        font-family:Orbitron,monospace;\n                        font-size:0.62em;\n                        font-weight:700;\n                        letter-spacing:0.08em;\n                        text-transform:uppercase;\n                        color:#ff8fa3;\n                        cursor:pointer;\n                        transition:all 140ms;\n                        text-align:center;\n                    }\n                    .fsel-reset-all:hover{\n                        background:rgba(255,77,109,0.15);\n                        border-color:#ff4d6d;\n                        color:#fff;\n                        box-shadow:0 0 10px rgba(255,77,109,0.2);\n                    }\n                `;
-        doc.head.appendChild(st);
-      }
       grid.innerHTML = "";
       grid.style.cssText = "";
       const trigger = doc.createElement("div");
@@ -18635,10 +20514,7 @@ window.grbtp = 35;
         window._botWeaponOverride = parseInt(wid);
         if (label) label.textContent = names[String(wid)] || wid;
         btns.forEach(b => {
-          const active = b.getAttribute("data-wid") === String(wid);
-          b.style.border = active ? "1px solid rgba(122,66,244,0.6)" : "1px solid rgba(255,255,255,0.08)";
-          b.style.background = active ? "rgba(122,66,244,0.15)" : "rgba(255,255,255,0.03)";
-          b.style.color = active ? "#c0a0ff" : "rgba(210,210,225,0.8)";
+          b.classList.toggle("wpn-active", b.getAttribute("data-wid") === String(wid));
         });
       };
       btns.forEach(btn => {
@@ -18663,10 +20539,7 @@ window.grbtp = 35;
           window._botSecWeaponOverride = parseInt(swid);
           if (secLabel) secLabel.textContent = secNames[String(swid)] || swid;
           secBtns.forEach(b => {
-            const active = b.getAttribute("data-swid") === String(swid);
-            b.style.border = active ? "2px solid #9090c8" : "2px solid #2a204066";
-            b.style.background = active ? "#1e1a30" : "#13101e";
-            b.style.color = active ? "#9090c8" : "#d8d8f8";
+            b.classList.toggle("wpn-active", b.getAttribute("data-swid") === String(swid));
           });
         };
         secBtns.forEach(btn => {
@@ -18723,11 +20596,58 @@ window.grbtp = 35;
               const pc = menuPage.closest("#page-container") || menuPage.parentElement;
               if (pc) pc.scrollTop = 0;
             } catch (_) {}
+            this.buildOutline(menuPage);
           } else {
             Logger.error(`attachOpenMenu Error: Cannot find "${button.textContent}" menu`);
           }
         };
       }
+    }
+    // The rail lists the sections of whichever category is open, so a long
+    // page can be jumped through without scrolling to look for a heading.
+    buildOutline(menuPage) {
+      try {
+        const doc = this.frame.document;
+        const outline = doc.getElementById("nav-outline");
+        const container = doc.getElementById("page-container");
+        if (!outline || !container || !menuPage) return;
+        outline.innerHTML = "";
+        this._outlineTargets = [];
+        const titles = menuPage.querySelectorAll(".section > .section-title, .rm-sec > .rm-sec-head > .rm-sec-title");
+        for (const titleEl of titles) {
+          const section = titleEl.closest(".section, .rm-sec");
+          if (!section) continue;
+          const first = titleEl.childNodes[0];
+          const label = (first && first.textContent || titleEl.textContent || "").trim();
+          if (!label) continue;
+          const item = doc.createElement("button");
+          item.className = "outline-item";
+          item.textContent = label;
+          item.onclick = () => {
+            const top = section.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop - 26;
+            container.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+          };
+          outline.appendChild(item);
+          this._outlineTargets.push({ item: item, section: section });
+        }
+        this.syncOutline();
+      } catch (_) {}
+    }
+    syncOutline() {
+      const targets = this._outlineTargets;
+      if (!targets || !targets.length) return;
+      try {
+        const container = this.frame.document.getElementById("page-container");
+        if (!container) return;
+        const line = container.getBoundingClientRect().top + 96;
+        let current = 0;
+        for (let i = 0; i < targets.length; i++) {
+          if (targets[i].section.getBoundingClientRect().top <= line) current = i;
+        }
+        for (let i = 0; i < targets.length; i++) {
+          targets[i].item.classList.toggle("current", i === current);
+        }
+      } catch (_) {}
     }
     attachListeners() {
       const {closeButton: closeButton, scriptDescription: scriptDescription, author: author} = this.getElements();
@@ -18751,6 +20671,20 @@ window.grbtp = 35;
       preventDefaults(this.frame.window);
       const description = "RYN v" + RYN.version;
       if (scriptDescription) scriptDescription.textContent = description;
+      const versionEl = this.querySelector("#ryn-version");
+      if (versionEl) versionEl.textContent = description;
+      const scrollHost = this.querySelector("#page-container");
+      if (scrollHost) {
+        let outlineQueued = false;
+        scrollHost.addEventListener("scroll", () => {
+          if (outlineQueued) return;
+          outlineQueued = true;
+          this.frame.window.requestAnimationFrame(() => {
+            outlineQueued = false;
+            this.syncOutline();
+          });
+        }, { passive: true });
+      }
       const fillColors = "xyn";
       const handleTextColors = () => {};
       setTimeout(handleTextColors, 5e3);
@@ -18788,10 +20722,12 @@ window.grbtp = 35;
         this.attachColorPickers();
         this.attachSliders();
         this.attachTextInputs();
+        this.attachSelects();
         this.attachButtons();
         this.attachAutoChatUI();
         this.attachRandomNameUI();
         this.attachOpenMenu();
+        this.buildOutline(this.querySelector(".menu-page.opened"));
         this.createRipple(".open-menu");
         client.StatsManager.init();
         const {menuContainer: menuContainer} = this.getElements();
@@ -18885,8 +20821,6 @@ window.grbtp = 35;
     _fourTraps: "KeyB",
     _autoMillKey: "KeyN",
     _boostSpikes: "Space",
-    _antiTrapProtect: false,
-    _antiTrapStar: false,
     _biomehats: true,
     _autoemp: true,
     _antienemy: true,
@@ -18897,24 +20831,15 @@ window.grbtp = 35;
     _empDefense: true,
     _autoheal: true,
     _autoSync: true,
-    // Off by default. It is new to this client, it moves you (moveTo), and it
-    // commits a turret shot — none of which should start happening because the
-    // client was updated.
-    // Off by default, like the other combat behaviour added after the fact.
-    _knockbackTick: false,
-    _velocityTick: false,
-    // Sub-option of _velocityTick: fire on anyone pinned in a trap of mine
-    // inside 200, instead of only inside the knockback window.
-    _velocityTickTrap: false,
     _adaptiveGearSwitching: false,
-    _antiSync: false,
     _autoShield: true,
     _rangedShield: false,
     _tailPriority: true,
     _antiSpikePush: true,
+    _antiRetrap: true,
+    _kbSpike: true,
     _spikeSyncHammer: true,
     _spikeSync: true,
-    _antiSmartTick: true,
     _safeSoldier: true,
     _toolSpearInsta: true,
     _autoSteal: true,
@@ -18922,6 +20847,7 @@ window.grbtp = 35;
     _turretSteal: true,
     _spikeGearInsta: true,
     _turretSync: true,
+    _velocityTick: true,
     // Off by default, like novastorm's `autoMills = false`. It is now a real
     // combat mill rather than a sandbox-only XP grinder, so leaving it on would
     // drop windmills behind every player from the first spawn.
@@ -18929,33 +20855,53 @@ window.grbtp = 35;
     _autoplacer: true,
     _prePlace: true,
     _replace: true,
-    _antiRetrap: true,
     _trapAnimal: false,
     _placementDefense: true,
     _autoPlay: false,
     _botAge4BoostPad: false,
     _autoplacerRadius: 350,
+    _autoplacerScanners: 4,
     _autobreak: true,
+    _breakPosition: "inside",
     _safeWalk: true,
     _dashMovement: true,
     _dashMovementKey: "KeyB",
     _autoGrindKey: "",
     _autoplacerKey: "",
     _autoGrind: false,
+    _autoGrindTargetPrimary: "ruby",
+    _autoGrindTargetSecondary: "ruby",
     _botAutoAttackEnabled: false,
     _playerTurretReloadBar: true,
     _weaponReloadBar: true,
     _renderHP: true,
     _objectTint: true,
     _objectTintOpacity: 45,
+    _structureColors: true,
+    _structureColorStrength: 60,
+    _ownSpikeColor: "#3d8bfd",
+    _allySpikeColor: "#2fc98a",
+    _enemySpikeColor: "#ff2f2f",
+    _ownTrapColor: "#8f6bff",
+    _allyTrapColor: "#26c6c0",
+    _enemyTrapColor: "#ff8c1a",
+    _visualSmoothing: true,
+    _renderOptimization: true,
+    _performanceOptimization: true,
+    _shadowWings: true,
     _weather: true,
     _weatherAmount: 45,
     _positionPrediction: false,
+    _deathCorpse: true,
     _stackedDamage: true,
     _itemHealthBar: false,
-    _itemHealthBarColor: "#1ab7e7",
     _itemHealthBarEnemy: false,
-    _itemHealthBarEnemyColor: "#ff4d4d",
+    // One colour for every structure's bar. Whiteout colours by ownership —
+    // green for yours, yellow for the clan's, red for everyone else — but the
+    // two toggles above already decide which structures get a bar at all, so
+    // the bar itself is one light sky blue rather than three answers to a
+    // question that has already been answered.
+    _itemHealthBarColor: "#b3e5fc",
     _displayPlayerAngle: false,
     _showPlayerID: true,
     _weaponHitbox: false,
@@ -18977,6 +20923,7 @@ window.grbtp = 35;
     _autoaccept: false,
     _hideHUD: false,
     _lowQuality: false,
+    _meleeAnimation: true,
     _menuTransparency: true,
     _autoAssassin: false,
     _botsAutoAssassin: false,
@@ -18988,25 +20935,29 @@ window.grbtp = 35;
     _circleRadius: 100,
     _botIndividualClans: false,
     _autoRandomBotNames: false,
-    // One name for every bot, typed once on the Bots page. Empty means the
-    // old behaviour: type a name per row, or let the dice fill it.
-    _botNameAll: "",
-    // Append the bot's number to that name: name1, name2, name3...
-    _botNumberNames: false,
+    // One name for the whole fleet. Empty means each bot is named per row.
+    _botBulkName: "",
     _storeItems: [ [ 15, 31, 6, 7, 22, 12, 26, 11, 53, 20, 40, 56 ], [ 11, 17, 16, 13, 19, 18, 21 ] ],
     _totalKills: 0,
     _globalKills: 0,
     _deaths: 0,
     _autoSyncTimes: 0,
-    _knockbackTickTimes: 0,
-    _velocityTickTimes: 0,
     _spikeSyncHammerTimes: 0,
     _spikeSyncTimes: 0,
+    _velocityTickTimes: 0,
   };
+  const storedSettings = CustomStorage.get("RYN") || {};
   const settings = {
     ...defaultSettings,
-    ...CustomStorage.get("RYN")
+    ...storedSettings
   };
+  // Auto grind's single target became one per weapon slot. Seed both slots from
+  // the old key before the loop below drops it, so a saved choice survives the
+  // split instead of quietly reverting to ruby.
+  if (typeof storedSettings._autoGrindTarget === "string" && !("_autoGrindTargetPrimary" in storedSettings)) {
+    settings._autoGrindTargetPrimary = storedSettings._autoGrindTarget;
+    settings._autoGrindTargetSecondary = storedSettings._autoGrindTarget;
+  }
   for (const iterator in settings) {
     const key = iterator;
     if (!defaultSettings.hasOwnProperty(key)) {
@@ -19015,6 +20966,14 @@ window.grbtp = 35;
   }
   if (!FORMATION_IDS.has(settings._formation)) {
     settings._formation = "none";
+  }
+  if (settings._breakPosition !== "inside" && settings._breakPosition !== "outside") {
+    settings._breakPosition = "inside";
+  }
+  for (const key of [ "_autoGrindTargetPrimary", "_autoGrindTargetSecondary" ]) {
+    if (!Object.prototype.hasOwnProperty.call(GRIND_TARGETS, settings[key])) {
+      settings[key] = GRIND_TARGET_FALLBACK;
+    }
   }
   for (const fid in settings._formationHotkeys) {
     if (!FORMATION_IDS.has(fid)) {
@@ -19231,7 +21190,7 @@ window.grbtp = 35;
       setupCard.appendChild(altServer);
       const div = document.createElement("div");
       div.id = "rynStats";
-      div.innerHTML = '\n            <span>PLAYERS: <span id="rynPlayers">?</span></span>\n            <span>BOTS: <span id="rynBots">0/0</span></span>\n            <span>PING: <span id="rynPing"></span>ms</span>\n            <span>FPS: <span id="rynFPS"></span></span>\n            <span>PACKETS: <span id="rynPackets"></span></span>\n            <span>FastQ: <span id="rynFastQ">false</span></span>\n        ';
+      div.innerHTML = '\n            <span>PLAYERS: <span id="rynPlayers">?</span></span>\n            <span>BOTS: <span id="rynBots">0/0</span></span>\n            <span>PING: <span id="rynPing"></span>ms</span>\n            <span>FPS: <span id="rynFPS"></span></span>\n            <span>PACKETS: <span id="rynPackets"></span></span>\n        ';
       gameUI.appendChild(div);
       (function() {
         var hud = document.createElement("div");
@@ -19365,12 +21324,6 @@ window.grbtp = 35;
         span.textContent = packets.toString();
       }
     }
-    updateFastQ(state) {
-      const span = document.querySelector("#rynFastQ");
-      if (span !== null) {
-        span.textContent = state.toString();
-      }
-    }
     updatePlaces(count) {}
     updateTotalKills(kills) {
       const span = document.querySelector("#rynTotalKills");
@@ -19410,12 +21363,6 @@ window.grbtp = 35;
     }
     updateDangerState(state) {
       const span = document.querySelector("#rynDangerState");
-      if (span !== null) {
-        span.textContent = state + "";
-      }
-    }
-    updateAutomill(state) {
-      const span = document.querySelector("#_automillSent");
       if (span !== null) {
         span.textContent = state + "";
       }
@@ -19708,6 +21655,13 @@ window.grbtp = 35;
     Hook.append("preRenderLoop", /\)\}\}\(\);function \w+\(\)\{/, "RYN._Renderer._preRender();");
     Hook.append("postRenderLoop", /\w+,\w+\(\),requestAnimFrame\(\w+\)/, ";RYN._Renderer._postRender();");
     Hook.append("mapPreRender", /(\w+)\.lineWidth=NUM{4};/, "RYN._Renderer._mapPreRender($1);");
+    // The minimap legend. All three sit inline in the bundle's minimap draw as
+    // literal colour strings, each unique in the file, so they are swapped
+    // rather than redrawn over. The bot dots have no counterpart here — the
+    // game does not know the bots exist — and are painted by _mapPreRender.
+    Hook.replace("mapSelfColor", /globalAlpha=1,(\w+)\.fillStyle="#fff",(\w+)\(/, 'globalAlpha=1,$1.fillStyle=RYN._Renderer._mapColors.self,$2(');
+    Hook.replace("mapTeamColor", /fillStyle="rgba\(255,255,255,0\.35\)"/, "fillStyle=RYN._Renderer._mapColors.team");
+    Hook.replace("mapDeathMarker", /fillStyle="#fc5553"/, "fillStyle=RYN._Renderer._mapColors.death");
     Hook.prepend("gameInit", /function (\w+)\(\w+\)\{\w+\.\w+\(\w+,f/, "RYN._gameInit=function(a){$1(a);};");
     Hook.prepend("LockRotationClient", /return \w+\?\(\!/, "return RYN._myClient._ModuleHandler._currentAngle;");
     Hook.replace("DisableResetMoveDir", /\w+=\{\},\w+\.send\("\w+"\)/, "");
@@ -19715,8 +21669,11 @@ window.grbtp = 35;
     Hook.prepend("renderEntity", /\w+\.health>NUM{0}.+?(\w+)\.fillStyle=(\w+)==(\w+)/, ";RYN._hooks._EntityRenderer._render($1,$2,$3);false&&");
     Hook.append("renderItemPush", /,(\w+)\.blocker,\w+.+?2\)\)/, ",RYN._Renderer._renderObjects.push($1)");
     Hook.replace("objectAlpha", /(\w+)\.globalAlpha=(\w+)\.hideFromEnemy\?([\d.]+):1,/, "$1.globalAlpha=RYN._Renderer._objectAlpha()*($2.hideFromEnemy?$3:1),");
-    Hook.replace("buildingTint", /\.isItem\?\((\w+)=(\w+)\((\w+)\),/, ".isItem?($1=RYN._Renderer._objectTint($2($3)),");
-    Hook.replace("resourceTint", /\((\w+)=(\w+)\((\w+)\),(\w+)\.drawImage\(\1,(\w+)-/, "($1=RYN._Renderer._objectTint($2($3)),$4.drawImage($1,$5-");
+    Hook.replace("buildingTint", /\.isItem\?\((\w+)=(\w+)\((\w+)\),/, ".isItem?($1=RYN._Renderer._objectTint($2($3),$3),");
+    // $3 is the resource being drawn, and it is now handed through so the
+    // renderer can tell food from wood and stone. buildingTint has always
+    // passed its object the same way.
+    Hook.replace("resourceTint", /\((\w+)=(\w+)\((\w+)\),(\w+)\.drawImage\(\1,(\w+)-/, "($1=RYN._Renderer._objectTint($2($3),$3),$4.drawImage($1,$5-");
     Hook.replace("animalTint", /(animals\/".+?)(\w+)\.drawImage\((\w+),-(\w+),-\4,\4\*2,\4\*2\)/, "$1RYN._Renderer._drawAnimal($2,$3,$4)");
     Hook.append("renderItem", /70, 0.35\)",(\w+).+?\w+\)/, ",RYN._hooks._ObjectRenderer._render($1)");
     Hook.append("RemoveSendAngle", /clientSendRate\)/, "&&false");
@@ -19762,7 +21719,6 @@ window.grbtp = 35;
         /let (\w+),(\w+),(\w+)=\!1;document\.getElementById\("ad-container"\)/,
         "let $1,$2,$3=!1;RYN._Login._releaseSpawn=function(){$3=!1};document.getElementById(\"ad-container\")");
     }
-
     Hook.replace("exposeCryptoFns", /const (\w+)=new (\w+),(\w+)=new (\w+);let (\w+)=null/, "const $1=new $2,$3=new $4;RYN._enc={Eo:Eo,Hi:$1,jt:jt,Po:Po,Ro:Ro};let $5=null");
     Hook.replace("handleBuy", /\w+\.send\("\w+",1,(\w+),(\w+)\)/, "RYN._myClient._ModuleHandler._buy($2,$1,true)");
     Hook.prepend("RemovePingCall", /\w+&&clearTimeout/, "return;");
@@ -19778,6 +21734,16 @@ window.grbtp = 35;
     Hook.prepend("unlockedItems", /\w+\.list\[\w+\]\.pre==/, "true||");
     Hook.replace("gameColor", /rgba\(0, 0, 70, 0.35\)/, "rgba(20, 4, 45, 0.45)");
     Hook.prepend("renderPlayer", /function (\w+)\(\w+,\w+\)\{\w+=\w+\|\|\w+,/, "RYN._hooks._renderPlayer=$1;");
+    // Melee animation and grip. Three surgical sites in the player renderer:
+    // the weapon sprite draw (both of them), the pair of hand circles, and the
+    // whole-player rotation in the render loop. Each hands off to
+    // RYN._MeleeAnim, which routes the polearm on to the shaft-grip system and
+    // returns control to the original code for every weapon neither of them
+    // carries a profile for -- shield, every bow, both crossbows and the
+    // musket -- and for anyone holding a building item.
+    Hook.replace("meleeWeapon", /(\w+)\((\w+)\.weapons\[(\w+)\.weaponIndex\],(\w+)\.weaponVariants\[\3\.weaponVariant\]\.src,\3\.scale,0,(\w+)\)/, "RYN._MeleeAnim._drawWeapon($1,$3,$2.weapons[$3.weaponIndex],$4.weaponVariants[$3.weaponVariant].src,$3.scale,0,$5)", "g");
+    Hook.replace("meleeHands", /(\w+)\.fillStyle=(\w+)\.skinColors\[(\w+)\.skinColor\],(\w+)\(\3\.scale\*Math\.cos\((\w+)\),\3\.scale\*Math\.sin\(\5\),NUM{14}\),\4\(\3\.scale\*(\w+)\*Math\.cos\(-\5\*(\w+)\),\3\.scale\*\6\*Math\.sin\(-\5\*\7\),NUM{14}\)/, "$1.fillStyle=$2.skinColors[$3.skinColor],RYN._MeleeAnim._drawHands($4,$3,$5,$7,$6,$1)");
+    Hook.replace("meleeBody", /(\w+)=\((\w+)==(\w+)\?(\w+)\(\):\2\.dir\)\+\2\.dirPlus/, "$1=($2==$3?$4():$2.dir)+RYN._MeleeAnim._bodyRot($2)");
     Hook.replace("maskFRVR", /window\.FRVR/, "FRVR", "g");
     Hook.replace("scaleWidth", /=1920/, "=RYN._ZoomHandler._scale._smooth._w");
     Hook.replace("scaleHeight", /=1080/, "=RYN._ZoomHandler._scale._smooth._h");
@@ -20240,25 +22206,354 @@ window.grbtp = 35;
       }
     }
   };
+  // ==========================================================================
+  // Death corpses
+  //
+  // A kill leaves a body behind: the dead player's own silhouette, held at the
+  // exact world position the server last reported for them, wearing a halo and
+  // angel wings — or a cowboy hat and a devil's tail if they were the player
+  // carrying the game's skull marker. It holds for a beat, fades out, and is
+  // gone.
+  //
+  // Strictly local and strictly visual. It sends nothing, reads nothing the
+  // client was not already told, and touches no player object after the tick
+  // the corpse was born on. A corpse is a handful of numbers and one draw
+  // call through the game's own player renderer — no particles, no lighting,
+  // no physics, no per-corpse timer.
+  //
+  // Everything is pooled. MAX_ACTIVE_CORPSES slots are built once, on the
+  // first death of the session, and reused for the rest of it: the active
+  // ones are kept compacted at the front of the array and expiring one is a
+  // swap and a decrement. Ten deaths in the same second allocate nothing.
+  // ==========================================================================
+
+  // The whole of the tuning. Durations are milliseconds.
+  const MAX_ACTIVE_CORPSES = 10;
+  const CORPSE_INITIAL_ALPHA = .6;
+  const CORPSE_HOLD_DURATION = 500;
+  const CORPSE_FADE_DURATION = 2600;
+  // The drift. The body lands on the spot it died, holds there long enough to
+  // read, then lifts away and turns as it goes while the fade takes it. All
+  // three are a function of the corpse's age alone — nothing is integrated
+  // frame to frame, so the path is identical at 30fps and at 240 and cannot
+  // accumulate error away from the position it was born on.
+  const CORPSE_RISE_DISTANCE = 95;
+  const CORPSE_RISE_SPIN = .45;
+  const CORPSE_RISE_SHRINK = .12;
+  // Hats and accessories are drawn by the bundle straight from their sprite
+  // id, so an id is all this needs to know about either of them — including
+  // the cowboy hat, which the client's own Hats table does not carry.
+  const CORPSE_HAT_NORMAL = 48;
+  const CORPSE_ACC_NORMAL = 13;
+  const CORPSE_HAT_SKULL = 5;
+  const CORPSE_ACC_SKULL = 20;
+  const CORPSE_SCALE = 35;
+  const CORPSE_OUTLINE = "#525252";
+  // A player you just killed was inside weapon range. A player who merely
+  // walked off the edge of the screen was not: the view is 1920x1080 world
+  // units, so anything past this on the tick of a kill is a view exit rather
+  // than a body, and gets no corpse.
+  const CORPSE_SPAWN_RANGE = 800;
+  // How many ticks back a disappearance still counts as the death this kill
+  // credited. Two, because the kill counter and the player list do not have to
+  // land in the same batch: SocketManager holds resource packets in its queue
+  // until the next player update, so a kill sent after that update is applied
+  // a tick after the body stopped being reported.
+  const CORPSE_DEATH_TICK_WINDOW = 2;
+
+  const CORPSE_SPAWN_RANGE_SQ = CORPSE_SPAWN_RANGE * CORPSE_SPAWN_RANGE;
+  const CORPSE_LIFETIME = CORPSE_HOLD_DURATION + CORPSE_FADE_DURATION;
+  const CORPSE_SKIN_COLORS = Config_default.skinColors.length;
+
+  const CorpseHandler = new class {
+    // Active slots occupy [0, count); everything past it is the free pool. The
+    // objects themselves are created once and never replaced, so nothing here
+    // allocates after the first death.
+    slots=[];
+    count=0;
+    _slot() {
+      const slots = this.slots;
+      if (slots.length === 0) {
+        for (let i = 0; i < MAX_ACTIVE_CORPSES; i++) {
+          slots.push({
+            born: 0,
+            x: 0,
+            y: 0,
+            angle: 0,
+            // The descriptor handed to the bundle's player renderer. One per
+            // slot, mutated in place: a fresh object literal every frame would
+            // churn the heap and miss the melee animator's identity cache. The
+            // fields past `scale` are the ones that renderer's animation path
+            // reads off a player; fixed here so a corpse always takes its idle
+            // branch instead of picking up whatever `undefined` compares to.
+            view: {
+              weaponIndex: 0,
+              buildIndex: -1,
+              tailIndex: 0,
+              skinIndex: 0,
+              weaponVariant: 0,
+              skinColor: 0,
+              scale: CORPSE_SCALE,
+              sid: 0,
+              dirPlus: 0,
+              animTime: 0,
+              animSpeed: 0,
+              targetAngle: 0
+            }
+          });
+        }
+      }
+      if (this.count < MAX_ACTIVE_CORPSES) {
+        return slots[this.count++];
+      }
+      // At the cap the oldest body makes way for the newest rather than the
+      // pool growing. Ten comparisons, and only ever on overflow.
+      let oldest = 0;
+      for (let i = 1; i < MAX_ACTIVE_CORPSES; i++) {
+        if (slots[i].born < slots[oldest].born) {
+          oldest = i;
+        }
+      }
+      return slots[oldest];
+    }
+    // Copies the dead player's last reported state into a pooled slot. Every
+    // field is a primitive: the player object is not referenced again, here or
+    // later, so nothing about the corpse can be moved by a respawn.
+    spawn(player, now) {
+      const slot = this._slot();
+      const view = slot.view;
+      // `pos.current` is the position the last player update actually carried
+      // for them, which is where they died. Deliberately not `pos.future`,
+      // which is the client's extrapolation of where they were headed.
+      const pos = player.pos.current;
+      const skull = player.hasSkull;
+      const skin = player.skinID;
+      slot.born = now;
+      slot.x = pos.x;
+      slot.y = pos.y;
+      slot.angle = player.angle;
+      view.skinIndex = skull ? CORPSE_HAT_SKULL : CORPSE_HAT_NORMAL;
+      view.tailIndex = skull ? CORPSE_ACC_SKULL : CORPSE_ACC_NORMAL;
+      view.weaponIndex = player.weapon.current | 0;
+      view.weaponVariant = player.variant.current | 0;
+      view.skinColor = skin >= 0 && skin < CORPSE_SKIN_COLORS ? skin : 0;
+    }
+    // Runs once per server tick, straight after the local player's own tick
+    // update, and costs one boolean read on every tick that did not carry a
+    // kill — which is all of them, nearly all of the time.
+    tick(playerManager) {
+      const client2 = playerManager.client;
+      if (!client2.isOwner || !Settings_default._deathCorpse) {
+        return;
+      }
+      const myPlayer = client2.myPlayer;
+      // `killedSomeone` is the client's existing kill event, raised in
+      // ClientPlayer.tickUpdate when the server's kill count goes up. The
+      // second half is the guard KillChat already uses against its one false
+      // positive: the counter is compared against a zeroed baseline on the
+      // first tick of a new life, so anyone who killed in a previous life
+      // reads there as having just killed again.
+      if (!myPlayer.killedSomeone || myPlayer.resources.kills === 0) {
+        return;
+      }
+      const tick = playerManager.corpseTick;
+      const mine = myPlayer.pos.current;
+      const cx = mine.x;
+      const cy = mine.y;
+      const now = Date.now();
+      // One walk of the player table per kill — not per frame, and not per
+      // player per frame. A player the server has just stopped reporting, on
+      // the tick we were credited with a kill and inside weapon range, is a
+      // body. Every enemy that qualifies gets its own corpse, so a spike that
+      // takes five at once leaves five, each at its own position with its own
+      // fade.
+      for (const player of playerManager.playerData.values()) {
+        const seen = player.corpseSeenTick;
+        if (seen <= 0) {
+          continue;
+        }
+        const gone = tick - seen;
+        if (gone < 1 || gone > CORPSE_DEATH_TICK_WINDOW) {
+          continue;
+        }
+        const id = player.id;
+        if (!myPlayer.isEnemyByID(id) || client2.isBotByID(id)) {
+          continue;
+        }
+        const pos = player.pos.current;
+        const dx = pos.x - cx;
+        const dy = pos.y - cy;
+        if (dx * dx + dy * dy > CORPSE_SPAWN_RANGE_SQ) {
+          continue;
+        }
+        // Spent: the next kill inside the window must not raise a second
+        // corpse for the same body. Cleared again by their next player update
+        // if they come back into view.
+        player.corpseSeenTick = 0;
+        this.spawn(player, now);
+      }
+    }
+    // The whole per-frame cost of the system: an integer compare when no one
+    // has died recently, and otherwise one pass over at most ten slots. A
+    // corpse does not move, so nothing about its position, rotation or
+    // appearance is recomputed here — only its age, and the alpha that age
+    // maps to.
+    render(ctx) {
+      if (this.count === 0) {
+        return;
+      }
+      if (!client.myPlayer.inGame || !Settings_default._deathCorpse) {
+        this.count = 0;
+        return;
+      }
+      const slots = this.slots;
+      const offset = RYN._offset;
+      const ox = offset.x;
+      const oy = offset.y;
+      const now = Date.now();
+      const draw = RYN._hooks._renderPlayer;
+      for (let i = 0; i < this.count; i++) {
+        const slot = slots[i];
+        const age = now - slot.born;
+        if (age >= CORPSE_LIFETIME) {
+          // Expired. Swap it behind the active run, shrink the run, and retest
+          // the index it was holding. The slot object stays in the array and
+          // is handed straight back out by the next death.
+          const last = --this.count;
+          slots[i] = slots[last];
+          slots[last] = slot;
+          i--;
+          continue;
+        }
+        let alpha = CORPSE_INITIAL_ALPHA;
+        // Read off the stored spawn state every frame rather than written back
+        // to it, so the body always resolves from the exact position it died
+        // on however long it has been drifting.
+        let y = slot.y;
+        let angle = slot.angle;
+        let scale = CORPSE_SCALE;
+        if (age > CORPSE_HOLD_DURATION) {
+          const t = (age - CORPSE_HOLD_DURATION) / CORPSE_FADE_DURATION;
+          // Smoothstep: flat at both ends, so the fade neither jumps as it
+          // leaves the hold nor snaps as it reaches nothing.
+          alpha *= 1 - t * t * (3 - 2 * t);
+          // Eased out, so it lifts off quickly and keeps slowing — a body
+          // floating up rather than one being thrown. Screen-up is world -Y.
+          const u = 1 - (1 - t) * (1 - t) * (1 - t);
+          y -= CORPSE_RISE_DISTANCE * u;
+          angle += CORPSE_RISE_SPIN * u;
+          scale -= CORPSE_SCALE * CORPSE_RISE_SHRINK * u;
+        }
+        const view = slot.view;
+        view.scale = scale;
+        ctx.save();
+        ctx.translate(slot.x - ox, y - oy);
+        ctx.rotate(angle);
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = CORPSE_OUTLINE;
+        draw(view, ctx);
+        ctx.restore();
+      }
+    }
+  };
+  // ==========================================================================
+  // The structure readout — whose building it is, and how much of it is left.
+  //
+  // Whiteout draws this inside its own renderGameObjects, for every placed
+  // building within 500 units: a rectangular health bar over the object and the
+  // owner's name above it.
+  //
+  //     if (hacking && tmpObj.dist2 <= 500) {
+  //         roundRect(tmpX - config.healthBarWidth / 2 - config.healthBarPad,
+  //                   tmpY - config.healthBarPad,
+  //                   config.healthBarWidth + config.healthBarPad * 2, 17, 8)
+  //         roundRect(tmpX - config.healthBarWidth / 2, tmpY,
+  //                   config.healthBarWidth * (tmpObj.health / tmpObj.maxHealth),
+  //                   17 - config.healthBarPad * 2, 7)
+  //     }
+  //     let owner = findPlayerBySID(tmpObj.owner.sid);
+  //     if (owner && tmpObj.dist2 <= 500) { strokeText/fillText owner.name at tmpY - 7 }
+  //
+  // What was here before was a circular arc around each structure and no name
+  // at all. That is gone; this is Whiteout's rectangle — but drawn with RYN's
+  // own pieces rather than a second set of primitives beside them.
+  //
+  // They line up exactly. Renderer.barContainer and barContent already lay out
+  // this shape, because Config.barWidth, barHeight and barPad are 50, 17 and
+  // 4.5 — the same three numbers Whiteout reads out of the game as
+  // healthBarWidth, the literal 17, and healthBarPad. So the holder and the
+  // fill land on the same pixels Whiteout puts them on, off RYN's config
+  // instead of a copy of the constants.
+  //
+  // The rest is RYN's too: ownership from the isMyPlayerByID / isTeammateByID
+  // pair every module and the structure colours already use, and the owner's
+  // name straight off PlayerManager rather than Whiteout's findPlayerBySID
+  // scan over the player list.
+  //
+  // Whiteout colours the bar by ownership — green for yours, yellow for the
+  // clan's, red for everyone else. Here every bar is the one light sky blue;
+  // ownership decides whether a bar is drawn at all, which is what this
+  // client's two toggles have always done.
+  // ==========================================================================
+  const STRUCTURE_INFO_RANGE = 500;
+  const STRUCTURE_INFO_RANGE_SQ = STRUCTURE_INFO_RANGE * STRUCTURE_INFO_RANGE;
+  // Whiteout's text: 20px, white on the dark outline, centred, sitting 7 above
+  // the bar's own origin.
+  const STRUCTURE_NAME_SIZE = 20;
+  const STRUCTURE_NAME_OFFSET = 7;
+  const STRUCTURE_NAME_COLOR = "#fff";
+  const STRUCTURE_NAME_OUTLINE = "#3d3f42";
+  const STRUCTURE_NAME_OUTLINE_WIDTH = 5.5;
+
   const ObjectRenderer = new class {
-    healthBar(ctx, entity, object) {
-      if (!object.seenPlacement || !object.isDestroyable) {
-        return 0;
+    // `cx`/`cy` are the player's world position, passed in because the render
+    // pass already has it and this runs once per structure on screen.
+    structureInfo(ctx, entity, object, cx, cy) {
+      // A structure with infinite health has no bar to draw. Whiteout draws for
+      // everything and divides by Infinity; this is the same picture without
+      // the NaN.
+      if (!object.isDestroyable) {
+        return;
       }
-      let isEnemyObj = false;
-      const _mp = client && client.myPlayer;
-      const _owner = object.ownerID;
-      if (_mp && _owner != null && !_mp.isMyPlayerByID(_owner) && !_mp.isTeammateByID(_owner)) {
-        isEnemyObj = true;
+      const myPlayer = client && client.myPlayer;
+      const owner = object.ownerID;
+      if (!myPlayer || owner === null || owner === void 0) {
+        return;
       }
-      const enabled = isEnemyObj ? Settings_default._itemHealthBarEnemy : Settings_default._itemHealthBar;
-      if (!enabled) {
-        return 0;
+      const isEnemy = !myPlayer.isMyPlayerByID(owner) && !myPlayer.isTeammateByID(owner);
+      if (!(isEnemy ? Settings_default._itemHealthBarEnemy : Settings_default._itemHealthBar)) {
+        return;
       }
-      const {health: health, maxHealth: maxHealth, angle: angle} = object;
-      const perc = health / maxHealth;
-      const color = isEnemyObj ? Settings_default._itemHealthBarEnemyColor : Settings_default._itemHealthBarColor;
-      return Renderer_default.circularBar(ctx, entity, perc, angle, color, 0, 1.4);
+      const dx = entity.x - cx;
+      const dy = entity.y - cy;
+      if (dx * dx + dy * dy > STRUCTURE_INFO_RANGE_SQ) {
+        return;
+      }
+      const offset = RYN._offset;
+      const x = entity.x + entity.xWiggle - offset.x;
+      const y = entity.y + entity.yWiggle - offset.y;
+      const {barWidth: barWidth, barHeight: barHeight, barPad: barPad} = Config_default;
+      const width = barWidth + barPad * 2;
+      const left = x - width / 2;
+      const top = y - barPad;
+      ctx.save();
+      ctx.globalAlpha = 1;
+      Renderer_default.barContainer(ctx, left, top, width, barHeight);
+      Renderer_default.barContent(ctx, left, top, width, barHeight, clamp(object.health / object.maxHealth, 0, 1), Settings_default._itemHealthBarColor);
+      const player = client.PlayerManager.playerData.get(owner);
+      const name = player && player.nickname;
+      if (name) {
+        ctx.fillStyle = STRUCTURE_NAME_COLOR;
+        ctx.strokeStyle = STRUCTURE_NAME_OUTLINE;
+        ctx.lineWidth = STRUCTURE_NAME_OUTLINE_WIDTH;
+        ctx.lineJoin = "round";
+        ctx.textBaseline = "middle";
+        ctx.textAlign = "center";
+        ctx.font = STRUCTURE_NAME_SIZE + "px Hammersmith One";
+        ctx.strokeText(name, x, y - STRUCTURE_NAME_OFFSET);
+        ctx.fillText(name, x, y - STRUCTURE_NAME_OFFSET);
+      }
+      ctx.restore();
     }
     renderWindmill(entity) {
       const item = Items[entity.id];
@@ -20282,34 +22577,63 @@ window.grbtp = 35;
         Renderer_default.diamond(ctx, x, y, object.placementScale, "#73b9ba", .5, 1);
       }
     }
+    // Distance-to-player comparator, allocated once. The old version built a
+    // fresh closure over the player's position on every frame it sorted.
+    _sortCx=0;
+    _sortCy=0;
+    _byDistance=(a, b) => {
+      const ax = a.x - this._sortCx;
+      const ay = a.y - this._sortCy;
+      const bx = b.x - this._sortCx;
+      const by = b.y - this._sortCy;
+      return ax * ax + ay * ay - (bx * bx + by * by);
+    };
     _render(ctx) {
-      if (Renderer_default._renderObjects.length === 0) {
+      const objects = Renderer_default._renderObjects;
+      if (objects.length === 0) {
         return;
       }
-      const {ObjectManager: ObjectManager2, _ModuleHandler: ModuleHandler2, myPlayer: myPlayer} = client;
-      const _cx = myPlayer && myPlayer.inGame ? myPlayer.pos.current.x : 0;
-      const _cy = myPlayer && myPlayer.inGame ? myPlayer.pos.current.y : 0;
+      const {ObjectManager: ObjectManager2, myPlayer: myPlayer} = client;
+      const inGame = myPlayer && myPlayer.inGame;
+      const _cx = inGame ? myPlayer.pos.current.x : 0;
+      const _cy = inGame ? myPlayer.pos.current.y : 0;
       const _vw = ZoomHandler_default._scale.current._w * 0.55;
       const _vh = ZoomHandler_default._scale.current._h * 0.55;
-      const _maxObj = Settings_default._lowQuality ? 80 : Infinity;
+      // Settings were read once per object per frame; the answer cannot change
+      // inside one pass, so they are read once for the pass.
+      const lowQuality = Settings_default._lowQuality;
+      const fast = Settings_default._performanceOptimization;
+      const _maxObj = lowQuality ? 80 : Infinity;
+      const structureInfo = inGame && (Settings_default._itemHealthBar || Settings_default._itemHealthBarEnemy);
+      const hitboxes = Settings_default._collisionHitbox || Settings_default._weaponHitbox || Settings_default._placementHitbox;
       let _objCount = 0;
-      if (Settings_default._lowQuality && myPlayer && myPlayer.inGame) {
-        Renderer_default._renderObjects.sort((a, b) => (a.x - _cx) * (a.x - _cx) + (a.y - _cy) * (a.y - _cy) - ((b.x - _cx) * (b.x - _cx) + (b.y - _cy) * (b.y - _cy)));
+      if (lowQuality && inGame) {
+        this._sortCx = _cx;
+        this._sortCy = _cy;
+        objects.sort(this._byDistance);
       }
-      for (const entity of Renderer_default._renderObjects) {
+      for (const entity of objects) {
         if (_objCount++ >= _maxObj) break;
-        if (Settings_default._lowQuality && (Math.abs(entity.x - _cx) > _vw || Math.abs(entity.y - _cy) > _vh)) continue;
+        if (lowQuality && (Math.abs(entity.x - _cx) > _vw || Math.abs(entity.y - _cy) > _vh)) continue;
         const object = ObjectManager2.objects.get(entity.sid);
         if (object === void 0) {
           continue;
         }
         if (object instanceof PlayerObject) {
-          this.healthBar(ctx, entity, object);
+          // The readout is only worth a call when one of its two toggles is on
+          // and the player is in the world to measure the 500 from.
+          if (structureInfo) {
+            this.structureInfo(ctx, entity, object, _cx, _cy);
+          }
+          // Not an overlay: this is what freezes spinning spikes and, in low
+          // quality, windmills. It runs whatever the overlay settings say.
           this.renderWindmill(entity);
         }
-        this.renderCollisions(ctx, entity, object);
+        if (!fast || hitboxes) {
+          this.renderCollisions(ctx, entity, object);
+        }
       }
-      Renderer_default._renderObjects.length = 0;
+      objects.length = 0;
     }
     volcanoBoxSize=940;
     volcanoAggressionRadius=1440;
@@ -20354,6 +22678,10 @@ window.grbtp = 35;
       if (Settings_default._positionPrediction && client.myPlayer.inGame) {
         DeadPlayerHandler.render(ctx, client.myPlayer.simulation.getPos(), client.myPlayer.simulation.spikeCollision ? "red" : "yellow");
       }
+      // Bodies go down before the grid, the objects and the living players the
+      // bundle draws after this hook, so they stay underfoot and never sit on
+      // top of anything you need to read.
+      CorpseHandler.render(ctx);
     }
   };
   const ObjectRenderer_default = ObjectRenderer;
@@ -20361,10 +22689,34 @@ window.grbtp = 35;
   const version = isProd ? "5.9.4" : "Dev";
   const loadedFast = document.head === null;
   if (!loadedFast) {
-    Logger.warn("RYN Client loading warning! It is generally recommended to use faster injection mode.");
+    Logger.warn("Ryn Type 2 loading warning! It is generally recommended to use faster injection mode.");
   }
-  Logger.test("RYN Client initialization..");
-  const gameToken = altcha.generate();
+  Logger.test("Ryn Type 2 initialization..");
+  // The altcha proof-of-work is only ever consumed by RYN.startGame(), and
+  // that only runs when the bundle never installed its own #enterGame handler
+  // — i.e. almost never, because Fa() assigns `we.onclick` on every normal
+  // load. Kicking it off here spawned min(16, hardwareConcurrency) SHA-256
+  // workers at document-start on *every* load and ran them flat out against
+  // every core during precisely the window Cloudflare Turnstile needs to fetch
+  // and solve its own challenge — and a Turnstile token is the one thing that
+  // must land before Play can connect. The game gives its widget 100 x 150ms
+  // to even appear; starving the machine is enough to miss that on a slower
+  // box, which left Play permanently ungated (see the guard in `onload`).
+  //
+  // It is generated on demand now, once, and memoised. The old form was also a
+  // floating promise: solve() rejects with "Not solved", and nothing was
+  // attached to catch it, so a failure surfaced as an unhandled rejection at
+  // load. The rejection is handled here and resolves to null, which
+  // startGame() already treats as failure.
+  let _gameTokenPromise = null;
+  const gameToken = () => (_gameTokenPromise ||= altcha.generate().catch(e => {
+    // Not Logger: every Logger method returns early while isProd is true, and
+    // this is a message about why the game will not start.
+    try {
+      console.warn("[RYN] altcha token generation failed:", e && e.message);
+    } catch (_) {}
+    return null;
+  }));
   const client = new PlayerClient_default;
   window.WebSocket = new window.Proxy(window.WebSocket, {
     construct(target, args) {
@@ -20575,12 +22927,1164 @@ window.grbtp = 35;
     }
   }();
 
-  (function _weatherLoop(now) {
-    requestAnimationFrame(_weatherLoop);
-    try {
-      Weather.frame(now || performance.now());
-    } catch (e) {}
-  })(performance.now());
+  // ───────────────────────────────────────────────────────────────────────────
+  //  Frame driver
+  //
+  //  The client used to hold eight independent requestAnimationFrame loops —
+  //  weather, the halves and squad overlays, the target markers, the scatter
+  //  and auto-farm bot passes and the two post-kill cleanup passes. Each one
+  //  re-registered itself every frame, so the browser scheduled, invoked and
+  //  unwound eight callbacks per frame to do work that belongs to one.
+  //
+  //  They are one loop now. Every pass keeps the cadence it had, runs in the
+  //  order it was registered in — which is the order the separate loops ran in,
+  //  because a self-registering rAF loop keeps its slot for the life of the
+  //  page — and keeps its own try/catch so a pass that throws cannot take the
+  //  others down with it. Two of the old loops had no guard of their own and
+  //  would have died permanently on a single throw; under the driver they are
+  //  retried on the next frame.
+  //
+  //  Every drawing pass owns a separate overlay canvas layered over the game's,
+  //  so none of this changes what is drawn over what.
+  // ───────────────────────────────────────────────────────────────────────────
+  const FrameDriver = new class {
+    _passes=[];
+    _started=false;
+    add(fn) {
+      this._passes.push(fn);
+      if (this._started) {
+        return;
+      }
+      this._started = true;
+      const tick = now => {
+        requestAnimationFrame(tick);
+        const passes = this._passes;
+        for (let i = 0; i < passes.length; i++) {
+          try {
+            passes[i](now);
+          } catch (e) {}
+        }
+      };
+      requestAnimationFrame(tick);
+    }
+  }();
+
+  FrameDriver.add(now => Weather.frame(now || performance.now()));
+
+  // ───────────────────────────────────────────────────────────────────────────
+  //  Melee animation and weapon grip
+  //
+  //  Vanilla moomoo animates an attack by rotating the entire player — body,
+  //  hat and both hand circles — by `dirPlus`, up to a full 180 degrees. The
+  //  weapon sprite is welded to that one transform, so every weapon performs
+  //  the identical motion and the result reads as a sprite spinning around a
+  //  disc rather than as a person swinging something with weight to it.
+  //
+  //  This replaces that, for melee weapons only. The body stops spinning (it
+  //  keeps a small torso twist), and the weapon together with its two grip
+  //  points moves as one rigid body about a pivot that sits on the weapon's own
+  //  handle. Each weapon drives that rigid body through its own keyframe track,
+  //  so a spear thrusts, a bat wraps around, a great hammer lands and dwells.
+  //
+  //  Grip model
+  //  ----------
+  //  The game already carries two grip points per weapon — the hand circles it
+  //  places from `armS` / `hndS` / `hndD`. For every melee weapon those two
+  //  points land on a single line through the sprite, which is the haft. So the
+  //  haft is read out of the game's own data instead of being guessed off the
+  //  artwork:
+  //
+  //                head / tip
+  //                    |
+  //                [ hand 1 ]     primary grip:   angle +armS·45°, radius scale
+  //                    |
+  //                [ hand 2 ]     secondary grip: angle -armS·hndS·45°, ·hndD
+  //                    |
+  //                butt of haft
+  //
+  //  The rest pose is left exactly as vanilla draws it, so no weapon can end up
+  //  mis-oriented, upside down, sideways or detached from its sprite. Every
+  //  thing the animation does is a rotation about a grip point plus a
+  //  translation — a rigid transform — which by construction keeps both hands
+  //  on the weapon for the whole of the motion.
+  //
+  //  Order of operations, once per player per frame:
+  //
+  //      attack direction (untouched, the game's own `dir`)
+  //        -> haft axis and the two grip points, from weapon data
+  //        -> pivot, chosen per weapon from those grip points
+  //        -> keyframe sample for this weapon at this instant
+  //        -> rigid transform of weapon + grips
+  //        -> off-hand track, for one-handed weapons
+  //        -> visibility clamps
+  //
+  //  Shield, every bow, both crossbows and the musket have no profile here and
+  //  fall through to the untouched vanilla path, as does anyone holding a
+  //  building item. `_track` returns null for all of them before anything else
+  //  happens, and the three call sites then run the original code verbatim.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  // Easing between keyframes. `i*` accelerate into the key — a weapon being
+  // driven by the body; `o*` decelerate into it — a weapon arriving under its
+  // own momentum; the higher the digit the harder the curve, which is how
+  // weight is expressed. `l` holds a constant rate (a dwell), `s` settles, and
+  // `b` overshoots slightly and springs back.
+  const MELEE_EASE = {
+    l: t => t,
+    i2: t => t * t,
+    i3: t => t * t * t,
+    i4: t => t * t * t * t,
+    o2: t => t * (2 - t),
+    o3: t => 1 - (1 - t) * (1 - t) * (1 - t),
+    o4: t => 1 - (1 - t) * (1 - t) * (1 - t) * (1 - t),
+    s: t => .5 - .5 * Math.cos(Math.PI * t),
+    b: t => {
+      const k = t - 1;
+      return 1 + 2.70158 * k * k * k + 1.70158 * k * k;
+    }
+  };
+
+  // Which grip points ride the weapon.
+  const MELEE_TWO = 0;  // both hands on the haft
+  const MELEE_ONE = 1;  // primary hand on the weapon, off hand counter-swings
+  const MELEE_DUAL = 2; // one weapon per hand, both ride
+
+  // Keyframe fields:
+  //   u  point in the weapon's own attack duration, 0 -> 1
+  //   r  rotation of the weapon + grip assembly about the pivot, radians;
+  //      negative drives the weapon toward the facing direction, positive
+  //      loads it away from there
+  //   p  translation along the facing axis, forward positive
+  //   l  translation across it, weapon side positive
+  //   s  primary hand sliding along the haft, toward the butt negative
+  //   t  torso twist
+  //   e  easing used to reach this key from the one before it
+  //
+  // Profile fields:
+  //   grip   which hands ride the weapon
+  //   pivot  the point the weapon turns about while it is being driven:
+  //          "f" primary grip, "r" secondary grip, "m" midway between them
+  //   back   the pivot used while the weapon is being loaded instead, i.e.
+  //          while the rotation is positive. A two-handed swing loads about
+  //          the lead hand -- the head travels, the hands stay put -- and then
+  //          drives about the rear hand, which is what puts the head through
+  //          the arc. Both pivots agree exactly where the rotation crosses
+  //          zero, so the swap costs no continuity. Defaults to `pivot`.
+  //   alt    alternate the pivot between the two grips on successive attacks
+  //   ctr    how much of the rotation the free off hand mirrors, one-handed only
+  //   ctrP   the same for the translation
+  //   whiff  scaling applied when the swing connected with nothing: {r, p}
+  //
+  // Keyed by weapon index. Only melee weapons appear; the absence of an entry
+  // is what keeps a weapon on the vanilla path.
+  //
+  // Two constraints shape every number below, and tools/verify-melee.js holds
+  // them: no grip point may come within 30px of the player's centre, or the
+  // body circle -- which the game draws last, over everything -- swallows it;
+  // and no grip point may travel more than about 60px in a 60fps frame, or the
+  // hands stop reading as hands. The weapon itself is free to blur, and on the
+  // heavy weapons it does.
+  const MELEE_PROFILES = {
+    // 0 - tool hammer. A light one-handed working tool: a flick of a wind-up, a
+    // short tap driven from the wrist, and it is back on guard immediately.
+    0: {
+      name: "tool hammer",
+      grip: MELEE_ONE, pivot: "f", ctr: .20, ctrP: .16,
+      whiff: { r: 1.10, p: 1.10 },
+      keys: [
+        { u: 0,   r: 0,     p: 0,  l: 0, s: 0, t: 0,    e: "l" },
+        { u: .12, r: .34,   p: -4, l: 2, s: 0, t: -.05, e: "o2" },
+        { u: .34, r: -1.05, p: 10, l: 6, s: 0, t: .07,  e: "i2" },
+        { u: .44, r: -1.22, p: 7,  l: 9, s: 0, t: .06,  e: "o3" },
+        { u: .62, r: -.80,  p: 3,  l: 5, s: 0, t: .03,  e: "o2" },
+        { u: 1,   r: 0,     p: 0,  l: 0, s: 0, t: 0,    e: "s" }
+      ]
+    },
+
+    // 1 - hand axe. One-handed chop: a real wind-up, a cubic fall that is still
+    // gathering speed when it arrives, and a head that is checked hard at the
+    // bite instead of flowing on through it.
+    1: {
+      name: "hand axe",
+      grip: MELEE_ONE, pivot: "f", ctr: .24, ctrP: .18,
+      whiff: { r: 1.12, p: 1.12 },
+      keys: [
+        { u: 0,   r: 0,     p: 0,  l: 0,  s: 0, t: 0,    e: "l" },
+        { u: .15, r: .46,   p: -5, l: 2,  s: 0, t: -.07, e: "o2" },
+        { u: .38, r: -1.25, p: 13, l: 10, s: 0, t: .09,  e: "i3" },
+        { u: .47, r: -1.48, p: 9,  l: 15, s: 0, t: .08,  e: "o4" },
+        { u: .66, r: -1.15, p: 4,  l: 9,  s: 0, t: .04,  e: "o2" },
+        { u: 1,   r: 0,     p: 0,  l: 0,  s: 0, t: 0,    e: "s" }
+      ]
+    },
+
+    // 2 - great axe. The same family as the hand axe and deliberately not a
+    // copy of it: two hands, a much wider load taken about the lead hand, a
+    // heavier acceleration, and the upper hand sliding down the haft through
+    // the swing the way it does on a real two-handed chop.
+    2: {
+      name: "great axe",
+      grip: MELEE_TWO, pivot: "r", back: "f",
+      whiff: { r: 1.10, p: 1.15 },
+      keys: [
+        { u: 0,   r: 0,     p: 0,  l: 0,  s: 0,   t: 0,    e: "l" },
+        { u: .18, r: .62,   p: -5, l: 2,  s: 3,   t: -.11, e: "o2" },
+        { u: .40, r: -1.28, p: 14, l: 8,  s: -10, t: .13,  e: "i3" },
+        { u: .50, r: -1.58, p: 10, l: 13, s: -14, t: .11,  e: "o4" },
+        { u: .72, r: -1.30, p: 5,  l: 9,  s: -7,  t: .05,  e: "o2" },
+        { u: 1,   r: 0,     p: 0,  l: 0,  s: 0,   t: 0,    e: "s" }
+      ]
+    },
+
+    // 3 - short sword. Compact one-handed cut: a very short cock of the wrist,
+    // a slash that stays close to the body, and a quick recovery. Nothing here
+    // is shared with the katana.
+    3: {
+      name: "short sword",
+      grip: MELEE_ONE, pivot: "f", ctr: .18, ctrP: .14,
+      whiff: { r: 1.14, p: 1.10 },
+      keys: [
+        { u: 0,   r: 0,     p: 0,  l: 0, s: 0, t: 0,    e: "l" },
+        { u: .10, r: .28,   p: -3, l: 1, s: 0, t: -.05, e: "o2" },
+        { u: .32, r: -1.15, p: 12, l: 4, s: 0, t: .08,  e: "i2" },
+        { u: .40, r: -1.40, p: 14, l: 7, s: 0, t: .07,  e: "o3" },
+        { u: .58, r: -1.00, p: 7,  l: 3, s: 0, t: .03,  e: "o2" },
+        { u: 1,   r: 0,     p: 0,  l: 0, s: 0, t: 0,    e: "s" }
+      ]
+    },
+
+    // 4 - katana. Two hands on the hilt throughout, both riding the haft, so
+    // neither can drift onto the blade. It raises, commits to one long cut, and
+    // then holds the blade out on line before returning slowly to guard. That
+    // hold -- the near-flat stretch from .49 to .70, four frames of a
+    // three-frame-per-tenth animation -- is what separates it from the short
+    // sword. It is not the same motion played faster.
+    4: {
+      name: "katana",
+      grip: MELEE_TWO, pivot: "r", back: "f",
+      whiff: { r: 1.08, p: 1.12 },
+      keys: [
+        { u: 0,   r: 0,     p: 0,  l: 0,  s: 0,  t: 0,    e: "l" },
+        { u: .13, r: .50,   p: -5, l: 2,  s: 2,  t: -.09, e: "o3" },
+        { u: .42, r: -1.55, p: 16, l: 6,  s: -4, t: .12,  e: "i2" },
+        { u: .49, r: -1.80, p: 13, l: 11, s: -6, t: .10,  e: "o4" },
+        { u: .70, r: -1.68, p: 8,  l: 9,  s: -3, t: .05,  e: "o2" },
+        { u: 1,   r: 0,     p: 0,  l: 0,  s: 0,  t: 0,    e: "s" }
+      ]
+    },
+
+    // 5 - polearm is deliberately absent. It is the one weapon that thrusts
+    // instead of swinging, and it is driven by WEAPON_ANIM_PROFILES below,
+    // which holds the hands at fixed points on the weapon's own shaft rather
+    // than deriving them from the game's two grip angles -- so the shaft can
+    // run forward through a braced grip, which is what a thrust is and what
+    // nothing expressible here can do. A weapon absent from both tables stays
+    // on the vanilla path.
+
+    // 6 - bat. Two hands, the widest load of any weapon here, and the only one
+    // whose rotation keeps growing after the contact point: it wraps around
+    // past the strike instead of stopping on it, which is what a bat does and
+    // what a sword does not.
+    6: {
+      name: "bat",
+      grip: MELEE_TWO, pivot: "r", back: "f",
+      whiff: { r: 1.12, p: 1.10 },
+      keys: [
+        { u: 0,   r: 0,     p: 0,  l: 0,  s: 0,  t: 0,    e: "l" },
+        { u: .20, r: .80,   p: -6, l: 2,  s: 4,  t: -.14, e: "o2" },
+        { u: .46, r: -1.35, p: 11, l: 10, s: -6, t: .15,  e: "i2" },
+        { u: .54, r: -1.86, p: 7,  l: 14, s: -8, t: .12,  e: "o2" },
+        { u: .76, r: -2.10, p: 3,  l: 8,  s: -4, t: .06,  e: "o2" },
+        { u: 1,   r: 0,     p: 0,  l: 0,  s: 0,  t: 0,    e: "s" }
+      ]
+    },
+
+    // 7 - daggers. One blade per hand, both riding, so the left dagger stays in
+    // the left hand and the right in the right. The blades already point down
+    // the facing axis at rest, so the strike is nearly all reach and almost no
+    // rotation -- a stab, not a cut, and it never loads backwards. `alt` swaps
+    // the pivot between the two grips on successive attacks and mirrors the
+    // lateral offset with it, so at 100ms a hand each the strikes genuinely
+    // alternate instead of repeating.
+    7: {
+      name: "daggers",
+      grip: MELEE_DUAL, pivot: "f", alt: true,
+      whiff: { r: 1.05, p: 1.15 },
+      keys: [
+        { u: 0,   r: 0,    p: 0,  l: 0,  s: 0, t: 0,    e: "l" },
+        { u: .08, r: -.04, p: -3, l: -1, s: 0, t: -.03, e: "o2" },
+        { u: .30, r: -.28, p: 21, l: 5,  s: 0, t: .05,  e: "o2" },
+        { u: .44, r: -.32, p: 23, l: 6,  s: 0, t: .04,  e: "o2" },
+        { u: 1,   r: 0,    p: 0,  l: 0,  s: 0, t: 0,    e: "s" }
+      ]
+    },
+
+    // 8 - stick. Light enough that it reaches full speed the instant it moves,
+    // so every key decelerates into place rather than accelerating into it; the
+    // arc is small and it springs back off the strike. Nothing in common with
+    // the bat or either hammer beyond being blunt.
+    8: {
+      name: "stick",
+      grip: MELEE_ONE, pivot: "f", ctr: .20, ctrP: .14,
+      whiff: { r: 1.15, p: 1.10 },
+      keys: [
+        { u: 0,   r: 0,     p: 0,  l: 0, s: 0, t: 0,    e: "l" },
+        { u: .10, r: .40,   p: -4, l: 2, s: 0, t: -.05, e: "o2" },
+        { u: .30, r: -1.00, p: 9,  l: 6, s: 0, t: .07,  e: "o2" },
+        { u: .40, r: -1.16, p: 7,  l: 9, s: 0, t: .06,  e: "o2" },
+        { u: .56, r: -.82,  p: 4,  l: 5, s: 0, t: .03,  e: "b" },
+        { u: 1,   r: 0,     p: 0,  l: 0, s: 0, t: 0,    e: "s" }
+      ]
+    },
+
+    // 10 - great hammer. The heaviest thing in the game and the profile says
+    // so: the slowest lift, a cubic acceleration into the fall, a quartic stop
+    // at the head, then a flat dwell while the head sits where it landed before
+    // the weapon is hauled back up. The upper hand slides a long way down the
+    // haft under the load. Same family as the great axe, different weapon.
+    10: {
+      name: "great hammer",
+      grip: MELEE_TWO, pivot: "r", back: "f",
+      whiff: { r: 1.06, p: 1.12 },
+      keys: [
+        { u: 0,   r: 0,     p: 0,  l: 0,  s: 0,   t: 0,    e: "l" },
+        { u: .22, r: .70,   p: -5, l: 2,  s: 4,   t: -.13, e: "o3" },
+        { u: .46, r: -1.15, p: 15, l: 8,  s: -12, t: .15,  e: "i3" },
+        { u: .55, r: -1.50, p: 11, l: 14, s: -16, t: .12,  e: "o4" },
+        { u: .64, r: -1.46, p: 10, l: 13, s: -15, t: .10,  e: "l" },
+        { u: .84, r: -1.22, p: 6,  l: 9,  s: -7,  t: .05,  e: "o2" },
+        { u: 1,   r: 0,     p: 0,  l: 0,  s: 0,   t: 0,    e: "s" }
+      ]
+    },
+
+    // 14 - mc grabby. The hand weapon: the hand on the end of it is what
+    // strikes, so it never swings. It shares the spear's shaft geometry -- the
+    // same sprite box, the same two grips -- and deliberately not the spear's
+    // character: barely any chamber, a quadratic snap straight out instead of
+    // the spear's built cubic drive, and then the thing the spear does not do
+    // at all, a hard quartic pull back in as it takes hold and hauls. Out fast,
+    // back faster, home slowly.
+    14: {
+      name: "mc grabby",
+      grip: MELEE_TWO, pivot: "r",
+      whiff: { r: 1.05, p: 1.20 },
+      keys: [
+        { u: 0,   r: 0,     p: 0,  l: 0,  s: 0,  t: 0,    e: "l" },
+        { u: .10, r: -.55,  p: -4, l: -8, s: 5,  t: -.06, e: "o2" },
+        { u: .28, r: -1.30, p: 20, l: 4,  s: 0,  t: .08,  e: "i2" },
+        { u: .36, r: -1.36, p: 30, l: 6,  s: -3, t: .09,  e: "o3" },
+        { u: .48, r: -1.18, p: 6,  l: 0,  s: 3,  t: .03,  e: "o4" },
+        { u: .68, r: -1.05, p: 9,  l: 2,  s: 1,  t: .03,  e: "o2" },
+        { u: 1,   r: 0,     p: 0,  l: 0,  s: 0,  t: 0,    e: "s" }
+      ]
+    }
+  };
+
+  /* ------------------------------------------------------------------------ *
+   * Shaft-grip weapon animation.
+   *
+   * A second animation system, and deliberately not a variant of the one
+   * above. `MeleeAnim` starts from the game's own two grip points -- the pair
+   * of angles the bundle already computes -- and moves them. This one starts
+   * from the weapon sprite instead: every profile names the direction of the
+   * weapon's handle in its own sprite frame (`shaft`), the point on that handle
+   * everything turns about (`grip`), and where along the handle each hand
+   * closes (`hand1` / `hand2`). The sprite and both hand circles then ride one
+   * transform, so the shaft genuinely passes through both fists and a thrust
+   * slides the shaft *through* them rather than carrying them along.
+   *
+   * One weapon is on it, the polearm -- the one weapon in the game that thrusts
+   * rather than swings, and the one the grip-angle system above cannot say
+   * anything useful about. Its profile is carried across from the v5.4 client
+   * unchanged, values and all.
+   *
+   * Every other weapon stays on MELEE_PROFILES. Both systems are purely
+   * presentational: they read the animation clock the server already drives
+   * (`animTime` / `animSpeed`) and never write to it, so hit timing, damage,
+   * range, cooldown and packets are untouched.
+   *
+   * Local frame: +X is the attack direction, +Y is the player's right. Player
+   * radius is 35.
+   * ------------------------------------------------------------------------ */
+
+  /* Easing ids. Multiplications only -- no pow/sin in the interpolators. */
+  const WA_LINEAR = 0;
+  const WA_OUT_QUAD = 1;
+  const WA_OUT_CUBIC = 2;
+  const WA_IN_QUAD = 3;
+  const WA_IN_CUBIC = 4;
+  const WA_INOUT_CUBIC = 5;
+  const WA_OUT_BACK = 6;
+  const WA_OUT_QUINT = 7;
+  const WA_INOUT_QUAD = 8;
+
+  /* Grip mode. One-handed weapons put the free hand on a resting pose that
+   * counter-swings; two-handed weapons put both hands on the shaft. */
+  const WA_ONE_HAND = 1;
+  const WA_TWO_HAND = 2;
+
+  /* Idle sway: one breath every WA_SWAY_PERIOD ms. The clock wraps on an exact
+   * multiple of that period so the phase is continuous across the wrap. */
+  const WA_SWAY_PERIOD = 2420;
+  const WA_SWAY_WRAP = WA_SWAY_PERIOD * 8;
+  const WA_SWAY_RATE = Math.PI * 2 / WA_SWAY_PERIOD;
+  const WA_SLOTS = 256;
+  const WA_DEG = Math.PI / 180;
+
+  /* ---------------------------------------------------------------------- *
+   * `shaft` is the weapon's base orientation: the direction of its handle in
+   * the sprite's own frame, before anything here rotates it. The bundle draws
+   * every sprite axis-aligned at (scale + xOff, yOff), so for a box taller
+   * than it is wide -- the polearm -- the long axis is +Y, and the bundle's
+   * own attack, which rotates the player -90 degrees to bring the business end
+   * to the front, settles that the business end is the +Y extreme. A square
+   * box -- the great hammer -- carries the handle direction that puts its head
+   * where the sprite offset points.
+   *
+   * `grip` is the pivot: a point on that handle, in sprite frame. Everything
+   * rotates about it, and it is where the hands hold.
+   *
+   * `hand1` / `hand2` place the hand circles as [along the shaft from the
+   * pivot, perpendicular to it]. They are the physical grip points, so the
+   * shaft visibly passes through both circles.
+   *
+   * Tracks are four keyframes -- idle, wind-up, strike, follow-through -- and
+   * then back to idle:
+   *   rot    rotation about the pivot
+   *   reach  travel along the attack direction, or along the shaft if `thrust`
+   *   lat    travel across it
+   *   slide  the shaft sliding back through both hands (thrusts, recoil)
+   *   sep    the secondary hand alone pulling back
+   * `hold` freezes the strike keyframe for a beat: weight on impact.
+   * ---------------------------------------------------------------------- */
+
+  const WEAPON_ANIM_PROFILES = [ {
+    /* Braced two-handed thrust. The shaft barely rotates; it drives forward and
+     * slides through both hands, which stay where they are. */
+    id: 5,
+    name: "polearm",
+    motion: "braced thrust",
+    hands: WA_TWO_HAND,
+    body: .05,
+    grip: [ 27, 25 ],
+    shaft: 90,
+    hand1: [ 13, 0 ],
+    hand2: [ -11, 0 ],
+    free: [ 0, 0 ],
+    freeSwing: 0,
+    thrust: 1,
+    tW: .11,
+    tH: .27,
+    hold: .05,
+    tF: .44,
+    rot: [ -1.54, -1.5, -1.6, -1.57 ],
+    reach: [ -13, -21, 16, 8 ],
+    lat: [ 3.5, 5, 1, 2 ],
+    slide: [ 0, -7, 26, 18 ],
+    sep: [ 0, 0, 0, 0 ],
+    ease: [ WA_INOUT_QUAD, WA_IN_CUBIC, WA_OUT_CUBIC, WA_INOUT_CUBIC ],
+    bob: 1.3,
+    wide: 1.1
+  } ];
+
+  const WeaponAnim = new class {
+    _t=0;
+    _frame=0;
+    /* Scratch for the pose resolved this frame. Every draw call for a player
+     * reads these, so the work is done once and shared. */
+    _rot=0;
+    _reach=0;
+    _lat=0;
+    _slide=0;
+    _sep=0;
+    _ax=0;
+    _ay=0;
+    _cr=1;
+    _sr=0;
+    _flip=1;
+    _u=-1;
+    _pf=null;
+    _cacheP=null;
+    _cacheF=-1;
+    _cacheT=-1;
+    _table=[];
+    _neutral=null;
+    /* Per-player stroke bookkeeping, kept in typed arrays indexed by sid so
+     * nothing is ever written onto the game's player objects -- adding fields
+     * there would split their hidden class and make this whole path
+     * megamorphic. */
+    _strokeAt=new Int32Array(WA_SLOTS).fill(-1);
+    _strokeAlt=new Uint8Array(WA_SLOTS);
+    constructor() {
+      this._neutral = this._build({
+        id: -1,
+        name: "default",
+        motion: "none",
+        hands: WA_ONE_HAND,
+        body: 1,
+        grip: [ 0, 0 ],
+        shaft: 0,
+        hand1: [ 0, 0 ],
+        hand2: [ 0, 0 ],
+        free: [ 0, 0 ],
+        freeSwing: 0,
+        thrust: 0,
+        tW: .25,
+        tH: .5,
+        hold: 0,
+        tF: .75,
+        rot: [ 0, 0, 0, 0 ],
+        reach: [ 0, 0, 0, 0 ],
+        lat: [ 0, 0, 0, 0 ],
+        slide: [ 0, 0, 0, 0 ],
+        sep: [ 0, 0, 0, 0 ],
+        ease: [ WA_LINEAR, WA_LINEAR, WA_LINEAR, WA_LINEAR ],
+        bob: 0,
+        wide: 1
+      }, true);
+      for (let i = 0; i < WEAPON_ANIM_PROFILES.length; i++) {
+        const profile = this._build(WEAPON_ANIM_PROFILES[i], false);
+        this._table[profile.id] = profile;
+      }
+    }
+    /* One fixed object shape for every profile, so the interpolator stays
+     * monomorphic. Stage times are ordered here rather than guarded per frame,
+     * and everything that can be precomputed -- the shaft's unit vector, the
+     * free hand's resting point, the resting anchor -- is. */
+    _build(cfg, plain) {
+      const tW = clamp(cfg.tW, 0, .82);
+      const tH = clamp(cfg.tH, tW + 1e-3, .88);
+      const tHold = clamp(cfg.tH + (cfg.hold || 0), tH, .93);
+      const tF = clamp(cfg.tF, tHold + 1e-3, .97);
+      const shaft = cfg.shaft * WA_DEG;
+      const cha = Math.cos(shaft);
+      const sha = Math.sin(shaft);
+      const freeAngle = cfg.free[0] * WA_DEG;
+      const p = {
+        id: cfg.id,
+        name: cfg.name,
+        motion: cfg.motion,
+        plain: plain ? 1 : 0,
+        hands: cfg.hands,
+        body: cfg.body,
+        gripX: cfg.grip[0],
+        gripY: cfg.grip[1],
+        cha: cha,
+        sha: sha,
+        h1d: cfg.hand1[0],
+        h1p: cfg.hand1[1],
+        h2d: cfg.hand2[0],
+        h2p: cfg.hand2[1],
+        freeX: cfg.free[1] * Math.cos(freeAngle),
+        freeY: cfg.free[1] * Math.sin(freeAngle),
+        freeSwing: cfg.freeSwing,
+        thrust: cfg.thrust,
+        tW: tW,
+        tH: tH,
+        tHold: tHold,
+        tF: tF,
+        r0: cfg.rot[0],
+        r1: cfg.rot[1],
+        r2: cfg.rot[2],
+        r3: cfg.rot[3],
+        d0: cfg.reach[0],
+        d1: cfg.reach[1],
+        d2: cfg.reach[2],
+        d3: cfg.reach[3],
+        l0: cfg.lat[0],
+        l1: cfg.lat[1],
+        l2: cfg.lat[2],
+        l3: cfg.lat[3],
+        g0: cfg.slide[0],
+        g1: cfg.slide[1],
+        g2: cfg.slide[2],
+        g3: cfg.slide[3],
+        s0: cfg.sep[0],
+        s1: cfg.sep[1],
+        s2: cfg.sep[2],
+        s3: cfg.sep[3],
+        eW: cfg.ease[0],
+        eH: cfg.ease[1],
+        eF: cfg.ease[2],
+        eB: cfg.ease[3],
+        bob: cfg.bob,
+        wide: cfg.wide,
+        alt: cfg.alt ? 1 : 0,
+        restAX: 0,
+        restAY: 0
+      };
+      /* Where the pivot sits at rest -- the reference the free hand counter-
+       * swings against. */
+      const c = Math.cos(p.r0), s = Math.sin(p.r0);
+      const sfx = cha * c - sha * s;
+      const sfy = cha * s + sha * c;
+      const dx = 1 + (sfx - 1) * p.thrust;
+      const dy = sfy * p.thrust;
+      p.restAX = p.gripX + p.d0 * dx - p.l0 * dy;
+      p.restAY = p.gripY + p.d0 * dy + p.l0 * dx;
+      return p;
+    }
+    /* Whether this player's weapon belongs to this system rather than to
+     * MeleeAnim. Holding a building item leaves here false: the game draws the
+     * item itself and animates it its own way. */
+    _owns(player) {
+      if (!player || !Settings_default._meleeAnimation) {
+        return false;
+      }
+      if (!(player.buildIndex < 0)) {
+        return false;
+      }
+      return this._table[player.weaponIndex] !== undefined;
+    }
+    _ease(id, t) {
+      if (t <= 0) return 0;
+      if (t >= 1) return 1;
+      let u;
+      switch (id) {
+       case WA_OUT_QUAD:
+        u = 1 - t;
+        return 1 - u * u;
+
+       case WA_OUT_CUBIC:
+        u = 1 - t;
+        return 1 - u * u * u;
+
+       case WA_IN_QUAD:
+        return t * t;
+
+       case WA_IN_CUBIC:
+        return t * t * t;
+
+       case WA_INOUT_CUBIC:
+        u = 1 - t;
+        return t < .5 ? 4 * t * t * t : 1 - 4 * u * u * u;
+
+       case WA_OUT_BACK:
+        u = t - 1;
+        return 1 + u * u * (2.70158 * u + 1.70158);
+
+       case WA_OUT_QUINT:
+        u = 1 - t;
+        u *= u;
+        return 1 - u * u * (1 - t);
+
+       case WA_INOUT_QUAD:
+        u = 1 - t;
+        return t < .5 ? 2 * t * t : 1 - 2 * u * u;
+
+       default:
+        return t;
+      }
+    }
+    /* Called once per rendered frame from Renderer._preRender, handed the
+     * timestamp the renderer already samples so this adds no clock read of its
+     * own. `_t` is an integer millisecond phase that wraps on a whole number of
+     * idle-sway periods, so the field stays a small integer and never boxes. */
+    frame(now) {
+      this._frame = this._frame + 1 | 0;
+      this._t = now % WA_SWAY_WRAP | 0;
+    }
+    /* Normalised position inside the weapon's own attack window, or -1 when
+     * the player is not mid-attack. Derived from the clock the server started;
+     * nothing here writes back to it. */
+    _phase(player) {
+      const time = player.animTime;
+      const span = player.animSpeed;
+      if (!(time > 0) || !(span > 0)) return -1;
+      const u = 1 - time / span;
+      return u < 0 ? 0 : u > 1 ? 1 : u;
+    }
+    /* Resolves this player's weapon pose for this frame into the scratch
+     * fields, in one fixed order:
+     *
+     *   1. base orientation  the weapon's own shaft direction (profile.cha/sha)
+     *   2. grip and pivot    profile.grip, and the hand offsets along the shaft
+     *   3. attack direction  +X of this frame already is it; the bundle rotates
+     *                        the frame by the player's aim outside this call
+     *   4. animation         the rot/reach/lat/slide/sep tracks
+     *   5. follow-through    the later keyframes of those same tracks
+     *
+     * Single-slot cache: the render loop asks for the same player three or four
+     * times in a row (below-hand weapon, hands, above-hand weapon). */
+    _pose(player) {
+      const time = player.animTime;
+      /* Integer clock stamp: keeps the cache field a small integer, and still
+       * changes every frame of an attack at any sane frame rate. */
+      const stamp = time > 0 ? time | 0 : -1;
+      if (this._cacheP === player && this._cacheF === this._frame && this._cacheT === stamp) {
+        return this._pf;
+      }
+      const profile = this._table[player.weaponIndex] || this._neutral;
+      this._cacheP = player;
+      this._cacheF = this._frame;
+      this._cacheT = stamp;
+      this._pf = profile;
+      const u = this._phase(player);
+      this._u = u;
+      let flip = 1;
+      let rot, reach, lat, slide, sep;
+      if (u < 0) {
+        rot = profile.r0;
+        reach = profile.d0;
+        lat = profile.l0;
+        slide = profile.g0;
+        sep = profile.s0;
+        if (profile.bob !== 0) {
+          const sway = Math.sin(this._t * WA_SWAY_RATE + (player.sid & 7) * .8) * profile.bob;
+          reach += sway;
+          rot += sway * .004;
+        }
+      } else {
+        /* A new stroke shows up as animTime jumping back up. Used only by a
+         * profile that leads with the other hand on alternate strokes. */
+        const slot = (player.sid | 0) & WA_SLOTS - 1;
+        if (stamp > this._strokeAt[slot]) this._strokeAlt[slot] ^= 1;
+        this._strokeAt[slot] = stamp;
+        let e;
+        if (u < profile.tW) {
+          e = this._ease(profile.eW, u / profile.tW);
+          rot = profile.r0 + (profile.r1 - profile.r0) * e;
+          reach = profile.d0 + (profile.d1 - profile.d0) * e;
+          lat = profile.l0 + (profile.l1 - profile.l0) * e;
+          slide = profile.g0 + (profile.g1 - profile.g0) * e;
+          sep = profile.s0 + (profile.s1 - profile.s0) * e;
+        } else if (u < profile.tH) {
+          e = this._ease(profile.eH, (u - profile.tW) / (profile.tH - profile.tW));
+          rot = profile.r1 + (profile.r2 - profile.r1) * e;
+          reach = profile.d1 + (profile.d2 - profile.d1) * e;
+          lat = profile.l1 + (profile.l2 - profile.l1) * e;
+          slide = profile.g1 + (profile.g2 - profile.g1) * e;
+          sep = profile.s1 + (profile.s2 - profile.s1) * e;
+        } else if (u < profile.tHold) {
+          /* Weight on impact: the strike pose holds for a beat. */
+          rot = profile.r2;
+          reach = profile.d2;
+          lat = profile.l2;
+          slide = profile.g2;
+          sep = profile.s2;
+        } else if (u < profile.tF) {
+          e = this._ease(profile.eF, (u - profile.tHold) / (profile.tF - profile.tHold));
+          rot = profile.r2 + (profile.r3 - profile.r2) * e;
+          reach = profile.d2 + (profile.d3 - profile.d2) * e;
+          lat = profile.l2 + (profile.l3 - profile.l2) * e;
+          slide = profile.g2 + (profile.g3 - profile.g2) * e;
+          sep = profile.s2 + (profile.s3 - profile.s2) * e;
+        } else {
+          e = this._ease(profile.eB, (u - profile.tF) / (1 - profile.tF));
+          rot = profile.r3 + (profile.r0 - profile.r3) * e;
+          reach = profile.d3 + (profile.d0 - profile.d3) * e;
+          lat = profile.l3 + (profile.l0 - profile.l3) * e;
+          slide = profile.g3 + (profile.g0 - profile.g3) * e;
+          sep = profile.s3 + (profile.s0 - profile.s3) * e;
+        }
+        /* The bundle swings a whiff through 180 degrees and a connecting hit
+         * through 90. Carry that distinction into the weapon's own travel
+         * instead of flattening it. */
+        if (profile.wide !== 1 && player.targetAngle < -2.5) {
+          rot = profile.r0 + (rot - profile.r0) * profile.wide;
+          reach = profile.d0 + (reach - profile.d0) * profile.wide;
+          lat = profile.l0 + (lat - profile.l0) * profile.wide;
+          slide = profile.g0 + (slide - profile.g0) * profile.wide;
+        }
+        if (profile.alt && this._strokeAlt[slot]) {
+          flip = -1;
+          lat = -lat;
+          rot = -rot * .6;
+        }
+      }
+      /* Base orientation carried through the animation rotation, then the
+       * pivot placed along the attack direction (or along the shaft, for a
+       * thrust) and across it. */
+      const c = Math.cos(rot);
+      const s = Math.sin(rot);
+      const sfx = profile.cha * c - profile.sha * s;
+      const sfy = profile.cha * s + profile.sha * c;
+      const dx = 1 + (sfx - 1) * profile.thrust;
+      const dy = sfy * profile.thrust;
+      this._rot = rot;
+      this._reach = reach;
+      this._lat = lat;
+      this._slide = slide;
+      this._sep = sep;
+      this._cr = c;
+      this._sr = s;
+      this._flip = flip;
+      this._ax = profile.gripX + reach * dx - lat * dy;
+      this._ay = profile.gripY + reach * dy + lat * dx;
+      return profile;
+    }
+    /* The body keeps a weapon-specific fraction of the swing as a lean; the
+     * weapon supplies the rest about its own grip. `dirPlus` is never
+     * modified. */
+    _bodyAngle(player) {
+      const swing = player.dirPlus;
+      if (!swing) {
+        return 0;
+      }
+      const profile = this._table[player.weaponIndex];
+      return profile ? swing * profile.body : swing;
+    }
+    /* Wraps the bundle's renderTool: the sprite turns about its grip, and the
+     * grip is placed where the pose put it. */
+    _drawWeapon(draw, weapon, variant, x, y, ctx, player) {
+      const profile = this._pose(player);
+      if (profile.plain) {
+        draw(weapon, variant, x, y, ctx);
+        return;
+      }
+      ctx.save();
+      ctx.translate(this._ax, this._ay);
+      ctx.rotate(this._rot);
+      draw(weapon, variant, x - profile.gripX, y - profile.gripY, ctx);
+      ctx.restore();
+    }
+    /* The two hand circles. They are the weapon's grip points, not decoration:
+     * each is placed at a fixed spot along the shaft and carried by the same
+     * transform as the sprite, so the shaft passes through both of them. */
+    _drawHands(circle, player, arm, hndS, hndD, ctx) {
+      const profile = this._pose(player);
+      const scale = player.scale;
+      if (profile.plain) {
+        circle(scale * Math.cos(arm), scale * Math.sin(arm), 14);
+        const off = -arm * hndS;
+        const radius = scale * hndD;
+        circle(radius * Math.cos(off), radius * Math.sin(off), 14);
+        return;
+      }
+      const ax = this._ax;
+      const ay = this._ay;
+      const c = this._cr;
+      const s = this._sr;
+      const flip = this._flip;
+      /* Primary hand: on the shaft, carried back by whatever the shaft has
+       * slid through the grip. */
+      let along = profile.h1d - this._slide;
+      let across = profile.h1p * flip;
+      let lx = along * profile.cha - across * profile.sha;
+      let ly = along * profile.sha + across * profile.cha;
+      circle(ax + lx * c - ly * s, ay + lx * s + ly * c, 14, ctx);
+      if (profile.hands === WA_TWO_HAND) {
+        /* Secondary hand: further along the same shaft, plus whatever it has
+         * drawn back on its own. */
+        along = profile.h2d - this._slide - this._sep;
+        across = profile.h2p * flip;
+        lx = along * profile.cha - across * profile.sha;
+        ly = along * profile.sha + across * profile.cha;
+        circle(ax + lx * c - ly * s, ay + lx * s + ly * c, 14, ctx);
+      } else {
+        const swing = profile.freeSwing;
+        circle(profile.freeX + (profile.restAX - ax) * swing,
+               profile.freeY * flip + (profile.restAY - ay) * swing, 14, ctx);
+      }
+    }
+  }();
+  const WeaponAnim_default = WeaponAnim;
+
+  const MeleeAnim = new class {
+    HAND_RADIUS=14;
+    // A grip point closer to the middle than this disappears under the body
+    // circle, which is drawn last and over everything.
+    MIN_HAND_RADIUS=30;
+    // Two grips closer together than this stop reading as two hands.
+    MIN_HAND_GAP=24;
+
+    // One motion sample and one placement, both reused every frame. Nothing in
+    // here allocates.
+    _m={ rot: 0, push: 0, lat: 0, slide: 0, twist: 0, prof: null, alt: false };
+    _g={ px: 0, py: 0, rot: 0, dx: 0, dy: 0, h1x: 0, h1y: 0, h2x: 0, h2y: 0 };
+    _who=null;
+    _when=null;
+    _what=null;
+    _live=false;
+    _placedFor=null;
+    _placedAt=null;
+
+    // Whether this player is on the new melee path at all. Everything excluded
+    // leaves here with a null and runs the game's original code untouched.
+    _track(player) {
+      if (!player) {
+        return null;
+      }
+      if (this._who === player && this._when === player.animTime && this._what === player.weaponIndex) {
+        return this._live ? this._m : null;
+      }
+      this._who = player;
+      this._when = player.animTime;
+      this._what = player.weaponIndex;
+      this._live = false;
+      this._placedFor = null;
+      if (!Settings_default._meleeAnimation) {
+        return null;
+      }
+      // Holding a building item: the game draws the item itself and animates it
+      // its own way. Left alone.
+      if (!(player.buildIndex < 0)) {
+        return null;
+      }
+      // `weaponIndex` arrives off the wire, so the lookup is checked for a real
+      // profile rather than for anything the index happened to reach.
+      const prof = MELEE_PROFILES[player.weaponIndex];
+      if (!prof || !prof.keys) {
+        return null;
+      }
+
+      const speed = player.animSpeed;
+      const time = player.animTime;
+      let u = 0;
+      if (time > 0 && speed > 0) {
+        u = 1 - time / speed;
+        if (u < 0) {
+          u = 0;
+        } else if (u > 1) {
+          u = 1;
+        }
+        // `animTime` jumps back up to `animSpeed` when a new attack starts, and
+        // only ever falls in between, so a rise is a new attack.
+        const prev = player._rynAnimTime;
+        if (prev === undefined || time > prev + 1e-6) {
+          player._rynAlt = !player._rynAlt;
+        }
+        player._rynAnimTime = time;
+      }
+
+      const m = this._m;
+      m.prof = prof;
+      m.alt = !!(prof.alt && player._rynAlt);
+      this._sample(prof.keys, u, m);
+
+      // The game sets `targetAngle` to -PI when the swing connected with
+      // nothing and to -hitAngle when it did. A swing that met no resistance
+      // carries further and reaches further; one that landed is checked.
+      if (player.targetAngle < -2.4) {
+        const w = prof.whiff;
+        m.rot *= w.r;
+        m.push *= w.p;
+        m.lat *= w.p;
+      }
+
+      this._live = true;
+      return m;
+    }
+
+    // Walk the keyframes to the segment holding `u` and interpolate across it.
+    _sample(keys, u, out) {
+      const last = keys.length - 1;
+      let i = 1;
+      while (i < last && u > keys[i].u) {
+        i++;
+      }
+      const a = keys[i - 1];
+      const b = keys[i];
+      const span = b.u - a.u;
+      let t = span > 0 ? (u - a.u) / span : 1;
+      if (t < 0) {
+        t = 0;
+      } else if (t > 1) {
+        t = 1;
+      }
+      t = MELEE_EASE[b.e](t);
+      out.rot = a.r + (b.r - a.r) * t;
+      out.push = a.p + (b.p - a.p) * t;
+      out.lat = a.l + (b.l - a.l) * t;
+      out.slide = a.s + (b.s - a.s) * t;
+      out.twist = a.t + (b.t - a.t) * t;
+    }
+
+    // Grip points and rigid transform for this instant. `armAngle`, `hndS` and
+    // `hndD` are the same three values the game computes for its own hand
+    // placement, so the rest pose this builds from is the vanilla one.
+    _place(player, armAngle, hndS, hndD) {
+      const m = this._track(player);
+      if (!m) {
+        return null;
+      }
+      if (this._placedFor === player && this._placedAt === player.animTime) {
+        return this._g;
+      }
+      const g = this._g;
+      const prof = m.prof;
+      const scale = player.scale || 35;
+
+      // The game's own two grip points, which lie on the haft.
+      const a1 = armAngle;
+      const a2 = -armAngle * hndS;
+      let h1x = scale * Math.cos(a1);
+      let h1y = scale * Math.sin(a1);
+      let h2x = scale * hndD * Math.cos(a2);
+      let h2y = scale * hndD * Math.sin(a2);
+
+      // Haft direction, secondary grip toward primary: up the shaft, toward the
+      // head or tip. The primary hand slides along this.
+      let ax = h1x - h2x;
+      let ay = h1y - h2y;
+      const alen = Math.sqrt(ax * ax + ay * ay) || 1;
+      ax /= alen;
+      ay /= alen;
+
+      // Pivot: a point on the handle, never the sprite centre. A weapon being
+      // loaded turns about the lead hand and a weapon being driven turns about
+      // the rear one, so the pivot follows the sign of the rotation. The two
+      // agree exactly at rotation zero, which is where the swap happens.
+      let pivot = m.rot > 0 ? prof.back || prof.pivot : prof.pivot;
+      if (m.alt) {
+        pivot = pivot === "f" ? "r" : "f";
+      }
+      let px;
+      let py;
+      if (pivot === "f") {
+        px = h1x;
+        py = h1y;
+      } else if (pivot === "r") {
+        px = h2x;
+        py = h2y;
+      } else {
+        px = (h1x + h2x) / 2;
+        py = (h1y + h2y) / 2;
+      }
+
+      const lat = m.alt ? -m.lat : m.lat;
+      const rot = m.rot;
+      const cos = Math.cos(rot);
+      const sin = Math.sin(rot);
+
+      // Primary grip: slide along the haft, then ride the rigid transform.
+      let x1 = h1x + ax * m.slide;
+      let y1 = h1y + ay * m.slide;
+      let dx = x1 - px;
+      let dy = y1 - py;
+      x1 = px + dx * cos - dy * sin + m.push;
+      y1 = py + dx * sin + dy * cos + lat;
+
+      let x2;
+      let y2;
+      if (prof.grip === MELEE_ONE) {
+        // The off hand is not on the weapon. It counter-swings about the body,
+        // which keeps it at its own radius and so always clear of the body
+        // circle, and reads as the free arm balancing the strike.
+        const cr = -rot * prof.ctr;
+        const cc = Math.cos(cr);
+        const cs = Math.sin(cr);
+        x2 = h2x * cc - h2y * cs - m.push * prof.ctrP;
+        y2 = h2x * cs + h2y * cc - lat * prof.ctrP;
+      } else {
+        dx = h2x - px;
+        dy = h2y - py;
+        x2 = px + dx * cos - dy * sin + m.push;
+        y2 = py + dx * sin + dy * cos + lat;
+      }
+
+      // Visibility clamp 1: if a grip has ended up inside the body circle, push
+      // the whole assembly — weapon and both grips — outward together. Moving
+      // it as one keeps the hands on the weapon.
+      let ex = 0;
+      let ey = 0;
+      const r1 = Math.sqrt(x1 * x1 + y1 * y1);
+      const r2 = Math.sqrt(x2 * x2 + y2 * y2);
+      const near = r1 < r2 ? r1 : r2;
+      if (near < this.MIN_HAND_RADIUS) {
+        const need = this.MIN_HAND_RADIUS - near;
+        if (near > .001) {
+          const nx = r1 < r2 ? x1 : x2;
+          const ny = r1 < r2 ? y1 : y2;
+          ex = nx / near * need;
+          ey = ny / near * need;
+        } else {
+          ex = need;
+        }
+        x1 += ex;
+        y1 += ey;
+        x2 += ex;
+        y2 += ey;
+      }
+
+      // Visibility clamp 2: keep the two grips readable as two. A rigid grip
+      // preserves its own spacing, so this can only ever act on the free off
+      // hand of a one-handed weapon.
+      if (prof.grip === MELEE_ONE) {
+        let sx = x2 - x1;
+        let sy = y2 - y1;
+        const sep = Math.sqrt(sx * sx + sy * sy);
+        if (sep < this.MIN_HAND_GAP) {
+          if (sep > .001) {
+            const k = (this.MIN_HAND_GAP - sep) / sep;
+            x2 += sx * k;
+            y2 += sy * k;
+          } else {
+            y2 -= this.MIN_HAND_GAP;
+          }
+        }
+      }
+
+      g.px = px;
+      g.py = py;
+      g.rot = rot;
+      g.dx = m.push + ex;
+      g.dy = lat + ey;
+      g.h1x = x1;
+      g.h1y = y1;
+      g.h2x = x2;
+      g.h2y = y2;
+      this._placedFor = player;
+      this._placedAt = player.animTime;
+      return g;
+    }
+
+    // Replaces the game's two weapon draws. Excluded weapons and building items
+    // reach `draw` with the arguments the game passed and nothing else changes.
+    // The polearm and the great hammer are handed to the shaft-grip system
+    // instead, which places the sprite from its own pivot.
+    _drawWeapon(draw, player, weapon, variant, x, y, ctx) {
+      if (WeaponAnim_default._owns(player)) {
+        WeaponAnim_default._drawWeapon(draw, weapon, variant, x, y, ctx, player);
+        return;
+      }
+      const g = this._place(player, Math.PI / 4 * (weapon.armS || 1), weapon.hndS || 1, weapon.hndD || 1);
+      if (!g) {
+        draw(weapon, variant, x, y, ctx);
+        return;
+      }
+      // Rotate the sprite about the grip point, not about its own centre, then
+      // carry it with the hands.
+      ctx.save();
+      ctx.translate(g.px + g.dx, g.py + g.dy);
+      ctx.rotate(g.rot);
+      ctx.translate(-g.px, -g.py);
+      draw(weapon, variant, x, y, ctx);
+      ctx.restore();
+    }
+
+    // Replaces the game's two hand circles. The vanilla branch calls `circle`
+    // with exactly the arguments the game used, default context included.
+    _drawHands(circle, player, armAngle, hndS, hndD, ctx) {
+      if (WeaponAnim_default._owns(player)) {
+        WeaponAnim_default._drawHands(circle, player, armAngle, hndS, hndD, ctx);
+        return;
+      }
+      const g = this._place(player, armAngle, hndS, hndD);
+      const scale = player.scale;
+      if (!g) {
+        circle(scale * Math.cos(armAngle), scale * Math.sin(armAngle), this.HAND_RADIUS);
+        circle(scale * hndD * Math.cos(-armAngle * hndS), scale * hndD * Math.sin(-armAngle * hndS), this.HAND_RADIUS);
+        return;
+      }
+      // Weapon first, then the secondary grip, then the primary on top: both
+      // circles stay whole and the leading hand reads as the nearer one.
+      circle(g.h2x, g.h2y, this.HAND_RADIUS, ctx);
+      circle(g.h1x, g.h1y, this.HAND_RADIUS, ctx);
+    }
+
+    // Replaces `dirPlus` in the player render loop. Melee weapons twist the
+    // torso a few degrees instead of spinning the whole player, so the body and
+    // hat stay put and the arms do the work. Everything else keeps `dirPlus`.
+    _bodyRot(player) {
+      if (WeaponAnim_default._owns(player)) {
+        return WeaponAnim_default._bodyAngle(player);
+      }
+      const m = this._track(player);
+      return m ? (m.alt ? -m.twist : m.twist) : player.dirPlus;
+    }
+  }();
+  const MeleeAnim_default = MeleeAnim;
 
   // ==========================================================================
   // LOGIN
@@ -20803,6 +24307,8 @@ window.grbtp = 35;
     _myClient: client,
     _settings: Settings_default,
     _Renderer: Renderer_default,
+    _MeleeAnim: MeleeAnim_default,
+    _WeaponAnim: WeaponAnim_default,
     _ZoomHandler: ZoomHandler_default,
     _hooks: {
       _EntityRenderer: EntityRenderer_default,
@@ -20814,7 +24320,7 @@ window.grbtp = 35;
     _offset: new Vector_default,
     _gameInit(token) {},
     async startGame() {
-      const token = await gameToken;
+      const token = await gameToken();
       if (typeof token !== "string" || token.length === 0) {
         Logger.error("Failed to generate altcha token..");
         return;
@@ -20858,11 +24364,47 @@ window.grbtp = 35;
   if (document.readyState !== "loading") {
     contentLoaded();
   }
-  // This used to be `enterGame.classList.remove("disabled")`, unconditionally,
-  // on window load. `disabled` is the bundle's own "we hold a Turnstile token"
-  // flag, not a cosmetic state, so clearing it by hand let Play be pressed with
-  // no token — which latches `ei` and kills Play for the life of the page. The
-  // game's own gating is left alone now, and the captcha is supervised instead.
+  // `disabled` on #enterGame is the game's "we hold a Cloudflare Turnstile
+  // token" flag, not a cosmetic state. onGotTurnstileToken is the only place
+  // that clears it, and it does so in the same expression that assigns the
+  // token; onTurnstileError and onTurnstileExpired both null the token and put
+  // the class back. Class and token are therefore always in sync.
+  //
+  // This used to run `enterGame.classList.remove("disabled")` unconditionally
+  // on window load, which broke that sync in the one direction that hurts: it
+  // let Play be clicked before any token existed. The bundle handles that
+  // badly. Its click handler is
+  //
+  //     we.classList.contains("disabled") || (Si("Connecting..."), ... Fi())
+  //
+  // so the menu commits to "Connecting..." first, and then Fi() is
+  //
+  //     !vi || ei || (ei = !0, Sa || pi ? ue && Lt("cf:" + ue) : ...)
+  //
+  // On moomoo.io vi is true (pi is false, so `(!pi || We) && (vi = !0)` fires)
+  // and Sa is true, so the branch taken is `ue && Lt("cf:" + ue)`. With no
+  // token that short-circuits and Lt is never called — no socket is opened at
+  // all. But `ei` has already latched true one comma earlier, so every later
+  // click is a no-op too. The result is a menu stuck on "Connecting..." that
+  // no amount of clicking recovers: the reported "can't log in, no
+  // connection". Switching server calls re.switchServer(), which assigns
+  // window.location and reloads the page — that clears `ei` and gives
+  // Turnstile a warm token, which is why switching modes always looked like
+  // the cure.
+  //
+  // _autospawn made it easier to hit: clientSpawn() calls enterGame.click()
+  // and the checkTrusted hook strips the isTrusted guard, so the click can
+  // land before the token has arrived without anyone touching the mouse.
+  //
+  // The game's own gating is left to do its job. The watcher below only
+  // reports a Turnstile that never arrives, so a blocked challenge reads as a
+  // blocked challenge instead of a dead button.
+  // The game's own gating is still left to do its job — nothing here decides
+  // whether to connect. This starts the captcha supervisor, which replaces the
+  // watcher that used to sit here and only print a warning after 25 seconds. A
+  // warning is still printed when the challenge really is blocked, but a
+  // widget that was merely rejected for double-rendering now gets replaced
+  // instead of reported.
   const onload = () => {
     Logger.test("Page loaded..");
     Login_default.init();
@@ -21657,7 +25199,7 @@ window.grbtp = 35;
       const el = this._frameDoc.querySelector("#bm-status");
       if (!el) return;
       el.textContent = msg;
-      el.style.color = isErr ? "#cc5151" : "#9090c8";
+      el.style.color = isErr ? "var(--rose)" : "var(--sage)";
       clearTimeout(this._statusTimer);
       this._statusTimer = setTimeout(() => {
         if (el) el.textContent = "";
@@ -21696,8 +25238,8 @@ window.grbtp = 35;
       });
       if (!visible.length) {
         const empty = this._frameDoc.createElement("div");
-        empty.style.cssText = "text-align:center;font-size:0.75em;color:#7A42F433;padding:14px 0;font-family:Orbitron,monospace;letter-spacing:0.08em;";
-        empty.textContent = filterVal === "__liked" ? "— NO LIKED SONGS —" : "— EMPTY —";
+        empty.className = "rm-empty";
+        empty.textContent = filterVal === "__liked" ? "No liked songs yet" : "Library is empty";
         list.appendChild(empty);
         return;
       }
@@ -21705,7 +25247,7 @@ window.grbtp = 35;
         const i = song.__origIndex;
         const row = this._frameDoc.createElement("div");
         row.className = "rm-song-row" + (i === this._currentIndex ? " active" : "");
-        row.innerHTML = `\n                  <span class="rm-snum">${i + 1}</span>\n                  <span class="rm-stitle">${song.title}${song.lyrics ? ' <span style="color:rgba(122,66,244,0.38);font-size:0.8em;">♪</span>' : ""}</span>\n                  <span class="rm-sartist">${song.artist || ""}</span>\n                  <span class="rm-s-icons">\n                    <span class="rm-s-like${song.liked ? " on" : ""}" title="Like">&#9829;</span>\n                    <span class="rm-s-save${song.saved ? " on" : ""}" title="Save">&#128190;</span>\n                    <span class="rm-sdel" title="Delete">&#x2715;</span>\n                  </span>`;
+        row.innerHTML = `\n                  <span class="rm-snum">${i + 1}</span>\n                  <span class="rm-stitle">${song.title}${song.lyrics ? ' <span style="color:var(--sky);font-size:0.85em;">♪</span>' : ""}</span>\n                  <span class="rm-sartist">${song.artist || ""}</span>\n                  <span class="rm-s-icons">\n                    <span class="rm-s-like${song.liked ? " on" : ""}" title="Like">&#9829;</span>\n                    <span class="rm-s-save${song.saved ? " on" : ""}" title="Save">&#128190;</span>\n                    <span class="rm-sdel" title="Delete">&#x2715;</span>\n                  </span>`;
         row.querySelector(".rm-s-like").onclick = e => {
           e.stopPropagation();
           song.liked = !song.liked;
@@ -21903,10 +25445,7 @@ window.grbtp = 35;
       const _updSyncBot = () => {
         if (!syncBotBtn) return;
         syncBotBtn.textContent = this._syncBot ? "ON" : "OFF";
-        syncBotBtn.style.background = this._syncBot ? "#2a1f00" : "#0d0a14";
-        syncBotBtn.style.borderColor = this._syncBot ? "#9090c8" : "#9090c844";
-        syncBotBtn.style.color = this._syncBot ? "#e8e8ff" : "#9090c8";
-        syncBotBtn.style.boxShadow = this._syncBot ? "0 0 10px #9090c844" : "none";
+        syncBotBtn.classList.toggle("primary", this._syncBot);
         if (syncBotBadge) syncBotBadge.textContent = this._syncBot ? "on" : "off";
       };
       if (syncBotBtn) syncBotBtn.onclick = () => {
@@ -21922,7 +25461,7 @@ window.grbtp = 35;
         const ing = !!(client && client.myPlayer && client.myPlayer.inGame);
         if (testSt) {
           testSt.textContent = `sock:${st} enc:${enc} inGame:${ing}`;
-          testSt.style.color = st === "OPEN" ? "#9090c8" : "#cc5151";
+          testSt.style.color = st === "OPEN" ? "var(--sage)" : "var(--rose)";
           setTimeout(() => {
             if (testSt) testSt.textContent = "";
           }, 4000);
@@ -21944,10 +25483,8 @@ window.grbtp = 35;
         clearTimeout(_sendLyricsTimer);
         _sendLyricsTimer = null;
         if (sendAllLyricsBtn) {
-          sendAllLyricsBtn.textContent = "♬ Send All Lyrics: OFF";
-          sendAllLyricsBtn.style.color = "#9090c8";
-          sendAllLyricsBtn.style.borderColor = "#9090c866";
-          sendAllLyricsBtn.style.background = "#0d0a14";
+          sendAllLyricsBtn.textContent = "\u266C Send All Lyrics: OFF";
+          sendAllLyricsBtn.classList.remove("primary");
         }
         if (sendLyricsStatusEl) sendLyricsStatusEl.textContent = "";
       };
@@ -21959,10 +25496,8 @@ window.grbtp = 35;
           if (sendLyricsStatusEl) sendLyricsStatusEl.textContent = "No LRC lyrics for this song.";
           _sendLyricsActive = false;
           if (sendAllLyricsBtn) {
-            sendAllLyricsBtn.textContent = "♬ Send All Lyrics: OFF";
-            sendAllLyricsBtn.style.color = "#9090c8";
-            sendAllLyricsBtn.style.borderColor = "#9090c866";
-            sendAllLyricsBtn.style.background = "#0d0a14";
+            sendAllLyricsBtn.textContent = "\u266C Send All Lyrics: OFF";
+            sendAllLyricsBtn.classList.remove("primary");
           }
           return;
         }
@@ -22009,10 +25544,8 @@ window.grbtp = 35;
         sendAllLyricsBtn.onclick = () => {
           _sendLyricsActive = !_sendLyricsActive;
           if (_sendLyricsActive) {
-            sendAllLyricsBtn.textContent = "♬ Send All Lyrics: ON";
-            sendAllLyricsBtn.style.color = "#e8e8ff";
-            sendAllLyricsBtn.style.borderColor = "#9090c8";
-            sendAllLyricsBtn.style.background = "#2a1f00";
+            sendAllLyricsBtn.textContent = "\u266C Send All Lyrics: ON";
+            sendAllLyricsBtn.classList.add("primary");
             _startSendAllLyrics();
           } else {
             _stopSendAllLyrics();
@@ -22183,7 +25716,7 @@ window.grbtp = 35;
           const st = q("#music-backup-status");
           if (st) {
             st.textContent = "✓ Exported " + this._songs.length + " songs!";
-            st.style.color = "#9090c8";
+            st.style.color = "var(--sage)";
             setTimeout(() => {
               if (st) st.textContent = "";
             }, 3000);
@@ -22192,7 +25725,7 @@ window.grbtp = 35;
           const st = q("#music-backup-status");
           if (st) {
             st.textContent = "⚠ Export failed";
-            st.style.color = "#cc5151";
+            st.style.color = "var(--rose)";
           }
         }
       };
@@ -22226,7 +25759,7 @@ window.grbtp = 35;
               const st = q("#music-backup-status");
               if (st) {
                 st.textContent = "✓ Imported " + added + " songs!";
-                st.style.color = "#9090c8";
+                st.style.color = "var(--sage)";
                 setTimeout(() => {
                   if (st) st.textContent = "";
                 }, 3000);
@@ -22235,7 +25768,7 @@ window.grbtp = 35;
               const st = q("#music-backup-status");
               if (st) {
                 st.textContent = "⚠ Invalid file";
-                st.style.color = "#cc5151";
+                st.style.color = "var(--rose)";
               }
             }
           };
@@ -22244,6 +25777,2731 @@ window.grbtp = 35;
       }
     }
   };
+
+  /* ==== BEGIN LRC AI (src/lrc/lrc-ai.js) ==== */
+/* ============================================================================
+ * RYN TYPE 2 — LRC AI LYRICS
+ *
+ * Automatic synchronised lyrics for the Music library: find the .lrc for a
+ * song, translate it to English when it is not already English, validate it,
+ * cache it, and hand the finished timeline to the player's existing chat-sync
+ * loop when that song plays.
+ *
+ * This module is self-contained. It reaches into exactly one existing object
+ * (`MusicPlayer`) and wraps four of its methods; it does not modify any of
+ * their bodies, does not touch any other Ryn system, and adds no per-frame
+ * work of its own. Remove the module and the client behaves exactly as before.
+ *
+ * WHAT IT REUSES, RATHER THAN REBUILDING
+ *   chat      MusicPlayer._tickSync -> _sendChat / _sendLyric* -> PacketManager
+ *             There is no second chat path here. The module only decides what
+ *             `MusicPlayer._lyrics` contains; the player still does the sending,
+ *             so every existing sync mode (me / bots / mixed / unified), the
+ *             30-char chunking and the 2200 ms spacing keep working unchanged.
+ *   loop      MusicPlayer._startRAF / _tickSync. No new interval, no new RAF.
+ *   reflow    MusicPlayer._reflowLRC, so lines are split for the 30-char chat
+ *             cap exactly the way manually-pasted lyrics already are.
+ *   toast     MusicPlayer._toast
+ *   storage   the same IndexedDB-with-localStorage-fallback pattern as
+ *             MusicPlayer._openDB, in its own database (see LRCCache).
+ *
+ * ARCHITECTURE
+ *   LRCManager            orchestrates the prepare pipeline and playback lookup
+ *   +- SongIdentifier     stable per-song id from title + artist + content hash
+ *   +- LRCFetcher         LRCLIB lookup, synced preferred over plain
+ *   +- LRCParser          timestamps, multi-timestamp lines, metadata tags
+ *   +- LanguageDetector   script + stopword detection, no network
+ *   +- TranslationManager provider chain, per-line, 1:1 with timestamps
+ *   +- LRCValidator       is this usable, and does it belong to this song
+ *   +- LRCCache           RynLRCDB: meta + original.lrc + english.lrc
+ *   +- SyncEngine         timeline build, offset, binary-search seek
+ *   +- ChatLyricsSender   sanitising + the handoff to the player's chat loop
+ *   +- LRCUI              the [LRC AI] button and the details panel
+ *
+ * NETWORK POLICY
+ *   Requests happen only while preparing a song — i.e. only when the user
+ *   presses [LRC AI] or [Retry LRC]. Playback is served entirely from cache.
+ *
+ * SECURITY
+ *   Downloaded lyrics are treated as plain text and nothing else. Text is
+ *   stripped of control characters and length-capped at parse time, before it
+ *   can reach either the chat packet or the DOM, and every element this module
+ *   creates is built with createElement/textContent — never innerHTML.
+ * ========================================================================== */
+
+const RynLRC = (function () {
+  "use strict";
+
+  const CACHE_VERSION = 1;
+  const DB_NAME = "RynLRCDB";
+  const DB_VERSION = 1;
+  const STORE_META = "meta";      /* RynData/Lyrics/<SongID>/metadata.json */
+  const STORE_LRC = "lyrics";     /* RynData/Lyrics/<SongID>/{original,english}.lrc */
+  const GLOBAL_OFFSET_KEY = "ryn_lrc_global_offset";
+  const LS_PREFIX = "ryn_lrc_";   /* localStorage fallback when IDB is unusable */
+
+  const NET_TIMEOUT_MS = 12000;
+  const META_TIMEOUT_MS = 8000;
+  const TRANSLATE_CONCURRENCY = 4;
+  const TRANSLATE_STAGGER_MS = 60;
+  const MAX_LINE_CHARS = 300;     /* a lyric line longer than this is not a lyric */
+  const DURATION_DRIFT_S = 5;     /* cached lyrics stop matching past this */
+  const SEEK_RESET_S = 3;         /* a jump this big cancels pending chat chunks */
+
+  /* The host player. Set by attach(). */
+  const Host = { mp: null };
+
+  /* ---------------------------------------------------------------------- *
+   * Small helpers
+   * ---------------------------------------------------------------------- */
+
+  function warn(where, err) {
+    try { console.warn("[RynLRC] " + where + ":", err); } catch (_) {}
+  }
+
+  /* Every callback that crosses back into the player goes through this, so a
+   * bug in the lyrics module can never take the music player down with it. */
+  function guard(where, fn) {
+    return function () {
+      try { return fn.apply(this, arguments); } catch (e) { warn(where, e); }
+    };
+  }
+
+  /* A sync try/catch does not catch a rejected promise, so every async entry
+   * point called from an event handler or a wrapper goes through here. */
+  function fire(promise, where) {
+    try {
+      if (promise && typeof promise.catch === "function") {
+        promise.catch(function (e) { warn(where, e); });
+      }
+    } catch (e) { warn(where, e); }
+    return undefined;
+  }
+
+  function sleep(ms) {
+    return new Promise(function (r) { setTimeout(r, ms); });
+  }
+
+  /* fetch + timeout + "never throw at the caller". */
+  async function httpJson(url, timeoutMs) {
+    const ctl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = setTimeout(function () { try { ctl && ctl.abort(); } catch (_) {} },
+      timeoutMs || NET_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, {
+        method: "GET",
+        cache: "no-store",
+        credentials: "omit",
+        referrerPolicy: "no-referrer",
+        signal: ctl ? ctl.signal : undefined
+      });
+      if (!res.ok) return { ok: false, status: res.status, data: null };
+      const data = await res.json();
+      return { ok: true, status: res.status, data: data };
+    } catch (e) {
+      return { ok: false, status: 0, data: null, error: e };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function sha256Hex(text) {
+    try {
+      if (typeof crypto !== "undefined" && crypto.subtle && typeof TextEncoder !== "undefined") {
+        const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+        const bytes = new Uint8Array(buf);
+        let out = "";
+        for (let i = 0; i < bytes.length; i++) out += bytes[i].toString(16).padStart(2, "0");
+        return out;
+      }
+    } catch (_) {}
+    return fnv1aHex(text);
+  }
+
+  /* Fallback when SubtleCrypto is unavailable (insecure context). 128 bits of
+   * FNV-1a over four differently-seeded lanes — weaker than SHA-256, but this
+   * is only ever used to tell two songs apart, never as a security boundary. */
+  function fnv1aHex(text) {
+    const seeds = [ 0x811c9dc5, 0x01000193, 0x9e3779b9, 0x85ebca6b ];
+    let out = "";
+    for (let s = 0; s < seeds.length; s++) {
+      let h = seeds[s] >>> 0;
+      for (let i = 0; i < text.length; i++) {
+        h ^= text.charCodeAt(i) & 0xff;
+        h = Math.imul(h, 0x01000193) >>> 0;
+        h ^= text.charCodeAt(i) >>> 8;
+        h = Math.imul(h, 0x01000193) >>> 0;
+      }
+      out += h.toString(16).padStart(8, "0");
+    }
+    return out;
+  }
+
+  function nowIso() {
+    try { return new Date().toISOString(); } catch (_) { return ""; }
+  }
+
+  /* ---- name comparison, shared by the fetcher and the validator ---- */
+
+  function tokensOf(s) {
+    let t = String(s == null ? "" : s).toLowerCase();
+    try { t = t.normalize("NFKD").replace(/[̀-ͯ]/g, ""); } catch (_) {}
+    return t.replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean);
+  }
+
+  /* Token overlap, 0..1. Cheap, and enough to tell "the same song" from
+   * "somebody else's song". */
+  function similarity(a, b) {
+    const ta = tokensOf(a), tb = tokensOf(b);
+    if (!ta.length || !tb.length) return 0;
+    const set = new Set(tb);
+    let hit = 0;
+    for (let i = 0; i < ta.length; i++) if (set.has(ta[i])) hit++;
+    return hit / Math.max(ta.length, tb.length);
+  }
+
+  /* Which alphabet a string is mostly written in. Comparing "Lemon" with
+   * "レモン" by token overlap scores zero even though they are the same
+   * song, so names are only ever judged when both sides are in the same
+   * script — otherwise the comparison is skipped rather than failed. */
+  function scriptOf(s) {
+    const t = String(s == null ? "" : s);
+    let latin = 0, cjk = 0, other = 0;
+    for (let i = 0; i < t.length; i++) {
+      const c = t.charCodeAt(i);
+      if (c < 0x30) continue;                                   /* punctuation, space */
+      if (c < 0x250) latin++;
+      else if ((c >= 0x3040 && c <= 0x30ff) || (c >= 0x3400 && c <= 0x9fff) ||
+               (c >= 0xac00 && c <= 0xd7af)) cjk++;
+      else other++;
+    }
+    const total = latin + cjk + other;
+    if (!total) return "none";
+    if (latin / total > 0.7) return "latin";
+    if (cjk / total > 0.5) return "cjk";
+    return "other";
+  }
+
+  function comparableNames(a, b) {
+    const sa = scriptOf(a), sb = scriptOf(b);
+    return sa !== "none" && sb !== "none" && sa === sb;
+  }
+
+  /* "04:16" or "256" -> seconds. Returns 0 when it is neither. */
+  function parseClock(text) {
+    const t = String(text == null ? "" : text).trim();
+    let m = t.match(/^(\d{1,3}):([0-5]?\d)(?:[.:]\d+)?$/);
+    if (m) return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+    m = t.match(/^(\d{1,5})(?:\.\d+)?$/);
+    if (m) return parseInt(m[1], 10);
+    return 0;
+  }
+
+  function clampInt(v, lo, hi, dflt) {
+    const n = parseInt(v, 10);
+    if (!isFinite(n)) return dflt;
+    return Math.max(lo, Math.min(hi, n));
+  }
+
+  function fmtClock(sec) {
+    if (!isFinite(sec) || sec <= 0) return "--:--";
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return m + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  /* ---------------------------------------------------------------------- *
+   * ChatLyricsSender
+   *
+   * Deliberately thin. Ryn already has a chat architecture and the brief says
+   * not to grow a second one, so this owns only the two things the existing
+   * path does not do: making downloaded text safe to hand over, and saying
+   * whether the player is currently in a state where lyrics would be sent.
+   * ---------------------------------------------------------------------- */
+
+  const ChatLyricsSender = {
+    /* Downloaded LRC is untrusted plain text. Strip anything that is not a
+     * printable lyric before it can reach a chat packet or the DOM. */
+    sanitize: function (text) {
+      let t = String(text == null ? "" : text);
+      /* control chars, bidi overrides and zero-width joiners */
+      t = t.replace(/[\u0000-\u001F\u007F-\u009F]/g, " ");
+      t = t.replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/g, "");
+      t = t.replace(/\s+/g, " ").trim();
+      if (t.length > MAX_LINE_CHARS) t = t.slice(0, MAX_LINE_CHARS).trim();
+      return t;
+    },
+
+    /* True when one of the player's four sync modes is on. The module never
+     * flips these itself — enabling chat output stays the user's decision. */
+    chatSyncActive: function () {
+      const mp = Host.mp;
+      if (!mp) return false;
+      return !!(mp._chatSync || mp._mixedSync || mp._botsOnlySync || mp._unifiedSync);
+    },
+
+    /* The handoff. The player's own _tickSync reads _lyrics every frame and
+     * does the sending, chunking and per-mode routing. */
+    handoff: function (timeline, seedIndex) {
+      const mp = Host.mp;
+      if (!mp) return;
+      mp._lyrics = timeline;
+      mp._lyricIndex = seedIndex;
+      mp._lastSentWall = 0;
+    }
+  };
+
+  /* ---------------------------------------------------------------------- *
+   * LRCParser
+   *
+   * Handles what the player's built-in _parseLRC does not: multiple
+   * timestamps on one line, [ti:]/[ar:]/[al:]/[au:]/[by:]/[length:]/[offset:]
+   * metadata, enhanced word-level <mm:ss.xx> markers, and malformed input.
+   *
+   * Each parsed line keeps `ts`, the exact bracket text it came from, so the
+   * English .lrc can be written back with byte-identical timestamps rather
+   * than re-derived ones.
+   * ---------------------------------------------------------------------- */
+
+  const TIME_TAG = /\[(\d{1,4}):([0-5]?\d)(?:[.:](\d{1,3}))?\]/g;
+  const META_TAG = /^\[([a-zA-Z#]+):(.*)\]$/;
+  const WORD_TAG = /<\d{1,4}:\d{1,2}(?:[.:]\d{1,3})?>/g;
+
+  const LRCParser = {
+    parse: function (raw) {
+      const meta = {};
+      const lines = [];
+      let malformed = 0;
+      let emptyTimed = 0;
+
+      let text = String(raw == null ? "" : raw);
+      text = text.replace(/^\uFEFF/, "");            /* UTF-8 BOM */
+      text = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+      const rows = text.split("\n");
+      for (let r = 0; r < rows.length; r++) {
+        const row = rows[r].trim();
+        if (!row) continue;
+
+        /* Metadata: a single bracket pair whose tag is alphabetic. Anything
+         * unparseable in here is skipped rather than thrown. */
+        const mm = row.match(META_TAG);
+        if (mm && !/^\d/.test(mm[1])) {
+          const key = mm[1].toLowerCase();
+          const val = mm[2].trim();
+          if (key === "offset") {
+            const n = parseInt(val, 10);
+            if (isFinite(n) && Math.abs(n) < 600000) meta.offset = n;
+          } else if (key.length <= 12) {
+            meta[key] = val.slice(0, 200);
+          }
+          continue;
+        }
+
+        /* Timestamps. Collect every leading tag, then take what is left. */
+        TIME_TAG.lastIndex = 0;
+        const stamps = [];
+        let cursor = 0;
+        let m;
+        while ((m = TIME_TAG.exec(row)) !== null) {
+          if (m.index !== cursor) break;           /* tags must be contiguous */
+          cursor = TIME_TAG.lastIndex;
+          const min = parseInt(m[1], 10);
+          const sec = parseInt(m[2], 10);
+          let frac = 0;
+          if (m[3]) {
+            /* 1 digit = tenths, 2 = hundredths, 3 = milliseconds */
+            const d = m[3];
+            frac = parseInt(d, 10) * (d.length === 1 ? 100 : d.length === 2 ? 10 : 1);
+          }
+          if (!isFinite(min) || !isFinite(sec)) continue;
+          stamps.push({
+            ms: (min * 60 + sec) * 1000 + frac,
+            ts: m[0].slice(1, -1)
+          });
+        }
+
+        if (!stamps.length) {
+          if (row[0] === "[") malformed++;
+          continue;
+        }
+
+        let body = row.slice(cursor);
+        body = body.replace(WORD_TAG, " ");        /* enhanced LRC word timings */
+        body = ChatLyricsSender.sanitize(body);
+
+        if (!body) { emptyTimed += stamps.length; continue; }   /* instrumental gap */
+
+        for (let s = 0; s < stamps.length; s++) {
+          lines.push({ ms: stamps[s].ms, ts: stamps[s].ts, text: body });
+        }
+      }
+
+      /* [offset:] convention: a positive offset shifts the lyrics earlier, so
+       * it is subtracted from every timestamp. Kept out of `ms` here and
+       * applied at timeline build time instead, so `ms` always mirrors the
+       * file and the stored .lrc stays untouched. */
+      lines.sort(function (a, b) { return a.ms - b.ms || (a.text < b.text ? -1 : 1); });
+
+      /* Drop exact duplicates (same instant, same words). */
+      const out = [];
+      for (let i = 0; i < lines.length; i++) {
+        const prev = out[out.length - 1];
+        if (prev && prev.ms === lines[i].ms && prev.text === lines[i].text) continue;
+        out.push(lines[i]);
+      }
+
+      return { meta: meta, lines: out, malformed: malformed, emptyTimed: emptyTimed };
+    },
+
+    /* True when the text carries at least one real timestamp. Used to tell a
+     * synced .lrc apart from plain lyrics without a full parse. */
+    looksSynced: function (raw) {
+      TIME_TAG.lastIndex = 0;
+      return TIME_TAG.test(String(raw == null ? "" : raw));
+    },
+
+    /* Serialise back to .lrc. Timestamps are written from the `ts` string the
+     * line was parsed from, so they survive a round trip exactly. */
+    format: function (lines, header) {
+      const out = [];
+      if (header) {
+        if (header.ti) out.push("[ti:" + header.ti + "]");
+        if (header.ar) out.push("[ar:" + header.ar + "]");
+        if (header.al) out.push("[al:" + header.al + "]");
+        if (header.by) out.push("[by:" + header.by + "]");
+        if (header.length) out.push("[length:" + header.length + "]");
+        if (out.length) out.push("");
+      }
+      for (let i = 0; i < lines.length; i++) {
+        const ts = lines[i].ts || LRCParser.msToTs(lines[i].ms);
+        out.push("[" + ts + "]" + lines[i].text);
+      }
+      return out.join("\n") + "\n";
+    },
+
+    msToTs: function (ms) {
+      const total = Math.max(0, Math.round(ms));
+      const min = Math.floor(total / 60000);
+      const sec = Math.floor((total % 60000) / 1000);
+      const cs = Math.floor((total % 1000) / 10);
+      return String(min).padStart(2, "0") + ":" +
+             String(sec).padStart(2, "0") + "." +
+             String(cs).padStart(2, "0");
+    }
+  };
+
+  /* ---------------------------------------------------------------------- *
+   * LanguageDetector
+   *
+   * Offline. Script ranges settle the non-Latin languages outright; Latin
+   * script falls through to stopword and diacritic scoring. Anything it is
+   * not sure about comes back as "und", and the translation provider's own
+   * detection settles it before a single line is translated.
+   * ---------------------------------------------------------------------- */
+
+  const SCRIPTS = [
+    { lang: "ja", re: /[぀-ゟ゠-ヿ]/g },
+    { lang: "ko", re: /[가-힯ᄀ-ᇿ㄰-㆏]/g },
+    { lang: "ar", re: /[؀-ۿݐ-ݿࢠ-ࣿ]/g },
+    { lang: "ru", re: /[Ѐ-ӿ]/g },
+    { lang: "hi", re: /[ऀ-ॿ]/g },
+    { lang: "he", re: /[֐-׿]/g },
+    { lang: "th", re: /[฀-๿]/g },
+    { lang: "el", re: /[Ͱ-Ͽ]/g },
+    { lang: "zh", re: /[一-鿿㐀-䶿]/g }   /* last: kana beats Han */
+  ];
+
+  const STOPWORDS = {
+    en: ("the and you that with have this for not are your but all was what when there " +
+         "from just then they will can dont cant were been into about only over").split(/\s+/),
+    es: "que los las por con una para como pero más este esta cuando todo nada siempre corazón amor vida".split(/\s+/),
+    fr: "les des que pour dans une avec pas plus sur mais tout comme elle nous vous toujours amour coeur".split(/\s+/),
+    de: "die der und das ich nicht mit auch für ein eine ist wie aber wenn immer mich dich liebe".split(/\s+/),
+    pt: "que com uma para não mais como você seu meu quando tudo nada sempre coração amor vida".split(/\s+/),
+    it: "che non per una con come più sono nel della anche quando tutto niente sempre cuore amore".split(/\s+/),
+    tr: "bir ben sen için ama daha çok gibi her şey zaman kalp aşk seni beni".split(/\s+/),
+    nl: "een het niet van voor met maar ook nog wel dat ik je mijn jouw liefde".split(/\s+/),
+    pl: "nie jest tak jak dla ale tylko jeszcze wszystko kiedy ciebie mnie serce".split(/\s+/),
+    id: "yang dan untuk tidak ini itu dengan aku kamu kita akan sudah cinta hati".split(/\s+/),
+    vi: "không được người này thì một cho anh em với những trong tình yêu".split(/\s+/)
+  };
+
+  const DIACRITIC_HINTS = [
+    { lang: "es", re: /[ñ¿¡]/gi },
+    { lang: "fr", re: /[œàèùêôçâ]/gi },
+    { lang: "de", re: /[äöüß]/gi },
+    { lang: "pt", re: /[ãõ]/gi },
+    { lang: "tr", re: /[ğışİ]/gi },
+    { lang: "pl", re: /[ąćęłńśźż]/gi }
+  ];
+
+  const LANG_NAMES = {
+    en: "English", ja: "Japanese", ko: "Korean", zh: "Chinese", ar: "Arabic",
+    es: "Spanish", fr: "French", de: "German", pt: "Portuguese", it: "Italian",
+    ru: "Russian", tr: "Turkish", hi: "Hindi", he: "Hebrew", th: "Thai",
+    el: "Greek", nl: "Dutch", pl: "Polish", id: "Indonesian", vi: "Vietnamese",
+    und: "Unknown"
+  };
+
+  const LanguageDetector = {
+    name: function (code) {
+      return LANG_NAMES[code] || String(code || "unknown");
+    },
+
+    detect: function (lines) {
+      const sample = lines.slice(0, 120).map(function (l) { return l.text; }).join(" ");
+      if (!sample.trim()) return { lang: "und", confidence: 0 };
+
+      const letters = (sample.match(/\S/g) || []).length || 1;
+
+      /* Non-Latin scripts are decisive. Kana or Hangul anywhere in a lyric
+       * means Japanese or Korean even when Han characters outnumber them. */
+      const hits = {};
+      for (let i = 0; i < SCRIPTS.length; i++) {
+        const s = SCRIPTS[i];
+        s.re.lastIndex = 0;
+        hits[s.lang] = (sample.match(s.re) || []).length;
+      }
+      if (hits.ja / letters > 0.03) return { lang: "ja", confidence: 0.98 };
+      if (hits.ko / letters > 0.05) return { lang: "ko", confidence: 0.98 };
+      if (hits.ar / letters > 0.10) return { lang: "ar", confidence: 0.97 };
+      if (hits.ru / letters > 0.10) return { lang: "ru", confidence: 0.97 };
+      if (hits.hi / letters > 0.10) return { lang: "hi", confidence: 0.96 };
+      if (hits.he / letters > 0.10) return { lang: "he", confidence: 0.96 };
+      if (hits.th / letters > 0.10) return { lang: "th", confidence: 0.96 };
+      if (hits.el / letters > 0.10) return { lang: "el", confidence: 0.95 };
+      if (hits.zh / letters > 0.10) return { lang: "zh", confidence: 0.95 };
+
+      /* Latin script: score stopwords, then let diacritics break ties. */
+      const words = sample.toLowerCase().match(/[a-zà-öø-ÿğışçăâîșțąćęłńśźż']+/g) || [];
+      if (words.length < 4) return { lang: "und", confidence: 0 };
+
+      const wordSet = Object.create(null);
+      for (let i = 0; i < words.length; i++) wordSet[words[i]] = (wordSet[words[i]] || 0) + 1;
+
+      const scores = {};
+      for (const lang in STOPWORDS) {
+        const list = STOPWORDS[lang];
+        let hitCount = 0;
+        for (let i = 0; i < list.length; i++) if (wordSet[list[i]]) hitCount += wordSet[list[i]];
+        scores[lang] = hitCount / words.length;
+      }
+      for (let i = 0; i < DIACRITIC_HINTS.length; i++) {
+        const h = DIACRITIC_HINTS[i];
+        h.re.lastIndex = 0;
+        const n = (sample.match(h.re) || []).length;
+        if (n) scores[h.lang] = (scores[h.lang] || 0) + Math.min(0.08, n / letters * 2);
+      }
+
+      let best = "und", bestScore = 0, second = 0;
+      for (const lang in scores) {
+        if (scores[lang] > bestScore) { second = bestScore; bestScore = scores[lang]; best = lang; }
+        else if (scores[lang] > second) { second = scores[lang]; }
+      }
+
+      /* Below this the sample is too thin to call, and "und" sends the
+       * question to the translation provider instead of guessing wrong. */
+      if (bestScore < 0.035) return { lang: "und", confidence: 0 };
+      const margin = bestScore - second;
+      return { lang: best, confidence: Math.min(0.95, 0.5 + margin * 6) };
+    }
+  };
+
+  /* ---------------------------------------------------------------------- *
+   * TranslationManager
+   *
+   * One request per unique line, never a batch that could come back with a
+   * different number of lines than it went out with. Repeated lines (choruses
+   * are most of a lyric) are translated once and reused, which is what keeps
+   * the request count sane.
+   *
+   * Providers are tried in order until one answers; the first that works is
+   * kept for the rest of the song. A line no provider can translate keeps its
+   * original text — a timestamp is never dropped because a request failed.
+   * ---------------------------------------------------------------------- */
+
+  const PROVIDERS = [
+    {
+      id: "gtx",
+      /* Also reports the source language it detected, which is what settles
+       * an "und" from LanguageDetector. */
+      translate: async function (text, src) {
+        const url = "https://translate.googleapis.com/translate_a/single" +
+          "?client=gtx&sl=" + encodeURIComponent(src || "auto") +
+          "&tl=en&dt=t&q=" + encodeURIComponent(text);
+        const r = await httpJson(url, NET_TIMEOUT_MS);
+        if (!r.ok || !Array.isArray(r.data) || !Array.isArray(r.data[0])) return null;
+        let out = "";
+        for (let i = 0; i < r.data[0].length; i++) {
+          const seg = r.data[0][i];
+          if (seg && typeof seg[0] === "string") out += seg[0];
+        }
+        out = out.trim();
+        if (!out) return null;
+        return { text: out, detected: typeof r.data[2] === "string" ? r.data[2] : null };
+      }
+    },
+    {
+      id: "lingva",
+      translate: async function (text, src) {
+        const url = "https://lingva.ml/api/v1/" + encodeURIComponent(src && src !== "und" ? src : "auto") +
+          "/en/" + encodeURIComponent(text);
+        const r = await httpJson(url, NET_TIMEOUT_MS);
+        if (!r.ok || !r.data || typeof r.data.translation !== "string") return null;
+        const out = r.data.translation.trim();
+        if (!out) return null;
+        return { text: out, detected: r.data.info && r.data.info.detectedSource || null };
+      }
+    },
+    {
+      id: "mymemory",
+      translate: async function (text, src) {
+        if (!src || src === "und" || src === "auto") return null;   /* needs a pair */
+        const url = "https://api.mymemory.translated.net/get?q=" + encodeURIComponent(text) +
+          "&langpair=" + encodeURIComponent(src) + "%7Cen";
+        const r = await httpJson(url, NET_TIMEOUT_MS);
+        if (!r.ok || !r.data || !r.data.responseData) return null;
+        const out = String(r.data.responseData.translatedText || "").trim();
+        if (!out || /^(MYMEMORY WARNING|INVALID)/i.test(out)) return null;
+        return { text: out, detected: null };
+      }
+    }
+  ];
+
+  const TranslationManager = {
+    /* Ask a provider what language a sample is. Only called when the offline
+     * detector was not confident, and only ever on one line. */
+    probeLanguage: async function (sample) {
+      for (let i = 0; i < PROVIDERS.length; i++) {
+        try {
+          const r = await PROVIDERS[i].translate(sample, "auto");
+          if (r && r.detected) return { lang: String(r.detected).slice(0, 5).toLowerCase(), provider: PROVIDERS[i].id };
+        } catch (e) { warn("probeLanguage/" + PROVIDERS[i].id, e); }
+      }
+      return { lang: null, provider: null };
+    },
+
+    /*
+     * texts    the original lines, in order
+     * src      source language code
+     * onTick   progress callback (done, total)
+     * token    { cancelled: bool } — a song change or a Clear aborts the run
+     *
+     * Returns { texts, provider, failed } with texts.length === texts.in.length
+     * always, so the caller can zip translations back onto timestamps by index.
+     */
+    translateLines: async function (texts, src, onTick, token) {
+      const unique = [];
+      const byText = new Map();
+      for (let i = 0; i < texts.length; i++) {
+        if (!byText.has(texts[i])) { byText.set(texts[i], null); unique.push(texts[i]); }
+      }
+
+      let provider = null;
+      let failed = 0;
+      let done = 0;
+
+      /* Find a provider that answers, using the first line as the probe. */
+      for (let p = 0; p < PROVIDERS.length && unique.length; p++) {
+        if (token && token.cancelled) return { texts: texts.slice(), provider: null, failed: texts.length, cancelled: true };
+        try {
+          const r = await PROVIDERS[p].translate(unique[0], src);
+          if (r && r.text) {
+            provider = PROVIDERS[p];
+            byText.set(unique[0], r.text);
+            done = 1;
+            if (onTick) onTick(done, unique.length);
+            break;
+          }
+        } catch (e) { warn("translate probe/" + PROVIDERS[p].id, e); }
+      }
+      if (!provider) return { texts: texts.slice(), provider: null, failed: texts.length };
+
+      /* Remaining unique lines, bounded concurrency, small stagger. */
+      const queue = unique.slice(done);
+      let cursor = 0;
+
+      async function worker(slot) {
+        await sleep(slot * TRANSLATE_STAGGER_MS);
+        while (cursor < queue.length) {
+          if (token && token.cancelled) return;
+          const line = queue[cursor++];
+          let got = null;
+          try {
+            got = await provider.translate(line, src);
+          } catch (e) { warn("translate/" + provider.id, e); }
+          if (!got || !got.text) {
+            /* One retry down the chain before giving up on this line. */
+            for (let p = 0; p < PROVIDERS.length; p++) {
+              if (PROVIDERS[p] === provider) continue;
+              try {
+                const alt = await PROVIDERS[p].translate(line, src);
+                if (alt && alt.text) { got = alt; break; }
+              } catch (e) { warn("translate alt/" + PROVIDERS[p].id, e); }
+            }
+          }
+          if (got && got.text) byText.set(line, got.text);
+          else { byText.set(line, null); failed++; }
+          done++;
+          if (onTick) onTick(done, unique.length);
+        }
+      }
+
+      const workers = [];
+      for (let w = 0; w < Math.min(TRANSLATE_CONCURRENCY, queue.length); w++) workers.push(worker(w));
+      await Promise.all(workers);
+
+      if (token && token.cancelled) {
+        return { texts: texts.slice(), provider: provider.id, failed: failed, cancelled: true };
+      }
+
+      /* Zip back by index. A line whose translation failed keeps its original
+       * words rather than vanishing, so the event count never changes. */
+      const out = new Array(texts.length);
+      for (let i = 0; i < texts.length; i++) {
+        const t = byText.get(texts[i]);
+        out[i] = t ? ChatLyricsSender.sanitize(t) : texts[i];
+      }
+      return { texts: out, provider: provider.id, failed: failed };
+    }
+  };
+
+  /* ---------------------------------------------------------------------- *
+   * LRCValidator
+   *
+   * The gate in front of "✓ LRC Ready". Everything it rejects comes back as a
+   * reason string the details panel can show verbatim.
+   * ---------------------------------------------------------------------- */
+
+  const LRCValidator = {
+    validateParsed: function (parsed, opts) {
+      opts = opts || {};
+      const lines = parsed && parsed.lines || [];
+
+      if (!lines.length) return { ok: false, reason: "no timestamped lines in the file" };
+
+      let withText = 0;
+      for (let i = 0; i < lines.length; i++) if (lines[i].text && lines[i].text.length > 1) withText++;
+      if (withText < 3) return { ok: false, reason: "fewer than 3 lines carry any words" };
+
+      /* parse() sorts, so this only catches a genuinely broken clock. */
+      for (let i = 1; i < lines.length; i++) {
+        if (lines[i].ms < lines[i - 1].ms) return { ok: false, reason: "timestamps are out of order" };
+      }
+
+      const first = lines[0].ms;
+      const last = lines[lines.length - 1].ms;
+      if (first < 0) return { ok: false, reason: "first timestamp is negative" };
+      if (last <= 0) return { ok: false, reason: "every timestamp is zero" };
+      if (last > 3 * 3600 * 1000) return { ok: false, reason: "timestamps run past three hours" };
+
+      /* ---- does this lyric belong to THIS song? ----
+       *
+       * Three pieces of evidence, weakest last. The first two come out of
+       * the .lrc's own metadata tags, which state outright which track the
+       * file was written for; the third is the shape of the timeline. */
+      const meta = parsed && parsed.meta || {};
+      const dur = opts.durationSec;
+      const confirmed = [];
+
+      /* 1. [length:] — the file's own claim about the track's duration.
+       *    Language-independent and far sharper than the envelope check
+       *    below: it is what catches a different song of similar length. */
+      if (dur && isFinite(dur) && dur > 1 && meta.length) {
+        const claimed = parseClock(meta.length);
+        if (claimed > 5) {
+          const tol = Math.max(20, dur * 0.12);
+          if (Math.abs(claimed - dur) > tol) {
+            return { ok: false, reason: "the .lrc is for a " + fmtClock(claimed) +
+              " track, this audio is " + fmtClock(dur) + " — a different song" };
+          }
+          confirmed.push("length");
+        }
+      }
+
+      /* 2. [ti:] / [ar:] — which song the file says it is. Only judged when
+       *    both sides are in the same script, so a romanised [ti:Lemon]
+       *    against a kanji title is skipped rather than failed. */
+      const names = [
+        [ meta.ti, opts.title, "titled" ],
+        [ meta.ar, opts.artist, "by" ]
+      ];
+      for (let i = 0; i < names.length; i++) {
+        const claim = names[i][0], mine = names[i][1];
+        if (!claim || !mine) continue;
+        if (!comparableNames(claim, mine)) continue;
+        const sim = similarity(claim, mine);
+        if (sim >= 0.34) { confirmed.push(names[i][2] === "titled" ? "title" : "artist"); continue; }
+        if (sim === 0) {
+          return { ok: false, reason: 'the .lrc is ' + names[i][2] + ' "' +
+            String(claim).slice(0, 40) + '", this song is "' +
+            String(mine).slice(0, 40) + '"' };
+        }
+      }
+
+      /* 3. The timeline envelope. */
+      if (dur && isFinite(dur) && dur > 1) {
+        const durMs = dur * 1000;
+        /* Some slack: an .lrc can carry a trailing credit line, and the file
+         * on disk is often a slightly different edit. Scaled to the track so
+         * a 30-second clip is not judged by a four-minute song's tolerance. */
+        const slack = Math.min(45000, Math.max(15000, durMs * 0.1));
+        if (last > durMs + slack) {
+          return { ok: false, reason: "lyrics run " + Math.round((last - durMs) / 1000) +
+            "s past the end of the audio — likely a different release" };
+        }
+        /* Deliberately loose: a long instrumental outro is normal, so this is
+         * only meant to catch a file that is plainly for a different track.
+         * The check above is the one that does the real work. */
+        if (last < durMs * 0.15 && durMs > 60000) {
+          return { ok: false, reason: "lyrics cover only " +
+            Math.round(last / durMs * 100) + "% of the audio" };
+        }
+        confirmed.push("duration");
+      }
+
+      return {
+        ok: true,
+        reason: "",
+        /* What actually confirmed the match, so the details panel can say
+         * whether the song was identified by name or only by length. */
+        confirmedBy: confirmed,
+        stats: { events: lines.length, withText: withText, firstMs: first, lastMs: last }
+      };
+    },
+
+    /* The translation layer must not change how many lyric events there are;
+     * if it did, the timestamps and the words are no longer the same list. */
+    validateTranslation: function (original, translated) {
+      if (!Array.isArray(translated) || translated.length !== original.length) {
+        return { ok: false, reason: "translation returned " +
+          (translated ? translated.length : 0) + " lines for " + original.length };
+      }
+      for (let i = 0; i < original.length; i++) {
+        if (translated[i].ms !== original[i].ms) {
+          return { ok: false, reason: "timestamp changed on line " + (i + 1) };
+        }
+        if (translated[i].ts !== original[i].ts) {
+          return { ok: false, reason: "timestamp text changed on line " + (i + 1) };
+        }
+        if (!translated[i].text) {
+          return { ok: false, reason: "line " + (i + 1) + " came back empty" };
+        }
+      }
+      return { ok: true, reason: "" };
+    }
+  };
+
+  /* ---------------------------------------------------------------------- *
+   * LRCCache
+   *
+   *   RynData/Lyrics/<SongID>/metadata.json  ->  RynLRCDB.meta[songId]
+   *   RynData/Lyrics/<SongID>/original.lrc   ->  RynLRCDB.lyrics[songId].originalLrc
+   *   RynData/Lyrics/<SongID>/english.lrc    ->  RynLRCDB.lyrics[songId].englishLrc
+   *
+   * A separate database from the player's BeeMusicDB on purpose: adding a
+   * store to that one means opening it at a higher version, and a second
+   * connection doing that can knock the music library's own connection over.
+   * The lyrics cache is not worth that risk, so it lives next door.
+   *
+   * Metadata is a store of its own so the song list can colour every button
+   * from one small read, without pulling every .lrc body into memory.
+   * ---------------------------------------------------------------------- */
+
+  const LRCCache = {
+    _db: null,
+    _dbFailed: false,
+    _metaMem: new Map(),      /* songId -> meta, warmed once at first render */
+    _lrcMem: new Map(),       /* songId -> { originalLrc, englishLrc } */
+    _warmed: false,
+
+    _open: function () {
+      const self = this;
+      if (this._db) return Promise.resolve(this._db);
+      if (this._dbFailed) return Promise.reject(new Error("idb unavailable"));
+      return new Promise(function (resolve, reject) {
+        let req;
+        try {
+          req = indexedDB.open(DB_NAME, DB_VERSION);
+        } catch (e) {
+          self._dbFailed = true;
+          reject(e);
+          return;
+        }
+        req.onupgradeneeded = function (e) {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(STORE_META)) db.createObjectStore(STORE_META);
+          if (!db.objectStoreNames.contains(STORE_LRC)) db.createObjectStore(STORE_LRC);
+        };
+        req.onsuccess = function (e) {
+          self._db = e.target.result;
+          self._db.onversionchange = function () {
+            try { self._db.close(); } catch (_) {}
+            self._db = null;
+          };
+          resolve(self._db);
+        };
+        req.onerror = function (e) { self._dbFailed = true; reject(e); };
+        req.onblocked = function () { self._dbFailed = true; reject(new Error("idb blocked")); };
+      });
+    },
+
+    _idbGet: function (store, key) {
+      return this._open().then(function (db) {
+        return new Promise(function (resolve, reject) {
+          const tx = db.transaction(store, "readonly");
+          const req = tx.objectStore(store).get(key);
+          req.onsuccess = function (e) { resolve(e.target.result); };
+          req.onerror = function (e) { reject(e); };
+        });
+      });
+    },
+
+    _idbPut: function (store, key, value) {
+      return this._open().then(function (db) {
+        return new Promise(function (resolve, reject) {
+          const tx = db.transaction(store, "readwrite");
+          tx.objectStore(store).put(value, key);
+          tx.oncomplete = function () { resolve(true); };
+          tx.onerror = function (e) { reject(e); };
+        });
+      });
+    },
+
+    _idbDelete: function (store, key) {
+      return this._open().then(function (db) {
+        return new Promise(function (resolve, reject) {
+          const tx = db.transaction(store, "readwrite");
+          tx.objectStore(store).delete(key);
+          tx.oncomplete = function () { resolve(true); };
+          tx.onerror = function (e) { reject(e); };
+        });
+      });
+    },
+
+    _idbAllMeta: function () {
+      return this._open().then(function (db) {
+        return new Promise(function (resolve, reject) {
+          const out = [];
+          const tx = db.transaction(STORE_META, "readonly");
+          const req = tx.objectStore(STORE_META).openCursor();
+          req.onsuccess = function (e) {
+            const cur = e.target.result;
+            if (!cur) { resolve(out); return; }
+            out.push(cur.value);
+            cur.continue();
+          };
+          req.onerror = function (e) { reject(e); };
+        });
+      });
+    },
+
+    /* localStorage fallback, used only when IndexedDB refuses to open. */
+    _lsGet: function (kind, songId) {
+      try {
+        const raw = localStorage.getItem(LS_PREFIX + kind + "_" + songId);
+        return raw ? JSON.parse(raw) : undefined;
+      } catch (_) { return undefined; }
+    },
+    _lsPut: function (kind, songId, value) {
+      try { localStorage.setItem(LS_PREFIX + kind + "_" + songId, JSON.stringify(value)); return true; }
+      catch (_) { return false; }
+    },
+    _lsDelete: function (kind, songId) {
+      try { localStorage.removeItem(LS_PREFIX + kind + "_" + songId); } catch (_) {}
+    },
+
+    /* One pass over the metadata store so every [LRC AI] button can render
+     * from memory. Called once, on the first song-list render. */
+    warm: async function () {
+      if (this._warmed) return;
+      this._warmed = true;
+      try {
+        const all = await this._idbAllMeta();
+        for (let i = 0; i < all.length; i++) {
+          if (all[i] && all[i].songId) this._metaMem.set(all[i].songId, all[i]);
+        }
+      } catch (e) {
+        warn("cache warm", e);
+      }
+    },
+
+    getMetaSync: function (songId) {
+      return songId ? this._metaMem.get(songId) || null : null;
+    },
+
+    getMeta: async function (songId) {
+      if (!songId) return null;
+      if (this._metaMem.has(songId)) return this._metaMem.get(songId);
+      let meta = null;
+      try { meta = await this._idbGet(STORE_META, songId); }
+      catch (e) { meta = this._lsGet("meta", songId); }
+      if (meta === undefined) meta = null;
+      if (meta) this._metaMem.set(songId, meta);
+      return meta;
+    },
+
+    getLrc: async function (songId) {
+      if (!songId) return null;
+      if (this._lrcMem.has(songId)) return this._lrcMem.get(songId);
+      let rec = null;
+      try { rec = await this._idbGet(STORE_LRC, songId); }
+      catch (e) { rec = this._lsGet("lrc", songId); }
+      if (rec === undefined) rec = null;
+      if (rec) this._lrcMem.set(songId, rec);
+      return rec;
+    },
+
+    put: async function (songId, meta, lrc) {
+      if (!songId) return false;
+      this._metaMem.set(songId, meta);
+      if (lrc) this._lrcMem.set(songId, lrc);
+      let ok = true;
+      try {
+        await this._idbPut(STORE_META, songId, meta);
+        if (lrc) await this._idbPut(STORE_LRC, songId, lrc);
+      } catch (e) {
+        warn("cache put", e);
+        ok = this._lsPut("meta", songId, meta);
+        if (lrc) ok = this._lsPut("lrc", songId, lrc) && ok;
+      }
+      return ok;
+    },
+
+    remove: async function (songId) {
+      if (!songId) return;
+      this._metaMem.delete(songId);
+      this._lrcMem.delete(songId);
+      try {
+        await this._idbDelete(STORE_META, songId);
+        await this._idbDelete(STORE_LRC, songId);
+      } catch (e) { warn("cache remove", e); }
+      this._lsDelete("meta", songId);
+      this._lsDelete("lrc", songId);
+    },
+
+    /* A cache entry stops being trusted when the module's format moves on,
+     * when the audio it was matched against is no longer the same length, or
+     * when it was built from a pasted .lrc that has since been replaced —
+     * otherwise pasting a better file would silently keep serving the old
+     * translation. */
+    isUsable: function (meta, durationSec, localRaw) {
+      if (!meta) return false;
+      if (meta.version !== CACHE_VERSION) return false;
+      if (meta.status !== "ready" && meta.status !== "plain") return false;
+      if (durationSec && meta.durationSec &&
+          Math.abs(durationSec - meta.durationSec) > DURATION_DRIFT_S) return false;
+      if (meta.source === "local" && meta.sourceId && localRaw !== undefined) {
+        const raw = String(localRaw || "");
+        const now = LRCParser.looksSynced(raw) ? fnv1aHex(raw).slice(0, 8) : "";
+        if (now !== meta.sourceId) return false;
+      }
+      return true;
+    },
+
+    globalOffset: function () {
+      try {
+        const raw = localStorage.getItem(GLOBAL_OFFSET_KEY);
+        return clampInt(raw, -30000, 30000, 0);
+      } catch (_) { return 0; }
+    },
+
+    setGlobalOffset: function (ms) {
+      try { localStorage.setItem(GLOBAL_OFFSET_KEY, String(clampInt(ms, -30000, 30000, 0))); }
+      catch (_) {}
+    }
+  };
+
+  /* ---------------------------------------------------------------------- *
+   * AudioTagReader
+   *
+   * Reads the title, artist and album out of the audio file itself.
+   *
+   * This is what makes the difference for a track ripped off YouTube. The
+   * library's title is whatever the filename was — "【MV】Lemon／米津玄師
+   * (Official Video) [4K]" — which is a poor thing to search a lyrics
+   * database with. The file's own ID3 tags usually carry the real values,
+   * "Lemon" and "米津玄師", and those find the song.
+   *
+   * Local and free: the bytes are already in the data URL, so this costs no
+   * request. Only the first ~1 MB is decoded (ID3v2 lives at the front) plus
+   * the last 128 bytes for an ID3v1 fallback, so a 20 MB song is not
+   * base64-decoded in full.
+   * ---------------------------------------------------------------------- */
+
+  const TEXT_FRAMES = {
+    TIT2: "title", TPE1: "artist", TALB: "album",   /* ID3v2.3 / v2.4 */
+    TT2:  "title", TP1:  "artist", TAL:  "album"    /* ID3v2.2         */
+  };
+
+  const AudioTagReader = {
+    /* Decode a byte range out of a base64 payload without decoding the rest.
+     * Slicing on 4-char boundaries keeps every chunk valid base64. */
+    _bytes: function (payload, byteOffset, byteCount) {
+      const startBlock = Math.floor(byteOffset / 3);
+      const endBlock = Math.min(Math.ceil(payload.length / 4),
+                                Math.ceil((byteOffset + byteCount) / 3));
+      if (endBlock <= startBlock) return null;
+      const chunk = payload.slice(startBlock * 4, endBlock * 4);
+      if (chunk.length < 4) return null;
+      let bin;
+      try { bin = atob(chunk); } catch (_) { return null; }
+      const skip = byteOffset - startBlock * 3;
+      const out = new Uint8Array(Math.max(0, Math.min(byteCount, bin.length - skip)));
+      for (let i = 0; i < out.length; i++) out[i] = bin.charCodeAt(skip + i) & 0xff;
+      return out;
+    },
+
+    _decode: function (bytes, encoding) {
+      if (!bytes || !bytes.length) return "";
+      const label = encoding === 1 ? "utf-16" : encoding === 2 ? "utf-16be"
+                  : encoding === 3 ? "utf-8" : "windows-1252";
+      try {
+        if (typeof TextDecoder !== "undefined") {
+          return new TextDecoder(label, { fatal: false }).decode(bytes);
+        }
+      } catch (_) {}
+
+      /* Without TextDecoder, a byte-per-char loop would turn UTF-16 into
+       * "ÿþL e m o n" and UTF-8 into mojibake, so both are decoded by hand
+       * rather than handed back wrong. */
+      if (encoding === 1 || encoding === 2) {
+        let be = encoding === 2;
+        let i = 0;
+        if (bytes.length >= 2) {
+          if (bytes[0] === 0xff && bytes[1] === 0xfe) { be = false; i = 2; }
+          else if (bytes[0] === 0xfe && bytes[1] === 0xff) { be = true; i = 2; }
+        }
+        let s = "";
+        for (; i + 1 < bytes.length; i += 2) {
+          const code = be ? (bytes[i] << 8) | bytes[i + 1] : (bytes[i + 1] << 8) | bytes[i];
+          if (code === 0) break;
+          s += String.fromCharCode(code);
+        }
+        return s;
+      }
+      if (encoding === 3) {
+        try { return decodeURIComponent(escape(this._latin1(bytes))); }
+        catch (_) { /* not valid UTF-8 after all */ }
+      }
+      return this._latin1(bytes);
+    },
+
+    _latin1: function (bytes) {
+      let s = "";
+      for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+      return s;
+    },
+
+    /* ID3v1 carries no encoding flag. Japanese taggers commonly wrote
+     * Shift-JIS there, so a byte run that is not valid UTF-8 gets a second
+     * reading before falling back to Latin-1. */
+    _decodeLegacy: function (bytes) {
+      const tryLabel = function (label) {
+        try {
+          if (typeof TextDecoder === "undefined") return null;
+          const s = new TextDecoder(label, { fatal: true }).decode(bytes);
+          return s;
+        } catch (_) { return null; }
+      };
+      let high = false;
+      for (let i = 0; i < bytes.length; i++) if (bytes[i] > 0x7f) { high = true; break; }
+      if (!high) return this._decode(bytes, 0);
+      return tryLabel("utf-8") || tryLabel("shift_jis") || this._decode(bytes, 0);
+    },
+
+    _clean: function (s) {
+      /* ID3 text frames are NUL-padded to the frame size, and a tag whose
+       * declared encoding does not match its bytes leaves U+FFFD behind.
+       * Both are stripped wherever they land, not just at the end — either
+       * one inside a search query poisons the query. */
+      return ChatLyricsSender.sanitize(
+        String(s || "").replace(/[\u0000\uFFFD]/g, "")).slice(0, 120);
+    },
+
+    _syncsafe: function (b, o) {
+      return ((b[o] & 0x7f) << 21) | ((b[o + 1] & 0x7f) << 14) |
+             ((b[o + 2] & 0x7f) << 7) | (b[o + 3] & 0x7f);
+    },
+
+    _u32: function (b, o) {
+      return (b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3];
+    },
+
+    /* Returns { title, artist, album } — any field may be "". Never throws. */
+    read: function (url) {
+      const empty = { title: "", artist: "", album: "" };
+      try {
+        const u = String(url || "");
+        const comma = u.indexOf(",");
+        if (u.slice(0, 5) !== "data:" || comma < 0) return empty;
+        if (!/;base64/i.test(u.slice(0, comma))) return empty;
+        const payload = u.slice(comma + 1);
+        if (payload.length < 64) return empty;
+
+        const head = this._bytes(payload, 0, 10);
+        if (head && head.length === 10 &&
+            head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33) {   /* "ID3" */
+          const major = head[3];
+          const size = this._syncsafe(head, 6);
+          if (size > 0 && size < 8 * 1024 * 1024) {
+            const body = this._bytes(payload, 10, Math.min(size, 1024 * 1024));
+            const got = this._readV2(body, major);
+            if (got.title || got.artist) return got;
+          }
+        }
+
+        /* ID3v1: the last 128 bytes of the file. The decoded length is not
+         * payload.length/4*3 — trailing "=" padding stands for bytes that
+         * are not there, and being one or two bytes out lands the read past
+         * the "TAG" magic and finds nothing. */
+        let total = Math.floor(payload.length / 4) * 3;
+        if (payload.slice(-2) === "==") total -= 2;
+        else if (payload.slice(-1) === "=") total -= 1;
+        const tail = this._bytes(payload, Math.max(0, total - 128), 128);
+        if (tail && tail.length >= 128 &&
+            tail[0] === 0x54 && tail[1] === 0x41 && tail[2] === 0x47) {   /* "TAG" */
+          return {
+            title: this._clean(this._decodeLegacy(tail.subarray(3, 33))),
+            artist: this._clean(this._decodeLegacy(tail.subarray(33, 63))),
+            album: this._clean(this._decodeLegacy(tail.subarray(63, 93)))
+          };
+        }
+      } catch (e) {
+        warn("readTags", e);
+      }
+      return empty;
+    },
+
+    _readV2: function (body, major) {
+      const out = { title: "", artist: "", album: "" };
+      if (!body) return out;
+      const idLen = major <= 2 ? 3 : 4;
+      const headLen = major <= 2 ? 6 : 10;
+      let p = 0;
+      let guard = 0;
+
+      while (p + headLen <= body.length && guard++ < 400) {
+        if (body[p] === 0) break;                       /* padding */
+        let id = "";
+        for (let i = 0; i < idLen; i++) id += String.fromCharCode(body[p + i]);
+
+        let size;
+        if (major <= 2) size = (body[p + 3] << 16) | (body[p + 4] << 8) | body[p + 5];
+        /* v2.4 sizes are syncsafe; v2.3 are plain. Some taggers get v2.4
+         * wrong, so a size that overruns the tag is retried the other way. */
+        else if (major >= 4) {
+          size = this._syncsafe(body, p + 4);
+          const plain = this._u32(body, p + 4);
+          if (p + headLen + size > body.length && p + headLen + plain <= body.length) size = plain;
+        } else size = this._u32(body, p + 4);
+
+        if (size <= 0 || p + headLen + size > body.length) break;
+
+        const field = TEXT_FRAMES[id];
+        if (field && !out[field]) {
+          const data = body.subarray(p + headLen, p + headLen + size);
+          if (data.length > 1) {
+            out[field] = this._clean(this._decode(data.subarray(1), data[0]));
+          }
+        }
+        p += headLen + size;
+        if (out.title && out.artist && out.album) break;
+      }
+      return out;
+    }
+  };
+
+  /* ---------------------------------------------------------------------- *
+   * SongIdentifier
+   *
+   * A filename is not an identity. Two files called "song.mp3" must not share
+   * a lyric cache entry, and renaming a song in the library must not throw its
+   * lyrics away, so the id is built from the title, the artist and a hash of
+   * the audio itself.
+   *
+   *   songId = SHA-256(title | artist | contentHash) truncated to 32 hex
+   *
+   * Duration is deliberately NOT part of the id. It arrives asynchronously
+   * from the audio element, so folding it in would give the same song two
+   * different ids depending on whether metadata had loaded yet. It is stored
+   * in metadata instead, where it does the same job better: it is what the
+   * lyrics provider is asked to match against, what the validator checks the
+   * timeline against, and what invalidates a cache entry when it drifts.
+   * ---------------------------------------------------------------------- */
+
+  const SongIdentifier = {
+    _durationCache: new Map(),   /* url -> seconds */
+
+    normalise: function (s) {
+      let t = String(s == null ? "" : s).toLowerCase();
+      try {
+        /* fold accents so "cafe" and "café" compare equal */
+        t = t.normalize("NFKD").replace(/[̀-ͯ]/g, "");
+      } catch (_) {}
+      return t.replace(/\s+/g, " ").trim();
+    },
+
+    /* Strip the noise a downloaded filename carries so the lyrics provider is
+     * searched with something close to the real track title. */
+    cleanTitle: function (title) {
+      let t = String(title == null ? "" : title);
+      t = t.replace(/\.(mp3|ogg|wav|flac|aac|m4a)$/i, "");
+      t = t.replace(/\((?:official|lyric|lyrics|audio|video|music|mv|hd|hq|4k|full)[^)]*\)/gi, " ");
+      t = t.replace(/\[(?:official|lyric|lyrics|audio|video|music|mv|hd|hq|4k|full)[^\]]*\]/gi, " ");
+      t = t.replace(/[\-–—]\s*(?:official|lyric|lyrics|audio|video|topic)\s*$/i, " ");
+      t = t.replace(/^\s*\d{1,2}\s*[.\-)]\s+/, "");        /* leading track number */
+      t = t.replace(/\s+/g, " ").trim();
+      return t || String(title == null ? "" : title).trim();
+    },
+
+    /* A title like "Artist - Track" carries the artist the library never got. */
+    splitArtist: function (title, artist) {
+      const known = String(artist == null ? "" : artist).trim();
+      if (known) return { title: title, artist: known };
+      const m = title.match(/^(.{2,60}?)\s+[\-–—]\s+(.{2,80})$/);
+      if (m) return { title: m[2].trim(), artist: m[1].trim() };
+      return { title: title, artist: "" };
+    },
+
+    /* Content hash. A data: URL is the file itself, so it is sampled — head,
+     * tail and length are enough to separate two different songs while
+     * staying fast on a 20 MB base64 string. A remote URL is hashed as text,
+     * since CORS means its bytes are usually not readable from here. */
+    contentHash: async function (url) {
+      const u = String(url == null ? "" : url);
+      if (!u) return "nourl";
+      if (u.slice(0, 5) === "data:") {
+        const HEAD = 65536;
+        const sample = u.length <= HEAD * 2
+          ? u
+          : u.slice(0, HEAD) + "|" + u.slice(-HEAD);
+        return (await sha256Hex("d" + u.length + "|" + sample)).slice(0, 32);
+      }
+      return (await sha256Hex("u|" + u)).slice(0, 32);
+    },
+
+    /* Read duration without disturbing the song that is playing: a throwaway
+     * element with preload="metadata", torn down as soon as it answers. */
+    readDuration: function (url) {
+      const self = this;
+      if (this._durationCache.has(url)) return Promise.resolve(this._durationCache.get(url));
+      return new Promise(function (resolve) {
+        let el = null;
+        let settled = false;
+        const finish = function (v) {
+          if (settled) return;
+          settled = true;
+          if (el) {
+            try { el.removeAttribute("src"); el.load(); } catch (_) {}
+            el = null;
+          }
+          if (v && isFinite(v) && v > 0) self._durationCache.set(url, v);
+          resolve(v || 0);
+        };
+        const timer = setTimeout(function () { finish(0); }, META_TIMEOUT_MS);
+        try {
+          el = new Audio();
+          el.preload = "metadata";
+          el.muted = true;
+          if (/^https?:/i.test(url)) el.crossOrigin = "anonymous";
+          el.onloadedmetadata = function () {
+            clearTimeout(timer);
+            finish(el && isFinite(el.duration) ? el.duration : 0);
+          };
+          el.onerror = function () { clearTimeout(timer); finish(0); };
+          el.src = url;
+        } catch (e) {
+          clearTimeout(timer);
+          warn("readDuration", e);
+          finish(0);
+        }
+      });
+    },
+
+    /*
+     * Returns { songId, hash, title, artist, durationSec }.
+     * The id is written back onto the song object and persisted through the
+     * player's own _save(), so it survives reloads, export and import.
+     */
+    identify: async function (song, opts) {
+      opts = opts || {};
+      if (!song) return null;
+      const mp = Host.mp;
+
+      const cleaned = this.cleanTitle(song.title);
+      const split = this.splitArtist(cleaned, song.artist);
+
+      let songId = song.lrcId;
+      let hash = song.lrcHash;
+      if (!songId || !hash) {
+        hash = await this.contentHash(song.url);
+        songId = (await sha256Hex(
+          this.normalise(split.title) + "|" + this.normalise(split.artist) + "|" + hash
+        )).slice(0, 32);
+        song.lrcId = songId;
+        song.lrcHash = hash;
+        try { mp && mp._save(); } catch (e) { warn("identify/save", e); }
+      }
+
+      /* The playing element already knows the duration; anything else needs a
+       * metadata read, which only happens when the caller asks for it. */
+      let durationSec = 0;
+      if (mp && mp._audio && mp._songs[mp._currentIndex] === song &&
+          isFinite(mp._audio.duration) && mp._audio.duration > 0) {
+        durationSec = mp._audio.duration;
+        this._durationCache.set(song.url, durationSec);
+      } else if (opts.needDuration) {
+        durationSec = await this.readDuration(song.url);
+      } else {
+        durationSec = this._durationCache.get(song.url) || 0;
+      }
+
+      /* Tags are read once and kept on the song, so this costs nothing on a
+       * replay. They are used for searching only — never folded into songId,
+       * which would re-key every song already in the cache. */
+      if (song.lrcTags === undefined && opts.needTags) {
+        song.lrcTags = AudioTagReader.read(song.url);
+        try { mp && mp._save(); } catch (e) { warn("identify/saveTags", e); }
+      }
+      const tags = song.lrcTags || { title: "", artist: "", album: "" };
+
+      return {
+        songId: songId,
+        hash: hash,
+        title: split.title,
+        artist: split.artist,
+        album: song.album || "",
+        durationSec: durationSec,
+        tags: tags
+      };
+    }
+  };
+
+  /* ---------------------------------------------------------------------- *
+   * LRCFetcher
+   *
+   * LRCLIB (lrclib.net) — a public, key-less, CORS-enabled synced-lyrics
+   * database. It is already the provider the Music page's own "how to add a
+   * song" guide points at for .lrc files, so this automates exactly the step
+   * the user was being asked to do by hand.
+   *
+   *   /api/get     exact lookup; wants artist + track + duration (+-2s)
+   *   /api/search  fuzzy; returns candidates to score
+   *
+   * Synced lyrics always win over plain. Plain is returned only so the caller
+   * can report "found, but not synchronised" rather than "nothing found".
+   * ---------------------------------------------------------------------- */
+
+  const LRCLIB = "https://lrclib.net";
+
+  const LRCFetcher = {
+    /* Shared with the validator, which judges the same names from the other
+     * direction: the fetcher picks a candidate by them, the validator checks
+     * the file that came back still claims to be this song. */
+    similarity: similarity,
+
+    score: function (cand, want) {
+      const titleSim = this.similarity(cand.trackName || "", want.title);
+      const artistSim = want.artist ? this.similarity(cand.artistName || "", want.artist) : 0.5;
+      let s = titleSim * 0.6 + artistSim * 0.3;
+      if (want.durationSec && cand.duration) {
+        const d = Math.abs(cand.duration - want.durationSec);
+        if (d <= 2) s += 0.15;
+        else if (d <= 6) s += 0.08;
+        else if (d > 20) s -= 0.25;
+      }
+      if (cand.syncedLyrics) s += 0.1;
+      if (cand.instrumental) s -= 0.5;
+      return s;
+    },
+
+    /*
+     * The distinct ways this song is worth asking for, best first.
+     *
+     * One query is not enough. A downloaded file's library title is often
+     * the filename, its artist field is often empty, and the artist is often
+     * buried in the title as "Artist - Track". The file's own ID3 tags are
+     * usually the cleanest of the lot, so they lead.
+     */
+    queries: function (want) {
+      const tags = want.tags || { title: "", artist: "", album: "" };
+      const out = [];
+      const push = function (title, artist) {
+        const t = String(title || "").trim();
+        const a = String(artist || "").trim();
+        if (!t || out.length >= 3) return;
+        const key = (t + "|" + a).toLowerCase();
+        for (let i = 0; i < out.length; i++) {
+          if ((out[i].title + "|" + out[i].artist).toLowerCase() === key) return;
+        }
+        out.push({ title: t, artist: a, album: want.album || "", durationSec: want.durationSec });
+      };
+      push(tags.title, tags.artist);        /* the file's own metadata */
+      push(want.title, want.artist);        /* what the library says   */
+      push(tags.title, want.artist);
+      push(want.title, tags.artist);
+      push(want.title, "");                 /* last resort: title only */
+      return out;
+    },
+
+    /*
+     * Providers, tried in order by the manager. Each returns
+     *   { synced, plain, source, sourceId, matchedTitle, matchedArtist,
+     *     matchedDuration, score }
+     * or null, and never throws — a provider that is unreachable, blocked by
+     * CORS or simply has nothing is just a provider that returned null.
+     */
+    providers: [
+      {
+        /* LRCLIB — public, key-less, CORS-enabled, and the provider the
+         * Music page's own guide already points at. */
+        id: "lrclib",
+        find: async function (want, token) {
+          const F = LRCFetcher;
+          const queries = F.queries(want);
+          let best = null;
+          let bestScore = -Infinity;
+
+          for (let q = 0; q < queries.length; q++) {
+            const want1 = queries[q];
+            const attempts = [];
+
+            /* The exact endpoint is the one that gets the right release. */
+            if (want1.artist && want1.durationSec > 0) {
+              const p = new URLSearchParams({
+                artist_name: want1.artist,
+                track_name: want1.title,
+                duration: String(Math.round(want1.durationSec))
+              });
+              if (want1.album) p.set("album_name", want1.album);
+              attempts.push({ url: LRCLIB + "/api/get?" + p.toString(), single: true });
+            }
+            attempts.push({
+              url: LRCLIB + "/api/search?" + new URLSearchParams(
+                want1.artist ? { track_name: want1.title, artist_name: want1.artist }
+                             : { q: want1.title }
+              ).toString(),
+              single: false
+            });
+
+            for (let i = 0; i < attempts.length; i++) {
+              if (token && token.cancelled) return null;
+              const r = await httpJson(attempts[i].url, NET_TIMEOUT_MS);
+              if (!r.ok || !r.data) continue;
+
+              const list = attempts[i].single ? [ r.data ] : (Array.isArray(r.data) ? r.data : []);
+              for (let c = 0; c < list.length && c < 20; c++) {
+                const cand = list[c];
+                if (!cand || typeof cand !== "object") continue;
+                if (!cand.syncedLyrics && !cand.plainLyrics) continue;
+                const s = attempts[i].single ? 1.5 : F.score(cand, want1);
+                if (s > bestScore) { bestScore = s; best = cand; }
+              }
+              if (attempts[i].single && best && best.syncedLyrics) break;
+            }
+            /* A strong synced hit means the later query shapes are wasted
+             * requests. */
+            if (best && best.syncedLyrics && bestScore >= 0.75) break;
+          }
+
+          if (!best) return null;
+          /* Below this the "match" is somebody else's song. */
+          if (bestScore < 0.35) return null;
+
+          return {
+            synced: typeof best.syncedLyrics === "string" ? best.syncedLyrics : "",
+            plain: typeof best.plainLyrics === "string" ? best.plainLyrics : "",
+            source: "lrclib",
+            sourceId: best.id != null ? String(best.id) : "",
+            matchedTitle: String(best.trackName || ""),
+            matchedArtist: String(best.artistName || ""),
+            matchedDuration: Number(best.duration) || 0,
+            score: bestScore
+          };
+        }
+      },
+
+      {
+        /* NetEase Cloud Music. Its catalogue of Japanese, Korean and Chinese
+         * tracks is far deeper than LRCLIB's, which is exactly where LRCLIB
+         * tends to come up empty. Two requests: search, then fetch the lrc
+         * for the best hit.
+         *
+         * `tlyric` on this API is a Chinese translation; it is ignored. The
+         * original goes through this module's own translation instead, so
+         * the output is English rather than a translation of a translation. */
+        id: "netease",
+        find: async function (want, token) {
+          const F = LRCFetcher;
+          const queries = F.queries(want).slice(0, 2);
+          let best = null;
+          let bestScore = -Infinity;
+
+          for (let q = 0; q < queries.length; q++) {
+            if (token && token.cancelled) return null;
+            const want1 = queries[q];
+            const r = await httpJson(
+              "https://music.163.com/api/search/get?" + new URLSearchParams({
+                s: (want1.title + " " + want1.artist).trim(),
+                type: "1", limit: "8", offset: "0"
+              }).toString(), NET_TIMEOUT_MS);
+            const songs = r.ok && r.data && r.data.result && Array.isArray(r.data.result.songs)
+              ? r.data.result.songs : [];
+
+            for (let i = 0; i < songs.length && i < 8; i++) {
+              const s = songs[i];
+              if (!s || s.id == null) continue;
+              const cand = {
+                id: s.id,
+                trackName: String(s.name || ""),
+                artistName: (Array.isArray(s.artists) ? s.artists : [])
+                  .map(function (a) { return a && a.name || ""; }).filter(Boolean).join(", "),
+                duration: Math.round(Number(s.duration || 0) / 1000),
+                /* NetEase lyrics are synced when they exist at all, so the
+                 * candidate is scored as if it carries them. */
+                syncedLyrics: "?"
+              };
+              const sc = F.score(cand, want1);
+              if (sc > bestScore) { bestScore = sc; best = cand; }
+            }
+            if (best && bestScore >= 0.75) break;
+          }
+
+          if (!best || bestScore < 0.4) return null;
+          if (token && token.cancelled) return null;
+
+          const l = await httpJson("https://music.163.com/api/song/lyric?" +
+            new URLSearchParams({ id: String(best.id), lv: "1", kv: "0", tv: "-1" }).toString(),
+            NET_TIMEOUT_MS);
+          const raw = l.ok && l.data && l.data.lrc && typeof l.data.lrc.lyric === "string"
+            ? l.data.lrc.lyric : "";
+          if (!raw.trim()) return null;
+
+          return {
+            synced: raw,
+            plain: "",
+            source: "netease",
+            sourceId: String(best.id),
+            matchedTitle: best.trackName,
+            matchedArtist: best.artistName,
+            matchedDuration: best.duration,
+            score: bestScore
+          };
+        }
+      },
+
+      {
+        /* Textyl — one request, second-resolution timings. Coarser than a
+         * real .lrc, so it is last: only reached when the other two have
+         * nothing, where coarse beats nothing. */
+        id: "textyl",
+        find: async function (want, token) {
+          const q = LRCFetcher.queries(want)[0];
+          if (!q) return null;
+          if (token && token.cancelled) return null;
+
+          const r = await httpJson("https://api.textyl.co/api/lyrics?q=" +
+            encodeURIComponent((q.artist + " " + q.title).trim()), NET_TIMEOUT_MS);
+          if (!r.ok || !Array.isArray(r.data) || !r.data.length) return null;
+
+          const lines = [];
+          for (let i = 0; i < r.data.length; i++) {
+            const row = r.data[i];
+            if (!row || typeof row.lyrics !== "string") continue;
+            const sec = Number(row.seconds);
+            if (!isFinite(sec) || sec < 0 || sec > 3 * 3600) continue;
+            const text = ChatLyricsSender.sanitize(row.lyrics);
+            if (!text) continue;
+            lines.push("[" + LRCParser.msToTs(sec * 1000) + "]" + text);
+          }
+          if (lines.length < 3) return null;
+
+          return {
+            synced: lines.join("\n"),
+            plain: "",
+            source: "textyl",
+            sourceId: "",
+            matchedTitle: q.title,
+            matchedArtist: q.artist,
+            matchedDuration: 0,
+            score: 0.5
+          };
+        }
+      }
+    ]
+  };
+
+  /* ---------------------------------------------------------------------- *
+   * SyncEngine
+   *
+   * Owns the numeric timeline and the index into it. It does not send
+   * anything and it does not run a loop — the player's existing _tickSync
+   * already walks _lyrics every frame, so the engine's whole job is to make
+   * sure the array that loop is reading is the right one, positioned at the
+   * right place.
+   *
+   * Timestamps are parsed once, at prepare time. Nothing here parses, fetches
+   * or serialises during playback.
+   * ---------------------------------------------------------------------- */
+
+  const SyncEngine = {
+    active: null,        /* { songId, songIndex, session, lines, offsetMs, synced } */
+
+    /* Last index whose timestamp is <= ms, or -1. O(log n). */
+    indexAt: function (list, ms) {
+      let lo = 0, hi = list.length - 1, ans = -1;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (list[mid].ms <= ms) { ans = mid; lo = mid + 1; }
+        else { hi = mid - 1; }
+      }
+      return ans;
+    },
+
+    /* Offset is applied here, never to the stored file. english.lrc keeps the
+     * timestamps it was cached with; the runtime array is what moves.
+     *
+     * Sign follows the brief: lyrics landing 300 ms early are fixed with
+     * +300 ms, so a positive offset pushes every event later. */
+    buildTimeline: function (lines, offsetMs) {
+      const mp = Host.mp;
+      const shifted = new Array(lines.length);
+      for (let i = 0; i < lines.length; i++) {
+        shifted[i] = { ms: Math.max(0, lines[i].ms + offsetMs), text: lines[i].text };
+      }
+      shifted.sort(function (a, b) { return a.ms - b.ms; });
+      /* Reuse the player's own reflow so a long line is split for the 30-char
+       * chat cap exactly as a hand-pasted lyric would be. */
+      try {
+        if (mp && typeof mp._reflowLRC === "function") return mp._reflowLRC(shifted);
+      } catch (e) { warn("reflow", e); }
+      return shifted;
+    },
+
+    /* Hand a prepared song's timeline to the player and seat the index at the
+     * current playback position, so a cache read that lands a moment after
+     * play() does not dump the opening lines all at once. */
+    activate: function (ctx) {
+      const mp = Host.mp;
+      if (!mp) return;
+      const timeline = this.buildTimeline(ctx.lines, ctx.offsetMs);
+      const nowMs = (mp._audio && isFinite(mp._audio.currentTime) ? mp._audio.currentTime : 0) * 1000;
+      /* -500 mirrors the player's own "already missed it" rule in _tickSync,
+       * so a line due right now still fires. */
+      const seed = this.indexAt(timeline, nowMs - 500);
+      ChatLyricsSender.handoff(timeline, seed);
+      this.active = {
+        songId: ctx.songId,
+        songIndex: ctx.songIndex,
+        session: ctx.session,
+        lines: ctx.lines,
+        offsetMs: ctx.offsetMs,
+        synced: true,
+        count: timeline.length
+      };
+    },
+
+    /* A song change, a delete or a restart drops the session. Never let Song
+     * A's lines survive into Song B. */
+    reset: function () {
+      this.active = null;
+    },
+
+    isActiveFor: function (songIndex, session) {
+      const a = this.active;
+      const mp = Host.mp;
+      if (!a || !mp) return false;
+      return a.songIndex === songIndex && a.session === session;
+    },
+
+    /* Offset changed while the song is playing: rebuild and re-seat, without
+     * replaying anything already sent. */
+    reapplyOffset: function (offsetMs) {
+      const mp = Host.mp;
+      const a = this.active;
+      if (!mp || !a) return false;
+      if (mp._songSessionId !== a.session) return false;
+      a.offsetMs = offsetMs;
+      const timeline = this.buildTimeline(a.lines, offsetMs);
+      const nowMs = (mp._audio && isFinite(mp._audio.currentTime) ? mp._audio.currentTime : 0) * 1000;
+      ChatLyricsSender.handoff(timeline, this.indexAt(timeline, nowMs - 500));
+      a.count = timeline.length;
+      return true;
+    },
+
+    /*
+     * Called after the player's own seekTo has run. That already re-seats
+     * _lyricIndex by a forward scan; this redoes it with a binary search so
+     * the cost does not grow with the lyric count, and — on a real jump —
+     * bumps the play session so chat chunks queued for the old position are
+     * dropped instead of arriving late over the new one.
+     */
+    onSeek: function (beforeSec) {
+      const mp = Host.mp;
+      if (!mp || !mp._audio) return;
+      const afterSec = isFinite(mp._audio.currentTime) ? mp._audio.currentTime : 0;
+      const jumped = Math.abs(afterSec - (beforeSec || 0)) > SEEK_RESET_S;
+
+      if (jumped && mp._lyrics && mp._lyrics.length) {
+        /* _songSessionId is the player's own guard on its pending setTimeout
+         * chunks. Bumping it here is what "reset on a significant seek" means
+         * in this architecture; it cancels stale sends and nothing else. */
+        mp._songSessionId++;
+        if (this.active) this.active.session = mp._songSessionId;
+      }
+
+      if (!mp._lyrics || !mp._lyrics.length) return;
+      mp._lyricIndex = this.indexAt(mp._lyrics, afterSec * 1000);
+      mp._lastSentWall = jumped ? Date.now() : 0;
+    }
+  };
+
+  /* ---------------------------------------------------------------------- *
+   * LRCUI
+   *
+   * Renders into the menu iframe the player already owns. The Music page's
+   * HTML and stylesheet are left untouched — the button, its styles and the
+   * details panel are all created from here, so removing this module leaves
+   * no trace in the page.
+   *
+   * Nothing here uses innerHTML with lyric or provider text. Song titles,
+   * artist names and error strings come from a file downloaded off the
+   * internet, and they go in through textContent only.
+   * ---------------------------------------------------------------------- */
+
+  const STATE_LABEL = {
+    idle:        "LRC AI",
+    identifying: "LRC AI: Loading...",
+    fetching:    "LRC AI: Loading...",
+    parsing:     "LRC AI: Loading...",
+    translating: "LRC AI: Translating...",
+    validating:  "LRC AI: Loading...",
+    caching:     "LRC AI: Loading...",
+    ready:       "✓ LRC",
+    plain:       "LRC: no sync",
+    none:        "Retry LRC",
+    error:       "Retry LRC"
+  };
+
+  const STYLE_ID = "ryn-lrc-style";
+  const STYLE_TEXT = [
+    ".rm-lrc-btn{",
+    "  flex-shrink:0;height:26px;padding:0 10px;",
+    "  display:inline-flex;align-items:center;justify-content:center;",
+    "  border-radius:var(--r1);border:1px solid var(--line-2);",
+    "  background:rgba(255,255,255,.04);",
+    "  font-family:var(--mono);font-size:10.5px;font-weight:700;",
+    "  letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;",
+    "  color:var(--tx-3);cursor:pointer;",
+    "  transition:background 140ms var(--ease),color 140ms var(--ease),border-color 140ms var(--ease);",
+    "}",
+    ".rm-lrc-btn:hover{background:rgba(255,255,255,.09);color:var(--tx-1);border-color:var(--line-3);}",
+    ".rm-lrc-btn.is-ready{color:var(--sage);border-color:var(--sage-40);background:var(--sage-14);}",
+    ".rm-lrc-btn.is-busy{color:var(--sky);border-color:var(--sky-45);background:var(--sky-12);cursor:progress;}",
+    ".rm-lrc-btn.is-plain{color:var(--iris-hi);border-color:var(--iris-45);background:var(--iris-12);}",
+    ".rm-lrc-btn.is-fail{color:var(--rose);border-color:rgba(217,163,171,.4);background:var(--rose-12);}",
+    "",
+    ".rm-lrc-panel{",
+    "  position:fixed;inset:0;z-index:9999;",
+    "  display:flex;align-items:center;justify-content:center;",
+    "  background:rgba(4,4,8,.66);backdrop-filter:blur(3px);",
+    "}",
+    ".rm-lrc-card{",
+    "  width:min(520px,92vw);max-height:86vh;overflow:auto;",
+    "  padding:26px 28px 22px;border-radius:var(--r3);",
+    "  background:var(--ink-2);border:1px solid var(--line-2);",
+    "  box-shadow:0 24px 64px rgba(0,0,0,.55);",
+    "}",
+    ".rm-lrc-card h3{",
+    "  margin:0 0 4px;font-size:19px;font-weight:800;letter-spacing:-.02em;color:var(--tx-1);",
+    "  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;",
+    "}",
+    ".rm-lrc-card .rm-lrc-sub{margin:0 0 20px;font-size:12.5px;font-weight:500;color:var(--tx-4);}",
+    ".rm-lrc-kv{display:flex;justify-content:space-between;gap:18px;padding:7px 0;border-bottom:1px solid var(--line);}",
+    ".rm-lrc-kv:last-of-type{border-bottom:none;}",
+    ".rm-lrc-k{font-size:12px;font-weight:600;color:var(--tx-4);white-space:nowrap;}",
+    ".rm-lrc-v{font-size:12.5px;font-weight:700;color:var(--tx-2);text-align:right;",
+    "  overflow:hidden;text-overflow:ellipsis;}",
+    ".rm-lrc-v.ok{color:var(--sage);} .rm-lrc-v.warn{color:var(--rose);} .rm-lrc-v.info{color:var(--sky);}",
+    ".rm-lrc-off{display:flex;align-items:center;gap:8px;margin:18px 0 4px;}",
+    ".rm-lrc-off input{",
+    "  width:92px;height:34px;padding:0 10px;border-radius:var(--r1);",
+    "  background:rgba(255,255,255,.05);border:1px solid var(--line-2);",
+    "  color:var(--tx-1);font-family:var(--mono);font-size:12.5px;text-align:right;",
+    "}",
+    ".rm-lrc-off button{",
+    "  height:34px;padding:0 12px;border-radius:var(--r1);",
+    "  background:rgba(255,255,255,.05);border:1px solid var(--line-2);",
+    "  color:var(--tx-2);font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer;",
+    "}",
+    ".rm-lrc-off button:hover{background:rgba(255,255,255,.1);color:var(--tx-1);}",
+    ".rm-lrc-hint{margin:6px 0 0;font-size:11.5px;font-weight:500;line-height:1.6;color:var(--tx-4);}",
+    ".rm-lrc-acts{display:flex;gap:9px;margin-top:22px;flex-wrap:wrap;}"
+  ].join("\n");
+
+  const LRCUI = {
+    doc: function () {
+      const mp = Host.mp;
+      return mp && mp._frameDoc ? mp._frameDoc : null;
+    },
+
+    /* Checked against the live document rather than a flag: UI.resetFrame()
+     * throws the menu iframe away and builds a new one, and the new document
+     * needs its own copy of these rules. */
+    injectStyle: function () {
+      const doc = this.doc();
+      if (!doc || doc.getElementById(STYLE_ID)) return;
+      const el = doc.createElement("style");
+      el.setAttribute("id", STYLE_ID);
+      el.textContent = STYLE_TEXT;
+      (doc.head || doc.body || doc.documentElement).appendChild(el);
+    },
+
+    /* Called after the player's own _renderSongList has rebuilt the rows. */
+    decorateRows: function () {
+      const mp = Host.mp;
+      const doc = this.doc();
+      if (!mp || !doc) return;
+      this.injectStyle();
+
+      /* One read of the metadata store paints every button; after that the
+       * states live in memory and rendering touches no storage at all. */
+      if (!LRCCache._warmed) {
+        LRCCache.warm().then(guard("warm rerender", function () {
+          try { mp._renderSongList(); } catch (e) { warn("rerender", e); }
+        }));
+      }
+
+      const rows = doc.querySelectorAll("#song-list .rm-song-row");
+      for (let r = 0; r < rows.length; r++) {
+        const row = rows[r];
+        const icons = row.querySelector(".rm-s-icons");
+        if (!icons || row.querySelector(".rm-lrc-btn")) continue;
+
+        /* The player stamps the library index (1-based) on the number cell,
+         * so read it back from there rather than re-deriving the filter. The
+         * title is checked against the row as well: if the two ever disagree
+         * the row gets no button, instead of a button wired to the wrong
+         * song. */
+        const numEl = row.querySelector(".rm-snum");
+        const idx = numEl ? parseInt(numEl.textContent, 10) - 1 : -1;
+        const song = mp._songs[idx];
+        if (!song) continue;
+        const titleEl = row.querySelector(".rm-stitle");
+        if (titleEl && String(song.title || "").trim() &&
+            titleEl.textContent.indexOf(String(song.title).trim()) !== 0) continue;
+
+        const btn = doc.createElement("span");
+        btn.className = "rm-lrc-btn";
+        btn.setAttribute("data-lrc-index", String(idx));
+        btn.onclick = guard("lrc button", function (e) {
+          e.stopPropagation();
+          LRCUI.onClick(idx);
+        });
+        row.insertBefore(btn, icons);
+        this.paint(idx);
+      }
+    },
+
+    /* Current display state for a song, from memory only. */
+    stateOf: function (song) {
+      if (!song) return { state: "idle", meta: null };
+      const live = LRCManager.progress.get(song.lrcId || ("i:" + song.title));
+      if (live) return { state: live.state, meta: null, note: live.note };
+      const meta = LRCCache.getMetaSync(song.lrcId);
+      if (!meta) return { state: "idle", meta: null };
+      if (meta.status === "ready") return { state: "ready", meta: meta };
+      if (meta.status === "plain") return { state: "plain", meta: meta };
+      return { state: meta.status === "error" ? "error" : "none", meta: meta };
+    },
+
+    paint: function (index) {
+      const mp = Host.mp;
+      const doc = this.doc();
+      if (!mp || !doc) return;
+      const btn = doc.querySelector('#song-list .rm-lrc-btn[data-lrc-index="' + index + '"]');
+      if (!btn) return;
+      const song = mp._songs[index];
+      const st = this.stateOf(song);
+
+      btn.textContent = STATE_LABEL[st.state] || STATE_LABEL.idle;
+      btn.classList.remove("is-ready", "is-busy", "is-plain", "is-fail");
+      if (st.state === "ready") btn.classList.add("is-ready");
+      else if (st.state === "plain") btn.classList.add("is-plain");
+      else if (st.state === "none" || st.state === "error") btn.classList.add("is-fail");
+      else if (st.state !== "idle") btn.classList.add("is-busy");
+
+      let title = "Find and cache English lyrics for this song";
+      if (st.state === "ready" && st.meta) {
+        title = st.meta.lineCount + " lines · " +
+          LanguageDetector.name(st.meta.language) +
+          (st.meta.language === "en" ? "" : " → English") +
+          " · click for details";
+      } else if (st.state === "plain") {
+        title = "Lyrics found — synchronisation unavailable";
+      } else if (st.state === "none" || st.state === "error") {
+        title = (st.meta && st.meta.note) || "No synchronised lyrics found — click to retry";
+      } else if (st.note) {
+        title = st.note;
+      }
+      btn.title = title;
+    },
+
+    repaintAll: function () {
+      const mp = Host.mp;
+      const doc = this.doc();
+      if (!mp || !doc) return;
+      const btns = doc.querySelectorAll("#song-list .rm-lrc-btn");
+      for (let i = 0; i < btns.length; i++) {
+        this.paint(parseInt(btns[i].getAttribute("data-lrc-index"), 10));
+      }
+    },
+
+    onClick: function (index) {
+      const mp = Host.mp;
+      const song = mp && mp._songs[index];
+      if (!song) return;
+      const st = this.stateOf(song);
+      if (st.state === "ready" || st.state === "plain") { fire(this.openPanel(index), "openPanel"); return; }
+      if (st.state === "idle" || st.state === "none" || st.state === "error") {
+        fire(LRCManager.prepare(index, { force: st.state !== "idle" }), "prepare");
+      }
+      /* A button already mid-pipeline is left alone. */
+    },
+
+    toast: function (msg) {
+      const mp = Host.mp;
+      try { mp && mp._toast && mp._toast(msg); } catch (e) { warn("toast", e); }
+    },
+
+    /* -- details panel ---------------------------------------------------- */
+
+    closePanel: function () {
+      const doc = this.doc();
+      if (!doc) return;
+      const old = doc.getElementById("rm-lrc-panel");
+      if (old && old.parentNode) old.parentNode.removeChild(old);
+    },
+
+    kv: function (doc, parent, key, value, cls) {
+      const row = doc.createElement("div");
+      row.className = "rm-lrc-kv";
+      const k = doc.createElement("span");
+      k.className = "rm-lrc-k";
+      k.textContent = key;
+      const v = doc.createElement("span");
+      v.className = "rm-lrc-v" + (cls ? " " + cls : "");
+      v.textContent = value;                       /* never innerHTML */
+      row.appendChild(k);
+      row.appendChild(v);
+      parent.appendChild(row);
+      return v;
+    },
+
+    openPanel: async function (index) {
+      const mp = Host.mp;
+      const doc = this.doc();
+      if (!mp || !doc) return;
+      const song = mp._songs[index];
+      if (!song) return;
+      const meta = await LRCCache.getMeta(song.lrcId);
+      if (!meta) { this.toast("No cached lyrics for this song"); return; }
+
+      this.injectStyle();
+      this.closePanel();
+
+      const wrap = doc.createElement("div");
+      wrap.className = "rm-lrc-panel";
+      wrap.id = "rm-lrc-panel";
+      wrap.onclick = function (e) { if (e.target === wrap) LRCUI.closePanel(); };
+
+      const card = doc.createElement("div");
+      card.className = "rm-lrc-card";
+
+      const h = doc.createElement("h3");
+      h.textContent = meta.title || song.title || "Untitled";
+      card.appendChild(h);
+
+      const sub = doc.createElement("p");
+      sub.className = "rm-lrc-sub";
+      sub.textContent = meta.artist || song.artist || "Unknown artist";
+      card.appendChild(sub);
+
+      const synced = meta.status === "ready";
+      this.kv(doc, card, "Source language",
+        LanguageDetector.name(meta.language) + (meta.languageSource ? " (" + meta.languageSource + ")" : ""));
+      this.kv(doc, card, "Translation",
+        meta.language === "en" ? "not needed — already English"
+                               : "English" + (meta.provider ? " via " + meta.provider : ""),
+        meta.language === "en" ? "" : "info");
+      this.kv(doc, card, "Lyric lines", String(meta.lineCount || 0));
+      this.kv(doc, card, "Sync status",
+        synced ? "synchronised" : "found, synchronisation unavailable",
+        synced ? "ok" : "warn");
+      this.kv(doc, card, "Duration", fmtClock(meta.durationSec));
+      this.kv(doc, card, "Lyrics source",
+        (meta.source || "unknown") + (meta.sourceId ? " #" + meta.sourceId : ""));
+      if (synced) {
+        const by = Array.isArray(meta.matchedBy) ? meta.matchedBy : [];
+        const NAMES = { length: "the .lrc's own length tag", title: "title",
+                        artist: "artist", duration: "track length" };
+        const parts = by.map(function (k) { return NAMES[k] || k; });
+        /* "duration" alone means nothing named the song — worth saying, since
+         * a different song of similar length would also pass that. */
+        const weak = by.length <= 1 && by[0] === "duration";
+        this.kv(doc, card, "Matched by",
+          parts.length ? parts.join(", ") : "nothing — accepted on shape alone",
+          weak || !parts.length ? "warn" : "ok");
+      }
+      this.kv(doc, card, "Cache", "stored · v" + meta.version + " · " +
+        (meta.lastUpdate ? String(meta.lastUpdate).slice(0, 10) : "unknown"), "ok");
+      this.kv(doc, card, "Song ID", String(meta.songId || "").slice(0, 16) + "…");
+      const chatV = this.kv(doc, card, "Chat sync",
+        ChatLyricsSender.chatSyncActive() ? "on" : "off — enable it under Chat sync",
+        ChatLyricsSender.chatSyncActive() ? "ok" : "warn");
+      if (chatV) chatV.title = "Lyrics load automatically; sending them to chat stays your choice.";
+
+      if (synced) {
+        const offWrap = doc.createElement("div");
+        offWrap.className = "rm-lrc-off";
+
+        const label = doc.createElement("span");
+        label.className = "rm-lrc-k";
+        label.textContent = "LRC offset";
+        offWrap.appendChild(label);
+
+        const minus = doc.createElement("button");
+        minus.textContent = "−250";
+        const input = doc.createElement("input");
+        input.type = "number";
+        input.step = "50";
+        input.value = String(meta.offsetMs || 0);
+        const plus = doc.createElement("button");
+        plus.textContent = "+250";
+        const zero = doc.createElement("button");
+        zero.textContent = "0";
+
+        const commit = guard("offset commit", function (v) {
+          const ms = clampInt(v, -30000, 30000, 0);
+          input.value = String(ms);
+          fire(LRCManager.setOffset(song, ms), "setOffset");
+        });
+        minus.onclick = function () { commit(parseInt(input.value, 10) - 250); };
+        plus.onclick = function () { commit(parseInt(input.value, 10) + 250); };
+        zero.onclick = function () { commit(0); };
+        input.onchange = function () { commit(input.value); };
+
+        offWrap.appendChild(minus);
+        offWrap.appendChild(input);
+        offWrap.appendChild(plus);
+        offWrap.appendChild(zero);
+        card.appendChild(offWrap);
+
+        const hint = doc.createElement("p");
+        hint.className = "rm-lrc-hint";
+        hint.textContent = "Lyrics arriving early? Raise the offset. Arriving late? Lower it. " +
+          "The cached .lrc keeps its original timestamps — the offset is applied as the " +
+          "song plays, and takes effect immediately.";
+        card.appendChild(hint);
+
+        const gHint = doc.createElement("p");
+        gHint.className = "rm-lrc-hint";
+        gHint.textContent = "Global offset: " + LRCCache.globalOffset() +
+          " ms, added to every song on top of this one.";
+        card.appendChild(gHint);
+      } else if (meta.note) {
+        const note = doc.createElement("p");
+        note.className = "rm-lrc-hint";
+        note.textContent = meta.note;
+        card.appendChild(note);
+      }
+
+      const acts = doc.createElement("div");
+      acts.className = "rm-lrc-acts";
+
+      const refetch = doc.createElement("button");
+      refetch.className = "option-button";
+      refetch.textContent = "Re-fetch";
+      refetch.onclick = guard("refetch", function () {
+        LRCUI.closePanel();
+        fire(LRCManager.prepare(index, { force: true }), "prepare");
+      });
+
+      const clear = doc.createElement("button");
+      clear.className = "option-button";
+      clear.textContent = "Clear cache";
+      clear.onclick = guard("clear cache", function () {
+        LRCUI.closePanel();
+        fire(LRCManager.clear(index), "clear");
+      });
+
+      const close = doc.createElement("button");
+      close.className = "option-button";
+      close.textContent = "Close";
+      close.onclick = function () { LRCUI.closePanel(); };
+
+      acts.appendChild(refetch);
+      acts.appendChild(clear);
+      acts.appendChild(close);
+      card.appendChild(acts);
+
+      wrap.appendChild(card);
+      (doc.body || doc.documentElement).appendChild(wrap);
+    }
+  };
+
+  /* ---------------------------------------------------------------------- *
+   * LRCManager
+   *
+   * The pipeline behind one press of [LRC AI], and the cache-only lookup
+   * behind every press of Play.
+   *
+   *   identify -> cache hit? -> fetch -> parse -> validate -> detect
+   *            -> translate -> validate -> cache -> "Ready"
+   *
+   * Failure is a state, not an exception: every step that can fail writes a
+   * cache entry saying so, which is what stops the module retrying by itself.
+   * Only the button asks again.
+   * ---------------------------------------------------------------------- */
+
+  const LRCManager = {
+    progress: new Map(),      /* songId -> { state, note } while a run is live */
+    _running: new Map(),      /* songId -> token, so one song runs once        */
+
+    /* A run starts before the song has an id and finishes after it has one,
+     * so both keys are cleared on the way out. */
+    _setState: function (song, index, state, note) {
+      const pre = "i:" + song.title;
+      const key = song.lrcId || pre;
+      if (state === null) {
+        this.progress.delete(key);
+        this.progress.delete(pre);
+      } else {
+        this.progress.set(key, { state: state, note: note || "" });
+      }
+      try { LRCUI.paint(index); } catch (e) { warn("paint", e); }
+    },
+
+    /* What the playback engine actually shifts timestamps by:
+     *   per-song calibration + the global one, minus the file's own [offset:]
+     * tag, which the LRC spec says shifts lyrics earlier by that many ms. */
+    effectiveOffset: function (meta) {
+      if (!meta) return LRCCache.globalOffset();
+      return (meta.offsetMs || 0) + LRCCache.globalOffset() - (meta.fileOffsetMs || 0);
+    },
+
+    /* ---- the prepare pipeline ---- */
+
+    prepare: async function (index, opts) {
+      opts = opts || {};
+      const mp = Host.mp;
+      if (!mp) return;
+      const song = mp._songs[index];
+      if (!song) return;
+
+      const preKey = song.lrcId || ("i:" + song.title);
+      if (this._running.has(preKey)) return;                 /* already working */
+      const token = { cancelled: false };
+      this._running.set(preKey, token);
+
+      try {
+        await this._run(song, index, opts, token);
+      } catch (e) {
+        warn("prepare", e);
+        this._setState(song, index, null);
+        await this._writeFailure(song, index, "error", "Preparation failed: " + (e && e.message || e));
+      } finally {
+        this._running.delete(preKey);
+        if (song.lrcId) this._running.delete(song.lrcId);
+      }
+    },
+
+    _run: async function (song, index, opts, token) {
+      const mp = Host.mp;
+
+      /* 1-4. Identify: title, artist, metadata, duration, stable identity. */
+      this._setState(song, index, "identifying");
+      const id = await SongIdentifier.identify(song, { needDuration: true, needTags: true });
+      if (!id) { this._setState(song, index, null); return; }
+      /* Re-key the run now that the id exists. */
+      this._running.set(id.songId, token);
+
+      /* 5. Cache first. A prepared song is never fetched or translated twice
+       *    unless the user explicitly asked to re-fetch. */
+      if (!opts.force) {
+        const cached = await LRCCache.getMeta(id.songId);
+        if (LRCCache.isUsable(cached, id.durationSec, song.lyrics)) {
+          this._setState(song, index, null);
+          LRCUI.paint(index);
+          LRCUI.toast(cached.status === "ready" ? "✓ LRC Ready (cached)" : "Cached lyrics are not synced");
+          this._maybeActivate(index);
+          return;
+        }
+        /* A remembered failure is also a cache hit. Without this the module
+         * would go back to the network every time the song list was touched,
+         * which is exactly the retry loop the brief rules out — only the
+         * Retry button, which passes force, gets to ask again. */
+        if (cached && cached.version === CACHE_VERSION &&
+            (cached.status === "none" || cached.status === "error")) {
+          this._setState(song, index, null);
+          LRCUI.toast(cached.status === "none" ? "No synchronised lyrics found" : "LRC unavailable");
+          return;
+        }
+      }
+
+      /* 6-8. Source the lyrics, then parse and validate what came back.
+       *
+       * A synced .lrc the user already pasted into the song comes first: it
+       * is already here, it costs no network, and they chose it deliberately.
+       * LRCLIB is the fallback — and also the second chance if the pasted
+       * file turns out not to match this audio.
+       *
+       * This is the point of the whole feature for a song whose only .lrc is
+       * in another language: paste it, press the button, get it in English
+       * with its timestamps untouched. */
+      const localRaw = String(song.lyrics || "");
+      const sources = [];
+      if (LRCParser.looksSynced(localRaw)) {
+        sources.push({
+          busy: "parsing",
+          get: function () {
+            return Promise.resolve({
+              synced: localRaw,
+              plain: "",
+              source: "local",
+              sourceId: fnv1aHex(localRaw).slice(0, 8),
+              matchedTitle: id.title,
+              matchedArtist: id.artist,
+              matchedDuration: id.durationSec,
+              score: 1
+            });
+          }
+        });
+      }
+      /* Then every lyrics provider, in order. Each is validated on its own,
+       * so a provider that answers with the wrong release falls through to
+       * the next instead of ending the run. */
+      const want = {
+        title: id.title,
+        artist: id.artist,
+        album: id.album,
+        durationSec: id.durationSec,
+        tags: id.tags || { title: "", artist: "", album: "" }
+      };
+      LRCFetcher.providers.forEach(function (prov) {
+        sources.push({
+          busy: "fetching",
+          get: function () { return prov.find(want, token); }
+        });
+      });
+
+      let found = null;       /* the source that validated */
+      let parsed = null;      /* its parsed lines */
+      let plainOnly = null;   /* unsynced lyrics, kept only as a last resort */
+      let lastReason = "";    /* why the previous candidate was rejected */
+      let matchedBy = [];     /* what confirmed this is the right song */
+
+      for (let s = 0; s < sources.length && !parsed; s++) {
+        this._setState(song, index, sources[s].busy);
+        const cand = await sources[s].get();
+        if (token.cancelled) { this._setState(song, index, null); return; }
+        if (!cand || (!cand.synced && !cand.plain)) continue;
+
+        if (!cand.synced || !LRCParser.looksSynced(cand.synced)) {
+          if (!plainOnly) plainOnly = cand;
+          continue;
+        }
+        const p = LRCParser.parse(cand.synced);
+        const c = LRCValidator.validateParsed(p, {
+          durationSec: id.durationSec,
+          /* Deliberately the file's own tags and not the library title: a
+           * user names songs whatever they like, and failing a good .lrc
+           * because its [ti:] does not match "song1" would be worse than
+           * the mismatch it is meant to catch. No tags, no name check. */
+          title: id.tags && id.tags.title,
+          artist: id.tags && id.tags.artist
+        });
+        if (c.ok) { found = cand; parsed = p; matchedBy = c.confirmedBy || []; }
+        else lastReason = c.reason;
+      }
+
+      /* Plain lyrics only: recorded, labelled honestly, never faked into a
+       * timeline. A synchronisation engine could be added later without
+       * touching anything else here. */
+      if (!parsed && plainOnly) {
+        await this._writeResult(song, index, id, {
+          status: "plain",
+          language: LanguageDetector.detect(
+            String(plainOnly.plain).split("\n").map(function (t) { return { text: t }; })
+          ).lang,
+          languageSource: "detector",
+          originalLrc: String(plainOnly.plain || "").slice(0, 200000),
+          englishLrc: "",
+          lineCount: String(plainOnly.plain || "").split("\n").filter(function (l) { return l.trim(); }).length,
+          note: "Lyrics found — synchronisation unavailable.",
+          found: plainOnly
+        });
+        this._setState(song, index, null);
+        LRCUI.toast("Lyrics found — sync unavailable");
+        return;
+      }
+
+      if (!parsed) {
+        this._setState(song, index, null);
+        if (lastReason) {
+          await this._writeFailure(song, index, "error", "LRC unavailable: " + lastReason);
+          LRCUI.toast("LRC unavailable");
+        } else {
+          await this._writeFailure(song, index, "none",
+            "No synchronised lyrics found for this title and artist.");
+          LRCUI.toast("No synchronised lyrics found");
+        }
+        return;
+      }
+
+      /* 9. Detect the language. No user choice, no manual step. */
+      let det = LanguageDetector.detect(parsed.lines);
+      let languageSource = "detector";
+      if (det.lang === "und" || det.confidence < 0.55) {
+        const probe = await TranslationManager.probeLanguage(parsed.lines[0].text);
+        if (probe.lang) {
+          det = { lang: probe.lang.split("-")[0], confidence: 0.9 };
+          languageSource = probe.provider;
+        }
+      }
+      if (token.cancelled) { this._setState(song, index, null); return; }
+
+      /* 10-12. Translate when needed. Timestamps are carried across
+       *        untouched: only the `text` field of each line changes. */
+      let english = parsed.lines;
+      let provider = "";
+      let failedLines = 0;
+
+      if (det.lang !== "en") {
+        this._setState(song, index, "translating");
+        const originals = parsed.lines.map(function (l) { return l.text; });
+        const tr = await TranslationManager.translateLines(
+          originals,
+          det.lang === "und" ? "auto" : det.lang,
+          guard("translate progress", function (done, total) {
+            LRCManager._setState(song, index, "translating",
+              "Translating " + done + "/" + total + " lines");
+          }),
+          token
+        );
+        if (token.cancelled) { this._setState(song, index, null); return; }
+
+        if (!tr.provider) {
+          this._setState(song, index, null);
+          await this._writeFailure(song, index, "error",
+            "Lyrics found in " + LanguageDetector.name(det.lang) +
+            " but no translation service could be reached.");
+          LRCUI.toast("Translation unavailable");
+          return;
+        }
+        provider = tr.provider;
+        failedLines = tr.failed;
+        english = parsed.lines.map(function (l, i) {
+          return { ms: l.ms, ts: l.ts, text: tr.texts[i] };   /* ms and ts untouched */
+        });
+      }
+
+      /* 13. Validate the translation against the original event for event. */
+      this._setState(song, index, "validating");
+      const tcheck = LRCValidator.validateTranslation(parsed.lines, english);
+      if (!tcheck.ok) {
+        this._setState(song, index, null);
+        await this._writeFailure(song, index, "error", "LRC unavailable: " + tcheck.reason);
+        LRCUI.toast("LRC unavailable");
+        return;
+      }
+
+      /* 14. Cache: metadata.json + original.lrc + english.lrc. */
+      this._setState(song, index, "caching");
+      const header = {
+        ti: id.title,
+        ar: id.artist || found.matchedArtist,
+        al: id.album,
+        by: "Ryn LRC AI",
+        length: fmtClock(id.durationSec)
+      };
+      await this._writeResult(song, index, id, {
+        status: "ready",
+        language: det.lang,
+        languageSource: languageSource,
+        originalLrc: LRCParser.format(parsed.lines, header),
+        englishLrc: LRCParser.format(english, header),
+        lineCount: english.length,
+        matchedBy: matchedBy,
+        fileOffsetMs: parsed.meta.offset || 0,
+        provider: provider,
+        untranslated: failedLines,
+        note: failedLines
+          ? failedLines + " line(s) kept their original words — translation failed for those."
+          : "",
+        found: found
+      });
+
+      /* 15. Ready. */
+      this._setState(song, index, null);
+      LRCUI.toast("✓ LRC Ready");
+      this._maybeActivate(index);
+    },
+
+    /* ---- cache writes ---- */
+
+    _writeResult: async function (song, index, id, r) {
+      const meta = {
+        songId: id.songId,
+        version: CACHE_VERSION,
+        title: id.title,
+        artist: id.artist || (r.found && r.found.matchedArtist) || "",
+        album: id.album || "",
+        durationSec: Math.round(id.durationSec || 0),
+        hash: id.hash,
+        language: r.language || "und",
+        languageSource: r.languageSource || "",
+        translation: "en",
+        status: r.status,
+        offsetMs: 0,
+        lastUpdate: nowIso(),
+        source: (r.found && r.found.source) || "",
+        sourceId: (r.found && r.found.sourceId) || "",
+        matchedTitle: (r.found && r.found.matchedTitle) || "",
+        matchedArtist: (r.found && r.found.matchedArtist) || "",
+        lineCount: r.lineCount || 0,
+        matchedBy: r.matchedBy || [],
+        fileOffsetMs: r.fileOffsetMs || 0,
+        provider: r.provider || "",
+        untranslated: r.untranslated || 0,
+        note: r.note || ""
+      };
+      /* Keep any offset the user had already dialled in for this song. */
+      const prev = await LRCCache.getMeta(id.songId);
+      if (prev && typeof prev.offsetMs === "number") meta.offsetMs = prev.offsetMs;
+
+      await LRCCache.put(id.songId, meta, {
+        songId: id.songId,
+        originalLrc: r.originalLrc || "",
+        englishLrc: r.englishLrc || r.originalLrc || ""
+      });
+      LRCUI.paint(index);
+    },
+
+    /* A failure is cached too. That is what "do not continuously retry"
+     * means: the state persists, and only the button clears it. */
+    _writeFailure: async function (song, index, status, note) {
+      const songId = song.lrcId;
+      if (!songId) { LRCUI.paint(index); return; }
+      const prev = await LRCCache.getMeta(songId);
+      const meta = {
+        songId: songId,
+        version: CACHE_VERSION,
+        title: SongIdentifier.cleanTitle(song.title),
+        artist: song.artist || "",
+        album: song.album || "",
+        durationSec: prev ? prev.durationSec : 0,
+        hash: song.lrcHash || "",
+        language: "und",
+        translation: "en",
+        status: status,
+        offsetMs: prev && typeof prev.offsetMs === "number" ? prev.offsetMs : 0,
+        lastUpdate: nowIso(),
+        source: "",
+        sourceId: "",
+        lineCount: 0,
+        provider: "",
+        note: note || ""
+      };
+      await LRCCache.put(songId, meta, null);
+      LRCUI.paint(index);
+    },
+
+    clear: async function (index) {
+      const mp = Host.mp;
+      const song = mp && mp._songs[index];
+      if (!song || !song.lrcId) return;
+      const wasActive = SyncEngine.active && SyncEngine.active.songId === song.lrcId;
+      await LRCCache.remove(song.lrcId);
+      if (wasActive) {
+        SyncEngine.reset();
+        /* Hand playback back to whatever the song itself carried. */
+        try { mp._lyrics = mp._parseLRC(song.lyrics || ""); mp._lyricIndex = -1; }
+        catch (e) { warn("clear/restore", e); }
+      }
+      LRCUI.paint(index);
+      LRCUI.toast("Cache cleared");
+    },
+
+    setOffset: async function (song, ms) {
+      if (!song || !song.lrcId) return;
+      const meta = await LRCCache.getMeta(song.lrcId);
+      if (!meta) return;
+      meta.offsetMs = ms;
+      meta.lastUpdate = nowIso();
+      await LRCCache.put(song.lrcId, meta, null);
+      /* Live songs pick the change up on the next line, with no replay. */
+      if (SyncEngine.active && SyncEngine.active.songId === song.lrcId) {
+        SyncEngine.reapplyOffset(this.effectiveOffset(meta));
+      }
+      LRCUI.toast("Offset " + (ms > 0 ? "+" : "") + ms + " ms");
+    },
+
+    /* ---- playback ---- */
+
+    /*
+     * Play was pressed. Cache only: no fetch, no parse of anything that was
+     * not already parsed, no translation, no network. If there is nothing
+     * cached the player keeps whatever lyrics the song itself carried, which
+     * is the pre-existing behaviour.
+     */
+    onSongStart: async function (index) {
+      const mp = Host.mp;
+      if (!mp) return;
+      SyncEngine.reset();
+
+      const song = mp._songs[index];
+      if (!song) return;
+      const session = mp._songSessionId;
+
+      /* An unidentified song is identified in the background so its button
+       * and its cache entry line up, but that never blocks playback. */
+      const id = await SongIdentifier.identify(song, { needDuration: false });
+      if (!id) return;
+      if (mp._songSessionId !== session || mp._currentIndex !== index) return;   /* song changed */
+
+      const meta = await LRCCache.getMeta(id.songId);
+      if (mp._songSessionId !== session || mp._currentIndex !== index) return;
+      if (!meta || meta.status !== "ready") { LRCUI.paint(index); return; }
+
+      const liveDur = mp._audio && isFinite(mp._audio.duration) ? mp._audio.duration : 0;
+      if (!LRCCache.isUsable(meta, liveDur, song.lyrics)) {
+        /* The audio behind this id changed length; the cached timeline is no
+         * longer the right one for it. */
+        LRCUI.paint(index);
+        return;
+      }
+
+      const rec = await LRCCache.getLrc(id.songId);
+      if (mp._songSessionId !== session || mp._currentIndex !== index) return;
+      if (!rec || !rec.englishLrc) { LRCUI.paint(index); return; }
+
+      const parsed = LRCParser.parse(rec.englishLrc);
+      if (!parsed.lines.length) { LRCUI.paint(index); return; }
+
+      SyncEngine.activate({
+        songId: id.songId,
+        songIndex: index,
+        session: session,
+        lines: parsed.lines,
+        offsetMs: this.effectiveOffset(meta)
+      });
+      LRCUI.paint(index);
+    },
+
+    /* Used after a prepare finishes while that same song is already playing. */
+    _maybeActivate: function (index) {
+      const mp = Host.mp;
+      if (!mp || mp._currentIndex !== index) return;
+      fire(this.onSongStart(index), "reactivate");
+    }
+  };
+
+  /* ---------------------------------------------------------------------- *
+   * attach
+   *
+   * Four wrappers, no rewrites. Each calls the original first and then adds
+   * the lyric behaviour, inside a guard, so the player's own logic runs
+   * exactly as it did before this module existed.
+   * ---------------------------------------------------------------------- */
+
+  function attach(mp) {
+    if (!mp || mp.__rynLrcAttached) return false;
+    mp.__rynLrcAttached = true;
+    Host.mp = mp;
+
+    /* play(): a new song, a loop restart or a next/prev all land here, and
+     * the player has already bumped _songSessionId and reset its index by
+     * the time the wrapper runs. */
+    const origPlay = mp.play;
+    mp.play = function (index) {
+      const r = origPlay.call(this, index);
+      try { fire(LRCManager.onSongStart(index), "onSongStart"); } catch (e) { warn("play hook", e); }
+      return r;
+    };
+
+    /* seekTo(): the position before the seek is only readable before the
+     * original runs, so it is captured here. */
+    const origSeek = mp.seekTo;
+    mp.seekTo = function (pct) {
+      let before = 0;
+      try { before = this._audio && isFinite(this._audio.currentTime) ? this._audio.currentTime : 0; }
+      catch (_) {}
+      const r = origSeek.call(this, pct);
+      try { SyncEngine.onSeek(before); } catch (e) { warn("seek hook", e); }
+      return r;
+    };
+
+    /* _renderSongList(): rows are rebuilt from scratch each time, so the
+     * buttons are re-added each time too. */
+    const origRender = mp._renderSongList;
+    mp._renderSongList = function () {
+      const r = origRender.call(this);
+      try { LRCUI.decorateRows(); } catch (e) { warn("render hook", e); }
+      return r;
+    };
+
+    /* _save() runs after every library mutation, including a delete — and a
+     * delete shifts every index after it. Re-check that the song the engine
+     * is synchronising is still the one playing, by id rather than by index,
+     * so Song A's lines can never survive into Song B. */
+    const origSave = mp._save;
+    mp._save = function () {
+      const r = origSave.call(this);
+      try {
+        const a = SyncEngine.active;
+        if (a) {
+          const cur = this._songs[this._currentIndex];
+          if (!cur || cur.lrcId !== a.songId) SyncEngine.reset();
+          else a.songIndex = this._currentIndex;
+        }
+      } catch (e) { warn("save hook", e); }
+      return r;
+    };
+
+    return true;
+  }
+
+  return {
+    attach: attach,
+    /* Exposed for the details panel, the console and any later module. */
+    Manager: LRCManager,
+    Cache: LRCCache,
+    Parser: LRCParser,
+    Detector: LanguageDetector,
+    Translator: TranslationManager,
+    Validator: LRCValidator,
+    Identifier: SongIdentifier,
+    Tags: AudioTagReader,
+    Fetcher: LRCFetcher,
+    Sync: SyncEngine,
+    UI: LRCUI,
+    version: CACHE_VERSION
+  };
+})();
+
+/* Wire it up. MusicPlayer is defined immediately above this block, and its
+ * init() runs later when the menu iframe is built, so the wrappers are in
+ * place well before the first render or the first play. */
+try {
+  RynLRC.attach(MusicPlayer);
+} catch (e) {
+  try { console.warn("[RynLRC] attach failed:", e); } catch (_) {}
+}
+  /* ==== END LRC AI ==== */
+
   let fKeyHeld = false, fKeyInterval = null;
   const _place = itemType => {
     const myPlayer = client.myPlayer;
@@ -22372,10 +28630,9 @@ window.grbtp = 35;
       }
     }
   }
-  (function _halvesLoop() {
-    requestAnimationFrame(_halvesLoop);
+  FrameDriver.add(() => {
     if (_halvesMap.size > 0) _renderHalvesOverlay();
-  })();
+  });
   function _splitIntoSquads() {
     _squadMap.clear();
     _activeSquads.clear();
@@ -22504,10 +28761,9 @@ window.grbtp = 35;
       }
     }
   }
-  (function _squadLoop() {
-    requestAnimationFrame(_squadLoop);
+  FrameDriver.add(() => {
     if (_squadMap.size > 0) _renderSquadOverlay();
-  })();
+  });
   document.addEventListener("contextmenu", e => {
     if (_squadMap.size === 0) return;
     const gameCanvas = document.querySelector("#gameCanvas");
@@ -22928,9 +29184,12 @@ window.grbtp = 35;
   _resizeTargetCanvas();
   window.addEventListener("resize", _resizeTargetCanvas);
   const _exclamAnims = new Map;
+  // The overlay canvas is created once and never replaced, so its context is
+  // taken once as well rather than on every frame.
+  const _targetCtx = _targetCanvas.getContext("2d");
   const _drawTargets = () => {
     const cv = _targetCanvas;
-    const ctx = cv.getContext("2d");
+    const ctx = _targetCtx;
     ctx.clearRect(0, 0, cv.width, cv.height);
     const now = Date.now();
     for (const [id, t] of _targets) {
@@ -23019,326 +29278,8 @@ window.grbtp = 35;
     for (const id of _exclamAnims.keys()) {
       if (!_targets.has(id)) _exclamAnims.delete(id);
     }
-    requestAnimationFrame(_drawTargets);
   };
-  requestAnimationFrame(_drawTargets);
-  // A bot walking home can be blocked, or the owner can be dead or across the
-  // map, and "returning" is a state that suppresses normal movement. Without a
-  // deadline a bot that never reaches the owner never moves normally again.
-  const SCATTER_RETURN_TIMEOUT_MS = 8e3;
-  const _SC_DECISION_MS = 1200;
-  const _SC_DECISION_MS_STUCK = 450;
-  const _SC_LOOKAHEAD = 170;
-  const _SC_NO_BACKTRACK_ARC = Math.PI * 0.62;
-  const _SC_REPEL_RADIUS = 230;
-  const _SC_STUCK_DIST = 35;
-  // x18 tests `c.speed === 0`, which it can because it owns the bot's own
-  // movement integrator. RYN reads speed as the distance covered last tick off
-  // the server, so an exact zero is rarer than actually being stopped.
-  const _SC_STOPPED_SPEED = 6;
-
-  function _scIsBlockedNear(om, myPlayer, x, y, buffer) {
-    let hit = null;
-    om.grid2D.query(x, y, 2, id => {
-      if (hit) return;
-      const obj = om.objects.get(id);
-      if (!obj || !obj.pos || !(obj instanceof PlayerObject)) return;
-      const op = obj.pos.current;
-      const d = Math.sqrt((op.x - x) ** 2 + (op.y - y) ** 2);
-      const need = (obj.collisionScale || 45) + (myPlayer.collisionScale || 35) + buffer;
-      if (d < need) hit = obj;
-    });
-    return hit;
-  }
-
-  function _scPathClear(om, myPlayer, x0, y0, angle, dist) {
-    const steps = Math.max(3, Math.round(dist / 40));
-    for (let i = 1; i <= steps; i++) {
-      const t = (i / steps) * dist;
-      const px = x0 + Math.cos(angle) * t;
-      const py = y0 + Math.sin(angle) * t;
-      if (_scIsBlockedNear(om, myPlayer, px, py, 6)) return false;
-    }
-    return true;
-  }
-
-  function _scFindClearAngle(om, myPlayer, pos, desiredAngle, lookahead) {
-    const STEP = Math.PI / 18;
-    let best = null, bestAbsOff = Infinity;
-    for (let off = -Math.PI; off <= Math.PI + 1e-6; off += STEP) {
-      if (Math.abs(off) >= bestAbsOff) continue;
-      const a = desiredAngle + off;
-      if (_scPathClear(om, myPlayer, pos.x, pos.y, a, lookahead)) {
-        best = a;
-        bestAbsOff = Math.abs(off);
-        if (bestAbsOff < STEP) break;
-      }
-    }
-    return best;
-  }
-
-  function _scNearestBlocker(om, pos, angle, maxDist) {
-    let best = null, bestDist = maxDist;
-    om.grid2D.query(pos.x, pos.y, 3, id => {
-      const obj = om.objects.get(id);
-      if (!obj || !obj.pos || !(obj instanceof PlayerObject)) return;
-      const op = obj.pos.current;
-      const d = Math.sqrt((op.x - pos.x) ** 2 + (op.y - pos.y) ** 2);
-      if (d > bestDist) return;
-      const a = Math.atan2(op.y - pos.y, op.x - pos.x);
-      const diff = Math.abs(Math.atan2(Math.sin(a - angle), Math.cos(a - angle)));
-      if (diff > Math.PI / 2.2) return;
-      best = obj;
-      bestDist = d;
-    });
-    return best;
-  }
-
-  function _scRepelAngle(sc_client, sc_bot, pos) {
-    let nearestDist = _SC_REPEL_RADIUS, nearestAngle = null;
-    try {
-      for (const other of sc_client.clients) {
-        if (other === sc_bot) continue;
-        const op = other && other.myPlayer && other.myPlayer.pos && other.myPlayer.pos.current;
-        if (!op) continue;
-        const d = Math.sqrt((op.x - pos.x) ** 2 + (op.y - pos.y) ** 2);
-        if (d < nearestDist) {
-          nearestDist = d;
-          nearestAngle = Math.atan2(op.y - pos.y, op.x - pos.x);
-        }
-      }
-      for (const p of sc_client.PlayerManager.players) {
-        if (!p || !p.pos || sc_client.myPlayer.isMyPlayerByID(p.id)) continue;
-        const op = p.pos.current;
-        const d = Math.sqrt((op.x - pos.x) ** 2 + (op.y - pos.y) ** 2);
-        if (d < nearestDist) {
-          nearestDist = d;
-          nearestAngle = Math.atan2(op.y - pos.y, op.x - pos.x);
-        }
-      }
-    } catch (_) {}
-    return nearestAngle === null ? null : nearestAngle + Math.PI;
-  }
-
-  // x18 commits to a heading and keeps it. It only picks a new one when the bot
-  // has covered a long leg, or when it has stopped moving:
-  //
-  //     if (c.doMills && Date.now() - c.moveRan.lastChange >= 1e4
-  //         || D(re(c.moveRan.y - c.y, 2) + re(c.moveRan.x - c.x, 2)) > 3300
-  //         || c.speed === 0) { c.moveRan.angle = vx(c.moveRan.angle); ... }
-  //
-  // (D/re/S are Math.sqrt/pow/abs, W is PI, so the middle term is the straight
-  // line distance from where the leg started.)
-  //
-  // What was here re-rolled on a 1200ms timer regardless, which is a bot
-  // changing its mind nine times before it has crossed its own body — the
-  // zigzag it produced is why the movement read as jitter rather than roaming.
-  const _X18_LEG_DISTANCE = 3300;
-  const _X18_LEG_TIMEOUT_MS = 1e4;
-  const _X18_MIN_TURN = 2;
-  const _X18_PICK_TRIES = 24;
-  function _x18Wander(prev) {
-    let candidate = Math.random() * Math.PI * 2;
-    if (prev === null || prev === void 0) return candidate;
-    for (let i = 0; i < _X18_PICK_TRIES && getAngleDist(prev, candidate) <= _X18_MIN_TURN; i++) {
-      candidate = Math.random() * Math.PI * 2;
-    }
-    return candidate;
-  }
-  function _scDecide(sc_client, sc_bot, sc_mh, sc_pos, now) {
-    const om = sc_bot.ObjectManager;
-    let baseAngle;
-    if (sc_mh._scatterReturning) {
-      const owner = sc_client.myPlayer;
-      const op = owner && owner.pos && owner.pos.current;
-      baseAngle = op ? Math.atan2(op.y - sc_pos.y, op.x - sc_pos.x) : Math.random() * Math.PI * 2 - Math.PI;
-    } else {
-      // x18's heading pick, its `vx`:
-      //
-      //     function vx(e, t) {
-      //         t = Math.random() * ae;                  // ae = 2*PI
-      //         if (e && Ay(e, t) <= 2) return vx(e);    // Ay = angle distance
-      //         return t;
-      //     }
-      //
-      // Uniform over the circle, rejected and re-rolled while it lands within 2
-      // radians of the heading it is replacing — so a change of direction is
-      // always a hard turn of at least 115 degrees, never a nudge. Recursion in
-      // the original; a bounded loop here, because acceptance is only about 36%
-      // per try and an unlucky run should not grow the stack.
-      baseAngle = _x18Wander(sc_mh._scatterLastMoveAngle);
-      const repel = _scRepelAngle(sc_client, sc_bot, sc_pos);
-      if (repel !== null) {
-        const rx = Math.cos(baseAngle) * .4 + Math.cos(repel) * .6;
-        const ry = Math.sin(baseAngle) * .4 + Math.sin(repel) * .6;
-        baseAngle = Math.atan2(ry, rx);
-      }
-    }
-    const clearAngle = _scFindClearAngle(om, sc_bot.myPlayer, sc_pos, baseAngle, _SC_LOOKAHEAD);
-    if (clearAngle !== null) {
-      sc_mh._scatterBreaking = false;
-      sc_mh._scatterBreakTarget = null;
-      return clearAngle;
-    }
-    const blocker = _scNearestBlocker(om, sc_pos, baseAngle, _SC_LOOKAHEAD + 60);
-    if (blocker) {
-      sc_mh._scatterBreaking = true;
-      sc_mh._scatterBreakTarget = blocker.id;
-      return Math.atan2(blocker.pos.current.y - sc_pos.y, blocker.pos.current.x - sc_pos.x);
-    }
-    sc_mh._scatterBreaking = false;
-    sc_mh._scatterBreakTarget = null;
-    return baseAngle;
-  }
-
-  (function _scatterLoop() {
-    try {
-      const _sc_client = client;
-      if (_sc_client && _sc_client.isOwner) {
-        const _sc_now = Date.now();
-        for (const _sc_bot of _sc_client.clients) {
-          const _sc_mh = _sc_bot._ModuleHandler;
-          if (!_sc_mh) continue;
-          // Bring this bot in line with the toggle. A bot that connected after
-          // random movement was switched on starts wandering here rather than
-          // trailing the owner on its own.
-          if (Settings_default._botsScattered && !_sc_mh._scatterActive) {
-            _sc_mh._scatterActive = true;
-            _sc_mh._scatterReturning = false;
-            _sc_mh._scatterBreaking = false;
-            _sc_mh._scatterBreakTarget = null;
-            _sc_mh._scatterLastMoveAngle = null;
-            _sc_mh._scatterNextDecisionTime = 0;
-            _sc_mh._scatterLastPos = null;
-            _sc_mh._scatterStuckStrikes = 0;
-          }
-          if (!_sc_mh._scatterActive && !_sc_mh._scatterReturning) continue;
-          const _sc_player = _sc_bot.myPlayer;
-          if (!_sc_player || !_sc_player.pos) continue;
-          const _sc_pos = _sc_player.pos.current;
-
-          if (_sc_mh._scatterReturning) {
-            if (_sc_now >= (_sc_mh._scatterReturnDeadline || 0)) {
-              // Home or not, hand it back to normal movement — Movement.postTick
-              // only steps aside while one of these two flags is set.
-              _sc_mh._scatterReturning = false;
-              _sc_mh._scatterBreaking = false;
-              _sc_mh._scatterBreakTarget = null;
-              _sc_mh.startMovement(null);
-              continue;
-            }
-            const owner = _sc_client.myPlayer;
-            const op = owner && owner.pos && owner.pos.current;
-            if (op) {
-              const dHome = Math.sqrt((op.x - _sc_pos.x) ** 2 + (op.y - _sc_pos.y) ** 2);
-              if (dHome < 120) {
-                _sc_mh._scatterReturning = false;
-                _sc_mh._scatterBreaking = false;
-                _sc_mh._scatterBreakTarget = null;
-                _sc_mh.startMovement(null);
-                continue;
-              }
-            }
-          }
-
-          // x18's three conditions. Returning still runs on the timer, since
-          // walking home is a fixed target rather than a leg to commit to.
-          const _sc_stopped = (_sc_bot.myPlayer.speed || 0) <= _SC_STOPPED_SPEED;
-          let _sc_legDist = Infinity;
-          if (_sc_mh._scatterLegStart) {
-            _sc_legDist = Math.sqrt((_sc_pos.x - _sc_mh._scatterLegStart.x) ** 2 + (_sc_pos.y - _sc_mh._scatterLegStart.y) ** 2);
-          }
-          const _sc_dueDecision = _sc_mh._scatterReturning ? _sc_now >= (_sc_mh._scatterNextDecisionTime || 0) : _sc_mh._scatterAngle === void 0 || _sc_mh._scatterAngle === null || _sc_stopped || _sc_legDist > _X18_LEG_DISTANCE || _sc_now - (_sc_mh._scatterLegStartedAt || 0) >= _X18_LEG_TIMEOUT_MS;
-          if (_sc_dueDecision) {
-            _sc_mh._scatterLegStart = {
-              x: _sc_pos.x,
-              y: _sc_pos.y
-            };
-            _sc_mh._scatterLegStartedAt = _sc_now;
-            let stuck = false;
-            if (_sc_mh._scatterLastPos) {
-              const moved = Math.sqrt((_sc_pos.x - _sc_mh._scatterLastPos.x) ** 2 + (_sc_pos.y - _sc_mh._scatterLastPos.y) ** 2);
-              stuck = moved < _SC_STUCK_DIST;
-            }
-            _sc_mh._scatterStuckStrikes = stuck ? (_sc_mh._scatterStuckStrikes || 0) + 1 : 0;
-            const _sc_angle = _scDecide(_sc_client, _sc_bot, _sc_mh, _sc_pos, _sc_now);
-            _sc_mh._scatterAngle = _sc_angle;
-            _sc_mh._scatterLastMoveAngle = _sc_angle;
-            _sc_mh._scatterLastPos = {
-              x: _sc_pos.x,
-              y: _sc_pos.y
-            };
-            _sc_mh._scatterNextDecisionTime = _sc_now + ((_sc_mh._scatterStuckStrikes || 0) > 0 ? _SC_DECISION_MS_STUCK : _SC_DECISION_MS);
-          }
-
-          const _sc_angle = _sc_mh._scatterAngle;
-          if (_sc_angle === undefined || _sc_angle === null) continue;
-          _sc_mh.move_dir = _sc_angle;
-          // startMovement is the only thing that keeps reverse_move_dir in step
-          // with move_dir, and the scatter loop writes move_dir directly — so
-          // while wandering it stayed null and Automill, which builds behind the
-          // bot and reads exactly that field, returned on its first line every
-          // tick. Keeping the pair in sync is what lets bots mill as they roam,
-          // which is how x18 uses wander in the first place: c.doMills is what
-          // puts a bot into that mode.
-          _sc_mh.reverse_move_dir = reverseAngle(_sc_angle);
-          try {
-            _sc_bot.PacketManager.move(_sc_angle);
-          } catch (_) {}
-
-          try {
-            const _sc_om = _sc_bot.ObjectManager;
-            if (!_sc_om) continue;
-            let _sc_closest = null, _sc_closestDist = 181;
-            if (_sc_mh._scatterBreaking && _sc_mh._scatterBreakTarget !== null) {
-              const tgt = _sc_om.objects.get(_sc_mh._scatterBreakTarget);
-              if (tgt && tgt.pos) {
-                const tp = tgt.pos.current;
-                const td = Math.sqrt((tp.x - _sc_pos.x) ** 2 + (tp.y - _sc_pos.y) ** 2);
-                if (td <= 181) _sc_closest = tgt;
-              }
-            }
-            if (!_sc_closest) {
-              let _sc_bestDist = 181;
-              _sc_om.grid2D.query(_sc_pos.x, _sc_pos.y, 2, _sc_id => {
-                const _sc_obj = _sc_om.objects.get(_sc_id);
-                if (!_sc_obj || !_sc_obj.pos) return;
-                const _sc_op = _sc_obj.pos.current;
-                const _sc_od = Math.sqrt((_sc_op.x - _sc_pos.x) ** 2 + (_sc_op.y - _sc_pos.y) ** 2);
-                if (_sc_od > _sc_bestDist) return;
-                const _sc_oa = Math.atan2(_sc_op.y - _sc_pos.y, _sc_op.x - _sc_pos.x);
-                const _sc_diff = Math.abs(Math.atan2(Math.sin(_sc_oa - _sc_angle), Math.cos(_sc_oa - _sc_angle)));
-                if (_sc_diff > Math.PI / 2) return;
-                _sc_closest = _sc_obj;
-                _sc_bestDist = _sc_od;
-              });
-            }
-            if (_sc_closest) {
-              const _sc_bp = _sc_closest.pos.current;
-              const _sc_ba = Math.atan2(_sc_bp.y - _sc_pos.y, _sc_bp.x - _sc_pos.x);
-              const _sc_sec = _sc_player.getItemByType(1);
-              const _sc_pri = _sc_player.getItemByType(0);
-              const _sc_rel = _sc_mh.staticModules && _sc_mh.staticModules.reloading;
-              if (_sc_rel) {
-                if (_sc_sec === 10 && _sc_rel.isReloaded(1)) {
-                  try {
-                    _sc_bot.PacketManager.attack(_sc_ba);
-                  } catch (_) {}
-                  _sc_mh.forceWeapon = 1;
-                } else if (_sc_pri !== 8 && _sc_pri !== 5 && _sc_rel.isReloaded(0)) {
-                  try {
-                    _sc_bot.PacketManager.attack(_sc_ba);
-                  } catch (_) {}
-                  _sc_mh.forceWeapon = 0;
-                }
-              }
-            }
-          } catch (_sc_e) {}
-        }
-      }
-    } catch (_) {}
-    requestAnimationFrame(_scatterLoop);
-  })();
+  FrameDriver.add(_drawTargets);
   const _attachTargetSettings = doc => {
     const slider = doc.getElementById("_targetCooldown");
     const valEl = doc.getElementById("_targetCooldownVal");
@@ -23421,40 +29362,17 @@ window.grbtp = 35;
               Settings_default._botFarmMode = mode;
               const isSingle = mode === "single";
               if (typeRow) typeRow.style.display = isSingle ? "" : "none";
-              if (btnSingle) {
-                btnSingle.style.background = isSingle ? "rgba(122,66,244,0.25)" : "rgba(255,255,255,0.05)";
-                btnSingle.style.borderColor = isSingle ? "rgba(122,66,244,0.6)" : "rgba(255,255,255,0.1)";
-                btnSingle.style.color = isSingle ? "#fff" : "#aaa";
-              }
-              if (btnNearest) {
-                btnNearest.style.background = !isSingle ? "rgba(122,66,244,0.25)" : "rgba(255,255,255,0.05)";
-                btnNearest.style.borderColor = !isSingle ? "rgba(122,66,244,0.6)" : "rgba(255,255,255,0.1)";
-                btnNearest.style.color = !isSingle ? "#fff" : "#aaa";
-              }
+              if (btnSingle) btnSingle.classList.toggle("seg-active", isSingle);
+              if (btnNearest) btnNearest.classList.toggle("seg-active", !isSingle);
             }
             _applyMode(Settings_default._botFarmMode || "single");
             if (btnSingle) btnSingle.addEventListener("click", () => _applyMode("single"));
             if (btnNearest) btnNearest.addEventListener("click", () => _applyMode("nearest"));
             const farmTypeBtns = doc.querySelectorAll(".farm-type-btn");
-            const farmTypeActive = {
-              border: "rgba(122,66,244,0.6)",
-              bg: "rgba(122,66,244,0.25)",
-              color: "#fff"
-            };
             function _applyFarmType(idx) {
               Settings_default._botFarmType = idx;
               if (ftSel) ftSel.value = idx;
-              farmTypeBtns.forEach((btn, i) => {
-                if (i === idx) {
-                  btn.style.border = "1.5px solid " + farmTypeActive.border;
-                  btn.style.background = farmTypeActive.bg;
-                  btn.style.color = farmTypeActive.color;
-                } else {
-                  btn.style.border = "1.5px solid rgba(255,255,255,0.08)";
-                  btn.style.background = "rgba(255,255,255,0.03)";
-                  btn.style.color = "#666";
-                }
-              });
+              farmTypeBtns.forEach((btn, i) => btn.classList.toggle("seg-active", i === idx));
             }
             farmTypeBtns.forEach(btn => {
               btn.addEventListener("click", () => {
@@ -23485,10 +29403,7 @@ window.grbtp = 35;
               Settings_default._botAge4BoostPad = useBoost;
               if (label) label.textContent = names[String(id)] || id;
               btns.forEach(b => {
-                const active = b.getAttribute("data-age4id") === String(id);
-                b.style.border = active ? "1px solid rgba(122,66,244,0.6)" : "1px solid rgba(255,255,255,0.08)";
-                b.style.background = active ? "rgba(122,66,244,0.15)" : "rgba(255,255,255,0.03)";
-                b.style.color = active ? "#c0a0ff" : "rgba(210,210,225,0.8)";
+                b.classList.toggle("wpn-active", b.getAttribute("data-age4id") === String(id));
               });
             }
             btns.forEach(btn => {
@@ -23607,7 +29522,7 @@ window.grbtp = 35;
                   behavior: "smooth",
                   block: "center"
                 });
-                item.opt.style.background = "rgba(122,66,244,0.18)";
+                item.opt.style.background = "rgba(142,118,206,0.20)";
                 setTimeout(function() {
                   item.opt.style.background = "";
                 }, 1200);
@@ -23937,7 +29852,7 @@ window.grbtp = 35;
   }
   (function _cleanupLoopInit() {
     let _prevBot = null;
-    (function _cleanupTick() {
+    FrameDriver.add(function _cleanupPass() {
       try {
         const bot = window._gbot1v1BotID;
         if (bot && bot !== _prevBot) {
@@ -23955,8 +29870,7 @@ window.grbtp = 35;
           bot._ModuleHandler._postKillCleanupModule.postTick();
         }
       } catch (_) {}
-      requestAnimationFrame(_cleanupTick);
-    })();
+    });
   })();
   const WIN_CLEANUP_RADIUS = 1300;
   class WinCleanupModule {
@@ -24023,7 +29937,7 @@ window.grbtp = 35;
   }
   (function _winCleanupLoopInit() {
     let _prevBot = null;
-    (function _winCleanupTick() {
+    FrameDriver.add(function _winCleanupPass() {
       try {
         const task = window._gbot1v1WinCleanup;
         const bot = task && task.active ? task.bot : null;
@@ -24040,10 +29954,9 @@ window.grbtp = 35;
           bot._ModuleHandler._winCleanupModule.postTick();
         }
       } catch (_) {}
-      requestAnimationFrame(_winCleanupTick);
-    })();
+    });
   })();
-  (function _autoFarmLoop() {
+  FrameDriver.add(function _autoFarmPass() {
     try {
       if (Settings_default._botAutoFarmEnabled && !Settings_default._botsFrozen && client && client.isOwner) {
         _farmResourceClaims.clear();
@@ -24072,8 +29985,7 @@ window.grbtp = 35;
         }
       }
     } catch (_) {}
-    requestAnimationFrame(_autoFarmLoop);
-  })();
+  });
   window.addEventListener("load", onload);
   if (document.readyState === "complete") {
     onload();

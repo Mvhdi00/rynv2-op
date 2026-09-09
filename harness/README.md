@@ -665,6 +665,51 @@ within 400 given a recent hit, RYN within `primaryRange + 130` with no recent-hi
 requirement — those bounds are `canPossiblyInstakill`'s, and it feeds danger
 detection, the soldier hat and every insta module, not only the heal).
 
+### `login-latch.js` and `login-latch-mutate.py`
+
+Why Play dies for the life of the page, measured against the real moomoo bundle
+kept in `fixtures/`.
+
+Two latches in the game's own code, neither ever cleared. `ei` ("a connection
+attempt is in flight") is set one comma BEFORE the branch that decides whether
+to connect, so a press with no Turnstile token opens no socket and still latches
+— every later click is a no-op. And the disconnect handler clears `kt` but not
+`ei`, so one dropped connection is equally terminal. The single `ei=!1` in the
+whole bundle sits behind `allowNavigation` being false, which RYN's own FRVR
+stub sets true, so under RYN it is unreachable.
+
+Three things make this bench trustworthy rather than decorative:
+
+* **The patterns are read out of the shipped client**, by hook name, and applied
+  to the real bundle. It cannot drift from what the client does, and if a
+  pattern stops matching a future bundle it says so instead of passing.
+* **The before/after control.** The BEFORE run has to reproduce the bug — 0
+  connects with the latch stuck — or the AFTER run proves nothing.
+* **The supervisor is lifted, not stubbed.** Section 2 replaces `RYN._Login`
+  with spies, which proves the bundle patches call the right things and nothing
+  about what they call into. Section 3 runs the shipped class.
+
+```
+  sequence                                          connects   latch   verdict
+  BEFORE  press Play with no token, then get one    0          set     NO SOCKET, and Play is dead from here on
+  AFTER   press Play with no token, then get one    1          set     reaches the server
+  BEFORE  connect, get dropped, press Play again    1          set     reaches the server
+  AFTER   connect, get dropped, press Play again    2          set     reaches the server
+```
+
+The fake Turnstile models the real one's awkward part: `render()` into a
+container it has already used returns **undefined** rather than throwing, and
+the registry is keyed on the **element**. That second detail caught the first
+version of the fix, which emptied `innerHTML` and re-rendered — Turnstile
+rejected it exactly as before, because the node was the same one. Replacing the
+node is what clears it.
+
+`login-latch-mutate.py` breaks the fix 14 ways and requires a red result each
+time. Two were missed on the first run and both were real gaps, not bench
+faults: nothing checked that a patch actually *installs* its hook (a
+replacement can be gutted and still match), and the missing-API guard was
+tested for not throwing when what it really protects is the render budget.
+
 ### `shame-model.js`
 
 RYN's picture of the shame counter against the server's, with a wire between
@@ -712,7 +757,7 @@ cannot be booted here, so `node --check` is the only whole-file check available
 and it validates syntax only — it will not notice a call to a deleted helper, an
 identifier that resolves nowhere, or a UI id no element carries.
 
-70 checks in four groups: **EXECUTE** (each changed block lifted with `vm` and
+72 checks in four groups: **EXECUTE** (each changed block lifted with `vm` and
 actually run against stubs), **RESOLVE** (outer identifiers declared),
 **WIRE** (settings, registration, run order, UI ids — including that all 63
 `staticModules` constructors name something real, and that the spike tick takes
@@ -723,8 +768,8 @@ UI row or run-order slot of it survives — while auto place's own `canSpikeTick
 and `LUNA_SPIKE_TICK_MODULES`, which predate all of it, are still there.
 
 `ryn-changes-mutate.py` is the check on the check: it breaks the client 51 ways
-and requires a red result each time. It drives **three** verifiers — the checker,
-`anti-audit.js` and `shame-model.js` — and counts a mutation as caught if any of
+and requires a red result each time. It drives **four** verifiers — the checker,
+`anti-audit.js`, `shame-model.js` and `login-latch.js` — and counts a mutation as caught if any of
 them goes red, since they divide the client between them: wiring, the damage
 terms, and the shame counter. Three real holes came out of it and are
 worth knowing about, because all three are easy to reproduce elsewhere:
