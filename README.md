@@ -132,6 +132,7 @@ tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 tools/sim-explorer.js     Ryn Type 2's exploration system, run headless
 tools/check-bots-ui.js    Ryn Type 2's Bots page: markup, fleet naming, bot IDs
+tools/check-food-texture.js  Ryn Type 2's sakura food texture: hook, asset, render
 ```
 
 ## Build
@@ -191,6 +192,55 @@ understood.
 `Ryn_Type_2.user.js` is a separate client that lives here alongside the mix. It
 is edited directly rather than built, so the file in the repo is the file you
 install.
+
+## Sakura food
+
+The FOOD resource wears a sakura flower instead of the game's berry bush.
+
+Food is resource type 1 — the berry bush in the green and snow biomes, the
+cactus in the desert. The game builds its sprite in `El()`, which caches one
+canvas per type/scale/biome and hands it to the object draw, which centres it
+with `drawImage(sprite, x - sprite.width / 2, …)`. RYN already intercepts
+exactly that canvas: the `resourceTint` hook wraps `El()`'s return in
+`Renderer._objectTint` before it reaches `drawImage`. So the whole change is:
+
+- `resourceTint` now passes the resource through as a second argument, the way
+  `buildingTint` always has, so the renderer can tell food from wood and stone.
+- `_objectTint` swaps in a sakura canvas of **identical dimensions** when the
+  entity is food, before anything else looks at the sprite. The tint, the tint
+  cache and the game's own draw carry on unchanged.
+
+Nothing else moves. Spawning, collision, hitboxes, gathering, healing and the
+inventory never look at a sprite, so none of them can notice.
+
+The image is the supplied PNG resampled to 256 square and embedded as a data
+URI — a userscript is one file with no asset directory, and the largest food
+sprite the game ever asks for is 205px (`bushScales` tops out at 95, and `El`
+sizes the canvas `2.1 * scale + 5.5`), so the full 1254 square would have added
+a megabyte of base64 for detail that cannot be shown. Framing, colours and the
+transparent background are untouched.
+
+**The desert cactus is food too**, so it becomes a sakura as well. Its 35 damage
+on contact is unchanged — but the visual warning is gone. Restricting the swap
+to non-desert bushes is a one-line change in `_foodSprite` if that matters more
+than consistency.
+
+Verify with:
+
+```sh
+node tools/check-food-texture.js     # needs: npm i --no-save terser
+node tools/check-hooks.js Ryn_Type_2.user.js
+```
+
+`check-food-texture` covers the parts a diff cannot show. It runs the real hook
+against the re-minified bundle and checks the rewritten resource draw still
+parses and still hands the resource through; it decodes the embedded data URI
+and checks pixels — 8-bit RGBA, square, transparent corners rather than black
+ones, the flower centred, still pink — because a re-encode that flattened the
+alpha would look identical in a diff; and it runs `_objectTint` against a fake
+canvas to check that only food is swapped, at the sprite's own dimensions, with
+nothing painted behind it, and that the purple object tint still composites on
+top.
 
 ## Naming the fleet, and bot IDs
 
