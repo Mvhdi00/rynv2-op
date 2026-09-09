@@ -1,4 +1,4 @@
-// Headless harness for the persistent-exploration block in Ryn_Type_2.user.js.
+// Headless harness for Ryn Type 2's bot roaming.
 //
 //     node tools/sim-explorer.js [path/to/Ryn_Type_2.user.js]
 //
@@ -20,6 +20,17 @@
 //   two bots      a pair that meets separates, and never both re-target at once
 //   fleet of 24   24 bots starting on one spot spread over the map, do not
 //                 stay clustered, and cost a fraction of a millisecond a tick
+//   roaming       over two hours of game time the bot stands in every sector,
+//                 targets sectors it has already been to, reaches all four
+//                 edges and the corners, and never shuffles. Then, with the
+//                 random term pinned so the answer is deterministic: a sector
+//                 it has just left is stepped away from, and once the cooldown
+//                 expires that same sector is chosen again — which is the whole
+//                 difference between roaming and one-time exploration
+//   toggle        the switch turns roaming off on the tick it is flipped, with
+//                 no walk-home phase to sit through, and back on again
+//   trap          an enemy trap is broken the tick the bot is caught, without
+//                 waiting for the stuck ladder; a clan trap is left alone
 //
 // Exits non-zero if any check fails.
 const fs = require("fs");
@@ -122,6 +133,8 @@ function makeBot(owner, id, x, y, world) {
       pos: { current: new Vec(x, y) },
       collisionScale: 35,
       speed: 0,
+      isTrapped: false,
+      trappedIn: null,
       getItemByType: t => (t === 0 ? 3 : 10)
     },
     get isOwner() { return false; }
@@ -136,7 +149,7 @@ const ctx = vm.createContext({
   _isControlled: () => true,
   window: { _gbot1v1BotID: null, _gbot1v1WinCleanup: null }
 });
-vm.runInContext("(function(){\n" + block + "\n this.BotExplorer = BotExplorer; this.EXP = {EXP_SPACING_RADIUS, EXP_MIN_TRAVEL, EXP_SECTOR_SIZE, EXP_SECTOR_COLS};\n}).call(this)", ctx);
+vm.runInContext("(function(){\n" + block + "\n this.BotExplorer = BotExplorer; this.EXP = {EXP_SPACING_RADIUS, EXP_MIN_TRAVEL, EXP_SECTOR_SIZE, EXP_SECTOR_COLS, EXP_EDGE_MARGIN, EXP_SECTOR_COOLDOWN_MS};\n}).call(this)", ctx);
 const { BotExplorer, EXP } = ctx;
 
 // ── integrator ─────────────────────────────────────────────────────────────
@@ -413,6 +426,174 @@ function check(name, ok, detail) {
   check("fleet of 24: does not stay clustered", crowded < 0.1,
     (crowded * 100).toFixed(1) + "% of bot-ticks had a neighbour inside the separation radius (24 bots started on one spot)");
   check("fleet of 24: cheap", ms < 4000, ms + "ms for 24 bots x 2000 ticks (" + (ms / 2000).toFixed(2) + "ms/tick for the whole fleet)");
+}
+
+// ── 6. roaming, not exploring: does it keep coming back? ───────────────────
+{
+  const world = makeWorld([]);
+  const owner = { clients: new Set(), getClientIndex: () => 0 };
+  const bot = makeBot(owner, 1, 7200, 7200, world);
+  owner.clients.add(bot);
+  const ex = new BotExplorer(bot);
+  bot._ModuleHandler.staticModules.botExplorer = ex;
+
+  // Every destination the bot commits to, in order.
+  const legs = [];
+  const origPick = ex._pickDestination.bind(ex);
+  ex._pickDestination = function (now, pos, state) {
+    origPick(now, pos, state);
+    if (state.dest) legs.push({ x: state.dest.x, y: state.dest.y, sector: sectorOf(state.dest.x, state.dest.y) });
+  };
+
+  const occupied = new Map();
+  for (let t = 0; t < 40000; t++) {
+    advanceClock();
+    ex.postTick();
+    integrate(bot, world);
+    const p = bot.myPlayer.pos.current;
+    const sec = sectorOf(p.x, p.y);
+    occupied.set(sec, (occupied.get(sec) || 0) + 1);
+  }
+
+  const total = EXP.EXP_SECTOR_COLS * EXP.EXP_SECTOR_COLS;
+  check("roaming: covers the whole map", occupied.size === total,
+    occupied.size + "/" + total + " sectors stood in over " + legs.length + " legs");
+
+  // The point of the correction: a sector it has already been to is picked
+  // again. If any "visited = ignore" rule survived, destination sectors would
+  // be unique and this would be 0.
+  const destCounts = new Map();
+  for (const leg of legs) destCounts.set(leg.sector, (destCounts.get(leg.sector) || 0) + 1);
+  const revisited = [...destCounts.values()].filter(n => n > 1).length;
+  const busiest = Math.max(...destCounts.values());
+  check("roaming: previously visited sectors are chosen again",
+    revisited >= 20 && busiest >= 3,
+    revisited + " sectors targeted more than once, busiest " + busiest + " times");
+  // Coverage over a finite run is coupon-collecting — 36 sectors need about
+  // 150 draws to all come up even when the draw is fair — so a run of ~130 legs
+  // landing on 30-ish is sampling, not exclusion. It is still worth a floor
+  // well above what any "visited = ignore" rule could produce.
+  check("roaming: most of the map is targeted within one run",
+    destCounts.size >= total - 8, destCounts.size + "/" + total + " distinct sectors targeted in " + legs.length + " legs");
+
+  // The exclusion question asked directly, and deterministically. Coverage over
+  // a finite run cannot answer it — a sector can be missed by luck — so pin the
+  // random term and ask the chooser the same question three ways.
+  {
+    const realRandom = Math.random;
+    bot.myPlayer.pos.current.x = 900;
+    bot.myPlayer.pos.current.y = 900;
+    const pickWith = mark => {
+      const st = ex._newState(Date.now());
+      if (mark) mark(st);
+      st.dest = null;
+      origPick(Date.now(), bot.myPlayer.pos.current, st);
+      return st.dest ? sectorOf(st.dest.x, st.dest.y) : null;
+    };
+    Math.random = () => 0.5;
+    const baseline = pickWith(null);
+    const cooled = pickWith(st => st.visited.set(baseline, Date.now() - EXP.EXP_SECTOR_COOLDOWN_MS - 1));
+    const hot = pickWith(st => st.visited.set(baseline, Date.now()));
+    Math.random = realRandom;
+
+    check("roaming: a sector just left is stepped away from",
+      hot !== baseline && hot !== null, "would pick " + baseline + "; while it is cooling picks " + hot);
+    check("roaming: once the cooldown expires it is worth exactly what it was",
+      cooled === baseline, "never visited picks " + baseline + ", visited long ago picks " + cooled);
+  }
+
+  // Legs are journeys, not shuffles.
+  let short = 0;
+  for (let i = 1; i < legs.length; i++) {
+    if (Math.hypot(legs[i].x - legs[i - 1].x, legs[i].y - legs[i - 1].y) < EXP.EXP_MIN_TRAVEL * 0.5) short++;
+  }
+  check("roaming: consecutive destinations are far apart",
+    short / legs.length < 0.1, short + " of " + legs.length + " legs under half the minimum travel");
+
+  // The edges and the corners, not just the middle.
+  const band = EXP.EXP_EDGE_MARGIN + 400;
+  const hitN = legs.some(l => l.y < band), hitS = legs.some(l => l.y > 14400 - band);
+  const hitW = legs.some(l => l.x < band), hitE = legs.some(l => l.x > 14400 - band);
+  check("roaming: reaches all four edges", hitN && hitS && hitW && hitE,
+    `N${hitN ? "y" : "n"} S${hitS ? "y" : "n"} W${hitW ? "y" : "n"} E${hitE ? "y" : "n"}`);
+  const corners = legs.filter(l => (l.x < band || l.x > 14400 - band) && (l.y < band || l.y > 14400 - band)).length;
+  check("roaming: reaches the corners", corners > 0, corners + " corner destinations");
+}
+
+// ── 7. the toggle turns it off on the spot ─────────────────────────────────
+{
+  const world = makeWorld([]);
+  const owner = { clients: new Set(), getClientIndex: () => 0 };
+  const bot = makeBot(owner, 1, 3000, 3000, world);
+  owner.clients.add(bot);
+  const ex = new BotExplorer(bot);
+  bot._ModuleHandler.staticModules.botExplorer = ex;
+  Settings_default._botsScattered = true;
+  for (let t = 0; t < 60; t++) { advanceClock(); ex.postTick(); integrate(bot, world); }
+  check("toggle: on means roaming", bot._ModuleHandler._scatterActive === true && ex.state !== null);
+
+  // Second press: the flag drops and the bot stops on that same tick, so
+  // Movement.postTick — which only stands aside while the flag is set — has it
+  // walking back from the very next tick.
+  Settings_default._botsScattered = false;
+  advanceClock();
+  ex.postTick();
+  check("toggle: off drops the flag immediately", bot._ModuleHandler._scatterActive === false);
+  check("toggle: and stops the roaming heading on the same tick", bot._ModuleHandler.move_dir === null);
+  check("toggle: and lets go of its state", ex.state === null);
+
+  // And back on again, with no walk-home phase in between to sit through.
+  Settings_default._botsScattered = true;
+  advanceClock();
+  ex.postTick();
+  check("toggle: on again resumes at once", bot._ModuleHandler._scatterActive === true);
+  Settings_default._botsScattered = true;
+}
+
+// ── 8. walking into a trap ─────────────────────────────────────────────────
+{
+  const world = makeWorld([]);
+  const owner = { clients: new Set(), getClientIndex: () => 0 };
+  const bot = makeBot(owner, 1, 5000, 5000, world);
+  owner.clients.add(bot);
+  const ex = new BotExplorer(bot);
+  bot._ModuleHandler.staticModules.botExplorer = ex;
+  const mh = bot._ModuleHandler;
+
+  const enemyTrap = new PlayerObject(500, 5000, 5000, 10, { destroyable: true, ownerID: 99 });
+  const clanTrap  = new PlayerObject(501, 5000, 5000, 10, { destroyable: true, ownerID: 1 });
+
+  function tick() { advanceClock(); mh.moduleActive = false; mh.shouldAttack = false; mh.useAngle = null; ex.postTick(); }
+  for (let t = 0; t < 20; t++) { tick(); integrate(bot, world); }
+
+  // Not trapped: no swing.
+  tick();
+  check("trap: nothing is swung at while free", mh.shouldAttack === false);
+
+  // Trapped by an enemy: swung at on the very next tick, without waiting for
+  // the stuck ladder — state.recovery is still 0 here.
+  bot.myPlayer.isTrapped = true;
+  bot.myPlayer.trappedIn = enemyTrap;
+  tick();
+  check("trap: an enemy trap is broken immediately, not after the stuck ladder",
+    mh.shouldAttack === true && ex.state.recovery === 0,
+    "shouldAttack=" + mh.shouldAttack + " recovery=" + ex.state.recovery);
+  check("trap: aimed at the trap and marked as the break target",
+    mh._scatterBreakTarget === enemyTrap.id && mh.forceWeapon !== null,
+    "target=" + mh._scatterBreakTarget + " weapon=" + mh.forceWeapon);
+  check("trap: the bot faces its swing", mh._scatterAngle === mh.useAngle);
+
+  // A clan trap does not hold you and cannot be damaged, so it is not hit.
+  bot.myPlayer.trappedIn = clanTrap;
+  tick();
+  check("trap: a clan trap is left alone", mh.shouldAttack === false);
+
+  // Freed again: back to walking.
+  bot.myPlayer.isTrapped = false;
+  bot.myPlayer.trappedIn = null;
+  tick();
+  check("trap: once free it stops swinging and walks on",
+    mh.shouldAttack === false && mh.move_dir !== null);
 }
 
 Date.now = realNow;

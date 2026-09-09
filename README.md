@@ -130,7 +130,7 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
-tools/sim-explorer.js     Ryn Type 2's exploration system, run headless
+tools/sim-explorer.js     Ryn Type 2's bot roaming, run headless
 tools/check-bots-ui.js    Ryn Type 2's Bots page: markup, fleet naming, bot IDs
 tools/check-food-texture.js  Ryn Type 2's sakura food texture: hook, asset, render
 tools/check-structure-readout.js  Ryn Type 2's building name + health bar
@@ -347,7 +347,7 @@ looks up exists, that the name box is a text input bound to a real setting
 Then it pulls the UI object out of the shipped file, constructs it against a
 fake document, and actually runs the row rendering and the Apply handler.
 
-## Persistent exploration
+## Full-map roaming
 
 Bot random movement (Bots → the Scatter Bots key, `J` by default) used to be
 x18's wander: roll a random heading, re-roll while it lands within 2 radians of
@@ -363,74 +363,119 @@ into something.
 
 ```
 current position -> a distant sector -> a corridor to it -> travel
--> arrive -> another distant sector -> ...
+-> arrive -> another distant sector -> forever
 ```
+
+**It is roaming, not exploration.** Nothing records that a place has been seen:
+there is no explored set, no frontier, no visited flag, and no way for any part
+of the map to stop being a candidate. What there is instead is a *decaying
+penalty* on the sector the bot is standing in, so it leaves; once that runs out
+the sector is worth exactly what it was before the bot ever arrived, and the bot
+comes back. The objective is coverage over time, repeated indefinitely — the
+hundredth pass over the map is the same job as the first.
 
 The bot commits to a destination and keeps it. Direction changes only for a
 reason: the route bends around something, the destination is reached or proven
 unreachable, another bot is too close, or the bot is recovering from being
 stuck. There is no per-tick randomness in the steering at all.
 
-| Concern | Where |
-|---|---|
-| What counts as solid | `_expBlockerAt`, `_expFirstBlocker` |
-| Corridor clearance | `_expCorridorClear`, `_expClearHeading` |
-| Path generation | `_expBuildPath` |
-| Bot-to-bot separation | `_expSpacingPass` |
-| Destination choice, following, stuck recovery, breaking, execution | `BotExplorer` |
+### Choosing where to go
 
-It is a bot module — `ModuleHandler.botModules`, between `botRangedAttack` and
-`movement` — so it runs on the server tick like every other module rather than
-on its own animation-frame pass, and `Movement.postTick` stands aside for it on
-the `_scatterActive` flag it always used.
+All 36 sectors are scored every time, and the best wins. Being scored is not the
+same as being filtered: the only two things that take a sector out of the running
+are being too close to be a journey, and having been *unreachable* in the last
+minute — and both undo themselves. Arriving somewhere never removes it.
 
-Everything underneath is the client's existing machinery:
+```
+score =  distance                far enough to be a journey
+       + bearing away from the last leg
+       + edge/corner             the boundary is a destination
+       + random                  route variation
+       - recently stood there    decays to nothing
+       - near its own last few destinations
+       - near where another bot is heading
+```
 
-- **`PlayerManager.canMoveOnTop`** decides what is passable. It is
-  ownership-aware — boost pads, platforms, healing and spawn pads, blockers,
-  teleporters and your own clan's pit traps are walkable, an enemy pit trap is
-  not, and no resource ever is. That is what gives paths their openings: a
-  building boundary is only a wall where the game actually makes it one, so a
-  gate is routed through rather than walked around. The old check queried only
-  `PlayerObject`, so every tree, bush and rock was invisible to it and routes
-  were drawn straight through them.
-- **`ObjectManager.grid2D`** for lookups, and `isDestroyedObject` as the signal
-  that a structure nearby just came down.
-- **`ModuleHandler.startMovement`**, which keeps `move_dir` and
-  `reverse_move_dir` in step (Automill builds off the latter) and runs
-  `MovementSimulation`, so a step into a spike is refused rather than sent.
-  Movement goes out on a real change of heading or a 2s keepalive, not every
-  tick — re-sending a slightly different heading every tick is the jitter.
-- **`moduleActive` / `useAngle` / `forceWeapon` / `shouldAttack`**, the same
-  channel `BotAutoBreak` uses, for breaking. There is no second attack path and
-  the reload gate is the client's own.
+**Distance is a qualifier, not a gradient.** `EXP_MIN_TRAVEL` already guarantees
+every destination is a journey, so the term saturates past it: the whole far half
+of the map ties on distance and the spread terms decide. Scoring raw distance
+instead measured as the bot bouncing between opposite corners, targeting barely
+half the map's sectors and never the middle — the centre is somewhere to go, not
+only somewhere to cross.
 
-Breaking is only reached after routing around has failed, and only for what the
-same swept-disc probe reports first along the heading the bot is walking — it
-must also be destroyable and enemy-owned, since a clan's own buildings take no
-damage and a tree does not come down. Nothing off to the side is touched however
-close the bot walks past it. Bringing a blocker down resets the recovery clock;
-nothing coming down means recovery keeps escalating, which is what stops a bot
-hammering a wall it cannot break.
+A destination in a boundary sector lands on the boundary itself half the time,
+which is what turns "the north row" into the north edge and the corner sectors
+into the corners.
 
-Path building is the only expensive part, so it runs on a budget shared by the
-whole fleet (3 plans per 100ms whatever the bot count); a bot waiting for a slot
-holds the straight line to its destination, which is what the planner returns in
-open ground anyway.
+### The fleet
+
+Each bot's destination is registered with the owner, and a candidate loses score
+the closer it is to where another bot is already heading — a distance falloff
+rather than a same-sector test, because two bots either side of a sector line are
+still together. When two bots do meet, exactly one yields: the one that committed
+most recently, ties broken on client index, and the bot that keeps its path takes
+the same cooldown so it cannot be asked to yield again to a third bot in the
+crowd it is walking out of.
+
+### The switch
+
+One key, both ways. Off is off on the keypress: `_scatterActive` drops, and
+`Movement.postTick` — which only stands aside while that flag is set — has the
+whole fleet walking back on the next tick. There used to be a walk-home phase in
+between, which is what made the second press look like it had not worked: the bot
+kept being driven by the roaming module for up to eight seconds first. It was
+also redundant, since following the owner *is* walking home.
+
+### Obstacles
+
+- **Passability** comes from `PlayerManager.canMoveOnTop`, which is
+  ownership-aware, so a building boundary is only a wall where the game makes it
+  one and a gate is routed through rather than walked around.
+- **Corridors** are tested as exact point-to-segment distances, not sampled
+  points: the smallest solid radius in the game is an enemy pit trap at 10 units,
+  which sampling would step over.
+- **A trap is broken the tick the bot is caught in it.** Every other obstacle has
+  to be shown to be blocking before the bot swings, but a trap has already
+  stopped it dead — `MovementSimulation` sets `lockMove` — and `EnemyManager`
+  says so outright through `myPlayer.isTrapped` / `trappedIn`. Waiting for the
+  stuck ladder to reach the same conclusion is seconds spent standing in it. Only
+  an enemy's trap: a clan trap neither holds you nor takes damage.
+- **Anything else breakable** is only swung at after routing around has failed,
+  and only when the same swept-disc probe reports it first along the heading the
+  bot is walking. Nothing off to the side is touched however close the bot walks
+  past it. A blocker coming down resets the recovery clock; nothing coming down
+  lets recovery keep escalating, so a bot never hammers a wall it cannot break.
+
+The swing goes out on `moduleActive` / `useAngle` / `forceWeapon` /
+`shouldAttack` — the channel `BotAutoBreak` and `Autobreak` already use. No
+second attack path, and the reload gate is the client's own.
+
+### Movement and cost
+
+`ModuleHandler.startMovement` does the walking: it keeps `move_dir` and
+`reverse_move_dir` in step (Automill builds off the latter) and runs
+`MovementSimulation`, so a step into a spike is refused rather than sent. A
+packet goes out on a real change of heading or a 2s keepalive, not every tick —
+re-sending a slightly different heading every tick is the jitter.
+
+Path building is the only expensive part and runs on a fleet-wide budget of 3
+plans per 100ms; a bot waiting for a slot holds the straight line to its
+destination, which is what the planner returns in open ground anyway. 24 bots
+cost 0.17ms a tick between them.
 
 Verify with:
 
 ```sh
 node tools/sim-explorer.js
-node --check Ryn_Type_2.user.js
 ```
 
-`sim-explorer` pulls the block straight out of the shipped file and runs it
-against a stub of the client surface it uses, driven by an integrator that
-resolves collisions the way the game does. It checks that a bot crosses the map
-rather than milling about and that its move packets are keepalives rather than
-corrections; that a wall with a gap is routed through the gap; that a breakable
-wall is broken through while a breakable thing off to the side is left alone;
-that a pair of bots separates and only ever one of them yields; and that 24 bots
-starting on one spot spread out, stay spread, and cost a fraction of a
-millisecond per tick between them.
+It pulls the block straight out of the shipped file and runs it against a stub of
+the client surface, driven by an integrator that resolves collisions the way the
+game does. Over two hours of game time one bot stands in all 36 sectors, targets
+sectors it has already been to, reaches all four edges and the corners, and never
+shuffles. Then, with the random term pinned so the answer is deterministic: a
+sector it has just left is stepped away from, and once the cooldown expires that
+same sector is chosen again — which is the whole difference between roaming and
+one-time exploration. It also checks the switch turns roaming off on the tick it
+is flipped, and that an enemy trap is broken the tick the bot is caught while a
+clan trap is left alone.

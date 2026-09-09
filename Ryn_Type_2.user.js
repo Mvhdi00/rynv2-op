@@ -8092,24 +8092,28 @@ window.grbtp = 35;
         try {
           const {isOwner: _sbIsOwner, clients: _sbClients} = this.client;
           if (_sbIsOwner) {
-            // Flipping one flag is the whole toggle. BotExplorer reconciles
-            // every bot to it on its own tick, which is what lets a bot spawned
-            // mid session pick the mode up, and what stops the state going
-            // stale when the bot the old code sampled happens to be dead. The
-            // loop below is only so the fleet turns for home on this keypress
-            // rather than on its next tick.
+            // One key, both ways. Flipping the flag is the whole toggle —
+            // BotExplorer reconciles every bot to it on its own tick, which is
+            // what lets a bot spawned mid session pick roaming up, and what
+            // stops the state going stale when the bot the old code sampled
+            // happens to be dead.
+            //
+            // The loop is so switching off lands on the keypress rather than up
+            // to a server tick later: it drops _scatterActive now, and
+            // Movement.postTick — which only stands aside while that flag is
+            // set — has the whole fleet walking back on the very next tick.
             Settings_default._botsScattered = !Settings_default._botsScattered;
             SaveSettings();
             if (!Settings_default._botsScattered) {
               for (const _sbBot of _sbClients) {
                 const _sbMH = _sbBot._ModuleHandler;
                 if (!_sbMH || !_sbMH._scatterActive) continue;
-                _sbMH._scatterActive = false;
-                _sbMH._scatterDest = null;
-                _sbMH._scatterReturning = true;
-                _sbMH._scatterReturnDeadline = Date.now() + SCATTER_RETURN_TIMEOUT_MS;
-                _sbMH._scatterBreaking = false;
-                _sbMH._scatterBreakTarget = null;
+                const _sbEx = _sbMH.staticModules && _sbMH.staticModules.botExplorer;
+                if (_sbEx) {
+                  _sbEx.stopRoaming(_sbMH);
+                } else {
+                  _sbMH._scatterActive = false;
+                }
               }
             }
           }
@@ -8639,7 +8643,7 @@ window.grbtp = 35;
     postTick() {
       const {InputHandler: InputHandler2} = this.client.ownerClient;
       const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
-      if (ModuleHandler._scatterActive || ModuleHandler._scatterReturning) return;
+      if (ModuleHandler._scatterActive) return;
       if (ModuleHandler._autoFarmActive) return;
       // Ranged kiting already decided where this bot walks this tick.
       if (ModuleHandler.staticModules.botRangedAttack?.active) return;
@@ -15504,12 +15508,21 @@ window.grbtp = 35;
   // This replaces the heading with a destination and a path to it:
   //
   //     current position -> a distant sector -> a corridor to it -> travel
-  //     -> arrive -> another distant sector
+  //     -> arrive -> another distant sector -> forever
   //
   // The bot commits to a destination and keeps it. Direction only changes for
   // a reason — the route bends around something, the destination is reached or
   // is proven unreachable, another bot is too close, or recovery from being
   // stuck. There is no per-tick randomness anywhere in the steering.
+  //
+  // It is roaming, not exploration. Nothing here records that a place has been
+  // seen: there is no explored set, no frontier, no visited flag, and no way
+  // for any part of the map to stop being a candidate. What there is instead is
+  // a decaying penalty on the sector the bot is standing in, so it leaves; once
+  // that runs out the sector is worth exactly what it was before the bot ever
+  // arrived, and the bot will come back. The objective is coverage over time,
+  // repeated indefinitely — a hundredth pass over the map is the same job as
+  // the first.
   //
   // Layout, one concern per piece:
   //
@@ -15530,16 +15543,12 @@ window.grbtp = 35;
   // here moves a player by any route the game does not already provide.
   // ==========================================================================
 
-  // A bot walking home can be blocked, or the owner can be dead or across the
-  // map, and "returning" is a state that suppresses normal movement. Without a
-  // deadline a bot that never reaches the owner never moves normally again.
-  const SCATTER_RETURN_TIMEOUT_MS = 8e3;
-
   const EXP_MAP = Config_default.mapScale;
-  // The map divided into sectors, which is the unit a destination is chosen in
-  // and the unit visit history is kept in. 6x6 of 2400 is coarse enough that
-  // 36 numbers describe where a bot has been, and fine enough that "somewhere
-  // else" is a real place rather than a quadrant.
+  // The map divided into sectors. These are geography and nothing else — a way
+  // of spreading destinations over the whole map instead of around wherever the
+  // bot happens to be standing. There is no explored/unexplored state anywhere
+  // in this file: every sector is eligible every time a destination is picked,
+  // for as long as the client runs.
   const EXP_SECTOR_COLS = 6;
   const EXP_SECTOR_SIZE = EXP_MAP / EXP_SECTOR_COLS;
   // Keep destinations off the map wall; a point in the corner is a point the
@@ -15548,6 +15557,17 @@ window.grbtp = 35;
   // A destination has to be a journey. 3200 is more than a screen width, so
   // "somewhere else" is somewhere the bot cannot currently see.
   const EXP_MIN_TRAVEL = 3200;
+  // Distance is a qualifier, not a gradient. Past EXP_MIN_TRAVEL the trip is
+  // already a journey and another few thousand units does not make it a better
+  // one, so the term saturates: the whole far half of the map ties on distance
+  // and the spread terms decide between them.
+  //
+  // Scoring raw distance instead measured as the bot bouncing between opposite
+  // corners — the far rim beat everything else by a fixed margin no amount of
+  // randomness could close, and barely half the map's sectors were ever chosen
+  // as a destination. The middle of the map is somewhere to go, not only
+  // somewhere to cross.
+  const EXP_TRAVEL_SATURATION = 3000;
   const EXP_ARRIVE_RADIUS = 260;
   const EXP_NODE_RADIUS = 130;
   // Waypoint spacing, and how far ahead a corridor is probed. Beyond about this
@@ -15593,14 +15613,39 @@ window.grbtp = 35;
   // it are the time a wall gets to come down before the bot decides the whole
   // destination is the problem.
   const EXP_RECOVERY_GIVE_UP = 6;
-  // How long a sector stays written off after the bot failed to reach it.
-  const EXP_SECTOR_FAIL_MS = 9e4;
-  // A sector counts as fully stale again after this long unvisited.
-  const EXP_SECTOR_FRESH_MS = 12e4;
+  const EXP_RECOVERY_BREAK_AT = 2;
+  // A sector the bot could not reach is skipped for this long. This is about
+  // reachability, not about having been there: it is set by the stuck ladder
+  // giving up, never by arriving, and it expires on its own.
+  const EXP_SECTOR_FAIL_MS = 6e4;
+  // How long a sector the bot has just stood in is worth less than the rest of
+  // the map. Not a visited flag — a decaying penalty that reaches zero, after
+  // which the sector scores exactly as it did before the bot ever went there.
+  // This is the whole of the "do not loop around one region" rule.
+  const EXP_SECTOR_COOLDOWN_MS = 9e4;
+
+  // Destination scoring. Every term is a preference; none of them is a filter,
+  // so no part of the map can ever become permanently ineligible.
+  const EXP_W_DISTANCE = .6;     // far enough to be a journey
+  const EXP_W_BEARING = .9;      // away from the last leg's direction
+  const EXP_W_EDGE = .12;        // a tiebreak toward the boundary, no more
+  const EXP_W_RANDOM = .55;      // route variation between near-equal sectors
+  const EXP_W_RECENT = 1;        // where the bot has just been, for a while
+  const EXP_W_HISTORY = 1;       // near one of its own last few destinations
+  const EXP_W_FLEET = 1.2;       // near where another bot is already heading
+  // How far apart the fleet's destinations are pulled. Inside this radius a
+  // sector is worth less to a bot the closer it is to another bot's target, so
+  // a fleet fans out across the map instead of arriving together.
+  const EXP_FLEET_SPREAD = 4200;
+  // Chance that a destination in a sector on the map boundary is put on the
+  // boundary itself rather than in the middle of the sector, so the four edges
+  // and the four corners get visited rather than merely passed near.
+  const EXP_EDGE_PULL_CHANCE = .5;
+  const EXP_EDGE_BAND = 300;
   // Hard cap on one destination, so a bot that is making slow progress rather
   // than no progress still moves on eventually.
   const EXP_DEST_TIMEOUT_MS = 9e4;
-  const EXP_DEST_HISTORY = 6;
+  const EXP_DEST_HISTORY = 8;
   const EXP_DEST_MIN_SEPARATION = 2200;
   const EXP_SPACING_RADIUS = 260;
   const EXP_SPACING_COOLDOWN_MS = 6e3;
@@ -15621,8 +15666,7 @@ window.grbtp = 35;
         spacingRan: 0,
         planWindow: 0,
         planTokens: EXP_PLAN_PER_WINDOW,
-        claims: new Map,
-        claimCounts: new Map
+        claims: new Map
       };
       _expOwnerStates.set(owner, state);
     }
@@ -15635,35 +15679,39 @@ window.grbtp = 35;
     return sy * EXP_SECTOR_COLS + sx;
   }
 
-  // One bot, one claimed sector. Two bots heading for the same corner of the
-  // map is the clustering this is here to prevent, and it is cheaper to avoid
-  // it at the moment of choosing than to separate them once they arrive.
-  function _expClaim(owner, bot, sector) {
+  // Where each bot is currently heading, so the next bot to choose can head
+  // somewhere else. Two bots walking to the same corner is the clustering this
+  // exists to prevent, and it is cheaper to avoid at the moment of choosing
+  // than to separate them once they have both arrived.
+  function _expClaim(owner, bot, point) {
     const state = _expOwnerState(owner);
-    const previous = state.claims.get(bot);
-    if (previous !== undefined) {
-      const left = (state.claimCounts.get(previous) || 1) - 1;
-      if (left <= 0) {
-        state.claimCounts.delete(previous);
-      } else {
-        state.claimCounts.set(previous, left);
-      }
-    }
-    if (sector === null) {
+    if (point === null) {
       state.claims.delete(bot);
       return;
     }
-    state.claims.set(bot, sector);
-    state.claimCounts.set(sector, (state.claimCounts.get(sector) || 0) + 1);
+    state.claims.set(bot, {
+      x: point.x,
+      y: point.y
+    });
   }
 
-  function _expClaimCount(owner, bot, sector) {
+  // How crowded a candidate point is by the rest of the fleet's destinations:
+  // 0 when nobody else is heading within EXP_FLEET_SPREAD of it, rising toward
+  // 1 per bot as they converge. A distance falloff rather than a same-sector
+  // test, because two bots either side of a sector line are still together.
+  function _expCrowding(owner, bot, x, y) {
     const state = _expOwnerState(owner);
-    let count = state.claimCounts.get(sector) || 0;
-    if (state.claims.get(bot) === sector) {
-      count -= 1;
+    let crowding = 0;
+    for (const [other, claim] of state.claims) {
+      if (other === bot) {
+        continue;
+      }
+      const d = Math.hypot(claim.x - x, claim.y - y);
+      if (d < EXP_FLEET_SPREAD) {
+        crowding += 1 - d / EXP_FLEET_SPREAD;
+      }
     }
-    return count;
+    return crowding;
   }
 
   function _expTakePlanToken(owner, now) {
@@ -15958,6 +16006,23 @@ window.grbtp = 35;
       this._release();
       this.state = null;
     }
+    // Hand the bot straight back to normal movement. Movement.postTick only
+    // steps aside while _scatterActive is set, so dropping it here is the whole
+    // handover: from the next tick the bot walks to its owner again, which is
+    // what "come back" means. The one startMovement(null) stops it walking on
+    // the heading it was roaming with in the meantime.
+    stopRoaming(mh) {
+      mh._scatterActive = false;
+      mh._scatterBreaking = false;
+      mh._scatterBreakTarget = null;
+      mh._scatterDest = null;
+      mh._scatterAngle = void 0;
+      this._release();
+      this.state = null;
+      try {
+        mh.startMovement(null);
+      } catch (_) {}
+    }
     _release() {
       try {
         _expClaim(this.client.ownerClient, this.client, null);
@@ -15994,16 +16059,27 @@ window.grbtp = 35;
 
     // ── destination selection ───────────────────────────────────────────────
     //
-    // Every sector is scored and the best one wins. Distance is the base, and
-    // the rest are the things that stop a fleet from wearing a groove between
-    // two places: a bearing away from the last leg, staleness, no sector
-    // another bot has already claimed, nothing within EXP_DEST_MIN_SEPARATION
-    // of the last few destinations, and nowhere the bot has already failed to
-    // reach. The random term is a tiebreak between near-equal sectors, not a
-    // direction — it never reaches the steering.
+    // Every one of the 36 sectors is scored, every time, and the best wins.
+    // Being scored is not the same as being filtered: the only two things that
+    // can take a sector out of the running are being too close to be a journey
+    // and having been unreachable in the last minute, and both of those undo
+    // themselves. Arriving somewhere never removes it from the running — the
+    // bot will be back.
+    //
+    //     score =  distance                 far is the point
+    //            + bearing away from the last leg
+    //            + edge/corner              the boundary is a destination
+    //            + random                   route variation
+    //            - recently stood there     decays to nothing
+    //            - near its own last few destinations
+    //            - near where another bot is heading
+    //
+    // The random term is a tiebreak between near-equal sectors. It never
+    // reaches the steering — a heading is never random here.
     _pickDestination(now, pos, state) {
       const owner = this.client.ownerClient;
       const bias = state.yieldAway;
+      const last = EXP_SECTOR_COLS - 1;
       let best = null;
       let bestScore = -Infinity;
       let fallback = null;
@@ -16022,6 +16098,10 @@ window.grbtp = 35;
               sy: sy
             };
           }
+          // The only two things that can rule a sector out, and both undo
+          // themselves: it is not far enough away to be a journey, or the bot
+          // failed to reach it recently. Neither is a record of having been
+          // there — arriving never rules a sector out at all.
           const failedUntil = state.failed.get(sector);
           if (failedUntil !== undefined) {
             if (now < failedUntil) {
@@ -16033,24 +16113,45 @@ window.grbtp = 35;
             continue;
           }
           const heading = Math.atan2(cy - pos.y, cx - pos.x);
-          let score = dist / EXP_MAP;
+          let score = Math.min(1, (dist - EXP_MIN_TRAVEL) / EXP_TRAVEL_SATURATION) * EXP_W_DISTANCE;
+          // A different direction from the leg just walked, so the bot crosses
+          // the map rather than shuffling along one side of it.
           if (state.legHeading !== null) {
-            score += getAngleDist(state.legHeading, heading) / Math.PI * .9;
+            score += getAngleDist(state.legHeading, heading) / Math.PI * EXP_W_BEARING;
           }
+          // Sectors against the map boundary carry the four edges and the four
+          // corners. Without this they are only ever reached by accident,
+          // because they have half a map's worth of neighbours to lose to.
+          const edges = (sx === 0 ? 1 : 0) + (sx === last ? 1 : 0) + (sy === 0 ? 1 : 0) + (sy === last ? 1 : 0);
+          score += edges / 2 * EXP_W_EDGE;
+          score += Math.random() * EXP_W_RANDOM;
+          // Where the bot has just been, worth less for a while and then worth
+          // exactly what it was worth before. A sector it has never entered and
+          // one it left EXP_SECTOR_COOLDOWN_MS ago score identically: there is
+          // no bonus for being new, only a penalty for being current, and the
+          // penalty runs out.
           const seen = state.visited.get(sector);
-          score += (seen === undefined ? 1 : Math.min(1, (now - seen) / EXP_SECTOR_FRESH_MS)) * .8;
-          score -= _expClaimCount(owner, this.client, sector) * 1.2;
+          if (seen !== undefined) {
+            const cooling = 1 - (now - seen) / EXP_SECTOR_COOLDOWN_MS;
+            if (cooling > 0) {
+              score -= cooling * EXP_W_RECENT;
+            } else {
+              state.visited.delete(sector);
+            }
+          }
+          // Its own last few destinations, so a fleet-wide sweep does not
+          // degenerate into a two-point shuttle.
           for (let h = 0; h < state.history.length; h++) {
             const past = state.history[h];
             if (Math.hypot(past.x - cx, past.y - cy) < EXP_DEST_MIN_SEPARATION) {
-              score -= 1;
+              score -= EXP_W_HISTORY;
               break;
             }
           }
+          score -= _expCrowding(owner, this.client, cx, cy) * EXP_W_FLEET;
           if (bias !== null) {
             score += (1 - getAngleDist(bias, heading) / Math.PI);
           }
-          score += Math.random() * .15;
           if (score > bestScore) {
             bestScore = score;
             best = {
@@ -16061,9 +16162,9 @@ window.grbtp = 35;
           }
         }
       }
-      // Nothing scored means every sector is either too close or written off,
-      // which on a 14400 map takes a bot that has failed almost everywhere.
-      // Take the farthest sector and let the failure timers expire.
+      // Nothing scored means every sector is either too close or was
+      // unreachable recently. Take the farthest one and clear the failures —
+      // the bot always has somewhere to go.
       if (best === null) {
         best = fallback;
         state.failed.clear();
@@ -16072,10 +16173,27 @@ window.grbtp = 35;
         return;
       }
       const spread = EXP_SECTOR_SIZE * .36;
+      // Half the time a boundary sector aims at the boundary itself. This is
+      // what turns "the north row" into the north edge, and the corner sectors
+      // into the corners.
+      const pullW = best.sx === 0 && Math.random() < EXP_EDGE_PULL_CHANCE;
+      const pullE = best.sx === last && Math.random() < EXP_EDGE_PULL_CHANCE;
+      const pullN = best.sy === 0 && Math.random() < EXP_EDGE_PULL_CHANCE;
+      const pullS = best.sy === last && Math.random() < EXP_EDGE_PULL_CHANCE;
       let point = null;
       for (let attempt = 0; attempt < 6; attempt++) {
         let x = (best.sx + .5) * EXP_SECTOR_SIZE + (Math.random() * 2 - 1) * spread;
         let y = (best.sy + .5) * EXP_SECTOR_SIZE + (Math.random() * 2 - 1) * spread;
+        if (pullW) {
+          x = EXP_EDGE_MARGIN + Math.random() * EXP_EDGE_BAND;
+        } else if (pullE) {
+          x = EXP_MAP - EXP_EDGE_MARGIN - Math.random() * EXP_EDGE_BAND;
+        }
+        if (pullN) {
+          y = EXP_EDGE_MARGIN + Math.random() * EXP_EDGE_BAND;
+        } else if (pullS) {
+          y = EXP_MAP - EXP_EDGE_MARGIN - Math.random() * EXP_EDGE_BAND;
+        }
         // Standing in the river means being carried by the current, so it is
         // not somewhere to aim for. Crossing it on the way is untouched.
         if (pointInRiver({
@@ -16121,7 +16239,7 @@ window.grbtp = 35;
       state.breakTarget = null;
       state.wantsNewDest = false;
       state.yieldAway = null;
-      _expClaim(owner, this.client, state.destSector);
+      _expClaim(owner, this.client, point);
       this.client._ModuleHandler._scatterDest = point;
     }
 
@@ -16291,51 +16409,99 @@ window.grbtp = 35;
       });
       return out;
     }
+    // Which weapon this bot breaks with, or null if it cannot swing this tick.
+    // Sakuna's rule, the one BotAutoBreak uses: the great hammer when it has
+    // one, otherwise the primary — and only when that slot has reloaded.
+    _breakWeapon(mh, myPlayer) {
+      if (mh.moduleActive || mh.placedOnce) {
+        return null;
+      }
+      const reloading = mh.staticModules && mh.staticModules.reloading;
+      if (!reloading) {
+        return null;
+      }
+      const secondary = myPlayer.getItemByType(1);
+      const useSecondary = secondary === 10;
+      const weaponID = useSecondary ? secondary : myPlayer.getItemByType(0);
+      if (weaponID === null || weaponID === void 0) {
+        return null;
+      }
+      const weapon = DataHandler_default.getWeapon(weaponID);
+      if (!weapon || !reloading.isReloaded(useSecondary ? 1 : 0)) {
+        return null;
+      }
+      return {
+        type: useSecondary ? 1 : 0,
+        range: weapon.range ?? 0
+      };
+    }
+
+    // The swing itself, on ModuleHandler's action channel — the same one
+    // BotAutoBreak and Autobreak go out through. No second attack path.
+    _swing(mh, type, aim, targetID, state) {
+      mh.moduleActive = true;
+      mh.useAngle = aim;
+      mh.forceWeapon = type;
+      mh.shouldAttack = true;
+      mh._scatterBreaking = true;
+      mh._scatterBreakTarget = targetID;
+      state.breakTarget = targetID;
+      // UpdateAngle faces the bot at _scatterAngle while roaming, so the swing
+      // is what it should be looking at this tick.
+      mh._scatterAngle = aim;
+    }
+
+    // Standing in a trap.
+    //
+    // This is the one obstacle that skips the stuck ladder. Everything else has
+    // to be shown to be blocking before the bot swings at it; a trap has
+    // already stopped the bot dead — MovementSimulation sets lockMove and the
+    // bot cannot walk out — and EnemyManager says so outright through
+    // myPlayer.isTrapped and trappedIn, computed from real collision against
+    // the trap's own position. Waiting several seconds for the recovery ladder
+    // to reach the same conclusion is several seconds spent standing in it.
+    //
+    // Only an enemy's trap: a clan trap does not hold you and cannot be
+    // damaged anyway.
+    _trapBreak(mh, myPlayer, state) {
+      if (!myPlayer.isTrapped) {
+        return false;
+      }
+      const trap = myPlayer.trappedIn;
+      if (!trap || !trap.pos) {
+        return false;
+      }
+      if (!this.client.PlayerManager.isEnemyByID(trap.ownerID, myPlayer)) {
+        return false;
+      }
+      const weapon = this._breakWeapon(mh, myPlayer);
+      if (weapon === null) {
+        return false;
+      }
+      const pos = myPlayer.pos.current;
+      this._swing(mh, weapon.type, pos.angle(trap.pos.current), trap.id, state);
+      return true;
+    }
+
     _tryBreak(mh, myPlayer, heading, state) {
       const pos = myPlayer.pos.current;
       const ahead = _expFirstBlocker(this.client, pos.x, pos.y, heading, EXP_PROBE);
       const breakable = ahead !== null && ahead instanceof PlayerObject && ahead.isDestroyable && !ahead.canMoveOnTop() && this.client.PlayerManager.isEnemyByID(ahead.ownerID, myPlayer);
       if (!breakable) {
-        mh._scatterBreaking = false;
-        mh._scatterBreakTarget = null;
         return false;
       }
-      if (mh.moduleActive || mh.placedOnce) {
-        return false;
-      }
-      const reloading = mh.staticModules && mh.staticModules.reloading;
-      if (!reloading) {
-        return false;
-      }
-      const secondary = myPlayer.getItemByType(1);
-      const primary = myPlayer.getItemByType(0);
-      const useSecondary = secondary === 10;
-      const weaponID = useSecondary ? secondary : primary;
-      if (weaponID === null || weaponID === void 0) {
-        return false;
-      }
-      const weapon = DataHandler_default.getWeapon(weaponID);
-      if (!weapon || !reloading.isReloaded(useSecondary ? 1 : 0)) {
+      const weapon = this._breakWeapon(mh, myPlayer);
+      if (weapon === null) {
         return false;
       }
       // Still walking up to it. Keep walking; the swing happens once it is in
       // reach, which the steering below is already arranging.
-      const blockers = this._routeBlockers(myPlayer, heading, weapon.range ?? 0);
+      const blockers = this._routeBlockers(myPlayer, heading, weapon.range);
       if (blockers.length === 0) {
         return false;
       }
       blockers.sort((a, b) => a.obj.health - b.obj.health);
-      const aim = _expMeanAngle(blockers.map(b => b.angle));
-      mh.moduleActive = true;
-      mh.useAngle = aim;
-      mh.forceWeapon = useSecondary ? 1 : 0;
-      mh.shouldAttack = true;
-      mh._scatterBreaking = true;
-      mh._scatterBreakTarget = blockers[0].obj.id;
-      state.breakTarget = blockers[0].obj.id;
-      // UpdateAngle faces the bot at _scatterAngle while scattering, so the
-      // swing is what it should be looking at this tick.
-      mh._scatterAngle = aim;
+      this._swing(mh, weapon.type, _expMeanAngle(blockers.map(b => b.angle)), blockers[0].obj.id, state);
       return true;
     }
 
@@ -16378,39 +16544,36 @@ window.grbtp = 35;
       // has to give the flag up rather than merely decline to steer, or the
       // duelling bot would stand still while random movement is switched on.
       if (window._gbot1v1BotID !== null && client === window._gbot1v1BotID) {
-        if (mh._scatterActive || mh._scatterReturning) {
-          mh._scatterActive = false;
-          mh._scatterReturning = false;
-          mh._scatterBreaking = false;
-          mh._scatterBreakTarget = null;
-          mh._scatterAngle = void 0;
-          this._release();
-          this.state = null;
+        if (mh._scatterActive) {
+          this.stopRoaming(mh);
         }
         return;
       }
 
-      // Reconcile with the toggle every tick. A bot that connected after random
-      // movement was switched on joins in here, and one that was mid-return
-      // when it was switched back on stops returning.
+      // Reconcile with the toggle every tick, in both directions. A bot that
+      // connected after roaming was switched on joins in here; a bot still
+      // roaming after it was switched off stops here.
+      //
+      // Off is off. There used to be a walk-home phase in between, which is
+      // what made the second keypress look like it had not worked: the bot kept
+      // being driven from here for up to eight seconds, walking to wherever the
+      // owner was at the time, before normal movement got the bot back. It was
+      // also redundant — following the owner *is* walking home, and
+      // Movement.postTick does it from the next tick as soon as the flag drops.
       if (Settings_default._botsScattered) {
         if (!mh._scatterActive) {
           mh._scatterActive = true;
-          mh._scatterReturning = false;
           mh._scatterBreaking = false;
           mh._scatterBreakTarget = null;
           this.state = null;
         }
       } else if (mh._scatterActive) {
-        mh._scatterActive = false;
-        mh._scatterReturning = true;
-        mh._scatterReturnDeadline = now + SCATTER_RETURN_TIMEOUT_MS;
+        this.stopRoaming(mh);
+        return;
       }
-      if (!mh._scatterActive && !mh._scatterReturning) {
+      if (!mh._scatterActive) {
         if (this.state !== null) {
-          this._release();
-          this.state = null;
-          mh._scatterAngle = void 0;
+          this.stopRoaming(mh);
         }
         return;
       }
@@ -16447,30 +16610,6 @@ window.grbtp = 35;
         }
       } catch (_) {}
 
-      if (mh._scatterReturning) {
-        const owner = client.ownerClient;
-        const ownerPlayer = owner && owner.myPlayer;
-        const ownerPos = ownerPlayer && ownerPlayer.pos && ownerPlayer.pos.current;
-        if (now >= (mh._scatterReturnDeadline || 0) || ownerPos && pos.distance(ownerPos) < 120) {
-          // Home or not, hand it back to normal movement — Movement.postTick
-          // only steps aside while one of these two flags is set.
-          mh._scatterReturning = false;
-          mh._scatterBreaking = false;
-          mh._scatterBreakTarget = null;
-          mh._scatterAngle = void 0;
-          this._release();
-          this.state = null;
-          mh.startMovement(null);
-          return;
-        }
-        if (ownerPos) {
-          const heading = Math.atan2(ownerPos.y - pos.y, ownerPos.x - pos.x);
-          mh._scatterAngle = heading;
-          this._steer(mh, heading, now, state);
-        }
-        return;
-      }
-
       _expSpacingPass(client.ownerClient, now);
 
       if (state.dest !== null) {
@@ -16505,9 +16644,13 @@ window.grbtp = 35;
       }
       const heading = this._headingFor(pos, state);
       mh._scatterAngle = heading;
-      if (state.recovery >= 2) {
-        this._tryBreak(mh, myPlayer, heading, state);
-      } else {
+      // A trap first and unconditionally; anything else only once routing
+      // around it has already failed twice.
+      let breaking = this._trapBreak(mh, myPlayer, state);
+      if (!breaking && state.recovery >= EXP_RECOVERY_BREAK_AT) {
+        breaking = this._tryBreak(mh, myPlayer, heading, state);
+      }
+      if (!breaking) {
         mh._scatterBreaking = false;
         mh._scatterBreakTarget = null;
       }
