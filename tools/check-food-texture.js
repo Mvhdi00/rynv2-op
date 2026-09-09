@@ -169,6 +169,15 @@ let texture = null;
     check("texture: transparent background, not a black one",
       corners.every(p => p[3] === 0), corners.map(p => "rgba(" + p.join(",") + ")").join(" "));
     const [x0, y0, x1, y1] = png.alphaBBox();
+    // FOOD_TEXTURE_FILL is a measurement of this PNG. Swap the PNG for one with
+    // a different margin and the constant is silently wrong, so it is checked
+    // against the pixels rather than trusted.
+    {
+      const stated = Number((client.match(/const FOOD_TEXTURE_FILL = (\.\d+);/) || [])[1]);
+      const actual = Math.max(x1 - x0 + 1, y1 - y0 + 1) / png.width;
+      check("texture: FOOD_TEXTURE_FILL matches the shipped pixels",
+        Math.abs(stated - actual) < 0.005, "stated " + stated + ", measured " + actual.toFixed(4));
+    }
     check("texture: the flower is centred in its frame",
       Math.abs((x0 + x1) / 2 - png.width / 2) < png.width * 0.02 && Math.abs((y0 + y1) / 2 - png.height / 2) < png.height * 0.02,
       "content " + (x1 - x0 + 1) + "x" + (y1 - y0 + 1) + " at (" + x0 + "," + y0 + ")");
@@ -225,8 +234,21 @@ let texture = null;
   check("render: food gets a different sprite", out !== bush);
   check("render: at exactly the dimensions it replaces",
     out.width === bush.width && out.height === bush.height, out.width + "x" + out.height + " vs " + bush.width + "x" + bush.height);
-  check("render: the texture is drawn over the whole sprite, not a slice",
-    drawn.length === 1 && drawn[0].rest.join(",") === "0,0,205,205", drawn.length ? drawn[0].rest.join(",") : "nothing drawn");
+  // The flower is drawn to the bush's painted footprint, not to the canvas
+  // edge — see FOOD_TEXTURE_SCALE. Both fills are read out of the file so a
+  // change to either constant has to keep the arithmetic true.
+  const bushFill = Number((client.match(/const FOOD_BUSH_FILL = (\.\d+);/) || [])[1]);
+  const texFill = Number((client.match(/const FOOD_TEXTURE_FILL = (\.\d+);/) || [])[1]);
+  check("render: both fills are stated as constants", bushFill > 0 && texFill > 0,
+    "bush " + bushFill + ", texture " + texFill);
+  const want = 205 * bushFill / texFill;
+  const inset = (205 - want) / 2;
+  check("render: the texture is drawn centred at the bush's footprint",
+    drawn.length === 1 && drawn[0].rest.every((v, i) => Math.abs(v - [inset, inset, want, want][i]) < 0.01),
+    drawn.length ? drawn[0].rest.map(v => v.toFixed(1)).join(",") + "  want " + [inset, inset, want, want].map(v => v.toFixed(1)).join(",") : "nothing drawn");
+  check("render: the flower ends up the same width as the bush it replaced",
+    Math.abs(want * texFill - 205 * bushFill) < 0.01,
+    (want * texFill).toFixed(1) + "px painted vs the bush's " + (205 * bushFill).toFixed(1) + "px, on a 205px sprite");
   check("render: it is the embedded sakura that gets drawn",
     drawn.length === 1 && typeof drawn[0].img.src === "string" && drawn[0].img.src.startsWith("data:image/png;base64,"));
   check("render: nothing is painted behind it, so the png's transparency stands",

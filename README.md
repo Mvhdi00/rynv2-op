@@ -271,6 +271,17 @@ exactly that canvas: the `resourceTint` hook wraps `El()`'s return in
 Nothing else moves. Spawning, collision, hitboxes, gathering, healing and the
 inventory never look at a sprite, so none of them can notice.
 
+**The flower is scaled to the bush's footprint, not to the sprite edge.** `El()`
+sizes a bush's canvas `2.1 * scale + 5.5`, but the bush does not fill it: `Bl()`
+puts the star's six vertices at `0.7 * scale` and the curve between them only
+bulges to about `0.85 * scale`, so the painted shape spans **0.79** of the
+canvas. The sakura PNG carries its own transparent margin and fills **0.85** of
+its frame. Drawn edge to edge those do not agree — the flower came out 8% wider
+than the bush and covering 1.16x its ink, which is what read as "bigger than a
+stone". `FOOD_TEXTURE_SCALE` is the ratio of the two measurements, and it lands
+the flower on exactly the bush's footprint at all three scales the game spawns
+(80 / 85 / 95 → 139 / 147 / 163 px, against the bush's 141 / 149 / 164).
+
 The image is the supplied PNG resampled to 256 square and embedded as a data
 URI — a userscript is one file with no asset directory, and the largest food
 sprite the game ever asks for is 205px (`bushScales` tops out at 95, and `El`
