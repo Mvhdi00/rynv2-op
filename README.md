@@ -177,3 +177,44 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+## Ryn Type 2 (`Ryn_Type_2.user.js`)
+
+A second, independent userscript in this repo: the Ryn Type 2 client, kept
+here so changes to it are reviewable. It is not built from `src/` and shares no
+code path with `ReUp_Mix.user.js` — it carries its own placement engine
+(`RynPlacementEngine`) alongside the Luna-derived `AutoPlacer` that ReUp Mix
+also has.
+
+### Extra placer scanners
+
+`AutoPlacer`'s ladder picks every angle for what the build does to the nearest
+enemy — the spike that catches them, the trap that retraps them, the push that
+throws them onto something already standing. With one target on the board that
+reasoning only ever looks at the arc of the ring facing them, so open ground on
+the other sides is never considered, and only one build spot is ever shown in
+the placement preview.
+
+The ring is now cut into `_autoplacerScanners` equal sectors, sector 0 centred
+on the direction to the enemy. The ladder keeps sector 0 unchanged; each extra
+scanner owns exactly one of the others and only ever proposes angles inside it,
+so no two scanners can pick the same ground or wander into each other's arc —
+the partition does the deconfliction before a candidate exists.
+
+Per extra sector, per tick: one build, trap before spike. Every existing guard
+still applies — item caps and resources through `canPlace`, refused angles
+through the ban list, and the ladder's own two rules that a build may never
+wall off your path or your line to the target. Builds are queued behind the
+ladder's, so the packet budget is spent on the enemy-facing sector first.
+
+| Setting | Where | Default |
+|---|---|---|
+| `_autoplacerScanners` | Combat → Placement → Placer scanners (1–6) | 4 |
+
+`1` is the old behaviour exactly: the enemy-facing ladder alone.
+
+Placement previews are now tagged with the item each build is for, so a tick
+that queues a trap and a spike together draws each as itself instead of drawing
+both as whichever went out last.
