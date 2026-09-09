@@ -177,3 +177,35 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+## Ryn Type 2
+
+`Ryn_Type_2.user.js` is a separate userscript, unrelated to the ReUp Mix build
+above — it is checked in as-is, not produced by `tools/build-reup.js`.
+
+### Wings
+
+Angel Wings (accessory 13) is gone from the client. It is off `AutoBuy.buyList`
+and out of every branch of `DefaultAcc.getBestCurrentAcc`, which were the only
+two paths that reached `_buy` for it, so the client never spends gold on it and
+never equips it. The in-game store panel still lists it (`_storeItems`), so
+buying and wearing it by hand is unaffected.
+
+Shadow Wings (accessory 19) takes over where Angel Wings used to be picked:
+
+| Situation | Was | Now |
+|---|---|---|
+| Soldier hat active | Angel Wings, or Shadow Wings if `_shadowWings` was on | Shadow Wings |
+| Enemy detected, no Soldier | Angel Wings | Shadow Wings |
+| Bot with Be Angel on | Halo + Angel Wings | Halo only |
+
+The `_shadowWings` toggle (Combat → Shadow Wings) is removed along with its
+setting key — the behaviour it gated is now unconditional. Saved configs
+carrying the old key drop it on load, which the settings loader already does
+for any key not in `defaultSettings`.
+
+Be Angel keeps its halo in `DefaultHat.getBestCurrentHat`; only the wings half
+of it is gone. Death corpses still render a halo and angel wings — that is a
+local draw call, not a purchase.
