@@ -134,6 +134,7 @@ tools/sim-explorer.js     Ryn Type 2's bot roaming, run headless
 tools/check-bots-ui.js    Ryn Type 2's Bots page: markup, fleet naming, bot IDs
 tools/check-food-texture.js  Ryn Type 2's sakura food texture: hook, asset, render
 tools/check-structure-readout.js  Ryn Type 2's building name + health bar
+tools/check-menu-bindings.js  Ryn Type 2's menu controls vs Settings, and module wiring
 ```
 
 ## Build
