@@ -133,6 +133,7 @@ tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 tools/sim-explorer.js     Ryn Type 2's exploration system, run headless
 tools/check-bots-ui.js    Ryn Type 2's Bots page: markup, fleet naming, bot IDs
 tools/check-food-texture.js  Ryn Type 2's sakura food texture: hook, asset, render
+tools/check-structure-readout.js  Ryn Type 2's building name + health bar
 ```
 
 ## Build
@@ -192,6 +193,62 @@ understood.
 `Ryn_Type_2.user.js` is a separate client that lives here alongside the mix. It
 is edited directly rather than built, so the file in the repo is the file you
 install.
+
+## Structure readout
+
+Placed buildings carry the owner's name and a health bar, within 500 units.
+This is Whiteout v4's readout, and RYN's own circular arc bar that used to be
+here is gone.
+
+Whiteout draws it inside its `renderGameObjects`:
+
+```js
+if (hacking && tmpObj.dist2 <= 500) {
+    roundRect(tmpX - config.healthBarWidth / 2 - config.healthBarPad,
+              tmpY - config.healthBarPad,
+              config.healthBarWidth + config.healthBarPad * 2, 17, 8)   // holder
+    roundRect(tmpX - config.healthBarWidth / 2, tmpY,
+              config.healthBarWidth * (tmpObj.health / tmpObj.maxHealth),
+              17 - config.healthBarPad * 2, 7)                           // fill
+}
+let owner = findPlayerBySID(tmpObj.owner.sid);
+if (owner && tmpObj.dist2 <= 500) { strokeText/fillText owner.name at tmpY - 7 }
+```
+
+Ported onto RYN's own pieces rather than a second set of primitives beside
+them, and they line up exactly: `Renderer.barContainer` and `barContent`
+already draw this shape, because `Config.barWidth`, `barHeight` and `barPad`
+are 50, 17 and 4.5 — the same three numbers Whiteout reads out of the game as
+`healthBarWidth`, the literal `17`, and `healthBarPad`. Ownership comes from
+the `isMyPlayerByID` / `isTeammateByID` pair the rest of the client uses, and
+the owner's name off `PlayerManager` instead of Whiteout's `findPlayerBySID`
+scan.
+
+Whiteout colours the bar by ownership — green for yours, yellow for the clan's,
+red for everyone else. Here every bar is one **light sky blue** (`#b3e5fc`);
+the two toggles already decide which structures get a bar at all, so the bar
+itself does not answer the same question twice. The old `_itemHealthBarEnemyColor`
+is gone and one colour picker remains.
+
+**The name sits on the bar.** Whiteout puts it at `tmpY - 7` while the holder
+starts at `tmpY - 4.5`, so a name of any length covers most of the bar. That is
+Whiteout's layout and it is kept as-is; `STRUCTURE_NAME_OFFSET` is the one value
+to raise (≈22) to lift the name clear of the holder.
+
+Verify with:
+
+```sh
+node tools/check-structure-readout.js
+```
+
+It checks the Visual page against Settings — `attachColorPickers` and
+`attachCheckboxes` silently skip a control whose id is not a setting, so a
+removed setting leaves a dead control that looks fine until you click it — that
+the default colour actually reads as a light, soft sky blue, and then runs
+`structureInfo` against a recording context to confirm it draws Whiteout's
+rectangles *to the pixel*, the name where Whiteout puts it, and nothing at all
+past 500 units, for an indestructible structure, or with the matching toggle
+off.
 
 ## Sakura food
 
