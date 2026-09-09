@@ -14513,9 +14513,6 @@ window.grbtp = 35;
   // Novastorm's cap. Five enemies piled up must not read as more lethal than
   // the two hits that will actually land.
   const DEF_DMG_CAP = 140;
-  // Bull Helmet's own drain (Hats[7].healthRegen === -5). Novastorm's
-  // `if (currentHat == 7) totalDmgPot += 5`.
-  const DEF_BULL_DRAIN = 5;
 
   const DEF_NONE = 0;
   const DEF_WATCH = 1;
@@ -14532,9 +14529,8 @@ window.grbtp = 35;
   const DEF_R_MUSKET = 5;
   const DEF_R_VELOCITY = 6;
   const DEF_R_INSTA = 7;
-  const DEF_R_BURST = 8;
-  const DEF_R_DAMAGE = 9;
-  const DEF_R_NAMES = [ "none", "spikeTick", "trapInsta", "kbSpike", "syncSpike", "musket", "velocity", "insta", "burst", "damage" ];
+  const DEF_R_DAMAGE = 8;
+  const DEF_R_NAMES = [ "none", "spikeTick", "trapInsta", "kbSpike", "syncSpike", "musket", "velocity", "insta", "damage" ];
 
   // Velocity tick. Novastorm's window is a flat 150..350 between the two
   // extrapolated positions. Whiteout arms much tighter, around the boost-tick
@@ -14563,20 +14559,8 @@ window.grbtp = 35;
   // plus 430) without leaving a gap a musket can shoot through unseen.
   const DEF_MUSKET_NEAR = 700;
   const DEF_RANGED_IDS = new Set([ 9, 12, 13, 15 ]);
-  const DEF_DAGGER_ID = 7;
-  const DEF_BULL_HAT = 7;
   const DEF_SOLDIER_HAT = 6;
   const DEF_TURRET_HAT = 53;
-  const DEF_TANK_HAT = 40;
-  const DEF_BOOST_HAT = 12;
-
-  // Spam detection. A single dagger hit is 20 and means nothing; four of them
-  // inside two thirds of a second is a chain that has to be answered before the
-  // fifth. Bull-hat swings are heavier and rarer, so two is already a sequence.
-  const DEF_BURST_MS = 700;
-  const DEF_DAGGER_BURST_HITS = 3;
-  const DEF_BULL_BURST_HITS = 2;
-  const DEF_BURST_LOG_MAX = 12;
 
   // Pre-arm lengths, in ticks. Whiteout's qHeal is 3.
   const DEF_ARM_VELOCITY = 3;
@@ -14686,8 +14670,6 @@ window.grbtp = 35;
     // not arrived yet" from "they hit me again".
     sentHealAt = -1;
     sentHealFrom = 0;
-    // Rolling record of damage taken: { at, dmg, hat, weapon }. Bounded.
-    hitLog = [];
     // The largest single number that landed on this tick. The backstop reads it.
     tickMaxDamage = 0;
     // This tick's damage values with their attribution: { dmg, enemy, slot }.
@@ -14708,7 +14690,6 @@ window.grbtp = 35;
       this.pendingHeal = 0;
       this.sentHealAt = -1;
       this.sentHealFrom = 0;
-      this.hitLog.length = 0;
       this.tickMaxDamage = 0;
       this.tickHitCount = 0;
       this.lastEvadeTick = -8;
@@ -15059,34 +15040,6 @@ window.grbtp = 35;
       return worst;
     }
 
-    // 5 & 6 — Anti spam hit bull hat, anti spam daggers. Neither is a single
-    // hit worth reacting to; both are a rate. The log is what the whole burst
-    // looks like, so the decision is made on the chain rather than on its
-    // members.
-    senseBurst(threat) {
-      const myPlayer = this.client.myPlayer;
-      const now = Date.now();
-      const log = this.hitLog;
-      while (log.length > 0 && now - log[0].at > DEF_BURST_MS) log.shift();
-      if (log.length === 0) return 0;
-      let bull = 0;
-      let dagger = 0;
-      let total = 0;
-      for (let i = 0; i < log.length; i++) {
-        total += log[i].dmg;
-        if (log[i].hat === DEF_BULL_HAT) bull++;
-        if (log[i].weapon === DEF_DAGGER_ID) dagger++;
-      }
-      const spam = bull >= DEF_BULL_BURST_HITS || dagger >= DEF_DAGGER_BURST_HITS;
-      if (!spam) return 0;
-      // What the rest of this burst costs, at the rate it has been arriving.
-      const perHit = total / log.length;
-      const projected = perHit * Math.max(2, Math.round(log.length / 2));
-      const level = projected >= myPlayer.tempHealth ? DEF_LETHAL : DEF_DANGER;
-      threat.claim(level, DEF_R_BURST, DEF_SOLDIER_HAT, level >= DEF_LETHAL ? DEF_LOCK_LETHAL : DEF_LOCK_DANGER, DEF_ARM_SPIKE, null);
-      return projected;
-    }
-
     // ── assessment ──────────────────────────────────────────────────────────
     assess(near) {
       const {myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
@@ -15116,8 +15069,6 @@ window.grbtp = 35;
       this.senseVelocityTick(threat, near);
       const trapTerm = this.senseTrap(threat, near);
       if (trapTerm > raw) raw = trapTerm;
-      const burstTerm = this.senseBurst(threat);
-      if (burstTerm > raw) raw = burstTerm;
       raw += this.senseMusket(threat, near);
       // The damage-over-time tick — bull drain or poison — is already inside
       // potentialDamage: EnemyManager adds 5 on every isBullTickTime() tick.
@@ -15208,7 +15159,6 @@ window.grbtp = 35;
       // burst detector, the follow-up estimate, the backstop — reads the result
       // rather than re-matching the same numbers against the same enemies.
       const attribHat = myPlayer.hatID === DEF_SOLDIER_HAT ? Hats[DEF_SOLDIER_HAT].dmgMult : 1;
-      const now = Date.now();
       this.tickMaxDamage = 0;
       this.tickHitCount = 0;
       for (let d = 0; d < myPlayer.damages.length; d++) {
@@ -15237,13 +15187,6 @@ window.grbtp = 35;
         entry.enemy = owner;
         entry.slot = slot;
         this.tickHitCount += 1;
-        this.hitLog.push({
-          at: now,
-          dmg: damage,
-          hat: owner === null ? -1 : owner.hatID,
-          weapon: owner === null ? -1 : slot === 0 ? owner.weapon.primary : slot === 1 ? owner.weapon.secondary : DEF_TURRET_HAT
-        });
-        if (this.hitLog.length > DEF_BURST_LOG_MAX) this.hitLog.shift();
       }
 
       const threat = this.assess(near);

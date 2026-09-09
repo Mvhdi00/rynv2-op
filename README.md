@@ -284,8 +284,6 @@ fighting over the hat.
 | 2 | Sync spike | pushed onto / colliding with a spike with a swing ready | Soldier + arm; tank-gear break sanctioned when one swing kills the spike |
 | 3,7 | Musket insta | ranged secondary aimed inside **1700** (reach is `Weapons[15].range` 1400, bullet 50), cone narrowing with distance | Soldier + arm; one minimal perpendicular step if free and the step is clear |
 | 4 | Clown | above | Bull drain at full health only |
-| 5 | Bull-hat spam | 2 attributed bull hits inside 700 ms | Soldier + arm |
-| 6 | Dagger spam | 3 attributed dagger hits inside 700 ms | Soldier + arm |
 | 8 | Spike tick | enemy can place a spike touching us with a swing ready | push with turret gear when there is room; Soldier when trapped together |
 | 9 | Trap insta | held in an enemy trap with someone's combo up | Soldier + arm 3; hammer break sanctioned if it kills the trap |
 | 10 | KB spike | knockback landing point carries spike damage | Soldier + arm |
@@ -294,6 +292,28 @@ Push versus tank is decided by where the damage sits: Soldier only wins the tick
 in the band where it is the thing that saves us (kills bare, survives in
 Soldier). Above that band the hat is not enough and prevention is the only out;
 below it nothing is at risk.
+
+### Audited out: anti spam (bull hat, daggers)
+
+A rate-based detector for repeated bull-hat and dagger hits was built and then
+removed, because an audit of the reference clients found no basis for it in any
+of them:
+
+- **Daggers.** Every reference to daggers in Chicken, Falcon, Misery, Whiteout
+  and Novastorm is *offensive* — `getPredictWeapon` picking your own primary
+  (Novastorm 12656, Misery 11017), Chicken's "Safe Dagger Spamming"
+  (`safeSoldierSpamming`) toggle, and a `doWithDaggers` menu id with no
+  implementation behind it.
+- **Bull hat.** Every `skinIndex == 7` in the references is damage attribution
+  (`damage *= 1.5` inside Whiteout's `getAttacker`) or bull-tick detection
+  (`dmg == 5 && skinIndex == 7`). None of it is a defence against a hit chain.
+- **Rate detection.** No client carries any incoming-hit rate, burst or window
+  counter at all. Whiteout's only `hitCount` is an aim-scoring loop.
+
+A hit chain is still survived, through the paths that *are* grounded: each hit
+goes through `interpretDamage` attribution, `potentialDamage` prices whatever the
+attacker still has loaded, and the heal fires when the running total turns
+lethal. What is gone is a classifier that no reference client supports.
 
 ### Removed
 

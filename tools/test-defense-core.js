@@ -409,30 +409,6 @@ section("Anti musket insta");
   check("past 1700 it is not tracked", core.assess([ shooter ]).level === 0);
 }
 
-// ── 8. burst detection ──────────────────────────────────────────────────────
-section("Anti spam (daggers, bull hat)");
-{
-  const dag = makeEnemy({ x: 50, y: 0, primary: 7, hatID: 0 });
-  const w = makeWorld({ health: 70, enemies: [ dag ], damages: [ 20 * 1.5 ] });
-  const core = new M.DefenseCore(w.client);
-  core.postTick();
-  core.client.myPlayer.damages = [ 20 * 1.5 ];
-  core.postTick();
-  check("two dagger hits are not yet a chain", core.threat.reason !== 8);
-  core.client.myPlayer.damages = [ 20 * 1.5 ];
-  core.postTick();
-  check("three inside the window are", core.threat.reason === 8, "reason=" + core.threat.reason);
-}
-{
-  const bull = makeEnemy({ x: 50, y: 0, primary: 4, hatID: 7 });
-  const w = makeWorld({ health: 70, enemies: [ bull ], damages: [ 40 * 1.5 ] });
-  const core = new M.DefenseCore(w.client);
-  core.postTick();
-  core.client.myPlayer.damages = [ 40 * 1.5 ];
-  core.postTick();
-  check("two bull-hat hits are a chain", core.threat.reason === 8, "reason=" + core.threat.reason);
-}
-
 // ── 9. observed damage becomes prediction ───────────────────────────────────
 section("Damage attribution (Chicken/Falcon interpretDamage)");
 {
@@ -558,6 +534,13 @@ section("Engine wiring (source level)");
   has(/if \(ModuleHandler\.moduleActive && !ModuleHandler\.defenseClaim\) return;/, "auto shield survives a defensive claim");
   has(/staticModules\.reloading, this\.staticModules\.defenseCore/, "the core runs ahead of the offensive chain");
   check("AntiInsta is gone", !/class AntiInsta/.test(src));
+  // Anti spam (bull hat, daggers) was removed after the reference audit: no
+  // client among Chicken, Falcon, Misery, Whiteout or Novastorm carries any
+  // rate- or burst-based detection of incoming hits. Every dagger reference in
+  // them is offensive (your own primary, Chicken's "Safe Dagger Spamming"
+  // toggle, a dead doWithDaggers menu id) and every skinIndex == 7 reference is
+  // damage attribution or bull-tick detection.
+  check("no invented burst/rate detector survives", !/senseBurst|hitLog|DEF_BURST|DEF_DAGGER/.test(src));
 }
 
 // ── 15. angel wings ─────────────────────────────────────────────────────────
