@@ -209,3 +209,34 @@ for any key not in `defaultSettings`.
 Be Angel keeps its halo in `DefaultHat.getBestCurrentHat`; only the wings half
 of it is gone. Death corpses still render a halo and angel wings — that is a
 local draw call, not a purchase.
+
+### KB Spike
+
+Removed outright — the toggle, the `_kbSpike` setting, and the detection it
+gated.
+
+It was the defensive half of the spike game: inside `EnemyManager.checkCollision`
+it swept the knockback segment through each enemy spike's box, from the player's
+current and extrapolated positions, and raised `possibleToKnockback` and
+`potentialSpikeKnockbackDamage` when the sweep landed on one. Two terms read
+that damage, and both are simplified rather than left reading a field that is
+now always zero:
+
+| Reader | Was | Now |
+|---|---|---|
+| `instaThreat()` | `primaryDamage + potentialSpikeKnockbackDamage >= 100` | `primaryDamage >= 100` |
+| autoheal damage sum | `Math.max(potentialSpikeDamage, potentialSpikeKnockbackDamage)` | `potentialSpikeDamage` |
+
+`possibleToKnockback` was already dead in the original — set, reset, never read —
+and goes with it. Both fields are dropped from the class and its per-tick reset.
+
+The consequence is the point of the change, not a side effect: nothing counts
+the damage from being shoved onto a spike any more, so Soldier and the autoheal
+no longer react to that threat, and `shouldIgnoreModule()` no longer stands the
+offensive modules down for it. Spike Sync is still gated by everything else
+`shouldIgnoreModule()` reads — `spikeSyncThreat`, `detectedDangerEnemy`,
+`reverseInsta`, `toolHammerInsta`, `rangedBowInsta`, `velocityTickThreat`.
+
+The other spike checks in `checkCollision` are untouched. They are the opposite
+direction — knocking the *enemy* onto a spike — and are what Spike Sync and
+`_trapKB` are built on.
