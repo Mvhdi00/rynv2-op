@@ -131,6 +131,7 @@ tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 tools/sim-explorer.js     Ryn Type 2's exploration system, run headless
+tools/check-bots-ui.js    Ryn Type 2's Bots page: markup, fleet naming, bot IDs
 ```
 
 ## Build
@@ -190,6 +191,54 @@ understood.
 `Ryn_Type_2.user.js` is a separate client that lives here alongside the mix. It
 is edited directly rather than built, so the file in the repo is the file you
 install.
+
+## Naming the fleet, and bot IDs
+
+Bots → Fleet has a **Name every bot** box. Type a name there — say `Raptor` —
+and every bot row you add from then on is pre-filled with it, so the whole fleet
+joins under one name. **Apply to all** also pushes it onto the rows and bots you
+already have. It wins over *Auto random bot names*; clear the box to get the old
+per-row behaviour back. The name persists across sessions like any other
+setting.
+
+A moomoo name is chosen at spawn — it travels in the spawn packet and nothing
+else sets it — so a bot standing in the world cannot be renamed underneath
+itself. Apply sets what each bot spawns as **next**, and since bots respawn
+themselves, they catch up on their own. Until then the row shows both:
+`Raptor → Wolf`. Nothing is force-respawned, so bots held at the menu with `[`
+stay held.
+
+Each connected bot's row now reads:
+
+```
+✓  BOT 3   Raptor   id 1247   ✕
+```
+
+Two ids, because they answer different questions. **BOT 3** is the fleet slot —
+short, stable for the life of the connection, and what you mean by "bot 3".
+**id 1247** is the id the server gave that connection: what the bot is called in
+packets and by every other client.
+
+**Two bugs fixed on the way there.** The fleet slot came from `let id = 0`
+declared *inside* `handleBotCreation`, which runs once per row — so every row had
+its own counter sitting at zero and every bot came out as bot 0. And a bot
+connected through the dynamic list has no `#bot-container` option, which
+`botOption` dereferenced without checking; the throw landed inside
+`onFirstTickAfterSpawn`, so everything after that call was skipped —
+`clientIDList` never learned the bot's id, and bots did not recognise each other
+as friendly.
+
+Verify with:
+
+```sh
+node tools/check-bots-ui.js
+```
+
+It unescapes the Bots page and checks the ids are unique, that every id the code
+looks up exists, that the name box is a text input bound to a real setting
+(`attachTextInputs` silently skips one that is not), and that the tags balance.
+Then it pulls the UI object out of the shipped file, constructs it against a
+fake document, and actually runs the row rendering and the Apply handler.
 
 ## Persistent exploration
 
