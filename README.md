@@ -117,6 +117,7 @@ but nothing in the client needs it. It is stripped from the build.
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
+Ryn_Type_2.user.js        Ryn Type 2, edited in place (see below)
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
@@ -126,6 +127,7 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/verify-autoheal.js  Ryn Type 2's auto-heal, against 37 fight scenarios
 ```
 
 ## Build
@@ -169,6 +171,44 @@ against, and re-checks the observable parts ~15s after load — frame signature
 width, transport mode, live opcode table size. A server-side protocol change
 shows up as a console warning instead of as packets that quietly stop being
 understood.
+
+## Ryn Type 2 — auto-heal
+
+`Ryn_Type_2.user.js` is a separate client from the mix above and is not part of
+its build. It is checked in and edited in place. Its auto-heal is **Misery
+Client's**, running on Ryn's own packets, tick order and player state.
+
+Ryn used to decide with one number out of `EnemyManager`
+(`potentialDamage + potentialSpikeDamage`), which counts every enemy in reach
+and off reload at their full swing whether or not the swing can land, and which
+has no term for the two things that kill without a swing landing on you: being
+knocked onto a spike, and walking into one. Misery's model replaces it:
+
+| Term | What it counts |
+|---|---|
+| `spikeDmgPot` | contact while trapped, swept movement into a spike or cactus, both knockback segments, and a spinning spike an enemy could still place under you |
+| `hitDmgPot` | a weapon hit, only when there is a reason it lands — you are on a spike, about to be, or it alone is lethal |
+| `turretDmgPot` | a ready turret, on those same reasons, plus the velocity-tick rush |
+| `secDmgPot` | a ranged secondary that has already hit you and is off cooldown |
+| `poisonDmgPot` | 5 a period for five periods after a poison tick |
+| `projDmgPot` | Ryn's own: a projectile already in the air and aimed at you |
+
+The sum is capped at 140, scaled by 0.75 if soldier is about to go on and given
++5 if bull is, and food goes out when it reaches your health. A lethal spike
+push heals ahead of the tick's other packets and may spend shame to do it —
+that override is the **Survival Preheal** toggle, on by default, as in Misery.
+
+Two flags leave the module: `wantsSoldier` joins Ryn's soldier-equip condition,
+and `shouldResetShame` gates `ShameReset` so bull never goes on into a hit.
+
+```sh
+node tools/verify-autoheal.js       # 37 scenarios
+node --check Ryn_Type_2.user.js
+```
+
+`verify-autoheal.js` slices the module, `lineInRect`, `Vector` and the item
+table out of the userscript and stubs everything else, so it tests the shipped
+code rather than a copy of it.
 
 ## Notes
 
