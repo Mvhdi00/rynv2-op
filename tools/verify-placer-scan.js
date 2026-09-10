@@ -1,6 +1,6 @@
 // Unit tests against the real AutoPlacer class, lifted out of the client and
 // instantiated on stubs. Covers the two behaviour changes that are not the
-// aperture swap: the escalation ladder, and the wrap seam in perfect-angle
+// aperture swap: resolution selection, and the wrap seam in perfect-angle
 // detection.
 
 const fs = require("fs");
@@ -33,7 +33,6 @@ function constant(name) {
 }
 const LUNA_ANGLE_RESOLUTIONS = constant("LUNA_ANGLE_RESOLUTIONS");
 const LUNA_ANGLE_STEPS_DEFAULT = constant("LUNA_ANGLE_STEPS_DEFAULT");
-const LUNA_ESCALATE_TICKS = constant("LUNA_ESCALATE_TICKS");
 
 const Settings_default = { _autoplacerResolution: 72 };
 const Items = [];
@@ -42,11 +41,11 @@ Items[15] = { id: 15, scale: 50, placeOffset: -5, itemGroup: 5 };
 
 const AutoPlacer = new Function(
   "Items", "Config_default", "Settings_default", "GeometrySolver",
-  "LUNA_ANGLE_RESOLUTIONS", "LUNA_ANGLE_STEPS_DEFAULT", "LUNA_ESCALATE_TICKS",
+  "LUNA_ANGLE_RESOLUTIONS", "LUNA_ANGLE_STEPS_DEFAULT",
   "SpikeOpportunity",
   lift("  class AutoPlacer {", "  }") + "\n  return AutoPlacer;"
 )(Items, Config_default, Settings_default, GeometrySolver,
-  LUNA_ANGLE_RESOLUTIONS, LUNA_ANGLE_STEPS_DEFAULT, LUNA_ESCALATE_TICKS,
+  LUNA_ANGLE_RESOLUTIONS, LUNA_ANGLE_STEPS_DEFAULT,
   { reset() {} });
 
 let failures = 0;
@@ -84,34 +83,29 @@ function makePlacer(objects) {
 const myPlayer = { getItemCount: () => ({ count: 0, limit: 0 }) };
 const ORIGIN = { x: 7000, y: 4000 };
 
-// --- escalation -------------------------------------------------------------
-console.log("\nescalation ladder");
+// --- resolution selection ---------------------------------------------------
+// The setting is the rate, flat. There is no escalation ladder: sampling is
+// 0.0007ms at 36 against 0.0021ms at 144 on top of a 0.0059ms aperture solve,
+// so the coarser rung saves nothing worth the builds it drops.
+console.log("\nresolution selection");
 {
   const { p } = makePlacer([]);
-  Settings_default._autoplacerResolution = 72;
-
-  p._lastPlaceTick = 100;
-  check("just placed -> one rung below the ceiling", p._resolutionFor(100), 36);
-  check("1 tick idle  -> still below", p._resolutionFor(101), 36);
-  check(`${LUNA_ESCALATE_TICKS} ticks idle -> ceiling`, p._resolutionFor(100 + LUNA_ESCALATE_TICKS), 72);
-  check("long idle    -> ceiling", p._resolutionFor(200), 72);
-
-  Settings_default._autoplacerResolution = 144;
-  check("ceiling 144, just placed -> 72", p._resolutionFor(100), 72);
-  check("ceiling 144, idle        -> 144", p._resolutionFor(200), 144);
-
-  Settings_default._autoplacerResolution = 36;
-  check("ceiling 36 has no rung below -> flat", p._resolutionFor(100), 36);
-  check("ceiling 36 idle              -> flat", p._resolutionFor(200), 36);
-
+  for (const steps of LUNA_ANGLE_RESOLUTIONS) {
+    Settings_default._autoplacerResolution = steps;
+    check(`${steps} -> ${steps}, every tick`, p._resolutionFor(), steps);
+  }
   Settings_default._autoplacerResolution = 999;
-  check("above the top rung clamps down", p._resolutionFor(200), 144);
+  check("above the top rung clamps down", p._resolutionFor(), 144);
   Settings_default._autoplacerResolution = 50;
-  check("between rungs snaps down", p._resolutionFor(200), 36);
+  check("between rungs snaps down", p._resolutionFor(), 36);
+  Settings_default._autoplacerResolution = 1;
+  check("below the bottom rung takes the bottom", p._resolutionFor(), 36);
   delete Settings_default._autoplacerResolution;
-  check("missing setting falls back to the default", p._resolutionFor(200), LUNA_ANGLE_STEPS_DEFAULT);
+  check("missing setting falls back to the default", p._resolutionFor(), LUNA_ANGLE_STEPS_DEFAULT);
   Settings_default._autoplacerResolution = "144";
-  check("string off the <select> is accepted", p._resolutionFor(200), 144);
+  check("string off the <select> is accepted", p._resolutionFor(), 144);
+  Settings_default._autoplacerResolution = NaN;
+  check("unreadable value takes the bottom rung", p._resolutionFor(), 36);
   Settings_default._autoplacerResolution = 72;
 }
 
