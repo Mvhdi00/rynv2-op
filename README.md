@@ -182,3 +182,6 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+* `oracle/` — Oracle Laffer v1.2, with the current transport ported in and its
+  connection, captcha and reconnect paths fixed. See `oracle/README.md`.

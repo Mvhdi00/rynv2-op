@@ -665,6 +665,39 @@ within 400 given a recent hit, RYN within `primaryRange + 130` with no recent-hi
 requirement — those bounds are `canPossiblyInstakill`'s, and it feeds danger
 detection, the soldier hat and every insta module, not only the heal).
 
+### `oracle-net.js` and `oracle-net-mutate.py`
+
+Oracle's connection, checked the way the **server** checks it.
+
+`transport-check.js` proves a ported transport is byte-identical to the game's
+primitives. That is not the same as proving the client *uses* them, which is
+what this is for: it lifts Oracle's real `send` and real `onmessage` out of the
+io layer, runs them, and then verifies every frame they produce the way the
+server would — split the six-byte prefix, recompute the signature over the
+remainder with the same key, msgpack-decode it, and check `[op, args, seq]`
+against the seeded opcode table.
+
+Covered: nothing goes out before io-init; the connect callback fires on io-init
+and not on `onopen`; the sequence increases across all opcodes rather than per
+opcode; an opcode the server has no slot for is dropped without burning a
+sequence number; numeric server opcodes map back to letters; an unhandled one is
+skipped rather than thrown; the host formula matches the game's; and a second
+io-init rebuilds the session with the new key, the new table and the sequence
+restarted.
+
+21 mutations, all caught. Three were missed on the first run and all three were
+bench faults worth recording, because each is a way a green check can be
+worthless:
+
+* the `events` table was a `Proxy` answering to **any** key, so
+  `events[unknown].apply(...)` could never throw and the guard the bench existed
+  to check was untestable;
+* `onopen` was lifted but never **invoked**, so moving the connect callback back
+  into it — the exact ordering bug — was invisible;
+* a check for `this.socket = null` matched the **comment** explaining why that
+  line matters. Comments are now stripped from every lifted slice centrally,
+  after this happened twice.
+
 ### `login-latch.js` and `login-latch-mutate.py`
 
 Why Play dies for the life of the page, measured against the real moomoo bundle
