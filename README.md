@@ -169,16 +169,63 @@ faking them:
   closest legal flank, because it narrows the retreat now and shoots them from
   2200ms on; it is not described as walling anything.
 
+### The lane
+
+A tick spike has to land on the push, just past the target. A trap denies far
+more ground than it occupies: `checkItemLocation` refuses a spike within
+`52 + 50 = 102` of one, and two points on rings of 82 and 80 are only 102 apart
+once they are **78 degrees** apart — so **one trap denies 156 degrees of the
+spike ring**. Auto place lays traps at the target ("2: any trap, while neither
+of us is pinned"), so the enemy-facing arc was taken every tick and the tick
+could never form. That is why it looked inert with the placer running.
+
+The placer's own trap veto cannot cover this. It is gated on
+`kbCtx.strength >= SO_TRAP_VETO_STRENGTH`, and `strength` is zero unless a spike
+we already own is on the push — so it protects a chain that already exists and
+is structurally unable to protect one being built. It is also circular: it needs
+`primaryKbSpike`, which needs a placeable spike, which is what the trap has just
+made impossible.
+
+So the module publishes a **lane**: one point, one radius, on the ticks where a
+swing is actually pending — including the ticks it cannot fire on, which are the
+ones that need the ground cleared. It is enforced in the two places that can
+take it:
+
+- **preplace and replace** through the reservation ledger, as a soft claim at
+  `SYNC`. It outranks their `ANTICIPATION` and `RECOVERY`, yields to an `INSTA`
+  above them, and carries a value below the `1e6` a directed placement uses so
+  it never blocks the spike it is holding ground for.
+- **auto place**, which reads no ledger, through a direct test in
+  `_addPredictObject` — the one point the ladder, the trapped fallback and the
+  sector scanners all pass through. The test is the game's own refusal radius,
+  so a trap 78 degrees off the push is given up and one at 79 is kept.
+
+### When it fires
+
+On a bare board the chain exists only while the target is inside the placement
+ring — 70 to 82px, once both collision radii are counted. Past that there is no
+angle at which a spike can be placed behind them, so there is nothing to end the
+push on. This is the game, not a threshold.
+
+With a spike of ours already behind the target the rebound terms carry it
+instead and it fires at any melee range, which is the normal case once the
+placer has been allowed to build. Both bands are covered by tests.
+
 ### Tests
 
 ```sh
 node tools/test-spiketick.js
 ```
 
-55 checks over the scenarios in the brief — stationary / slow / fast targets,
+84 checks over the scenarios in the brief — stationary / slow / fast targets,
 trap and spike geometry, every placement route, bull owned and not, turret
-available and not, target lost before execution, duplicate prevention, and a
-geometry sweep asserting the turret never overlaps or shadows the spike.
+available and not, target lost before execution, duplicate prevention, a
+geometry sweep asserting the turret never overlaps or shadows the spike, the
+lane against the real PlacementLedger, and the firing bands above.
+
+The harness runs the real extracted source — the math helpers, the RPE
+constants, GeometrySolver, PlacementLedger, SpikeOpportunity and SpikeTick
+itself — so a change to the module is a change to what these exercise.
 
 ## Layout
 

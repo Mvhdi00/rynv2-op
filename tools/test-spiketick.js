@@ -28,6 +28,11 @@ const L_RPE = findLine(/^  const RPE_TICK_MS = /);
 const L_RPE_END = findLine(/^  const PlacementWeights = /) - 1;
 const L_SO = findLine(/^  const SO_MAX_ALIGN/);
 const L_SO_END = findLine(/^  const GeometrySolver = \{/) - 1;
+const L_LEDGER = findLine(/^  class PlacementLedger \{/);
+const L_LEDGER_END = (() => { for (let i = L_LEDGER; i < lines.length; i++) if (/^  \}\s*$/.test(lines[i])) return i + 1; throw new Error('ledger end'); })();
+const L_DOM = findLine(/^  const RPE_SOFT_DOMINANCE/);
+const L_GEO = findLine(/^  const GeometrySolver = \{/);
+const L_GEO_END = (() => { for (let i = L_GEO; i < lines.length; i++) if (/^  \};\s*$/.test(lines[i])) return i + 1; throw new Error('GeometrySolver end'); })();
 const L_ST = findLine(/^  const ST_SPIKE_TYPE = 4;/);
 const L_ST_END = findLine(/^  const SpikeTick_default = SpikeTick;/);
 
@@ -35,6 +40,9 @@ const extracted = [
   slice(L_HYP, L_LINEINRECT_END),
   slice(L_RPE, L_RPE_END),
   slice(L_SO, L_SO_END),
+  slice(L_GEO, L_GEO_END),
+  slice(L_DOM, L_DOM),
+  slice(L_LEDGER, L_LEDGER_END),
   slice(L_ST, L_ST_END)
 ].join('\n\n');
 
@@ -66,6 +74,7 @@ const Logger = { staticLog() {}, staticError() {}, staticWarn() {} };
 // ── Test scaffolding ──────────────────────────────────────────────────────
 const V = (x, y) => ({ x, y, distance(o) { return Math.hypot(o.x - x, o.y - y); }, distanceDefault(o) { const dx = o.x - x, dy = o.y - y; return dx * dx + dy * dy; }, angle(o) { return Math.atan2(o.y - y, o.x - x); } });
 
+let _tickSeq = 100;
 function makeWorld(opts) {
   const o = Object.assign({
     myPos: V(1000, 1000),
@@ -88,6 +97,8 @@ function makeWorld(opts) {
     spikeAccepts: true,
     turretAccepts: true,
     packetCount: 0,
+    blockers: [],
+    GeometrySolver: null,
     settings: {}
   }, opts || {});
   o.enemyNext = o.enemyNext || o.enemyPos;
@@ -116,21 +127,51 @@ function makeWorld(opts) {
     }
   };
   const ring = t => myPlayer.getItemPlaceScale(t === 4 ? o.spikeId : 17);
+  const claims = [];
   const engine = {
     _threat: { build() { return frame; } },
+    claim(x, y, radius, priority, owner, ttl, opts) { claims.push({x,y,radius,priority,owner,ttl,opts}); return 1; },
+    // Legal angles for a ring, solved with the client's REAL occlusion maths
+    // against whatever `blockers` the scenario puts on the board. Only the
+    // proposal step (target angle, aperture edges, wide-aperture midpoints) is
+    // mirrored from RynPlacementEngine.anglesFor; the geometry that decides
+    // whether a trap denies the spike its ground is the shipped code.
     anglesFor(type, target) {
       const given = type === 4 ? o.spikeAngles : o.turretAngles;
       if (given) return given.slice();
-      // default: a dense legal ring, which is the most permissive world and so
-      // the one that exercises the module's own filtering rather than a stub's
+      const GS = o.GeometrySolver;
+      const id = type === 4 ? o.spikeId : 17;
+      const ringR = myPlayer.getItemPlaceScale(id);
+      const footR = Items[id].scale;
+      if (!GS || o.blockers.length === 0) {
+        const out = [];
+        for (let i = 0; i < 72; i++) out.push(i * Math.PI * 2 / 72);
+        return out;
+      }
+      const blocked = [];
+      for (const b of o.blockers) {
+        const arc = GS.occlusion(o.myPos.x, o.myPos.y, ringR, footR, b.x, b.y, b.placementScale);
+        if (arc) blocked.push(arc);
+      }
+      const apertures = GS.invert(GS.merge(blocked));
+      if (apertures.length === 0) return [];
       const out = [];
-      for (let i = 0; i < 72; i++) out.push(i * Math.PI * 2 / 72);
-      return out;
+      const tgt = GS.norm(target ?? 0);
+      if (GS.inAperture(apertures, tgt)) out.push(tgt);
+      for (const ap of apertures) {
+        const inset = Math.min(.03, ap[2] / 3);
+        out.push(GS.norm(ap[0] + inset), GS.norm(ap[1] - inset));
+        if (ap[2] > .7) out.push(GS.norm(ap[0] + ap[2] / 2));
+      }
+      const seen = new Set, uniq = [];
+      for (const a of out) { const k = Math.round(a * 200); if (seen.has(k)) continue; seen.add(k); uniq.push(a); }
+      uniq.sort((x, y) => GS.angleDist(x, tgt) - GS.angleDist(y, tgt));
+      return uniq;
     }
   };
   const reloading = { isReloaded(type, ticks = 0) { return type === 0 ? o.primaryReloaded : type === 2 ? o.turretReloaded : true; } };
   const ModuleHandler = {
-    tickCount: 100, moduleActive: false, activeModule: null,
+    tickCount: _tickSeq += 7, moduleActive: false, activeModule: null,
     forceHat: null, useHat: null, forceWeapon: null, useAngle: null, shouldAttack: false,
     packetCount: o.packetCount, packetLimit: 119,
     staticModules: { placementEngine: engine, reloading },
@@ -157,7 +198,7 @@ function makeWorld(opts) {
     targetScale: o.enemyScale, targetId: 42, ourSpikes: o.ourSpikes,
     ourTraps: [], range: o.myPos.distance(o.enemyPos)
   };
-  return { client, ModuleHandler, EnemyManager, myPlayer, engine, packets, enemy, frame, opts: o };
+  return { client, ModuleHandler, EnemyManager, myPlayer, engine, packets, enemy, frame, claims, opts: o };
 }
 
 // The resolution stage the real ModuleHandler runs after the module list:
@@ -193,7 +234,7 @@ function makeSandbox(Settings) {
     client: null
   };
   vm.createContext(sandbox);
-  vm.runInContext('(function(){\n' + extracted + '\nthis.SpikeTick = SpikeTick; this.SpikeOpportunity = SpikeOpportunity;}).call(this)', sandbox);
+  vm.runInContext('(function(){\n' + extracted + '\nthis.SpikeTick = SpikeTick; this.SpikeOpportunity = SpikeOpportunity; this.GeometrySolver = GeometrySolver; this.PlacementLedger = PlacementLedger; this.RPE_PRIORITY = RPE_PRIORITY;}).call(this)', sandbox);
   return sandbox;
 }
 
@@ -477,6 +518,158 @@ run('S11 gear not reloaded', { turretReloaded: false }, ({ tick2, w, mod, s1, s2
   }
   check('G1 turret never overlaps the spike (' + withTurret + '/' + cases + ' had turrets)', overlap === 0, overlap + ' overlaps');
   check('G2 turret never shadows the spike', shadow === 0, shadow + ' shadows');
+})();
+
+// ── CONFLICT: the lane, and what used to take it ──────────────────────────
+// One placed trap denies 156 degrees of the spike ring (52 + 50 apart on rings
+// of 82 and 80), and the chain only counts a spike within 60 degrees of the
+// push. So a single trap laid toward the enemy takes the whole lane. These
+// check that the lane is published whenever a swing is pending, that it is
+// exactly the ground the game would refuse a spike on, and that a trap already
+// standing in it is still (correctly) fatal to that tick.
+(() => {
+  const sb = makeSandbox({ _spikeTick: true, _spikeTickTurret: true });
+  const my = V(1000, 1000);
+  const en = V(1078, 1000);
+  const trapRing = 35 + 50 - 5;
+  const trap = { x: my.x + trapRing, y: my.y, placementScale: 50 };
+  const w = makeWorld({ myPos: my, enemyPos: en, enemyNext: en,
+                        blockers: [trap], GeometrySolver: sb.GeometrySolver });
+  const mod = new sb.SpikeTick(w.client);
+  mod.postTick();
+  check('C1 a trap already in the lane still blocks that tick',
+        w.ModuleHandler.moduleActive === false);
+  // ...but the lane is published anyway, which is what clears it for next time
+  const lane = mod.laneAt(w.ModuleHandler.tickCount);
+  check('C2 the lane is published even on a tick that cannot fire', lane !== null,
+        JSON.stringify(mod.trace));
+  check('C3 the lane sits on the push, one spike ring out',
+        lane !== null && Math.abs(lane.x - (my.x + 82)) < 1e-9 && Math.abs(lane.y - my.y) < 1e-9,
+        JSON.stringify(lane));
+  check('C4 preplace and replace are told through the ledger',
+        w.claims.length === 1 && w.claims[0].opts.soft === true && w.claims[0].priority === 80,
+        JSON.stringify(w.claims));
+  check('C5 the claim yields to this module own directed placement',
+        w.claims[0].opts.value < 1e6);
+})();
+
+// The lane is exactly the game's refusal radius: a trap at 78 degrees denies
+// the spike and is given up, one at 79 does not and is kept.
+(() => {
+  const sb = makeSandbox({ _spikeTick: true, _spikeTickTurret: true });
+  const my = V(1000, 1000);
+  const w = makeWorld({ myPos: my, enemyPos: V(1078, 1000), enemyNext: V(1078, 1000),
+                        blockers: [], GeometrySolver: sb.GeometrySolver });
+  const mod = new sb.SpikeTick(w.client);
+  mod.postTick();
+  const lane = mod.laneAt(w.ModuleHandler.tickCount);
+  const trapRing = 35 + 50 - 5, trapScale = 50;
+  const denies = deg => {
+    const a = deg * Math.PI / 180;
+    const x = my.x + trapRing * Math.cos(a), y = my.y + trapRing * Math.sin(a);
+    return Math.hypot(x - lane.x, y - lane.y) < trapScale + lane.footR;
+  };
+  check('C6 a trap 70 deg off the push is refused', denies(70));
+  check('C7 a trap 77 deg off the push is refused', denies(77));
+  check('C8 a trap 79 deg off the push is allowed', !denies(79));
+  check('C9 a trap opposite the enemy is allowed', !denies(180));
+})();
+
+// No swing pending -> no lane -> the placer is completely unaffected.
+(() => {
+  const sb = makeSandbox({ _spikeTick: true, _spikeTickTurret: true });
+  const w = makeWorld({ primaryReloaded: false, GeometrySolver: sb.GeometrySolver });
+  const mod = new sb.SpikeTick(w.client);
+  mod.postTick();
+  check('C10 no lane while the primary is reloading',
+        mod.laneAt(w.ModuleHandler.tickCount) === null);
+  check('C11 no ledger claim either', w.claims.length === 0);
+})();
+(() => {
+  const sb = makeSandbox({ _spikeTick: false, _spikeTickTurret: true });
+  const w = makeWorld({ GeometrySolver: sb.GeometrySolver });
+  const mod = new sb.SpikeTick(w.client);
+  mod.postTick();
+  check('C12 no lane while Spike Tick is off',
+        mod.laneAt(w.ModuleHandler.tickCount) === null && w.claims.length === 0);
+})();
+(() => {
+  const sb = makeSandbox({ _spikeTick: true, _spikeTickTurret: true });
+  const w = makeWorld({ enemyPos: V(1600, 1000), enemyNext: V(1600, 1000), GeometrySolver: sb.GeometrySolver });
+  const mod = new sb.SpikeTick(w.client);
+  mod.postTick();
+  check('C13 no lane when the target is out of reach',
+        mod.laneAt(w.ModuleHandler.tickCount) === null && w.claims.length === 0);
+})();
+
+// A lane never outlives its tick.
+(() => {
+  const sb = makeSandbox({ _spikeTick: true, _spikeTickTurret: true });
+  const w = makeWorld({ GeometrySolver: sb.GeometrySolver });
+  const mod = new sb.SpikeTick(w.client);
+  mod.postTick();
+  const t = w.ModuleHandler.tickCount;
+  check('C14 lane held on its own tick', mod.laneAt(t) !== null);
+  check('C15 lane not honoured on the next tick', mod.laneAt(t + 1) === null);
+  mod.reset();
+  check('C16 reset drops the lane', mod.lane === null);
+})();
+
+// ── The lane against the REAL reservation ledger ──────────────────────────
+// The claim's priority and value decide who it holds off. That is reasoning
+// about three lines of PlacementLedger.blocked, so it is checked against the
+// shipped ledger rather than argued.
+(() => {
+  const sb = makeSandbox({ _spikeTick: true, _spikeTickTurret: true });
+  const ledger = new sb.PlacementLedger();
+  const P = sb.RPE_PRIORITY;
+  const tick = 100;
+  // what _publishLane files
+  const token = ledger.reserve(1082, 1000, 52, P.SYNC, 'spikeTick', tick, 2, { soft: true, value: 1e5 });
+  check('L1 the lane claim is accepted', token !== false);
+  // this module's own spike, directed, same ground
+  check('L2 the lane does not block the tick spike it is holding ground for',
+        ledger.blocked(1082, 1000, 52, P.SYNC, 1e6) === false);
+  // preplace and replace want the same ground
+  check('L3 preplace is held off', ledger.blocked(1082, 1000, 52, P.ANTICIPATION, 3) === true);
+  check('L4 replace is held off', ledger.blocked(1082, 1000, 52, P.RECOVERY, 3) === true);
+  // an insta outranks a pending tick, which is correct
+  check('L5 an insta still takes the ground', ledger.blocked(1082, 1000, 52, P.INSTA, 1e6) === false);
+  // ground the lane does not cover is untouched
+  check('L6 ground outside the lane is free',
+        ledger.blocked(1082 + 105, 1000, 52, P.ANTICIPATION, 3) === false);
+  // and it expires
+  ledger.expire(tick + 2);
+  check('L7 the lane expires', ledger.blocked(1082, 1000, 52, P.ANTICIPATION, 3) === false);
+})();
+
+// ── The band the chain can exist in ───────────────────────────────────────
+// A tick spike has to end the push, which means standing past the target — and
+// the placement ring is only 82 out. So on a bare board the chain exists only
+// while the target is inside that ring, which is 70..82 once both collision
+// radii are counted. That is the game, not a threshold: at 100px there is no
+// angle at which a spike can be placed behind them.
+//
+// With a spike of ours already behind them the rebound terms carry it instead,
+// and it fires at any melee range — which is the normal case once the placer
+// has been allowed to build, and is why the lane above matters so much.
+(() => {
+  const fire = (d, withSpike) => {
+    const sb = makeSandbox({ _spikeTick: true, _spikeTickTurret: true });
+    const my = V(1000, 1000), en = V(1000 + d, 1000);
+    const ourSpikes = withSpike ? [ { pos: { current: V(1000 + d + 90, 1000) }, collisionScale: 52 } ] : [];
+    const w = makeWorld({ myPos: my, enemyPos: en, enemyNext: en, ourSpikes: ourSpikes,
+                          blockers: [], GeometrySolver: sb.GeometrySolver });
+    const mod = new sb.SpikeTick(w.client);
+    mod.postTick();
+    return w.ModuleHandler.moduleActive === true;
+  };
+  check('B1 bare board, target inside the ring: fires', fire(74, false));
+  check('B2 bare board, target on the ring edge: fires', fire(80, false));
+  check('B3 bare board, target past the ring: no chain to take', !fire(100, false));
+  check('B4 bare board, polearm range: no chain to take', !fire(140, false));
+  check('B5 one spike behind them, mid range: fires', fire(100, true));
+  check('B6 one spike behind them, polearm range: fires', fire(140, true));
 })();
 
 // ── Report ────────────────────────────────────────────────────────────────

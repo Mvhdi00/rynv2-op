@@ -10400,11 +10400,28 @@ window.grbtp = 35;
 
     // Luna addPredictObject: queue a build, unless it would land on one this
     // tick has already queued.
+    // The ground a pending spike tick is holding, or null. Every build this
+    // module queues — the ladder's, the trapped fallback's and the sector
+    // scanners' — arrives here, so one test covers all three.
+    _spikeTickLane() {
+      const ModuleHandler = this.client._ModuleHandler;
+      const module = ModuleHandler && ModuleHandler.staticModules && ModuleHandler.staticModules.spikeTick;
+      return module ? module.laneAt(ModuleHandler.tickCount) : null;
+    }
+
     _addPredictObject(id, angle, preplace, myPos) {
       const item = Items[id];
       const dist = 35 + item.scale + (item.placeOffset || 0);
       const x = myPos.x + dist * Math.cos(angle);
       const y = myPos.y + dist * Math.sin(angle);
+      // A pending tick's lane. The test is the game's own refusal radius, so it
+      // gives up exactly the builds that would deny the spike its ground and no
+      // others: a trap 78 degrees off the push is refused because a spike could
+      // not then be placed, and one at 79 is allowed because it could. The lane
+      // is only ever set while a swing is actually pending, so on every other
+      // tick this costs one null test and changes nothing.
+      const lane = this._spikeTickLane();
+      if (lane !== null && hyp(x - lane.x, y - lane.y) < item.scale + lane.footR) return;
       for (const obj of this._predictObjects) {
         if (obj.id !== 17 && hyp(x - obj.x, y - obj.y) < item.scale + obj.scale) return;
       }
@@ -13171,8 +13188,10 @@ window.grbtp = 35;
       const pos = myPlayer.pos.current;
       return this.claim(pos.x + dist * Math.cos(angle), pos.y + dist * Math.sin(angle), item.scale, priority, owner, ttl);
     }
-    claim(x, y, radius, priority, owner, ttl = 3) {
-      return this.ledger.reserve(x, y, radius, priority, owner, this.client._ModuleHandler.tickCount, ttl);
+    // `opts` is the ledger's own {soft, value} pair, passed straight through so
+    // a caller can file an intention rather than a commitment.
+    claim(x, y, radius, priority, owner, ttl = 3, opts) {
+      return this.ledger.reserve(x, y, radius, priority, owner, this.client._ModuleHandler.tickCount, ttl, opts);
     }
     profileFor(type) {
       const tick = this.client._ModuleHandler.tickCount;
@@ -14573,6 +14592,37 @@ window.grbtp = 35;
   // place is already scoring, and neither of which is a tick.
   const ST_MIN_SCORE = SO_TERMINAL;
 
+  // ── The lane ──────────────────────────────────────────────────────────────
+  // The single patch of ground a pending tick cannot do without, and the reason
+  // this module looked inert with the placer running.
+  //
+  // A tick spike has to land on the push, just past the target: the chain only
+  // counts a spike within SO_MAX_ALIGN (60 degrees) of the push measured at the
+  // target, and on a ring of 82 that is a narrow arc around the push direction.
+  // A trap denies far more than it occupies — `checkItemLocation` refuses a
+  // spike within `52 + 50 = 102` of one, and two points on rings of 82 and 80
+  // are only 102 apart once they are 78 degrees apart, so **one trap denies 156
+  // degrees of the spike ring**. Auto place lays traps at the target ("2: any
+  // trap, while neither of us is pinned"), so the enemy-facing arc was being
+  // taken every tick and the tick could never form.
+  //
+  // The placer's own trap veto cannot cover this. It is gated on
+  // `kbCtx.strength >= SO_TRAP_VETO_STRENGTH`, and `strength` is zero unless a
+  // spike we already own is on the push — so it protects a chain that exists
+  // and is structurally unable to protect one being built. It is also circular:
+  // it needs `primaryKbSpike`, which needs a placeable spike, which is what the
+  // trap has just made impossible.
+  //
+  // So the lane is published instead, by whoever knows a swing is pending. It
+  // is one point and one radius, it exists only on ticks where a chain is
+  // actually live, and it is enforced in the two places that can take it:
+  // through the reservation ledger for preplace and replace, and through a
+  // direct test in the placer, which reads no ledger.
+  const ST_LANE_TTL = 2;
+  // Below the 1e6 a directed placement carries, so the lane holds off preplace
+  // and replace without this module's own spike being refused by it.
+  const ST_LANE_VALUE = 1e5;
+
   // Phase 19 debug. Off by default; when off the only cost is one boolean test
   // at each trace point, and nothing is allocated, formatted or retained.
   // Turn it on from the console with `__rynSpikeTick.on()`.
@@ -14592,6 +14642,9 @@ window.grbtp = 35;
     // rather than relying on it.
     _lockUntil=-1;
     _txn=0;
+    // The ground a pending tick is holding, stamped with the tick it was
+    // published on. Read through laneAt() so a stale one can never be honoured.
+    lane=null;
     // Last transaction's trace, for the debug hook. Never written unless
     // ST_DEBUG is on.
     trace=null;
@@ -14602,7 +14655,45 @@ window.grbtp = 35;
       this._gear = null;
       this._lockUntil = -1;
       this._txn = 0;
+      this.lane = null;
       this.trace = null;
+    }
+
+    // The lane, but only if it belongs to the tick being asked about. Every
+    // consumer goes through this rather than reading `lane` directly, so a lane
+    // published on an earlier tick can never hold ground it no longer needs.
+    laneAt(tick) {
+      const lane = this.lane;
+      return lane !== null && lane.tick === tick ? lane : null;
+    }
+
+    // Published once the gates that decide "a tick is pending" have all passed,
+    // and before any of the ones that decide "and it can happen this tick" —
+    // because the whole point is to clear ground for the ticks where it cannot
+    // yet. Preplace and replace are told through the ledger, at the tick's own
+    // priority: a soft claim outranks their ANTICIPATION and RECOVERY outright,
+    // yields to an insta above them, and does not block this module's own
+    // directed placement, which carries a higher value. The placer reads no
+    // ledger, so it tests `laneAt` directly.
+    _publishLane(engine, myPlayer, frame, kb) {
+      const id = myPlayer.getItemByType(ST_SPIKE_TYPE);
+      const item = id === null || id === undefined ? null : Items[id];
+      if (!item) return null;
+      const ring = myPlayer.getItemPlaceScale(id);
+      const lane = {
+        tick: frame.tick,
+        x: frame.myPos.x + ring * Math.cos(kb.push),
+        y: frame.myPos.y + ring * Math.sin(kb.push),
+        footR: item.scale
+      };
+      this.lane = lane;
+      try {
+        engine.claim(lane.x, lane.y, item.scale, RPE_PRIORITY.SYNC, this.moduleName, ST_LANE_TTL, {
+          soft: true,
+          value: ST_LANE_VALUE
+        });
+      } catch (_) {}
+      return lane;
     }
 
     // ── debug ───────────────────────────────────────────────────────────────
@@ -14724,6 +14815,12 @@ window.grbtp = 35;
       const kb = frame.kb && frame.kb.now !== undefined ? frame.kb.now : SpikeOpportunity.context(this.client, enemy, frame.targetPos, frame.targetScale, frame.ourSpikes, "now");
       if (!kb) return this._abort("no-chain");
 
+      // A swing is pending, so the ground it needs is held from here on —
+      // before the placement gates below, which are exactly the ones a trap in
+      // the lane makes fail. Holding it only after they passed would mean it
+      // was only ever held on ticks that did not need it.
+      this._publishLane(engine, myPlayer, frame, kb);
+
       // ── PREPARE ───────────────────────────────────────────────────────────
       const spike = this._chooseSpike(engine, myPlayer, frame, kb);
       if (spike === null) return this._abort("no-spike-angle");
@@ -14742,7 +14839,8 @@ window.grbtp = 35;
         turret: turret ? turret.angle : null,
         hit: hitAngle,
         score: spike.score,
-        strength: kb.strength
+        strength: kb.strength,
+        push: kb.push
       });
       if (ModuleHandler.requestPlace(ST_SPIKE_TYPE, spike.angle, this.moduleName) < 1) {
         return this._abort("spike-refused");
@@ -23142,6 +23240,14 @@ window.grbtp = 35;
     last() {
       const module = client && client._ModuleHandler && client._ModuleHandler.staticModules.spikeTick;
       return module ? module.trace : null;
+    },
+    // The ground being held for a pending tick this instant, or null when no
+    // swing is pending. `abort: "no-spike-angle"` with a lane showing means
+    // something is standing in it.
+    lane() {
+      const MH = client && client._ModuleHandler;
+      const module = MH && MH.staticModules.spikeTick;
+      return module ? module.laneAt(MH.tickCount) : null;
     }
   };
 
