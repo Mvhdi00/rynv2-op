@@ -239,13 +239,79 @@ scoped to the heal that can afford to be dropped: a heal the prediction demands
 spends whatever it needs, and only the `(tick - damageTick) > 0` recovery
 top-up is trimmed to what is left of the allowance.
 
+## Placement — scan rate and the resend ban
+
+Placement is two systems, and only one of them samples angles at all.
+
+**`RynPlacementEngine`** owns preplace and replace. It does not probe a fixed
+table: `CandidateGenerator.apertures` solves the whole ring into free arcs
+analytically, and `AngleSolver.propose` puts up angles for stated reasons —
+aperture edges, contact angles with the target now and next tick, knockback
+landing and chain directions, intents snapped onto legal ground. Angular
+precision there is exact, not 144ths; raising a step count would not touch it.
+
+**`AutoPlacer`** owns auto place, and that one does sample. Its rate is the
+**Placer resolution** setting, and the default is now **144** (2.5° steps),
+with 72 and 36 still selectable. A save written under the old 72 default is
+moved up once and stamped, so it happens only the once; a 72 set by hand after
+that stays put, and a save that already chose 36 or 144 is left alone.
+
+### The ban had to change with it
+
+The resend guard bans ground a build was sent to and the server dropped, for 18
+ticks. Luna bans the **angle** — the float, as a Map key — and that only works
+while one step is one slot. It never was:
+
+| | one step moves the build | same-slot span | neighbours inside it |
+|---|---|---|---|
+| 36 | 13.8 units | ~36° | 3 |
+| 72 | 6.9 units | ~36° | 7 |
+| 144 | 3.4 units | ~36° | 14 |
+
+A spike lands 79 units out and is 49 across, so two sends are the same ground
+until they are about 36° apart. Banning one float left every neighbour free to
+re-send the build that was just refused — and at 144 there are 14 of them.
+
+So the ban is on the ground: the world point the send was aimed at, that item
+only, for as long as the ban lasts. `_pointFree` was split out of `_canPlace`
+to ask it, which also drops the old angle-match proxy — that one re-derived the
+slot from this tick's table, and answered about somewhere else as soon as the
+player moved. This is what the engine's `PlacementMemory` already does on the
+preplace side, where the key is quantised by `2 * asin(footR / ringR)`.
+
+### Already present
+
+Everything else in the Luna preplace list was already in the client, so nothing
+was added twice:
+
+| | Where |
+|---|---|
+| Perfect angles | `_getPrePlaceAngles`, run ends over the ring — the seam pair `(last, first)` that Luna's loop skips is closed. Engine equivalent: aperture edges, scored as `packing`. |
+| Per-tick cache | `AutoPlacer._angleCache` keyed `(id, exclude, steps)`; `CandidateGenerator.cache` keyed `(profile, origin, exclude)`. |
+| Placement ladder | `isAutoPlaceAngle` carries Luna's rungs 1:1, plus the primary-knockback spike and the trap veto that protects its path. The engine scores instead of laddering. |
+| Break prediction | `PreplaceBook`; `AutoPlacer._getPrePlaceObject` is Luna's original, kept for reference. |
+| Preplace timing / spam | `_spamPrePlace`, with `RPE_MAX_RETRIES` bounding it. |
+| Knockback alignment | `_closestSpikeToKb` and `_bestPrimaryKbSpike`; `SpikeOpportunity` + the `rebound` and `primaryKb` scorer terms. |
+| LOS | `_los` → `blockFuture` / `blockEnemy`; scorer terms `mobility` (222-unit lookahead down my own path) and `sightline`. |
+| Spike tick | The π/5 back-knock test, in `_los.canSpikeTick` and as the scorer's `exposure` penalty. |
+| Packet budget | `LUNA_PLACE_COST` against `ModuleHandler.packetLimit` (119), and the scorer's `packet` term. |
+
+Two Luna rungs — `canTrapTick` and `canShamePlace` — are hardcoded `false`.
+They gate on Luna's shame-grind toggles, which this client does not have.
+
 ## Verify
 
 ```sh
 node --check Ryn_Type_2.user.js
 node tools/test-autoheal.js
+node tools/test-placer-ban.js
 ```
 
 `test-autoheal.js` lifts the heal module out of the script and runs it against
 stubs: the prediction sums, the hat terms, the shame wall at 7, the packet
 budget, and the spike-contact, walked-into, knocked-into and poison paths.
+
+`test-placer-ban.js` does the same for the placer's ring arithmetic: how a
+stored resolution snaps onto a rung, the step and same-slot geometry in the
+table above, and that a ban holds across a slot's whole span, stays with the
+item, stays where the server said no when the player walks, and expires.
