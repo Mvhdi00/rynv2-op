@@ -144,6 +144,60 @@ function check(name, expected, actual, extra = "") {
   check("and the ground is offered again", false, placer._isBanned(cfg(0)));
 }
 
+// ---- the in-flight window -------------------------------------------------
+// A send is only judged once it has had time to come back. Reading empty
+// ground under a send that is still in flight is how a build that worked gets
+// its own slot banned.
+{
+  const GRACE = 2, BAN = 18;
+  // The ban-fill loop, as postTick runs it.
+  const fill = (placer, objects, tick) => {
+    placer._tick = tick;
+    const om = stubClient(objects).ObjectManager;
+    const waiting = [];
+    for (const placed of placer._placedSlots) {
+      const age = placer._tick - placed.tick;
+      if (age < GRACE) { waiting.push(placed); continue; }
+      if (age > GRACE + 2) continue;
+      if (!placer._pointFree(placed.id, placed.x, placed.y, placed.scale, om, null)) continue;
+      placer._bannedSlots.push({ id: placed.id, x: placed.x, y: placed.y, r: placed.scale, expires: placer._tick + BAN });
+    }
+    placer._placedSlots = waiting;
+  };
+  const sent = placer => {
+    const cfg = placer._getConfig(SPIKE, { x: 0, y: 0 })(0);
+    placer._placedSlots.push({ id: SPIKE, x: cfg.x, y: cfg.y, scale: cfg.scale, tick: 0 });
+    return cfg;
+  };
+  const built = [ { id: 1, pos: { current: { x: RING, y: 0 } }, placementScale: 49 } ];
+
+  // The build lands late, on a connection slower than one tick.
+  const slow = new AutoPlacer(stubClient());
+  sent(slow);
+  fill(slow, [], 1);
+  check("tick 1: still in flight, nothing banned", 0, slow._bannedSlots.length);
+  check("tick 1: the send is still being waited on", 1, slow._placedSlots.length);
+  fill(slow, built, 2);
+  check("tick 2: it arrived, so nothing is banned", 0, slow._bannedSlots.length);
+  check("tick 2: and the send is done being tracked", 0, slow._placedSlots.length);
+
+  // The server genuinely refused it: ground is empty when the window closes.
+  const refused = new AutoPlacer(stubClient());
+  const where = sent(refused);
+  fill(refused, [], 1);
+  fill(refused, [], 2);
+  check("a refusal is banned once the window closes", 1, refused._bannedSlots.length);
+  check("and the slot is shut", true, refused._isBanned(refused._getConfig(SPIKE, { x: 0, y: 0 })(0)));
+  check("for 18 ticks from the judgement", 20, refused._bannedSlots[0].expires);
+
+  // The placer sat out; the evidence is too old to act on.
+  const stale = new AutoPlacer(stubClient());
+  sent(stale);
+  fill(stale, [], 9);
+  check("stale evidence is dropped unjudged", 0, stale._bannedSlots.length);
+  check("and not kept waiting either", 0, stale._placedSlots.length);
+}
+
 // ---- _pointFree: the test that decides whether a send landed --------------
 {
   const cfgOf = (placer, id) => placer._getConfig(id, { x: 0, y: 0 });

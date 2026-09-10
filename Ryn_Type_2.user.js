@@ -10177,6 +10177,25 @@ window.grbtp = 35;
   // footprint argument, arrived at from the other direction.
   const LUNA_BAN_TICKS = 18;
 
+  // How long a send is given to come back before the ground under it is read
+  // as refused.
+  //
+  // "Still empty next tick" is not "refused" — it is also every build that has
+  // not finished its round trip. A place goes out on tick N, the server adds
+  // the object, and the add packet lands back here at about one ping later: at
+  // 100ms that is inside tick N+1, at 250ms it is not. So on a bad connection
+  // the tick after a *successful* build reads the ground as empty.
+  //
+  // Luna's angle-keyed ban could afford to be wrong about that — one float out
+  // of the table, and the angle 2.5 deg over still built. A ban on the ground
+  // cannot: it holds the whole slot, so a false positive locks a slot that
+  // just built successfully out of being rebuilt for the rest of the 18 ticks,
+  // which is exactly the case replace exists for.
+  //
+  // Two ticks, which is what the engine already gives its own hard claim in
+  // ModuleHandler._notePlacement, and covers a round trip up to ~222ms.
+  const LUNA_BAN_GRACE_TICKS = 2;
+
   // How many builds the trapped fallback below is allowed to queue in one
   // tick. Every free angle would be five packets each and would empty the
   // resource bar for ground I cannot use until I am out of the trap; three is
@@ -10768,26 +10787,42 @@ window.grbtp = 35;
       this._spamPrePlacer = false;
       if (ModuleHandler.packetCount >= ModuleHandler.packetLimit) return;
 
-      // Not Luna's: ground we built on last tick that is still empty this tick
-      // is ground the server refused. Sit it out rather than spend the tick's
-      // packets on it again.
+      // Not Luna's: ground we built on that is still empty once the send has
+      // had time to come back is ground the server refused. Sit it out rather
+      // than spend the tick's packets on it again.
       //
       // Asked of the remembered landing point rather than of the angle that
       // produced it. Luna matches `Math.abs(a.angle - placed) < .01` against
       // this tick's table, which answers a different question every time I
       // move — and at 144 the angle either side of the match is the same slot
       // anyway, so the answer was never the one being banned.
-      for (const placed of this._placedSlots) {
-        if (!this._pointFree(placed.id, placed.x, placed.y, placed.scale, ObjectManager2, null)) continue;
-        this._bannedSlots.push({
-          id: placed.id,
-          x: placed.x,
-          y: placed.y,
-          r: placed.scale,
-          expires: this._tick + LUNA_BAN_TICKS
-        });
+      //
+      // A send younger than the grace window is not judged yet: it is still in
+      // flight, and reading empty ground under it as a refusal is how a build
+      // that worked gets its own slot banned.
+      {
+        const waiting = [];
+        for (const placed of this._placedSlots) {
+          const age = this._tick - placed.tick;
+          if (age < LUNA_BAN_GRACE_TICKS) {
+            waiting.push(placed);
+            continue;
+          }
+          // Past the window the evidence is stale — the placer sat out a few
+          // ticks and the ground has moved on — so the send is dropped
+          // unjudged rather than banning somewhere on old information.
+          if (age > LUNA_BAN_GRACE_TICKS + 2) continue;
+          if (!this._pointFree(placed.id, placed.x, placed.y, placed.scale, ObjectManager2, null)) continue;
+          this._bannedSlots.push({
+            id: placed.id,
+            x: placed.x,
+            y: placed.y,
+            r: placed.scale,
+            expires: this._tick + LUNA_BAN_TICKS
+          });
+        }
+        this._placedSlots = waiting;
       }
-      this._placedSlots = [];
 
       // ────────────────────────────────────────────────────────────────────
       // AUTO PLACER — Luna updateAngles + isAutoPlaceAngle
@@ -10938,14 +10973,16 @@ window.grbtp = 35;
           type: type
         });
         ModuleHandler.moduleActive = true;
-        // The whole build, not just its angle: next tick asks whether *this
-        // ground* is still empty, and the point is what answers that once I
-        // have moved off the ring position that produced it.
+        // The whole build, not just its angle: the ban check asks whether
+        // *this ground* is still empty, and the point is what answers that
+        // once I have moved off the ring position that produced it. The tick
+        // rides along so the check knows how long the send has had.
         this._placedSlots.push({
           id: obj.id,
           x: obj.x,
           y: obj.y,
-          scale: obj.scale
+          scale: obj.scale,
+          tick: this._tick
         });
       };
 
