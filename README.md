@@ -177,3 +177,75 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# Ryn Type 2
+
+`Ryn_Type_2.user.js` is a separate script from the mix above — a standalone
+client, not a build product of `tools/build-reup.js`.
+
+## Auto Heal — novastorm 1.4
+
+The auto heal is novastorm 1.4's, running on Ryn Type 2's packets, ticks and
+variables. It is a prediction, not a reaction: every tick it sums what could
+land on *this* tick and eats before it does.
+
+```
+totalDmgPot = spikeDmgPot + hitDmgPot + turretDmgPot + secDmgPot + poisonDmgPot
+if (totalDmgPot > 140) totalDmgPot = 140;
+if (totalDmgPot >= 100) soldierAnti = true;
+...
+hatFc();
+if (currentHat == 6) totalDmgPot *= 0.75;
+if (currentHat == 7) totalDmgPot += 5;
+if (myPlayer.health <= totalDmgPot) healing = true;
+if (((healing && myPlayer.shameCount < 7) || (tick - damageTick) > 0)
+    && myPlayer.health < 100) heal(100 - myPlayer.health);
+```
+
+The five terms are spike contact while trapped, spikes we are walking or being
+knocked into, weapon hits that have a reason to connect, turret and ranged
+secondary shots from a reloaded enemy, and poison on its 9-tick cycle — plus
+the spike-ring test, which asks whether an enemy can drop a spinning spike
+under us and hit us on the same tick.
+
+**What it replaced.** A port of Misery's heal, which is a fork of this same
+estimator with three additions. All three are gone:
+
+| Removed | Why |
+|---|---|
+| Early spike-push heal | A second heal call ahead of the tick's other packets, fired on `spikeDangerNow` before the hat terms. novastorm has one heal site, after `hatFc`, and reaches the same push through `spikeDmgPot` inside the one sum. |
+| Survival Preheal | Let a lethal prediction spend +1 shame to eat at `shameCount` 7. novastorm never crosses 7; a shamed tick waits for `(tick - damageTick) > 0`. The menu toggle and the `_survivalPreheal` setting went with it. |
+| Extra soldier trigger | `spikeDangerNow && totalDmgPot >= health` put soldier on below 100 predicted. novastorm's threshold is the flat `totalDmgPot >= 100`. |
+
+The in-flight projectile term went too. Ryn's `ProjectileManager` knows what is
+already in the air and Misery added that as a sixth summand; novastorm's sum
+has five terms and no equivalent, so a shot already flying is now only healed
+for once the enemy that fired it reads as reloaded. `ProjectileManager` is
+still read for attribution — telling a turret bolt apart from a spike tier is
+what fills `damagesByTurrets`.
+
+**What stayed on Ryn's side.** One module slot (`antiInsta`) in the same tick
+position; food out through `ModuleHandler.heal()` under the 119 packet/s
+budget, with `healedOnce` making `UpdateAngle` resend the direction — which is
+novastorm's `io.send("D", angle)` after a heal; the `shameActive` guard, so
+food is never spent while the server is refusing it; shame accounting where Ryn
+keeps it, in `Player.updateHealth`. `soldierAnti` and `shouldResetShame` leave
+the module for the hat systems, as they do in novastorm's `hatFc`.
+
+The packet budget is the one thing novastorm has no equivalent for, so it is
+scoped to the heal that can afford to be dropped: a heal the prediction demands
+spends whatever it needs, and only the `(tick - damageTick) > 0` recovery
+top-up is trimmed to what is left of the allowance.
+
+## Verify
+
+```sh
+node --check Ryn_Type_2.user.js
+node tools/test-autoheal.js
+```
+
+`test-autoheal.js` lifts the heal module out of the script and runs it against
+stubs: the prediction sums, the hat terms, the shame wall at 7, the packet
+budget, and the spike-contact, walked-into, knocked-into and poison paths.
