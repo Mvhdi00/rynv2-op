@@ -442,6 +442,126 @@ console.log("\n  FALLBACK — one bad server is not the end of the attempt\n");
       "the handshake flag is read BEFORE close() clears it, or every drop would look pre-handshake");
 }
 
+/* The Turnstile token. The console this was reported from showed
+ *
+ *   [Cloudflare Turnstile] Turnstile has already been rendered in this
+ *   container. The render attempt was rejected.
+ *
+ * which is two things rendering into #turnstileWidget: the page's own 150ms
+ * loop, and the client. Turnstile keys that on the container ELEMENT and
+ * returns undefined rather than throwing, so whichever arrived second got
+ * nothing. The fix is to stop competing — onGotTurnstileToken is a global, so
+ * the page's own token can simply be captured. */
+console.log("\n  TOKEN — take the page's, do not race it for the container\n");
+
+/* Collected here and awaited at the end of the file, because the token path is
+ * promise-based and has to be RUN. Three mutations slipped past a textual
+ * version of these checks — removing the early return, removing the wait, and
+ * removing the re-wrap guard all leave the identifiers in place. */
+const tokenChecks = (async function () {
+  const capture = /\(function captureOwnersToken\(\) \{[\s\S]*?\}\)\(\);/.exec(src);
+  say(!!capture, "the client wraps window.onGotTurnstileToken to capture the page's token");
+
+  const ownWidget = slice("function oracleRenderOwnWidget() {", "oracleRenderOwnWidget");
+  say(!/getElementById\("turnstileWidget"\)/.test(ownWidget),
+      "and its fallback widget never renders into #turnstileWidget — that container is the " +
+      "page's, and rendering into it is what produced the rejection");
+  say(/createElement\("div"\)/.test(ownWidget), "it makes a container of its own instead");
+
+  const get = slice("function oracleTurnstileToken() {", "oracleTurnstileToken");
+
+  /* A world with a clock we drive by hand, so the wait is measurable rather
+   * than real, and a Turnstile that answers instantly when asked. */
+  function tokenWorld({ captured = null, pageAnswersAfterMs = null } = {}) {
+    const state = { rendered: 0, logs: [], timers: [] };
+    const tbox = {
+      console: { warn() {}, log() {} }, Promise, Array, JSON,
+      ORACLE_SITEKEY: "sk", ORACLE_TOKEN_WAIT_MS: 12000,
+      document: {
+        createElement: () => ({ style: {}, id: "" }),
+        getElementById: () => ({ style: {}, id: "", parentNode: null }),
+        body: { appendChild() {} },
+      },
+      window: { turnstile: { render(el, o) { state.rendered++; o.callback("FALLBACK"); return "w1"; } } },
+      setInterval: (fn, ms) => { state.timers.push({ fn, ms }); return state.timers.length; },
+      clearInterval: id => { state.timers[id - 1] = null; },
+      setTimeout: () => 0, clearTimeout: () => {},
+      __logs: state.logs,
+    };
+    vm.createContext(tbox);
+    vm.runInContext(
+      "let oracleCapturedToken = " + JSON.stringify(captured) + ";\n" +
+      "const oracleLog = function(){ __logs.push(Array.prototype.slice.call(arguments).join(' ')); };\n" +
+      ownWidget + "\n" + get +
+      "\nthis.get = oracleTurnstileToken;" +
+      "\nthis.setCaptured = function(t){ oracleCapturedToken = t; };", tbox);
+
+    const promise = tbox.get();
+    let elapsed = 0;
+    for (let i = 0; i < 400; i++) {
+      const t = state.timers.find(x => x);
+      if (!t) break;
+      elapsed += t.ms;
+      if (pageAnswersAfterMs !== null && elapsed >= pageAnswersAfterMs) tbox.setCaptured("PAGE");
+      t.fn();
+      if (elapsed > 60000) break;
+    }
+    return { promise, state, elapsed };
+  }
+
+  {
+    const w = tokenWorld({ captured: "PAGE" });
+    say((await w.promise) === "PAGE", "a token already captured is used as-is");
+    say(w.state.rendered === 0, "and nothing is rendered (" + w.state.rendered + " renders)");
+  }
+  {
+    const w = tokenWorld({ pageAnswersAfterMs: 1000 });
+    say((await w.promise) === "PAGE", "a token the page produces during the wait is used");
+    say(w.state.rendered === 0, "and still nothing of ours is rendered");
+  }
+  {
+    const w = tokenWorld({});
+    say((await w.promise) === "FALLBACK", "with no page token the fallback widget is used");
+    say(w.state.rendered === 1, "exactly one fallback render (" + w.state.rendered + ")");
+    say(w.elapsed >= 12000, "and only after the full wait, not at once (" + w.elapsed + "ms)");
+  }
+
+  /* The wrapper itself: a token handed to the page's global must reach the
+   * client AND still reach the page's own handler, or the page's Play button
+   * never lights up. */
+  const box = { console: { log() {} }, window: {}, setInterval: () => 0, clearInterval: () => {}, Array };
+  vm.createContext(box);
+  vm.runInContext(
+    "let oracleCapturedToken = null;\n" +
+    "let oracleLog = function(){};\n" +
+    "window.onGotTurnstileToken = function(t){ window.__pageSaw = t; window.__pageCalls = (window.__pageCalls||0)+1; };\n" +
+    capture[0] +
+    "\nthis.fire = function(t){ window.onGotTurnstileToken(t); };" +
+    "\nthis.captured = function(){ return oracleCapturedToken; };" +
+    "\nthis.pageSaw = function(){ return window.__pageSaw; };" +
+    "\nthis.rewrap = function(){ " + capture[0] + " };" +
+    "\nthis.countCaptures = function(){ oracleLog = function(){ this.__n = (this.__n||0)+1; }.bind(this); this.__n = 0; };" +
+    "\nthis.captures = function(){ return this.__n; };", box);
+
+  box.fire("TOK-1");
+  say(box.captured() === "TOK-1", "a token given to the page's global is captured by the client");
+  say(box.pageSaw() === "TOK-1",
+      "and still reaches the page's own handler, so its Play button lights up as usual");
+
+  /* Wrapping twice must not double-wrap. The re-wrap runs on an interval so
+   * either load order works, and without the guard each pass adds a layer. A
+   * chain still delivers the token, so "did it arrive" cannot see it — count
+   * the layers that ran instead, which is one capture each. */
+  box.rewrap(); box.rewrap(); box.rewrap();
+  box.countCaptures();
+  box.fire("TOK-2");
+  say(box.captured() === "TOK-2" && box.pageSaw() === "TOK-2",
+      "after three re-wraps the token still reaches both the client and the page");
+  say(box.captures() === 1,
+      "and exactly one wrapper ran — the guard stops a chain building up (" +
+      box.captures() + " layers)");
+})();
+
 // ── 5. the old protocol is really gone ────────────────────────────────────
 console.log("\n  NO GHOSTS\n");
 {
@@ -465,7 +585,12 @@ console.log("\n  NO GHOSTS\n");
   say(!src.includes("rawgit.com"), "the dead rawgit @require is gone (the host shut down in 2019)");
 }
 
-console.log("\n  Not covered: the live server accepting the connection, and Cloudflare");
-console.log("  issuing a token. Oracle does not boot in this harness.");
-console.log("\n  " + (bad ? bad + " assertion(s) failed" : "all assertions hold"));
-process.exit(bad ? 1 : 0);
+tokenChecks.then(() => {
+  console.log("\n  Not covered: the live server accepting the connection, and Cloudflare");
+  console.log("  issuing a token. Oracle does not boot in this harness.");
+  console.log("\n  " + (bad ? bad + " assertion(s) failed" : "all assertions hold"));
+  process.exit(bad ? 1 : 0);
+}).catch(e => {
+  console.log("\n  FAIL  the token checks threw: " + (e && e.message));
+  process.exit(1);
+});

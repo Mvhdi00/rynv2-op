@@ -8708,6 +8708,9 @@ else {
             : "https://api.moomoo.io") + "/servers?v=1.27";
         const ORACLE_BASE_URL = "moomoo.io";
         const ORACLE_SITEKEY = "0x4AAAAAAAMYHI96GFiJzMmp";
+        // How long to let the page's own challenge answer before rendering one
+        // of our own. Turnstile normally solves in well under this.
+        const ORACLE_TOKEN_WAIT_MS = 12000;
 
         // `?server=<region>:<name>`, the same query the game reads.
         function oracleParseServerQuery() {
@@ -8765,15 +8768,58 @@ else {
             return pool;
         }
 
-        /* A Cloudflare Turnstile token, which the server now requires. The
-         * widget is rendered into the page's own #turnstileWidget when it is
-         * there and free, and into a holder of ours otherwise.
+        const oracleLog = function () {
+            // Deliberately unconditional. A connection that fails silently
+            // cannot be diagnosed from a screenshot, and this one has had to be
+            // twice already.
+            try { console.log.apply(console, ["[Oracle]"].concat(Array.prototype.slice.call(arguments))); }
+            catch (e) {}
+        };
+
+        /* ── the Turnstile token ────────────────────────────────────────────
          *
-         * Turnstile keys "already rendered" on the container ELEMENT and
-         * returns undefined rather than throwing when it rejects a second
-         * render, so a container the page has already used is replaced with a
-         * fresh node rather than merely emptied. */
-        function oracleTurnstileToken() {
+         * Take the page's OWN token rather than rendering a competing widget.
+         *
+         * onGotTurnstileToken is a global — the bundle does
+         *
+         *     window.onGotTurnstileToken = function(e){ ue = e, ... }
+         *
+         * so wrapping it captures whatever the page's own challenge produces,
+         * for free, with nothing rendered by us at all.
+         *
+         * The previous version always rendered its own widget into
+         * #turnstileWidget. The page renders into the same container on a 150ms
+         * loop, and Turnstile keys "already rendered" on the container ELEMENT
+         * and returns undefined rather than throwing — so whichever of the two
+         * got there second was rejected, which is the
+         *
+         *     [Cloudflare Turnstile] Turnstile has already been rendered in
+         *     this container. The render attempt was rejected.
+         *
+         * in the console. Capturing removes the competition instead of trying
+         * to win it. Rendering our own is kept, but only as the fallback for a
+         * page whose own challenge never produced anything. */
+        let oracleCapturedToken = null;
+        (function captureOwnersToken() {
+            const wrap = () => {
+                const prev = window.onGotTurnstileToken;
+                if (prev && prev.__oracleWrapped) return;
+                const fn = function (t) {
+                    oracleCapturedToken = t;
+                    oracleLog("captured the page's Turnstile token");
+                    if (typeof prev === "function") return prev.apply(this, arguments);
+                };
+                fn.__oracleWrapped = true;
+                window.onGotTurnstileToken = fn;
+            };
+            wrap();
+            // The bundle may assign its handler after this script runs, which
+            // would drop the wrapper. Re-wrap for a while so either order works.
+            let n = 0;
+            const t = setInterval(() => { wrap(); if (++n > 60) clearInterval(t); }, 250);
+        })();
+
+        function oracleRenderOwnWidget() {
             return new Promise(function (resolve) {
                 const ts = window.turnstile;
                 if (!ts || typeof ts.render !== "function") {
@@ -8783,20 +8829,20 @@ else {
                     resolve(null);
                     return;
                 }
-                let holder = document.getElementById("turnstileWidget");
-                if (holder && holder.parentNode) {
-                    const fresh = holder.cloneNode(false);
-                    holder.parentNode.replaceChild(fresh, holder);
-                    holder = fresh;
-                } else {
-                    holder = document.createElement("div");
-                    holder.style.cssText = "position:fixed;right:8px;bottom:8px;z-index:2147483647;";
-                    (document.body || document.documentElement).appendChild(holder);
-                }
+                // Our own holder, never the page's container: rendering into
+                // #turnstileWidget is what caused the rejection above.
+                const holder = document.createElement("div");
+                holder.id = "oracleTurnstile";
+                holder.style.cssText = "position:fixed;right:8px;bottom:8px;z-index:2147483647;";
+                (document.body || document.documentElement).appendChild(holder);
                 let done = false;
                 const finish = t => { if (!done) { done = true; resolve(t); } };
-                const timer = setTimeout(() => finish(null), 20000);
+                const timer = setTimeout(() => {
+                    oracleLog("our own Turnstile widget timed out");
+                    finish(null);
+                }, 20000);
                 try {
+                    oracleLog("rendering our own Turnstile widget as a fallback");
                     ts.render(holder, {
                         sitekey: ORACLE_SITEKEY,
                         theme: "light",
@@ -8806,8 +8852,34 @@ else {
                     });
                 } catch (e) {
                     clearTimeout(timer);
+                    oracleLog("our own Turnstile render threw:", e && e.message);
                     finish(null);
                 }
+            });
+        }
+
+        /* Wait for the page's own token, then fall back to our own widget. */
+        function oracleTurnstileToken() {
+            if (oracleCapturedToken) {
+                oracleLog("using the page's Turnstile token");
+                return Promise.resolve(oracleCapturedToken);
+            }
+            return new Promise(function (resolve) {
+                let waited = 0;
+                const poll = setInterval(function () {
+                    if (oracleCapturedToken) {
+                        clearInterval(poll);
+                        oracleLog("using the page's Turnstile token");
+                        resolve(oracleCapturedToken);
+                        return;
+                    }
+                    waited += 250;
+                    if (waited < ORACLE_TOKEN_WAIT_MS) return;
+                    clearInterval(poll);
+                    oracleLog("the page produced no Turnstile token in " +
+                        (ORACLE_TOKEN_WAIT_MS / 1000) + "s");
+                    oracleRenderOwnWidget().then(resolve);
+                }, 250);
             });
         }
 
@@ -8846,20 +8918,38 @@ else {
             if (oracleConnecting) return;
             oracleConnecting = true;
             try {
+                oracleLog("host", location.hostname, "| server list", ORACLE_API);
                 const list = await fetch(ORACLE_API).then(r => r.json());
-                if (!Array.isArray(list) || !list.length) throw new Error("empty server list");
+                if (!Array.isArray(list)) {
+                    throw new Error("server list is not an array (got " + typeof list + ")");
+                }
+                if (!list.length) throw new Error("server list is empty");
+                oracleLog("server list:", list.length, "entries");
                 oracleCandidates = oracleRankServers(list);
-                if (!oracleCandidates.length) throw new Error("no usable server in the list");
+                if (!oracleCandidates.length) {
+                    // Naming a real record is what makes this diagnosable: the
+                    // ranking drops anything without region/key, and a shape
+                    // change in the API is exactly the sort of thing that
+                    // empties the list without any error.
+                    throw new Error("no usable server in the list; first entry was " +
+                        JSON.stringify(list[0]).slice(0, 200));
+                }
                 oracleTries = 0;
                 oracleToken = await oracleTurnstileToken();
+                if (!oracleToken) {
+                    oracleLog("connecting WITHOUT a token — the server will very likely refuse");
+                }
                 const server = oracleCandidates.shift();
                 let address = "wss://" + oracleServerHost(server);
                 if (oracleToken) address += "?token=" + encodeURIComponent("cf:" + oracleToken);
                 wsAddress = address;
+                oracleLog("connecting to", oracleServerHost(server),
+                    "| token:", oracleToken ? "yes" : "NO",
+                    "| fallbacks left:", oracleCandidates.length);
                 connectSocket(address);
             } catch (e) {
                 oracleConnecting = false;          // retryable, always
-                console.error("[Oracle] could not start a connection:", e && e.message);
+                console.error("[Oracle] could not start a connection:", e && e.message, e);
                 try { showLoadingText("Connection failed"); } catch (_) {}
             }
         }
@@ -9149,6 +9239,7 @@ else {
         function oracleStart() {
             if (oracleStart.done) return;
             oracleStart.done = true;
+            oracleLog("starting");
             try { showLoadingText("Connecting..."); } catch (e) {}
             oracleConnect();
         }
@@ -9170,6 +9261,9 @@ else {
             // real disconnect, a drop before it means this server never
             // answered and the next candidate is worth trying.
             const hadHandshake = oracleHandshake;
+            oracleLog("disconnected:", reason,
+                "| handshake had completed:", hadHandshake,
+                "| fallbacks left:", oracleCandidates.length);
             io.close();
             // The connect guard has to come off too, or the retry below is the
             // one thing that can never happen.
@@ -19535,6 +19629,10 @@ else {
                         var data = parsed[1];
 
                         if (type === "io-init") {
+                            try {
+                                console.log("[Oracle] io-init: socketId", data[0],
+                                    "| signed:", data[3] === RevTransport.encryptedMode);
+                            } catch (e) {}
                             _this.socketId = data[0];
                             oracleNet = oracleNetInit(data);
                             oracleHandshake = true;

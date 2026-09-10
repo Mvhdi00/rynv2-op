@@ -685,7 +685,7 @@ skipped rather than thrown; the host formula matches the game's; and a second
 io-init rebuilds the session with the new key, the new table and the sequence
 restarted.
 
-30 mutations, all caught. Four were missed on the first run and all four were
+36 mutations, all caught. Six were missed on the first run and all six were
 bench faults worth recording, because each is a way a green check can be
 worthless:
 
@@ -702,7 +702,18 @@ worthless:
   the socket host, so it passed a client that dialled a port nothing listens on.
   That is the bug users saw as "Socket error" then "disconnected". The
   expectation is now lifted from the game's own `serverAddress`, because one
-  copied from the same misreading as the code cannot catch the misreading.
+  copied from the same misreading as the code cannot catch the misreading;
+* the token section **pattern-matched what it should have run**. Removing the
+  captured-token preference, removing the wait before the fallback, and removing
+  the re-wrap guard all leave their identifiers in the file, so `/name/.test()`
+  stayed green through every one. That section now drives the real promise
+  against a hand-driven clock.
+
+One mutation was also **withdrawn rather than chased**: deleting the fast-path
+early return in `oracleTurnstileToken` changes nothing observable, because the
+poll's own check finds the captured token on its first tick. A mutation that
+does not change behaviour is a bad mutation, not a missed one, so it was
+replaced with the one that does — removing the preference the poll relies on.
 
 ### `login-latch.js` and `login-latch-mutate.py`
 

@@ -109,12 +109,32 @@ MUTATIONS = [
      "            if (oracleTries >= ORACLE_MAX_TRIES || !oracleCandidates.length) return;",
      "            if (!oracleCandidates.length) return;"),
     ("the handshake flag is read after close() has cleared it",
-     "            const hadHandshake = oracleHandshake;\n            io.close();",
-     "            io.close();\n            const hadHandshake = oracleHandshake;"),
+     "            const hadHandshake = oracleHandshake;\n            oracleLog(\"disconnected:\", reason,",
+     "            oracleLog(\"disconnected:\", reason,"),
     ("the retry drops the token from the address",
      '            if (oracleToken) address += "?token=" + encodeURIComponent("cf:" + oracleToken);\n'
      '            try { showLoadingText("Connecting..."); } catch (e) {}',
      '            try { showLoadingText("Connecting..."); } catch (e) {}'),
+    # ── the token ──────────────────────────────────────────────────────────
+    ("the client stops capturing the page's token",
+     "                    oracleCapturedToken = t;\n", ""),
+    ("the wrapper swallows the page's own handler",
+     '                    if (typeof prev === "function") return prev.apply(this, arguments);\n', ""),
+    ("the fallback widget renders into the page's container again",
+     '                const holder = document.createElement("div");\n'
+     '                holder.id = "oracleTurnstile";',
+     '                const holder = document.getElementById("turnstileWidget");'),
+    ("the page's token is ignored and a widget is always rendered",
+     "                    if (oracleCapturedToken) {\n"
+     "                        clearInterval(poll);\n"
+     '                        oracleLog("using the page\'s Turnstile token");\n'
+     "                        resolve(oracleCapturedToken);\n"
+     "                        return;\n                    }\n", ""),
+    ("the page is given no time to answer before we render",
+     "                    if (waited < ORACLE_TOKEN_WAIT_MS) return;",
+     "                    if (false) return;"),
+    ("re-wrapping chains wrappers without a guard",
+     "                if (prev && prev.__oracleWrapped) return;\n", ""),
     # ── the ghosts ─────────────────────────────────────────────────────────
     ("the transport block is removed but the client still calls it",
      "const RevTransport = (function () {", "const RevTransportX = (function () {"),

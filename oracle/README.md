@@ -139,6 +139,43 @@ three tries; one that fails **after** io-init is a real disconnect and is left
 alone. A single pick that fails is indistinguishable from "the game is down",
 which is not usually what has happened.
 
+### The captcha: take the page's token, do not race it
+
+The console reported:
+
+```
+[Cloudflare Turnstile] Turnstile has already been rendered in this container.
+The render attempt was rejected.
+```
+
+That is two things rendering into `#turnstileWidget`: the page's own 150ms
+retry loop, and the client. Turnstile keys "already rendered" on the container
+**element** and returns `undefined` rather than throwing, so whichever arrived
+second got nothing back.
+
+Fighting for the container is the wrong shape of fix. `onGotTurnstileToken` is
+a **global** —
+
+```js
+window.onGotTurnstileToken = function(e){ ue = e, ... }
+```
+
+— so wrapping it captures whatever the page's own challenge produces, with
+nothing rendered by us at all. The wrapper still calls the page's original
+handler, so the page's own Play button lights up exactly as before, and it is
+idempotent so the re-wrap timer cannot build a chain of layers.
+
+Rendering our own widget is kept, but only as a fallback for a page whose
+challenge never answers — and into a container of ours, never `#turnstileWidget`.
+
+### It says what it is doing now
+
+The first two rounds of this fix could not be diagnosed from a screenshot,
+because the client logged nothing on the way to failing. Every step now prints:
+the host and the API it is using, how many servers came back, which one it
+chose, whether it has a token, how many fallbacks remain, the `io-init` it
+received, and the reason for any disconnect.
+
 And the captcha: the block at the top of the file waited for `#altcha_iframe`
 and clicked `#altcha_checkbox`. **moomoo replaced altcha with Cloudflare
 Turnstile**, so neither element exists. Every use was guarded, so it never
