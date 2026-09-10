@@ -113,10 +113,78 @@ but nothing in the client needs it. It is stripped from the build.
 
 ---
 
+## Spike Tick (`Ryn_Type_2.user.js`)
+
+Spike, bull hat, hit and turret as one transaction on one tick, added to the
+existing placement engine rather than beside it. Combat → Placement → **Spike
+Tick**, with a **Spike Tick Turret** sub-toggle.
+
+It is a module (`spikeTick`) in `ModuleHandler.modules`, sitting fifth so it
+gets first refusal among the tick/sync family, and it is in
+`LUNA_TICK_OWNER_MODULES` so auto place stands aside on a tick it claims — for
+that tick only, because `activeModule` is recomputed every tick. It owns no
+scan, no scheduler, no packet path and no prediction of its own: the target is
+`EnemyManager.nearestEnemy`, the world sweep and the one-tick prediction are the
+placement engine's memoised frame, legality is its aperture solver, the chain
+evaluation is `SpikeOpportunity`, and the wire is `requestPlace` / `forceHat` /
+`shouldAttack`.
+
+### What the protocol allows, and what it does not
+
+Read out of `src/game_index.js`:
+
+- `O.send` is synchronous, one frame per call, monotonically sequenced. N sends
+  in one JS turn arrive in order and all land before the server's next tick.
+  That is the only batching the protocol has, and no delay is needed anywhere.
+- `Player.buildItem` places at `this.dir` — which the attack packet's angle sets
+  — then resets `buildIndex = -1`. One select+attack pair places one item.
+- `Player.update` runs `gather()` only while `buildIndex < 0`, so the swing must
+  follow the builds, which that reset guarantees server-side.
+- `gather()` reads `skin.dmgMultO` **when it resolves, on the server's tick** —
+  so the bull hat may be equipped in the same burst as the swing, as long as it
+  precedes it. `autoHat` already runs after every placement module and before
+  `updateAttack`, so the wire order falls out of the existing pipeline:
+
+  ```
+  z(spike) F(1,spikeAng) F(0) z(weapon)     SPIKE
+  z(17)    F(1,turAng)   F(0) z(weapon)     TURRET (building)
+  c(0,7,0)                                  BULL HAT
+  [z(weapon)] F(1,hitAng) F(0)              HIT
+  D(hitAng)
+  ```
+
+Two things the game does **not** allow, and the client says so rather than
+faking them:
+
+- **The turret gear cannot share the tick.** Hat 53 is the turret that deals
+  damage, and there is one hat slot, which the bull hat holds while the swing
+  resolves. `reload[2]` counts up regardless of hat, so the gear goes on the
+  *next* tick and fires on the one after — the tightest the slot allows, and the
+  same two-step `SpikeSync` and `VelocityTick` already use.
+- **The turret building cannot form a pocket with the spike.** Its ring is
+  `35+43-5 = 73` against the spike's `82`, and `checkItemLocation` refuses a
+  build within `43+52 = 95` of the spike — which on those rings means ~79° of
+  angular separation, while a spike that ends the push must be within 60° of it.
+  The turret is pushed to the flank by arithmetic. It is still placed, on the
+  closest legal flank, because it narrows the retreat now and shoots them from
+  2200ms on; it is not described as walling anything.
+
+### Tests
+
+```sh
+node tools/test-spiketick.js
+```
+
+55 checks over the scenarios in the brief — stationary / slow / fast targets,
+trap and spike geometry, every placement route, bull owned and not, turret
+available and not, target lost before execution, duplicate prevention, and a
+geometry sweep asserting the turret never overlaps or shadows the spike.
+
 ## Layout
 
 ```
-ReUp_Mix.user.js          the build output — this is the script to install
+Ryn_Type_2.user.js        the Type 2 client — this is the script to install
+ReUp_Mix.user.js          the earlier Luna x RYN build
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
@@ -125,6 +193,7 @@ src/game_vendor.js        game bundle: msgpack codec, polyfills
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
+tools/test-spiketick.js   Spike Tick transaction tests
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 ```
 
