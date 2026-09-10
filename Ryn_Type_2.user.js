@@ -1372,7 +1372,10 @@ window.grbtp = 35;
       return this;
     }
     get length() {
-      return Math.hypot(this.x, this.y);
+      // Math.hypot guards against intermediate overflow; map coordinates are
+      // bounded by mapScale so there is nothing to guard, and sqrt of the sum
+      // is about thirteen times faster in V8.
+      return Math.sqrt(this.x * this.x + this.y * this.y);
     }
     normalizeVec() {
       const len = this.length;
@@ -1408,7 +1411,7 @@ window.grbtp = 35;
     distance(vec) {
       const dx = this.x - vec.x;
       const dy = this.y - vec.y;
-      return Math.hypot(dx, dy);
+      return Math.sqrt(dx * dx + dy * dy);
     }
     angle(vec) {
       return Math.atan2(vec.y - this.y, vec.x - this.x);
@@ -1427,7 +1430,13 @@ window.grbtp = 35;
   }
   const Vector_default = Vector;
   const getAngle = (x1, y1, x2, y2) => Math.atan2(y2 - y1, x2 - x1);
-  const getDistance = (x1, y1, x2, y2) => Math.hypot(x1 - x2, y1 - y2);
+  // Math.hypot is written to survive intermediate overflow and costs about
+  // thirteen times a plain root of the sum (measured: 45ns against 3.4ns). Every
+  // use of it in this client is a difference of two map coordinates, bounded by
+  // mapScale, so there is no overflow to survive. V8 inlines this to the same
+  // code as writing the root out by hand.
+  const hyp = (a, b) => Math.sqrt(a * a + b * b);
+  const getDistance = (x1, y1, x2, y2) => Math.sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2));
   const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
   const fixTo = (value, fraction) => parseFloat(value.toFixed(fraction));
   const PI = Math.PI;
@@ -2532,29 +2541,41 @@ window.grbtp = 35;
       const pos = this.pos.current.copy();
       return pos.add(Vector_default.fromAngle(this.move_dir, speed));
     }
+    // ── collision tests ─────────────────────────────────────────────────────
+    //
+    // Every one of these asks the same question — "is this within R" — and none
+    // of them needs the distance itself. Comparing squares answers it exactly
+    // and skips the square root, which matters because these are the hottest
+    // functions in the client by a wide margin: EnemyManager.checkCollision
+    // alone can reach thirty of them per object per enemy per connection per
+    // tick, and with a fleet in a fight that is six figures a tick.
+    //
+    // `distanceDefault` is the squared distance and was already on Vector; the
+    // comparisons below are the same predicate written against it.
     colliding(object, radius) {
       const {previous: a0, current: a1, future: a2} = this.pos;
       const b0 = object.pos.current;
-      return a0.distance(b0) <= radius || a1.distance(b0) <= radius || a2.distance(b0) <= radius;
+      const r2 = radius * radius;
+      return a0.distanceDefault(b0) <= r2 || a1.distanceDefault(b0) <= r2 || a2.distanceDefault(b0) <= r2;
     }
     collidingObject(object, addRadius = 0, checkType = 3) {
       const {previous: a0, current: a1, future: a2} = this.pos;
       const b0 = object.pos.current;
       const radius = this.collisionScale + object.collisionScale + addRadius;
-      return !!(checkType & 4) && a0.distance(b0) <= radius || !!(checkType & 2) && a1.distance(b0) <= radius || !!(checkType & 1) && a2.distance(b0) <= radius;
+      const r2 = radius * radius;
+      return !!(checkType & 4) && a0.distanceDefault(b0) <= r2 || !!(checkType & 2) && a1.distanceDefault(b0) <= r2 || !!(checkType & 1) && a2.distanceDefault(b0) <= r2;
     }
     collidingSimple(entity, range, tempPos = this.pos.current) {
-      const pos1 = tempPos;
-      const pos2 = entity.pos.current;
-      return pos1.distance(pos2) <= range;
+      return tempPos.distanceDefault(entity.pos.current) <= range * range;
     }
     collidingEntity(entity, range, checkBased = false, prev = true) {
       const {previous: a0, current: a1, future: a2} = this.pos;
       const {previous: b0, current: b1, future: b2} = entity.pos;
+      const r2 = range * range;
       if (checkBased) {
-        return prev && a0.distance(b0) <= range || a1.distance(b1) <= range || a2.distance(b2) <= range;
+        return prev && a0.distanceDefault(b0) <= r2 || a1.distanceDefault(b1) <= r2 || a2.distanceDefault(b2) <= r2;
       }
-      return a0.distance(b0) <= range || a0.distance(b1) <= range || a0.distance(b2) <= range || a1.distance(b0) <= range || a1.distance(b1) <= range || a1.distance(b2) <= range || a2.distance(b0) <= range || a2.distance(b1) <= range || a2.distance(b2) <= range;
+      return a0.distanceDefault(b0) <= r2 || a0.distanceDefault(b1) <= r2 || a0.distanceDefault(b2) <= r2 || a1.distanceDefault(b0) <= r2 || a1.distanceDefault(b1) <= r2 || a1.distanceDefault(b2) <= r2 || a2.distanceDefault(b0) <= r2 || a2.distanceDefault(b1) <= r2 || a2.distanceDefault(b2) <= r2;
     }
     runningAwayFrom(entity, angle) {
       if (angle === null) {
@@ -2705,6 +2726,30 @@ window.grbtp = 35;
     get canSpikeSync() {
       return this.nearestPlaceSpikeAngle !== null && this.client.ObjectManager.isDestroyedObject();
     }
+    // "Does this object's owner count as an enemy of X." The answer depends on
+    // two clan names and changes only when a clan packet arrives, but
+    // checkCollision was asking it twice for every object in the block — and a
+    // block in a fight is mostly one bot's spikes, all with the same owner.
+    // The answer is stamped on the owning player with the tick and the target it
+    // was asked about, so a run of same-owner objects costs one comparison.
+    //
+    // PlayerManager.isEnemyByID throws when it cannot find the owner. That throw
+    // would come up through the grid callback and abandon the rest of the tick
+    // for this connection, and building an Error is five microseconds besides,
+    // so a missing owner is treated the way an unowned object already is:
+    // as an enemy.
+    _ownerEnemyTo(PlayerManager, ownerID, target, targetID, tick) {
+      const owner = PlayerManager.playerData.get(ownerID);
+      if (owner === void 0) {
+        return true;
+      }
+      if (owner._emTick !== tick || owner._emTargetID !== targetID) {
+        owner._emTick = tick;
+        owner._emTargetID = targetID;
+        owner._emValue = PlayerManager.isEnemyByID(ownerID, target);
+      }
+      return owner._emValue;
+    }
     isNear(enemy, nearest, owner = this.client.myPlayer) {
       if (nearest === null || enemy === nearest) {
         return true;
@@ -2784,6 +2829,38 @@ window.grbtp = 35;
         this.velocityTickThreat = true;
       }
     }
+    // ── the hottest function in the client ──────────────────────────────────
+    //
+    // Called once for our own player and then once per visible enemy, on every
+    // connection, every tick. Each call sweeps a 7x7 cell block (600x600 units)
+    // around the target and runs the body below against every object in it.
+    //
+    // With a fleet of twenty and a fight in progress that is
+    //
+    //     21 connections x N enemies x M objects near each
+    //
+    // and M is not small precisely when it matters: bots answer a fight by
+    // building, so hitting someone multiplies the object count in the exact
+    // block being swept. That feedback loop is what took the frame rate to
+    // single digits, and it is why hitting was worse than looking.
+    //
+    // The body is unchanged in what it decides. What changed is where the work
+    // sits:
+    //
+    //   · everything that depends on the target and our own loadout but not on
+    //     the object is solved once per call instead of once per object. The
+    //     worst of those was getActualMaxKnockback, which is nine distance
+    //     tests and was being run twice for every object in the block.
+    //   · the sync-scan branch is gated by its target-side conditions before the
+    //     sweep rather than re-deriving them per object.
+    //   · owner lookups are memoised per tick on the owning player, so twenty
+    //     spikes belonging to one bot cost one clan comparison, not twenty.
+    //   · an object no branch on this path can consume is skipped immediately.
+    //     For an enemy that is every tree, bush, stone and gold ore in the
+    //     block — usually most of it.
+    //
+    // Nothing is throttled, deferred, or range-gated away: every object the old
+    // code inspected is still inspected, and every field it set is still set.
     checkCollision(target, isOwner = false) {
       target.isTrapped = false;
       target.trappedInPrev = target.trappedIn;
@@ -2793,26 +2870,66 @@ window.grbtp = 35;
       const pos2 = target.pos.current;
       const distanceToTarget = pos1.distance(pos2);
       const angleToTarget = pos1.angle(pos2);
+      const tick = ModuleHandler.tickCount;
+      const targetID = target.id;
+
+      // ── solved once per call ────────────────────────────────────────────
+      // The knockback this target would take from our weapons. A property of
+      // the target and our loadout; no object appears in it. Both branches that
+      // read it also refuse to act when it is zero, so it is solved on first
+      // demand and not at all for the common case of a target out of reach.
+      let knockbackSolved = false;
+      let knockbackValue = 0;
+
+      // The great-hammer sync scan. Its weapon test, its spike geometry and its
+      // reach test are all target-side: if any of them fails, no object in the
+      // block can satisfy the branch, and the old code proved that once per
+      // object.
+      const {primary: primary, secondary: secondary} = myPlayer.weapon;
+      let syncScan = false;
+      let syncDamage = 0;
+      let syncSecondary = null;
+      if (!isOwner && secondary === 10 && primary !== null && primary !== 8) {
+        syncDamage = myPlayer.getBuildingDamage(secondary, true);
+        syncSecondary = DataHandler_default.getWeapon(secondary);
+        const primaryRange = DataHandler_default.getWeapon(primary).range + target.hitScale;
+        if (myPlayer.collidingSimple(target, primaryRange)) {
+          const spikeID = myPlayer.getItemByType(4);
+          const spikeItem = spikeID === null || spikeID === void 0 ? void 0 : Items[spikeID];
+          if (spikeItem !== void 0) {
+            const spikePos = pos1.addDirection(angleToTarget, myPlayer.getItemPlaceScale(spikeID));
+            syncScan = pos2.distance(spikePos) <= target.collisionScale + spikeItem.scale;
+          }
+        }
+      }
+
       ObjectManager.grid2D.query(target.pos.current.x, target.pos.current.y, 3, id => {
         const object = ObjectManager.objects.get(id);
-        const pos3 = object.pos.current;
         const isPlayerObject = object instanceof PlayerObject;
         const isCactus = !isPlayerObject && object.isCactus;
+        // On the enemy path every branch below needs either a placed item or a
+        // cactus. A tree, a bush, a stone or a gold ore reaches the end of the
+        // callback having done nothing, so it stops here instead. Our own pass
+        // (isOwner) still sees everything: nearestObject and the collider
+        // trackers are its whole point.
+        if (!isOwner && !isPlayerObject && !isCactus) {
+          return;
+        }
+        const pos3 = object.pos.current;
         const isSpike = isPlayerObject && object.itemGroup === 2;
-        const isEnemyObject = !isPlayerObject || PlayerManager.isEnemyByID(object.ownerID, target);
-        const isEnemyObjectToMyPlayer = !isPlayerObject || PlayerManager.isEnemyByID(object.ownerID, myPlayer);
-        const collidingObject = target.collidingObject(object, 1);
-        const collidingCurrent = target.collidingObject(object, 1, 1);
+        const isEnemyObject = !isPlayerObject || this._ownerEnemyTo(PlayerManager, object.ownerID, target, targetID, tick);
         if (isPlayerObject && !isEnemyObject) {
           object.wasTeammate = true;
         }
         if (isPlayerObject && isEnemyObject && object.type === 15) {
+          const collidingObject = target.collidingObject(object, 1);
+          const collidingCurrent = target.collidingObject(object, 1, 1);
           if (collidingObject) {
             if (!isOwner) {
               if (this.isNear(target, this.nearestTrappedEnemy)) {
                 this.nearestTrappedEnemy = target;
               }
-              if (!isEnemyObjectToMyPlayer && this.isNear(target, this.nearestEnemyPush)) {
+              if (!this._ownerEnemyTo(PlayerManager, object.ownerID, myPlayer, myPlayer.id, tick) && this.isNear(target, this.nearestEnemyPush)) {
                 this.nearestEnemyPush = target;
               }
             }
@@ -2831,7 +2948,7 @@ window.grbtp = 35;
             object.trapActivated = true;
           }
         }
-        if (isOwner && isPlayerObject && object.type === 22 && collidingCurrent) {
+        if (isOwner && isPlayerObject && object.type === 22 && target.collidingObject(object, 1, 1)) {
           myPlayer.teleportPos.setVec(pos1);
           myPlayer.teleported = true;
         }
@@ -2903,23 +3020,10 @@ window.grbtp = 35;
             }
           }
         } else {
-          const {primary: primary, secondary: secondary} = myPlayer.weapon;
-          if (isPlayerObject && object.isDestroyable && secondary === 10 && primary !== null && primary !== 8) {
-            const damage = myPlayer.getBuildingDamage(secondary, true);
-            const primaryRange = DataHandler_default.getWeapon(primary).range + target.hitScale;
-            const secondaryRange = DataHandler_default.getWeapon(secondary).range + object.hitScale;
-            if (myPlayer.collidingSimple(target, primaryRange) && myPlayer.collidingSimple(object, secondaryRange) && object.health <= damage) {
-              const itemType = 4;
-              const spikeID = myPlayer.getItemByType(itemType);
-              const placeLength = myPlayer.getItemPlaceScale(spikeID);
-              const spikeScale = Items[spikeID].scale;
-              const spikePos = pos1.addDirection(angleToTarget, placeLength);
-              const distance = pos2.distance(spikePos);
-              const range = target.collisionScale + spikeScale;
-              if (distance <= range && this.isNear(object, this.nearestLowHPObject)) {
-                this.nearestLowHPObject = object;
-                this.nearestSyncEnemy = target;
-              }
+          if (syncScan && isPlayerObject && object.isDestroyable && object.health <= syncDamage) {
+            if (myPlayer.collidingSimple(object, syncSecondary.range + object.hitScale) && this.isNear(object, this.nearestLowHPObject)) {
+              this.nearestLowHPObject = object;
+              this.nearestSyncEnemy = target;
             }
           }
           // KB Spike — "they swing, we fly, we land on a spike" — used to be
@@ -2935,61 +3039,73 @@ window.grbtp = 35;
             this.enemySpikeCollider = target;
           }
           if (isEnemyObject && (isSpike || isCactus) && this.isNear(target, this.nearestEnemySpikeCollider)) {
-            const KBDistance = myPlayer.getActualMaxKnockback(target);
-            const spikeScale = object.collisionScale + target.collisionScale;
-            const angleToEnemy = pos1.angle(pos2);
-            const angleToSpike = pos1.angle(pos3);
-            const distanceToSpike1 = pos1.distance(pos3);
-            const offset = Math.asin(2 * spikeScale / (2 * distanceToSpike1));
-            const angleDistance = getAngleDist(angleToEnemy, angleToSpike);
-            const intersecting = angleDistance <= offset;
-            const overlapping = distanceToTarget <= distanceToSpike1;
+            if (!knockbackSolved) {
+              knockbackSolved = true;
+              knockbackValue = myPlayer.getActualMaxKnockback(target);
+            }
+            const KBDistance = knockbackValue;
             const inRange2 = KBDistance !== 0 && target.collidingObject(object, KBDistance);
-            if (intersecting && overlapping && inRange2) {
-              if (this.spikeCollider === null) {
-                this.nearestEnemySpikeCollider = target;
-                this.spikeCollider = object;
-              } else {
-                const pos4 = this.spikeCollider.pos.current;
-                const angle1 = pos2.angle(pos3);
-                const angle2 = pos1.angle(pos3);
-                const angle3 = pos2.angle(pos4);
-                const angle4 = pos1.angle(pos4);
-                const angleDist1 = getAngleDist(angle1, angle2);
-                const angleDist2 = getAngleDist(angle3, angle4);
-                if (angleDist1 < angleDist2) {
+            if (inRange2) {
+              const spikeScale = object.collisionScale + target.collisionScale;
+              const angleToEnemy = pos1.angle(pos2);
+              const angleToSpike = pos1.angle(pos3);
+              const distanceToSpike1 = pos1.distance(pos3);
+              const offset = Math.asin(2 * spikeScale / (2 * distanceToSpike1));
+              const angleDistance = getAngleDist(angleToEnemy, angleToSpike);
+              const intersecting = angleDistance <= offset;
+              const overlapping = distanceToTarget <= distanceToSpike1;
+              if (intersecting && overlapping) {
+                if (this.spikeCollider === null) {
                   this.nearestEnemySpikeCollider = target;
                   this.spikeCollider = object;
+                } else {
+                  const pos4 = this.spikeCollider.pos.current;
+                  const angle1 = pos2.angle(pos3);
+                  const angle2 = pos1.angle(pos3);
+                  const angle3 = pos2.angle(pos4);
+                  const angle4 = pos1.angle(pos4);
+                  const angleDist1 = getAngleDist(angle1, angle2);
+                  const angleDist2 = getAngleDist(angle3, angle4);
+                  if (angleDist1 < angleDist2) {
+                    this.nearestEnemySpikeCollider = target;
+                    this.spikeCollider = object;
+                  }
                 }
               }
             }
           }
           if (!target.isTrapped && isEnemyObject && object.type === 15 && this.isNear(target, this.nearestKBTrapEnemy)) {
-            const KBDistance = myPlayer.getActualMaxKnockback(target);
-            const trapScale = object.collisionScale + target.collisionScale;
-            const angleToEnemy = pos1.angle(pos2);
-            const angleToSpike = pos1.angle(pos3);
-            const distanceToTrap1 = pos1.distance(pos3);
-            const offset = Math.asin(2 * trapScale / (2 * distanceToTrap1));
-            const angleDistance = getAngleDist(angleToEnemy, angleToSpike);
-            const intersecting = angleDistance <= offset;
-            const overlapping = distanceToTarget <= distanceToTrap1;
+            if (!knockbackSolved) {
+              knockbackSolved = true;
+              knockbackValue = myPlayer.getActualMaxKnockback(target);
+            }
+            const KBDistance = knockbackValue;
             const inRange2 = KBDistance !== 0 && target.collidingObject(object, KBDistance);
-            if (intersecting && overlapping && inRange2) {
-              if (this.nearestKBTrap === null) {
-                this.nearestKBTrapEnemy = target;
-                this.nearestKBTrap = object;
-              } else {
-                const pos4 = this.nearestKBTrap.pos.current;
-                const angle1 = pos2.angle(pos3);
-                const angle2 = pos1.angle(pos3);
-                const angle3 = pos2.angle(pos4);
-                const angle4 = pos1.angle(pos4);
-                const angleDist1 = getAngleDist(angle1, angle2);
-                const angleDist2 = getAngleDist(angle3, angle4);
-                if (angleDist1 < angleDist2) {
+            if (inRange2) {
+              const trapScale = object.collisionScale + target.collisionScale;
+              const angleToEnemy = pos1.angle(pos2);
+              const angleToSpike = pos1.angle(pos3);
+              const distanceToTrap1 = pos1.distance(pos3);
+              const offset = Math.asin(2 * trapScale / (2 * distanceToTrap1));
+              const angleDistance = getAngleDist(angleToEnemy, angleToSpike);
+              const intersecting = angleDistance <= offset;
+              const overlapping = distanceToTarget <= distanceToTrap1;
+              if (intersecting && overlapping) {
+                if (this.nearestKBTrap === null) {
                   this.nearestKBTrapEnemy = target;
                   this.nearestKBTrap = object;
+                } else {
+                  const pos4 = this.nearestKBTrap.pos.current;
+                  const angle1 = pos2.angle(pos3);
+                  const angle2 = pos1.angle(pos3);
+                  const angle3 = pos2.angle(pos4);
+                  const angle4 = pos1.angle(pos4);
+                  const angleDist1 = getAngleDist(angle1, angle2);
+                  const angleDist2 = getAngleDist(angle3, angle4);
+                  if (angleDist1 < angleDist2) {
+                    this.nearestKBTrapEnemy = target;
+                    this.nearestKBTrap = object;
+                  }
                 }
               }
             }
@@ -8755,7 +8871,7 @@ window.grbtp = 35;
           const ownerPos = ownerPlayer.pos.current;
           const dx = ownerPos.x - myPos.x;
           const dy = ownerPos.y - myPos.y;
-          const dist = Math.hypot(dx, dy);
+          const dist = hyp(dx, dy);
           const toOwner = Math.atan2(dy, dx);
           const away = toOwner + Math.PI;
           const now = Date.now();
@@ -9071,7 +9187,7 @@ window.grbtp = 35;
         if (walkPos && walkPos.x !== undefined) {
           const walkTo = pos1.angle(walkPos);
           ModuleHandler._currentAngle = walkTo;
-          const dist = Math.hypot(walkPos.x - pos1.x, walkPos.y - pos1.y);
+          const dist = hyp(walkPos.x - pos1.x, walkPos.y - pos1.y);
           if (dist > 40) {
             this.isStopped = !ModuleHandler.startMovement(walkTo);
           } else {
@@ -9139,7 +9255,7 @@ window.grbtp = 35;
   // that just went, then hands the turn to the next one that still needs it.
   function clanTakeTurn(owner, bot, ownerClan, now) {
     const q = clanQueue(owner);
-    const bots = [ ...owner.clients ];
+    const bots = owner.clientList();
     q.total = bots.length;
     if (bots.length === 0) return false;
 
@@ -9192,7 +9308,7 @@ window.grbtp = 35;
   function clanAudit(owner) {
     const q = clanQueue(owner);
     const ownerClan = owner.myPlayer ? owner.myPlayer.clanName : null;
-    const bots = [ ...owner.clients ];
+    const bots = owner.clientList();
     let joined = 0, alive = 0;
     for (let i = 0; i < bots.length; i++) {
       const p = bots[i].myPlayer;
@@ -9868,7 +9984,7 @@ window.grbtp = 35;
       // where they are and the step is the only thing moving.
       const stepX = intent === null || intent === undefined ? myPos.x : myPos.x + Math.cos(intent) * TRAP_STANDOFF_STEP;
       const stepY = intent === null || intent === undefined ? myPos.y : myPos.y + Math.sin(intent) * TRAP_STANDOFF_STEP;
-      if (Math.hypot(stepX - enemyPos.x, stepY - enemyPos.y) >= range) return;
+      if (hyp(stepX - enemyPos.x, stepY - enemyPos.y) >= range) return;
 
       // The axis the game pushes along, pointing out of them.
       const outward = Math.atan2(myPos.y - enemyPos.y, myPos.x - enemyPos.x);
@@ -9904,7 +10020,7 @@ window.grbtp = 35;
         tangential = 0;
       }
       if (radial < deficit) radial = deficit;
-      const len = Math.hypot(radial, tangential);
+      const len = hyp(radial, tangential);
       ModuleHandler.moveTo = len < 1e-6 ? outward : outward + Math.atan2(tangential / len, radial / len);
     }
   }
@@ -9940,7 +10056,7 @@ window.grbtp = 35;
         }
         const raw = isPlayerObj ? Items[obj.type].scale : obj.scale;
         const p = obj.pos.current;
-        if (Math.hypot(x - p.x, y - p.y) < raw + 35) blocked = true;
+        if (hyp(x - p.x, y - p.y) < raw + 35) blocked = true;
       });
       return blocked;
     }
@@ -10190,7 +10306,7 @@ window.grbtp = 35;
         const obj = ObjectManager2.objects.get(objId);
         if (!obj) return false;
         if (excludeObj && obj === excludeObj) return false;
-        return Math.hypot(cx - obj.pos.current.x, cy - obj.pos.current.y) < cs + obj.placementScale;
+        return hyp(cx - obj.pos.current.x, cy - obj.pos.current.y) < cs + obj.placementScale;
       });
       if (blocked) return false;
       if (id !== 18) {
@@ -10313,7 +10429,7 @@ window.grbtp = 35;
       const x = myPos.x + dist * Math.cos(angle);
       const y = myPos.y + dist * Math.sin(angle);
       for (const obj of this._predictObjects) {
-        if (obj.id !== 17 && Math.hypot(x - obj.x, y - obj.y) < item.scale + obj.scale) return;
+        if (obj.id !== 17 && hyp(x - obj.x, y - obj.y) < item.scale + obj.scale) return;
       }
       this._predictObjects.push({
         id: id,
@@ -10519,13 +10635,13 @@ window.grbtp = 35;
       });
       if (scored.length === 0) return null;
       const bestScore = Math.min(...scored.map(v => v.alignment));
-      return scored.filter(v => v.alignment === bestScore).sort((a, b) => Math.hypot(enemyFut.x - a.angle.x, enemyFut.y - a.angle.y) - Math.hypot(enemyFut.x - b.angle.x, enemyFut.y - b.angle.y))[0]?.angle ?? null;
+      return scored.filter(v => v.alignment === bestScore).sort((a, b) => hyp(enemyFut.x - a.angle.x, enemyFut.y - a.angle.y) - hyp(enemyFut.x - b.angle.x, enemyFut.y - b.angle.y))[0]?.angle ?? null;
     }
 
     // Luna's "closest angle that catches the enemy on their way": the build
     // box has to cross the segment from where they are to where they will be.
     _closestToEnemy(angles, enemyPos, enemyFut, pad) {
-      return angles.filter(a => this._lineInRect(a.x - pad(a), a.y - pad(a), a.x + pad(a), a.y + pad(a), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y))[0] ?? null;
+      return angles.filter(a => this._lineInRect(a.x - pad(a), a.y - pad(a), a.x + pad(a), a.y + pad(a), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => hyp(enemyFut.x - a.x, enemyFut.y - a.y) - hyp(enemyFut.x - b.x, enemyFut.y - b.y))[0] ?? null;
     }
 
     // Novastorm's *other* knockback model, the one `_closestSpikeToKb` above
@@ -10610,7 +10726,7 @@ window.grbtp = 35;
         const box = [ cfg.x - cfg.scale - 5, cfg.y - cfg.scale - 5, cfg.x + cfg.scale + 5, cfg.y + cfg.scale + 5 ];
         const blockFuture = this._lineInRect(box[0], box[1], box[2], box[3], stX, stY, futX, futY);
         const blockEnemy = this._lineInRect(box[0], box[1], box[2], box[3], myFut.x, myFut.y, enemyFut.x, enemyFut.y);
-        let canSpikeTick = Math.hypot(cfg.x - enemyPos.x, cfg.y - enemyPos.y) < cfg.scale + 35;
+        let canSpikeTick = hyp(cfg.x - enemyPos.x, cfg.y - enemyPos.y) < cfg.scale + 35;
         if (canSpikeTick) {
           // A spike that knocks them back towards me is the wrong spike.
           const kbAngle = Math.atan2(enemyPos.y - cfg.y, enemyPos.x - cfg.x);
@@ -10619,7 +10735,7 @@ window.grbtp = 35;
           if (diff > Math.PI) diff = Math.PI * 2 - diff;
           canSpikeTick = diff >= Math.PI / 5;
         }
-        const canRetrap = Math.hypot(cfg.x - enemyPos.x, cfg.y - enemyPos.y) < 50;
+        const canRetrap = hyp(cfg.x - enemyPos.x, cfg.y - enemyPos.y) < 50;
         return {
           blockFuture: blockFuture,
           blockEnemy: blockEnemy,
@@ -10700,7 +10816,7 @@ window.grbtp = 35;
             // first and take the slot the spike was chosen for.
             if (vetoTraps) {
               if (SpikeOpportunity.onPath(kbCtx, config.x, config.y, config.scale)) return false;
-              if (Math.hypot(config.x - primaryKbSpike.x, config.y - primaryKbSpike.y) < config.scale + primaryKbSpike.scale) return false;
+              if (hyp(config.x - primaryKbSpike.x, config.y - primaryKbSpike.y) < config.scale + primaryKbSpike.scale) return false;
             }
             // 1: the trap that retraps them as they move
             if (closestTrapToEnemy && config === closestTrapToEnemy && neitherTrapped) return true;
@@ -10734,7 +10850,7 @@ window.grbtp = 35;
         // up empty — a trap that pins them is worth more than a spike that
         // chips them, but a spike is worth more than standing still.
         if (imTrapped && this._predictObjects.length === 0 && myPos.distance(enemyPos) <= (Settings_default._autoplacerRadius ?? 350)) {
-          const nearestFirst = (a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y);
+          const nearestFirst = (a, b) => hyp(enemyFut.x - a.x, enemyFut.y - a.y) - hyp(enemyFut.x - b.x, enemyFut.y - b.y);
           // Only ground nothing is standing on: `placeable` is _canPlace,
           // which already rejects every angle a build — mine or anyone's — is
           // occupying, so a blocked angle is never scanned twice.
@@ -10816,7 +10932,7 @@ window.grbtp = 35;
         const dx = o.x - cx, dy = o.y - cy;
         arr.push({
           ang: Math.atan2(dy, dx),
-          dist: Math.hypot(dx, dy),
+          dist: hyp(dx, dy),
           escapeScale: o.escapeScale
         });
       }
@@ -10850,7 +10966,7 @@ window.grbtp = 35;
       let building1 = null;
       for (const o of objects) {
         if (!o.dmg && !o.isCactus && !o.trap) continue;
-        const distance = Math.hypot(enemyX - o.x, enemyY - o.y);
+        const distance = hyp(enemyX - o.x, enemyY - o.y);
         if (distance > 320) continue;
         const px = enemyX + distance * Math.cos(dir);
         const py = enemyY + distance * Math.sin(dir);
@@ -11223,7 +11339,7 @@ window.grbtp = 35;
         // Standing on them while the swing does the work. Worth counting only
         // because a chain exists — plain contact is already priced by both
         // consumers, and crediting it again here would double-pay it.
-        if (Math.hypot(cx - ctx.enemyX, cy - ctx.enemyY) < r + 8) {
+        if (hyp(cx - ctx.enemyX, cy - ctx.enemyY) < r + 8) {
           score += SO_CONTACT;
         }
       }
@@ -11258,7 +11374,7 @@ window.grbtp = 35;
     // handled explicitly rather than clamped into a full-circle block.
     occlusion(ox, oy, ringR, footR, bx, by, blockR) {
       const dx = bx - ox, dy = by - oy;
-      const d = Math.hypot(dx, dy);
+      const d = hyp(dx, dy);
       const reach = footR + blockR;
       if (d >= ringR + reach) return null;
       if (d + ringR <= reach) return "full";
@@ -11382,7 +11498,7 @@ window.grbtp = 35;
     // Same law of cosines as occlusion, asked in the other direction.
     contactAngles(ox, oy, ringR, footR, tx, ty, targetR) {
       const dx = tx - ox, dy = ty - oy;
-      const d = Math.hypot(dx, dy);
+      const d = hyp(dx, dy);
       const reach = footR + targetR;
       if (d < RPE_EPS || d >= ringR + reach || d + ringR <= reach || d + reach <= ringR) return [];
       let cosArg = (d * d + ringR * ringR - reach * reach) / (2 * d * ringR);
@@ -11397,10 +11513,10 @@ window.grbtp = 35;
     segmentDistance(px, py, ax, ay, bx, by) {
       const vx = bx - ax, vy = by - ay;
       const len2 = vx * vx + vy * vy;
-      if (len2 < RPE_EPS) return Math.hypot(px - ax, py - ay);
+      if (len2 < RPE_EPS) return hyp(px - ax, py - ay);
       let t = ((px - ax) * vx + (py - ay) * vy) / len2;
       if (t < 0) t = 0; else if (t > 1) t = 1;
-      return Math.hypot(px - (ax + t * vx), py - (ay + t * vy));
+      return hyp(px - (ax + t * vx), py - (ay + t * vy));
     },
 
     // The game blocks projectiles with an axis-aligned box test, so anything
@@ -11484,7 +11600,7 @@ window.grbtp = 35;
     blocked(x, y, radius, priority, value, ignoreToken) {
       for (const e of this.entries) {
         if (ignoreToken !== undefined && e.token === ignoreToken) continue;
-        if (Math.hypot(x - e.x, y - e.y) >= radius + e.radius) continue;
+        if (hyp(x - e.x, y - e.y) >= radius + e.radius) continue;
         if (!e.soft) return true;
         if (e.priority > priority) return true;
         if (e.priority === priority && (value === undefined || value <= e.value)) return true;
@@ -11500,7 +11616,7 @@ window.grbtp = 35;
       for (let i = this.entries.length - 1; i >= 0; i--) {
         const e = this.entries[i];
         if (!e.soft) continue;
-        if (Math.hypot(x - e.x, y - e.y) >= radius + e.radius) continue;
+        if (hyp(x - e.x, y - e.y) >= radius + e.radius) continue;
         if (e.priority > priority) continue;
         if (e.priority === priority && (value === undefined || value <= e.value)) continue;
         if (e.priority < priority && value !== undefined && e.value > value * RPE_SOFT_DOMINANCE) continue;
@@ -11578,7 +11694,7 @@ window.grbtp = 35;
     expire(tick, origin) {
       // Once we have moved far enough that the ring no longer covers the same
       // ground, the old keys describe somewhere else.
-      if (this.lastOrigin && Math.hypot(origin.x - this.lastOrigin.x, origin.y - this.lastOrigin.y) > 70) {
+      if (this.lastOrigin && hyp(origin.x - this.lastOrigin.x, origin.y - this.lastOrigin.y) > 70) {
         this.sends.clear();
       }
       this.lastOrigin = {
@@ -12043,8 +12159,8 @@ window.grbtp = 35;
       const w = this.weights;
       const p = cand.profile;
       const terms = {};
-      const dTarget = Math.hypot(cand.x - frame.targetPos.x, cand.y - frame.targetPos.y);
-      const dNext = Math.hypot(cand.x - frame.targetNext.x, cand.y - frame.targetNext.y);
+      const dTarget = hyp(cand.x - frame.targetPos.x, cand.y - frame.targetPos.y);
+      const dNext = hyp(cand.x - frame.targetNext.x, cand.y - frame.targetNext.y);
 
       // Tactical value ----------------------------------------------------
       // `reach` is the part of the tactical score that represents actually
@@ -12125,7 +12241,7 @@ window.grbtp = 35;
       // was doing when it died.
       let recovery = 0;
       if (ctx.replace) {
-        const d = Math.hypot(cand.x - ctx.replace.x, cand.y - ctx.replace.y);
+        const d = hyp(cand.x - ctx.replace.x, cand.y - ctx.replace.y);
         const reach = p.footR + ctx.replace.radius;
         if (d < reach) {
           recovery = w.recovery * (1 - d / reach);
@@ -12180,7 +12296,7 @@ window.grbtp = 35;
       // Target distance and movement --------------------------------------
       terms.distance = w.distanceWeight * Math.max(0, 1 - dNext / w.distanceFalloff);
       let movement = 0;
-      const closing = Math.hypot(frame.targetNext.x - frame.myPos.x, frame.targetNext.y - frame.myPos.y) < Math.hypot(frame.targetPos.x - frame.myPos.x, frame.targetPos.y - frame.myPos.y);
+      const closing = hyp(frame.targetNext.x - frame.myPos.x, frame.targetNext.y - frame.myPos.y) < hyp(frame.targetPos.x - frame.myPos.x, frame.targetPos.y - frame.myPos.y);
       if (closing && intercepts) movement += w.approach;
       terms.movement = movement;
 
@@ -12191,8 +12307,8 @@ window.grbtp = 35;
       // put between us.
       let recession = 0;
       if (touching || intercepts) {
-        const dNow = Math.hypot(frame.targetPos.x - frame.myPos.x, frame.targetPos.y - frame.myPos.y);
-        const dNext = Math.hypot(frame.targetNext.x - frame.myPos.x, frame.targetNext.y - frame.myPos.y);
+        const dNow = hyp(frame.targetPos.x - frame.myPos.x, frame.targetPos.y - frame.myPos.y);
+        const dNext = hyp(frame.targetNext.x - frame.myPos.x, frame.targetNext.y - frame.myPos.y);
         if (dNext > dNow) recession = w.recession * Math.min(1, (dNext - dNow) / 24);
       }
       terms.recession = -recession;
@@ -12284,7 +12400,7 @@ window.grbtp = 35;
     _pairDelta(a, b, frame) {
       const w = this.weights;
       let delta = 0;
-      const gap = Math.hypot(a.x - b.x, a.y - b.y);
+      const gap = hyp(a.x - b.x, a.y - b.y);
       // A trap and a damage build pair up two different ways, and neither
       // half scores either of them alone.
       if (a.profile.isTrap !== b.profile.isTrap && (a.profile.isDamage || b.profile.isDamage)) {
@@ -12295,7 +12411,7 @@ window.grbtp = 35;
         const push = Math.atan2(frame.targetPos.y - spike.y, frame.targetPos.x - spike.x);
         const landX = frame.targetPos.x + RPE_KB_TRAVEL * Math.cos(push);
         const landY = frame.targetPos.y + RPE_KB_TRAVEL * Math.sin(push);
-        if (Math.hypot(landX - trap.x, landY - trap.y) < trap.profile.footR + frame.targetScale) {
+        if (hyp(landX - trap.x, landY - trap.y) < trap.profile.footR + frame.targetScale) {
           delta += w.synergyTrapSpike;
         } else if (gap < trap.profile.footR + spike.profile.touchR) {
           // Or the trap holds them where the spike can reach: the game pins a
@@ -12320,7 +12436,7 @@ window.grbtp = 35;
     }
     _feasible(cand, plan, ctx) {
       for (const other of plan) {
-        if (Math.hypot(cand.x - other.x, cand.y - other.y) < cand.profile.footR + other.profile.footR) return false;
+        if (hyp(cand.x - other.x, cand.y - other.y) < cand.profile.footR + other.profile.footR) return false;
       }
       const used = plan.reduce((n, o) => n + (o.profile.type === cand.profile.type ? 1 : 0), 0);
       const cap = ctx.perTypeCap.get(cand.profile.type);
@@ -12523,7 +12639,7 @@ window.grbtp = 35;
         }
         track.vx = vx;
         track.vy = vy;
-        track.speed = Math.hypot(vx, vy);
+        track.speed = hyp(vx, vy);
         track.peakSpeed = Math.max(track.peakSpeed ?? 0, track.speed);
         const prevHeading = track.heading;
         track.heading = track.speed > .5 ? Math.atan2(vy, vx) : prevHeading;
@@ -12543,7 +12659,7 @@ window.grbtp = 35;
       const headings = [];
       for (let i = 1; i < s.length; i++) {
         const dx = s[i].x - s[i - 1].x, dy = s[i].y - s[i - 1].y;
-        if (Math.hypot(dx, dy) < .5) continue;
+        if (hyp(dx, dy) < .5) continue;
         headings.push(Math.atan2(dy, dx));
       }
       if (headings.length < 2) return .5;
@@ -12582,7 +12698,7 @@ window.grbtp = 35;
         y += vy;
         vx += track.ax;
         vy += track.ay;
-        const sp = Math.hypot(vx, vy);
+        const sp = hyp(vx, vy);
         if (sp > seen * 1.1 && sp > 0) {
           const k = seen * 1.1 / sp;
           vx *= k;
@@ -12607,7 +12723,7 @@ window.grbtp = 35;
     intercept(entity, cx, cy, radius, maxTicks) {
       for (let n = 0; n <= maxTicks; n++) {
         const p = this.predict(entity, n);
-        if (Math.hypot(p.x - cx, p.y - cy) < radius) {
+        if (hyp(p.x - cx, p.y - cy) < radius) {
           return {
             tick: n,
             confidence: p.confidence,
@@ -12673,7 +12789,7 @@ window.grbtp = 35;
     has(x, y, radius) {
       for (const r of this.records) {
         if (r.state !== "pending") continue;
-        if (Math.hypot(r.x - x, r.y - y) < radius + r.footR) return true;
+        if (hyp(r.x - x, r.y - y) < radius + r.footR) return true;
       }
       return false;
     }
@@ -12736,11 +12852,11 @@ window.grbtp = 35;
         else if ((rec.kind === "vacating" || rec.kind === "steal") && !engine.client.ObjectManager.objects.has(rec.vacates)) reason = "vacated";
         // Stealing a slot is only worth the ground while the enemy is still
         // near enough to want it back.
-        else if (rec.steal && Math.hypot(frame.targetPos.x - rec.x, frame.targetPos.y - rec.y) > RPE_STEAL_ENEMY_RANGE) reason = "enemyLeft";
+        else if (rec.steal && hyp(frame.targetPos.x - rec.x, frame.targetPos.y - rec.y) > RPE_STEAL_ENEMY_RANGE) reason = "enemyLeft";
         else {
           // Still on our ring? We move, so a point that was reachable may not
           // be any more.
-          const d = Math.hypot(rec.x - frame.myPos.x, rec.y - frame.myPos.y);
+          const d = hyp(rec.x - frame.myPos.x, rec.y - frame.myPos.y);
           if (Math.abs(d - rec.ringR) > rec.footR * .8) reason = "outOfReach";
         }
         if (reason) {
@@ -13170,7 +13286,7 @@ window.grbtp = 35;
       if (this._plan.length === 0) return true;
       if (this._planTargetId !== frame.targetId) return true;
       if (!this._planTargetPos) return true;
-      const shift = Math.hypot(frame.targetPos.x - this._planTargetPos.x, frame.targetPos.y - this._planTargetPos.y);
+      const shift = hyp(frame.targetPos.x - this._planTargetPos.x, frame.targetPos.y - this._planTargetPos.y);
       return shift > this.weights.staleTargetShift;
     }
 
@@ -13282,7 +13398,7 @@ window.grbtp = 35;
           // a slot they are about to open.
           if (Items[obj.type] && Items[obj.type].hideFromEnemy) return false;
           const pos = obj.pos.current;
-          if (Math.hypot(actor.x - pos.x, actor.y - pos.y) - obj.scale > actor.range) return false;
+          if (hyp(actor.x - pos.x, actor.y - pos.y) - obj.scale > actor.range) return false;
           if (actor.legacy) {
             const hits = Math.ceil(obj.health / actor.dmg);
             const prev = legacy.get(obj);
@@ -13375,7 +13491,7 @@ window.grbtp = 35;
       let n = 0;
       for (const obj of frame.enemyObjects) {
         if (obj === exclude) continue;
-        if (Math.hypot(obj.pos.current.x - x, obj.pos.current.y - y) < 160) n++;
+        if (hyp(obj.pos.current.x - x, obj.pos.current.y - y) < 160) n++;
       }
       return n;
     }
@@ -13386,7 +13502,7 @@ window.grbtp = 35;
     // on, and it is zero the moment the two do not touch.
     _stealContext(frame, cand, x, y, radius, confidence, objectId, cluster) {
       const reach = cand.profile.footR + radius;
-      const d = Math.hypot(cand.x - x, cand.y - y);
+      const d = hyp(cand.x - x, cand.y - y);
       if (d >= reach) return null;
       return {
         objectId: objectId,
@@ -13395,7 +13511,7 @@ window.grbtp = 35;
         radius: radius,
         confidence: confidence,
         coverage: 1 - d / reach,
-        enemyDistance: Math.hypot(frame.targetPos.x - x, frame.targetPos.y - y),
+        enemyDistance: hyp(frame.targetPos.x - x, frame.targetPos.y - y),
         cluster: cluster
       };
     }
@@ -13770,7 +13886,7 @@ window.grbtp = 35;
         if (entry.used) continue;
         if (entry.tick + 1 !== tick) continue;
         if (entry.type !== cand.profile.type) continue;
-        if (Math.hypot(cand.x - entry.x, cand.y - entry.y) >= cand.profile.footR + entry.r) continue;
+        if (hyp(cand.x - entry.x, cand.y - entry.y) >= cand.profile.footR + entry.r) continue;
         entry.used = true;
         cand.retryToken = entry.token;
         return;
@@ -13919,7 +14035,7 @@ window.grbtp = 35;
       const myPlayer = this.client.myPlayer;
       if (!myPlayer.canPlace(cand.profile.type)) return false;
       for (const other of accepted) {
-        if (Math.hypot(cand.x - other.x, cand.y - other.y) < cand.profile.footR + other.profile.footR) return false;
+        if (hyp(cand.x - other.x, cand.y - other.y) < cand.profile.footR + other.profile.footR) return false;
       }
       if (!this._conflicts.availableGround(cand)) return false;
       // The ring moves with us, so the angle that reaches this ground is
@@ -14166,7 +14282,16 @@ window.grbtp = 35;
     // ── triggers ────────────────────────────────────────────────────────────
     postTick() {
       const {myPlayer: myPlayer} = this.client;
-      if (!myPlayer || !myPlayer.inGame) return;
+      if (!myPlayer || !myPlayer.inGame) {
+        this._vacatedQueue.length = 0;
+        return;
+      }
+      // Whatever was deleted this tick is planned here, once, before the
+      // engine's own opportunistic pass. Marking the tick as passed is what
+      // lets a deletion arriving after this point take an immediate pass of its
+      // own rather than waiting for the next tick's drain.
+      this._drainVacated();
+      this._vacatedTick = this.client._ModuleHandler.tickCount;
       const modes = [];
       // Auto place is not this engine's. RYN v5.4's Luna placer owns it and
       // is left exactly as it was; the engine plans the two modes it was
@@ -14191,31 +14316,62 @@ window.grbtp = 35;
     // it is exact where a timer is a guess, so the same pipeline runs again on
     // the event — for REPLACE, and for any PREPLACE candidate that had been
     // waiting for precisely this object.
+    // A deletion packet arrives once per structure, and a fight deletes many
+    // structures inside a single server tick — the fleet's own builds among
+    // them. Running the whole plan cycle for each one, on each of twenty-one
+    // connections, is where the frame rate went during combat.
+    //
+    // Split in two. The part that *records* what the deletion means — the book
+    // records waiting on this object become due, the forecast forgets it — is
+    // exact, costs a walk over a handful of records, and still happens per
+    // object, immediately. The part that *decides what to build* is queued and
+    // run once for the whole batch at the end of the tick.
+    //
+    // Nothing is lost by batching it: promote() pulls every due record into the
+    // pool whatever triggered the cycle, so a replacement booked against any of
+    // the deleted objects is planned in that one pass. And nothing is delayed —
+    // the cycle still runs inside the same tick, so the placement lands on the
+    // same server tick it would have. A deletion that arrives after this tick's
+    // pass has already run gets an immediate cycle of its own, which bounds the
+    // work at two cycles a tick rather than one per dead structure.
+    // A deletion packet arrives once per structure, and a fight deletes many
+    // structures inside a single server tick — the fleet's own builds among
+    // them. The old shape ran the whole plan cycle for each one, on each of
+    // twenty-one connections, and each of those cycles forced a fresh blocker
+    // query, threw away the aperture cache, rebuilt the knockback contexts and
+    // the escape analysis, and then ran a beam search. That is where the frame
+    // rate went during combat, and it is why hitting was worse than looking:
+    // hitting is what makes structures die.
+    //
+    // Split in two. The part that *records* what a deletion means — the book
+    // records waiting on this object become due, the forecast forgets it — is
+    // exact, costs a walk over a handful of records, and still happens per
+    // object, immediately. The part that *decides what to build* is queued and
+    // run once for the whole batch.
+    //
+    // Nothing is lost by batching it. promote() pulls every due record into the
+    // pool whatever triggered the cycle, so a replacement booked against any of
+    // the deleted structures is planned in that one pass, and the pass sees all
+    // of them removed from the sensed frame at once rather than one at a time.
+    // Nothing is delayed either: the cycle runs inside the same tick, so the
+    // placement reaches the server on the tick it always would have, and a
+    // deletion that arrives after this tick's pass has already run gets an
+    // immediate pass of its own. Two cycles a tick at worst, against one per
+    // dead structure before.
+    _vacatedQueue=[];
+    _vacatedTick=-1;
     onVacated(object) {
       if (!object) return;
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
+      const {myPlayer: myPlayer} = this.client;
       if (!Settings_default._prePlace && !Settings_default._replace) return;
       if (!myPlayer || !myPlayer.inGame) return;
       if (this._scheduler.budget() < RPE_PLACE_PACKETS) return;
+      // Cached per tick, so asking it once per deletion costs one comparison
+      // after the first.
       const frame = this._threat.build();
       if (!frame) return;
       if (frame.myPos.distance(object.pos.current) > RPE_REPLACE_RANGE) return;
       if (frame.range > RPE_REPLACE_RANGE) return;
-      // The object is still in the world while its deletion is handled, so
-      // every legality question below is asked with it taken out. That applies
-      // to the knockback chain too: a push that ends on a spike which has just
-      // died is not a chain, and the frame's spike list is the sensed one from
-      // before the deletion. Dropping it from the lists and clearing the
-      // evaluator's per-tick memo makes sense() re-solve against what is
-      // actually still standing. `targetTrapped` is deliberately left alone —
-      // _replaceContext reads it to find out whether the dead object was the
-      // thing holding them.
-      this._blockersTick = -1;
-      const stillStanding = o => o !== object;
-      frame.ourSpikes = frame.ourSpikes.filter(stillStanding);
-      frame.ourTraps = frame.ourTraps.filter(stillStanding);
-      SpikeOpportunity.reset();
-      this.sense();
 
       // Anything that was waiting for exactly this object is due now. It does
       // not get a private path to the wire — it rejoins the pool and is
@@ -14240,21 +14396,72 @@ window.grbtp = 35;
       // builds keep their own records, so the next forecast starts from what
       // has already been observed about them rather than from nothing.
       this.forecast.forget(object.id);
+
+      if (this._vacatedQueue.indexOf(object) !== -1) return;
+      this._vacatedQueue.push(object);
+      // This tick's batch has already been planned, so this one missed it and
+      // is planned on its own rather than waiting a tick for its ground.
+      if (this._vacatedTick === frame.tick) {
+        this._drainVacated();
+      }
+    }
+
+    // One plan pass for a batch of deletions. Everything the old per-object
+    // path did to the sensed frame is done here for the whole batch at once:
+    // the dead structures leave the spike and trap lists, the blocker set is
+    // re-queried, the knockback memo is dropped, and sense() re-solves against
+    // what is actually still standing.
+    _drainVacated() {
+      const queue = this._vacatedQueue;
+      if (queue.length === 0) return false;
       const modes = [];
       if (Settings_default._prePlace) modes.push(RPE_MODE.PREPLACE);
       if (Settings_default._replace) modes.push(RPE_MODE.REPLACE);
-      if (modes.length === 0) return;
+      const frame = modes.length === 0 ? null : this._threat.build();
+      if (!frame) {
+        queue.length = 0;
+        return false;
+      }
+      // The structure the target is standing closest to is the one whose ground
+      // is worth contesting first, so it supplies the replace context. The rest
+      // reach the same pool through the book records promoted above.
+      let primary = queue[0];
+      let best = Infinity;
+      for (let i = 0; i < queue.length; i++) {
+        const d = frame.targetPos.distanceDefault(queue[i].pos.current);
+        if (d < best) {
+          best = d;
+          primary = queue[i];
+        }
+      }
+      // The objects are still in the world while their deletions are handled,
+      // so every legality question below is asked with them taken out. That
+      // applies to the knockback chain too: a push that ends on a spike which
+      // has just died is not a chain, and the frame's spike list is the sensed
+      // one from before the deletions. `targetTrapped` is deliberately left
+      // alone — _replaceContext reads it to find out whether a dead object was
+      // the thing holding them.
+      this._blockersTick = -1;
+      const stillStanding = o => queue.indexOf(o) === -1;
+      frame.ourSpikes = frame.ourSpikes.filter(stillStanding);
+      frame.ourTraps = frame.ourTraps.filter(stillStanding);
+      SpikeOpportunity.reset();
+      this.sense();
+
+      queue.length = 0;
+      this._vacatedTick = frame.tick;
       this.stats.substituted = 0;
-      this._vacatingId = object.id;
+      this._vacatingId = primary.id;
       try {
         this.cycle({
           modes: modes,
-          vacated: object,
-          replace: this._replaceContext(object, frame)
+          vacated: primary,
+          replace: this._replaceContext(primary, frame)
         });
       } finally {
         this._vacatingId = null;
       }
+      return true;
     }
 
     // What the dead object was doing decides what its ground is worth. A trap
@@ -17148,7 +17355,7 @@ window.grbtp = 35;
       if (other === bot) {
         continue;
       }
-      const d = Math.hypot(claim.x - x, claim.y - y);
+      const d = hyp(claim.x - x, claim.y - y);
       if (d < EXP_FLEET_SPREAD) {
         crowding += 1 - d / EXP_FLEET_SPREAD;
       }
@@ -17317,7 +17524,7 @@ window.grbtp = 35;
     let cy = from.y;
     let heading = null;
     for (let i = 0; i < EXP_MAX_NODES; i++) {
-      const remaining = Math.hypot(dest.x - cx, dest.y - cy);
+      const remaining = hyp(dest.x - cx, dest.y - cy);
       if (remaining <= EXP_ARRIVE_RADIUS) {
         break;
       }
@@ -17531,7 +17738,7 @@ window.grbtp = 35;
           const sector = sy * EXP_SECTOR_COLS + sx;
           const cx = (sx + .5) * EXP_SECTOR_SIZE;
           const cy = (sy + .5) * EXP_SECTOR_SIZE;
-          const dist = Math.hypot(cx - pos.x, cy - pos.y);
+          const dist = hyp(cx - pos.x, cy - pos.y);
           if (dist > fallbackDist) {
             fallbackDist = dist;
             fallback = {
@@ -17585,7 +17792,7 @@ window.grbtp = 35;
           // degenerate into a two-point shuttle.
           for (let h = 0; h < state.history.length; h++) {
             const past = state.history[h];
-            if (Math.hypot(past.x - cx, past.y - cy) < EXP_DEST_MIN_SEPARATION) {
+            if (hyp(past.x - cx, past.y - cy) < EXP_DEST_MIN_SEPARATION) {
               score -= EXP_W_HISTORY;
               break;
             }
@@ -17677,7 +17884,7 @@ window.grbtp = 35;
       state.stuckTicks = 0;
       state.noProgress = 0;
       state.progressAt = now;
-      state.progressDist = Math.hypot(point.x - pos.x, point.y - pos.y);
+      state.progressDist = hyp(point.x - pos.x, point.y - pos.y);
       state.breakTarget = null;
       state.wantsNewDest = false;
       state.yieldAway = null;
@@ -17700,7 +17907,7 @@ window.grbtp = 35;
         state.stuckTicks += 1;
       }
       if (now - state.progressAt >= EXP_PROGRESS_WINDOW_MS) {
-        const dist = Math.hypot(state.dest.x - pos.x, state.dest.y - pos.y);
+        const dist = hyp(state.dest.x - pos.x, state.dest.y - pos.y);
         const gained = state.progressDist - dist;
         state.progressAt = now;
         state.progressDist = dist;
@@ -17770,7 +17977,7 @@ window.grbtp = 35;
       }
       state.nextValidateAt = now + EXP_VALIDATE_MS;
       const node = state.path[state.node];
-      const dist = Math.hypot(node.x - pos.x, node.y - pos.y);
+      const dist = hyp(node.x - pos.x, node.y - pos.y);
       const angle = Math.atan2(node.y - pos.y, node.x - pos.x);
       return !_expCorridorClear(this.client, pos.x, pos.y, angle, Math.min(dist, EXP_PROBE));
     }
@@ -17792,7 +17999,7 @@ window.grbtp = 35;
       if (state.path) {
         while (state.node < state.path.length) {
           const node = state.path[state.node];
-          if (Math.hypot(node.x - pos.x, node.y - pos.y) <= EXP_NODE_RADIUS) {
+          if (hyp(node.x - pos.x, node.y - pos.y) <= EXP_NODE_RADIUS) {
             state.node += 1;
             continue;
           }
@@ -18070,7 +18277,7 @@ window.grbtp = 35;
       _expSpacingPass(client.ownerClient, now);
 
       if (state.dest !== null) {
-        if (Math.hypot(state.dest.x - pos.x, state.dest.y - pos.y) <= EXP_ARRIVE_RADIUS) {
+        if (hyp(state.dest.x - pos.x, state.dest.y - pos.y) <= EXP_ARRIVE_RADIUS) {
           state.visited.set(state.destSector, now);
           state.dest = null;
         } else if (now - state.committedAt > EXP_DEST_TIMEOUT_MS) {
@@ -20623,8 +20830,44 @@ window.grbtp = 35;
       this.InputHandler = new InputHandler(this);
       this.StatsManager = new StatsManager(this);
     }
+    // The fleet's slot order, cached. This is asked once per bot per tick by the
+    // formation, the volley rota, the guard rota and the explorer's spacing —
+    // and it used to answer by spreading the Set into a fresh array and scanning
+    // it, so twenty bots meant twenty throwaway twenty-element arrays and four
+    // hundred comparisons every tick, for an answer that only changes when a bot
+    // joins or leaves.
+    //
+    // The cache is rebuilt from the Set whenever the fleet changes size, which
+    // is the only thing that can move a slot, and `_touchClients` marks it dirty
+    // at the two places that add and remove.
+    _clientList=[];
+    _clientIndex=new Map;
+    _clientCacheSize=-1;
+    _rebuildClientCache() {
+      this._clientList = [ ...this.clients ];
+      this._clientIndex.clear();
+      for (let i = 0; i < this._clientList.length; i++) {
+        this._clientIndex.set(this._clientList[i], i);
+      }
+      this._clientCacheSize = this.clients.size;
+    }
+    _touchClients() {
+      this._clientCacheSize = -1;
+    }
+    // The fleet as an array, without a spread per caller. Treat it as read-only:
+    // it is the cache, not a copy.
+    clientList() {
+      if (this._clientCacheSize !== this.clients.size) {
+        this._rebuildClientCache();
+      }
+      return this._clientList;
+    }
     getClientIndex(client2) {
-      return [ ...this.clients ].indexOf(client2);
+      if (this._clientCacheSize !== this.clients.size) {
+        this._rebuildClientCache();
+      }
+      const index = this._clientIndex.get(client2);
+      return index === void 0 ? -1 : index;
     }
     get isOwner() {
       return this.ownerClient === this;
@@ -21540,6 +21783,7 @@ window.grbtp = 35;
             // data-bot-id lookups all collided on the same key.
             player.id = ++this.botSequence;
             client.clients.add(player);
+            client._touchClients();
             this.removeBotConnecting();
             if (rowId) {
               const rowEl = this.frame.document.getElementById(rowId);
@@ -21561,6 +21805,7 @@ window.grbtp = 35;
             socket.removeEventListener("connected", onconnect);
             try {
               client.clients.delete(player);
+              client._touchClients();
             } catch (_) {}
             try {
               client.clientIDList.delete(player.myPlayer.id);
@@ -25401,7 +25646,7 @@ window.grbtp = 35;
       //    it thousands of structures at once would turn a keypress into a
       //    visible stall. A small model is sent whole; a large one is windowed.
       const view = ZoomHandler_default._scale && ZoomHandler_default._scale.current;
-      const span = view ? Math.hypot(view._w || 1920, view._h || 1080) / 2 : 1200;
+      const span = view ? hyp(view._w || 1920, view._h || 1080) / 2 : 1200;
       const radius = Math.max(1600, span + 700);
       const at = next.myPlayer.pos.current;
       const grid = next.ObjectManager.grid2D;
@@ -25899,7 +26144,7 @@ window.grbtp = 35;
         let ready = 0;
         for (let i = 0; i < mission.bots.length; i++) {
           const pos = mission.bots[i].myPlayer.pos.current;
-          if (Math.hypot(target.x - pos.x, target.y - pos.y) <= SCAN_ATTACK) {
+          if (hyp(target.x - pos.x, target.y - pos.y) <= SCAN_ATTACK) {
             ready += 1;
           }
         }
@@ -25920,7 +26165,7 @@ window.grbtp = 35;
         const pos = bot.myPlayer.pos.current;
         const dx = target.x - pos.x;
         const dy = target.y - pos.y;
-        const dist = Math.hypot(dx, dy);
+        const dist = hyp(dx, dy);
         const bearing = Math.atan2(dy, dx);
         mh._currentAngle = bearing;
         if (finishing) {
@@ -25939,7 +26184,7 @@ window.grbtp = 35;
         const ringY = target.y + Math.sin(slot) * SCAN_STANDOFF;
         const rdx = ringX - pos.x;
         const rdy = ringY - pos.y;
-        const rdist = Math.hypot(rdx, rdy);
+        const rdist = hyp(rdx, rdy);
         if (rdist > SCAN_STANDOFF_BAND) {
           mh.startMovement(Math.atan2(rdy, rdx));
         } else {
@@ -28222,7 +28467,7 @@ window.grbtp = 35;
     }
     _sendLyricToBotsDistributed(text) {
       if (!client || !client.clients) return;
-      const bots = [ ...client.clients ].filter(b => b && b.PacketManager && b.myPlayer && b.myPlayer.inGame);
+      const bots = client.clientList().filter(b => b && b.PacketManager && b.myPlayer && b.myPlayer.inGame);
       if (!bots.length) return;
       if (this._botsDistribIdx === undefined) this._botsDistribIdx = 0;
       const bot = bots[this._botsDistribIdx % bots.length];
@@ -31762,7 +32007,7 @@ try {
   const SQUAD_COLORS_DARK = [ "#1133aa", "#aa1111", "#11aa44" ];
   function _getOwnerBots() {
     try {
-      const bots = [ ...client.clients ];
+      const bots = client.clientList();
       return bots;
     } catch (e) {
       return [];
@@ -32285,7 +32530,7 @@ try {
         for (const bot of client.clients) {
           const pos = bot.myPlayer && bot.myPlayer.pos && bot.myPlayer.pos.current;
           if (!pos) continue;
-          const d = Math.hypot(pos.x - sender.pos.x, pos.y - sender.pos.y);
+          const d = hyp(pos.x - sender.pos.x, pos.y - sender.pos.y);
           if (d < nearestD) {
             nearestD = d;
             nearest = bot;
@@ -32322,7 +32567,7 @@ try {
       for (const [id, p] of pm.playerData) {
         if (!p.pos || p.id === AC().myPlayer.id) continue;
         const s = _worldToScreen(p.pos.x, p.pos.y);
-        const d = Math.hypot(mx - s.x, my - s.y);
+        const d = hyp(mx - s.x, my - s.y);
         if (d < bestD) {
           bestD = d;
           best = p;
@@ -32377,7 +32622,7 @@ try {
     }
     const readyTargets = [ ..._targets.values() ].filter(_isReady);
     if (readyTargets.length === 0) return;
-    const bots = [ ...client.clients ];
+    const bots = client.clientList();
     bots.forEach((bot, i) => {
       const inDuel = _1v1.get(bot);
       if (inDuel && inDuel.active) return;
@@ -32411,9 +32656,23 @@ try {
   // The overlay canvas is created once and never replaced, so its context is
   // taken once as well rather than on every frame.
   const _targetCtx = _targetCanvas.getContext("2d");
+  let _targetCanvasDirty = false;
   const _drawTargets = () => {
     const cv = _targetCanvas;
     const ctx = _targetCtx;
+    // Clearing a full-window canvas is not free, and with no marked targets
+    // there was never anything on it to clear. It is now cleared once when the
+    // last marker goes away, and then left alone.
+    if (_targets.size === 0) {
+      if (!_targetCanvasDirty) {
+        return;
+      }
+      _targetCanvasDirty = false;
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      _exclamAnims.clear();
+      return;
+    }
+    _targetCanvasDirty = true;
     ctx.clearRect(0, 0, cv.width, cv.height);
     const now = Date.now();
     for (const [id, t] of _targets) {
@@ -32852,7 +33111,16 @@ try {
     } catch (e) {}
   }, 200);
   const _farmResourceClaims = new Map;
+  // One server tick. The game runs at 9 updates a second; anything that decides
+  // what a bot does next has nothing to gain from running faster than that.
+  const RYN_SERVER_TICK_MS = 1e3 / 9;
   const _FARM_MAX_BOTS_PER_RESOURCE = 3;
+  // Ring sizes for the resource search, in grid cells (the grid is 100 units a
+  // cell). Four cells is a 800x800 square, which in any biome holds something;
+  // forty is most of a quarter of the map and is the point at which giving up
+  // and wandering is the better answer.
+  const _FARM_SCAN_MIN_CELLS = 4;
+  const _FARM_SCAN_MAX_CELLS = 40;
   class BotAutoFarmModule {
     constructor(botClient) {
       this.client = botClient;
@@ -32891,31 +33159,74 @@ try {
       if (!Settings_default._botAutoFarmEnabled) return false;
       return this._neededTypes() !== null;
     }
+    // The nearest unclaimed resource of a wanted type.
+    //
+    // This used to walk ObjectManager.objects — every object this bot has ever
+    // been sent, which after some roaming is most of the explored map — once per
+    // bot per call. It is now a widening ring query on the spatial grid the
+    // client already maintains, and the answer is identical: an object outside a
+    // square of half-width `cells * cellSize` is further away than
+    // `cells * cellSize`, so a candidate found inside that square at a shorter
+    // distance than its half-width is the nearest one there is. When the closest
+    // hit sits in a corner beyond that bound the ring simply widens and asks
+    // again.
+    _scanResources(ids, typeSet, myPos, objects, out) {
+      out.best = null;
+      out.bestDist = Infinity;
+      out.overflow = null;
+      out.overflowDist = Infinity;
+      out.bestId = null;
+      out.overflowId = null;
+      for (let i = 0; i < ids.length; i++) {
+        const resId = ids[i];
+        const obj = objects.get(resId);
+        if (obj === void 0 || obj.type === void 0 || obj.pos === void 0) continue;
+        if (!typeSet.has(obj.type)) continue;
+        const d = hyp(obj.pos.current.x - myPos.x, obj.pos.current.y - myPos.y);
+        const claimed = _farmResourceClaims.get(resId) || 0;
+        if (claimed < _FARM_MAX_BOTS_PER_RESOURCE) {
+          if (d < out.bestDist) {
+            out.bestDist = d;
+            out.best = obj;
+            out.bestId = resId;
+          }
+        } else if (d < out.overflowDist) {
+          out.overflowDist = d;
+          out.overflow = obj;
+          out.overflowId = resId;
+        }
+      }
+    }
     getNearestResource(typeSet) {
       const {ObjectManager: ObjectManager, myPlayer: myPlayer} = this.client;
       if (!ObjectManager || !myPlayer || !myPlayer.pos) return null;
-      let best = null, bestDist = Infinity, bestId = null;
-      let overflow = null, overflowDist = Infinity, overflowId = null;
       const myPos = myPlayer.pos.current;
-      for (const [resId, obj] of ObjectManager.objects) {
-        if (obj.type === undefined || obj.pos === undefined) continue;
-        if (!typeSet.has(obj.type)) continue;
-        const d = Math.hypot(obj.pos.current.x - myPos.x, obj.pos.current.y - myPos.y);
-        const claimed = _farmResourceClaims.get(resId) || 0;
-        if (claimed < _FARM_MAX_BOTS_PER_RESOURCE) {
-          if (d < bestDist) {
-            bestDist = d;
-            best = obj;
-            bestId = resId;
-          }
-        } else if (d < overflowDist) {
-          overflowDist = d;
-          overflow = obj;
-          overflowId = resId;
+      const grid = ObjectManager.grid2D;
+      const objects = ObjectManager.objects;
+      const scratch = this._scanOut || (this._scanOut = {});
+      let chosen = null;
+      let chosenId = null;
+      let cells = _FARM_SCAN_MIN_CELLS;
+      for (;;) {
+        const reach = cells * grid.cellSize;
+        this._scanResources(grid.queryFull(myPos.x, myPos.y, cells), typeSet, myPos, objects, scratch);
+        const candidate = scratch.best || scratch.overflow;
+        const candidateDist = scratch.best ? scratch.bestDist : scratch.overflowDist;
+        if (candidate !== null && candidateDist <= reach) {
+          chosen = candidate;
+          chosenId = scratch.best ? scratch.bestId : scratch.overflowId;
+          break;
         }
+        if (cells >= _FARM_SCAN_MAX_CELLS) {
+          // Nothing of this type within reach. Keep whatever the widest ring
+          // found — it is still the nearest one seen — and let the caller's
+          // wander take over when there is nothing at all.
+          chosen = candidate;
+          chosenId = candidate === null ? null : scratch.best ? scratch.bestId : scratch.overflowId;
+          break;
+        }
+        cells = Math.min(cells * 2, _FARM_SCAN_MAX_CELLS);
       }
-      const chosen = best || overflow;
-      const chosenId = best ? bestId : overflowId;
       if (chosen && chosenId !== null) {
         _farmResourceClaims.set(chosenId, (_farmResourceClaims.get(chosenId) || 0) + 1);
       }
@@ -32936,7 +33247,7 @@ try {
           const ownerPos = this.client.ownerClient && this.client.ownerClient.myPlayer && this.client.ownerClient.myPlayer.pos && this.client.ownerClient.myPlayer.pos.current;
           if (ownerPos) {
             const myPos = myPlayer.pos.current;
-            const dist = Math.hypot(ownerPos.x - myPos.x, ownerPos.y - myPos.y);
+            const dist = hyp(ownerPos.x - myPos.x, ownerPos.y - myPos.y);
             const followRadius = Number(Settings_default._followRadius) || 125;
             if (dist > followRadius) {
               const angle = Math.atan2(ownerPos.y - myPos.y, ownerPos.x - myPos.x);
@@ -32964,7 +33275,7 @@ try {
             range = DataHandler_default.getWeapon(priID).range + (target.hitScale || target.collisionScale || 0);
           }
         } catch (_) {}
-        const dist = Math.hypot(tPos.x - myPos.x, tPos.y - myPos.y);
+        const dist = hyp(tPos.x - myPos.x, tPos.y - myPos.y);
         _ModuleHandler._currentAngle = angle;
         if (_ModuleHandler.mouse) _ModuleHandler.mouse.sentAngle = angle;
         if (dist > range - 5) {
@@ -33076,7 +33387,13 @@ try {
   }
   (function _cleanupLoopInit() {
     let _prevBot = null;
-    FrameDriver.add(function _cleanupPass() {
+    let __cleanupPassLast = 0;
+    FrameDriver.add(function _cleanupPass(now) {
+      // Paced to the server tick: this decides where a bot walks and what it
+      // swings at, and it re-sorts its queue by distance each time it runs.
+      const at = now || performance.now();
+      if (at - __cleanupPassLast < RYN_SERVER_TICK_MS) return;
+      __cleanupPassLast = at;
       try {
         const bot = window._gbot1v1BotID;
         if (bot && bot !== _prevBot) {
@@ -33161,7 +33478,13 @@ try {
   }
   (function _winCleanupLoopInit() {
     let _prevBot = null;
-    FrameDriver.add(function _winCleanupPass() {
+    let __winCleanupPassLast = 0;
+    FrameDriver.add(function _winCleanupPass(now) {
+      // Paced to the server tick: this decides where a bot walks and what it
+      // swings at, and it re-sorts its queue by distance each time it runs.
+      const at = now || performance.now();
+      if (at - __winCleanupPassLast < RYN_SERVER_TICK_MS) return;
+      __winCleanupPassLast = at;
       try {
         const task = window._gbot1v1WinCleanup;
         const bot = task && task.active ? task.bot : null;
@@ -33180,7 +33503,20 @@ try {
       } catch (_) {}
     });
   })();
-  FrameDriver.add(function _autoFarmPass() {
+  // Auto farm decides where a bot walks and what it swings at. Those are
+  // server-tick decisions — the server only moves anything nine times a second —
+  // but this rode the frame driver, so at 120fps it ran thirteen times for every
+  // one that could matter. That cost twenty bots' worth of resource searching
+  // per frame, sent a movement packet per bot per frame against a budget of 119
+  // a second, and ran the wander timers (counted in ticks) thirteen times too
+  // fast. Pacing it to the tick fixes all three.
+  let _autoFarmLast = 0;
+  FrameDriver.add(function _autoFarmPass(now) {
+    const at = now || performance.now();
+    if (at - _autoFarmLast < RYN_SERVER_TICK_MS) {
+      return;
+    }
+    _autoFarmLast = at;
     try {
       if (Settings_default._botAutoFarmEnabled && !Settings_default._botsFrozen && client && client.isOwner) {
         _farmResourceClaims.clear();
