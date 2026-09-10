@@ -4547,10 +4547,9 @@ window.grbtp = 35;
       // Advances the shaft-grip system's own frame counter and idle-sway phase
       // off the timestamp already sampled here, so it reads no clock of its own.
       WeaponAnim_default.frame(this._lastFrameTime);
-      // Everything the server sent since the last frame is now in hand, so
-      // the tick's damage numbers can be added up and drawn as one. Ahead of
-      // the game's own text pass, so the sum appears on this frame.
-      DamageText_default._flush();
+      // Damage numbers are added up on the tick packet, not here. This only
+      // catches the ones a tick never came back for.
+      DamageText_default._flushStale();
       this.patchMyNameColor();
     }
     // The game canvas and its context do not change for the life of the page,
@@ -5276,10 +5275,13 @@ window.grbtp = 35;
   // scale, rise and lifetime, so it behaves exactly like the numbers it
   // stands in for.
   //
-  // The numbers are held until the next frame rather than for a fixed delay.
-  // A server tick is 111ms and a frame is about 16, so by the time the flush
-  // runs everything the server sent for one tick is already in hand, and
-  // nothing from the next tick can be yet.
+  // The numbers are held until the next server tick, which is where Whiteout
+  // flushes them — inside updatePlayers, the handler for the tick packet. A
+  // frame would be the wrong boundary: two packets sent microseconds apart
+  // are two separate tasks in the event loop, and the browser is free to
+  // paint between them, so a per-frame flush can split one hit across two
+  // frames and draw 60 and 25 after all. Between one tick packet and the
+  // next is exactly one tick's worth of damage, however the frames fall.
   // ==========================================================================
 
   // Light sky blue pulled toward violet, and left a little transparent so a
@@ -5295,14 +5297,19 @@ window.grbtp = 35;
   const TOTAL_DAMAGE_SPEED = .18;
   const TOTAL_DAMAGE_LIFE = 500;
 
-  // Two numbers belong to the same target when the server put them in the
-  // same place. It sends the target's tick position, so two numbers for one
-  // player are identical down to the float while two players are at least a
-  // scale apart — one unit separates those cases with room to spare.
-  const TOTAL_DAMAGE_EPSILON = 1;
+  // A number sitting exactly on a player's tick position is that player's,
+  // and the search stops there. Squared, because the search compares squared
+  // distances to stay off the square root.
+  const TOTAL_DAMAGE_EXACT_SQ = 1e-6;
+
+  // How long a number may wait for a tick before the render loop gives up and
+  // draws it anyway. Two ticks, so an ordinary tick boundary never trips it
+  // and nothing can be stranded by the server going quiet, a death or a
+  // disconnect.
+  const TOTAL_DAMAGE_STALE = 1e3 / Config_default.serverUpdateRate * 2;
 
   const DamageText = new class {
-    // Everything the game has handed over since the last frame.
+    // Everything the game has handed over since the last tick.
     _pending=[];
 
     // Stands in for the game's own showText call. `manager` is the game's
@@ -5321,13 +5328,53 @@ window.grbtp = 35;
         manager: manager,
         x: x,
         y: y,
-        value: value
+        value: value,
+        // Resolved now rather than at the flush, for the same reason Whiteout
+        // resolves it in showText: these are the positions the number arrived
+        // against, and by the flush the players have moved on.
+        target: this._targetOf(x, y),
+        time: Date.now()
       });
     }
 
-    // Called once a frame from the render loop. Each number claims every
-    // later one that landed on the same spot with the same sign, and the
-    // claimed ones are blanked so they are not drawn again on their own.
+    // Whiteout's target model. The packet carries a position and a value and
+    // nothing else — no id, no type — so the owner has to be worked out from
+    // the position: the player standing exactly where the server put the
+    // number owns it, and a number that is not on any player is credited to
+    // the player nearest to it.
+    _targetOf(x, y) {
+      const PlayerManager2 = client && client.PlayerManager;
+      const players = PlayerManager2 && PlayerManager2.players;
+      const myPlayer = client && client.myPlayer || null;
+      if (!players || players.length === 0) {
+        return myPlayer;
+      }
+      let nearest = null;
+      let best = Infinity;
+      for (let i = 0; i < players.length; i++) {
+        const player = players[i];
+        if (!player) {
+          continue;
+        }
+        const pos = player.pos.current;
+        const dx = x - pos.x;
+        const dy = y - pos.y;
+        const distance = dx * dx + dy * dy;
+        if (distance <= TOTAL_DAMAGE_EXACT_SQ) {
+          return player;
+        }
+        if (distance < best) {
+          best = distance;
+          nearest = player;
+        }
+      }
+      return nearest || myPlayer;
+    }
+
+    // Called on the tick packet. Each number claims every later one with the
+    // same target and the same sign, and the claimed ones are blanked so they
+    // are not drawn again on their own. The sum is drawn where the first of
+    // them landed, which is where Whiteout draws it too.
     _flush() {
       const pending = this._pending;
       if (pending.length === 0) {
@@ -5340,19 +5387,20 @@ window.grbtp = 35;
         }
         const isDamage = text.value >= 0;
         let sum = text.value;
-        for (let j = i + 1; j < pending.length; j++) {
-          const other = pending[j];
-          if (other === null || other.manager !== text.manager) {
-            continue;
+        // No target means no player was on screen to credit, which leaves
+        // nothing to group by, so the number stands alone.
+        if (text.target !== null) {
+          for (let j = i + 1; j < pending.length; j++) {
+            const other = pending[j];
+            if (other === null || other.manager !== text.manager) {
+              continue;
+            }
+            if (other.target !== text.target || other.value >= 0 !== isDamage) {
+              continue;
+            }
+            sum += other.value;
+            pending[j] = null;
           }
-          if (other.value >= 0 !== isDamage) {
-            continue;
-          }
-          if (Math.abs(other.x - text.x) > TOTAL_DAMAGE_EPSILON || Math.abs(other.y - text.y) > TOTAL_DAMAGE_EPSILON) {
-            continue;
-          }
-          sum += other.value;
-          pending[j] = null;
         }
         // Rounded for the same reason the tick's damage bucket is rounded:
         // these are sums of quarters and eighths, and adding them as floats
@@ -5361,6 +5409,16 @@ window.grbtp = 35;
         text.manager.showText(text.x, text.y, TOTAL_DAMAGE_SCALE, TOTAL_DAMAGE_SPEED, TOTAL_DAMAGE_LIFE, Math.abs(total), isDamage ? TOTAL_DAMAGE_COLOR : TOTAL_HEAL_COLOR);
       }
       pending.length = 0;
+    }
+
+    // The render loop's safety net, for numbers the tick never came back for.
+    // Entries are only ever appended, so the first one is the oldest.
+    _flushStale() {
+      const pending = this._pending;
+      if (pending.length === 0 || Date.now() - pending[0].time < TOTAL_DAMAGE_STALE) {
+        return;
+      }
+      this._flush();
     }
   }();
   const DamageText_default = DamageText;
@@ -7592,6 +7650,10 @@ window.grbtp = 35;
 
        case "a":
         PlayerManager2.updatePlayer(temp[1]);
+        // The tick boundary, and so the boundary a hit's damage numbers are
+        // added up across. Whiteout flushes at the same point, after the
+        // players have been moved to this tick's positions.
+        DamageText_default._flush();
         for (let i = 0; i < this.PacketQueue.length; i++) {
           this.PacketQueue[i]();
         }
