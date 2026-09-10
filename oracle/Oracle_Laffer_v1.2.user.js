@@ -8689,10 +8689,24 @@ else {
         // the same precaution for the same reason.
         window.ORACLE_NATIVE_SEND = window.WebSocket.prototype.send;
 
-        const ORACLE_API = (location.hostname === "sandbox.moomoo.io"
-            ? "https://api-sandbox.moomoo.io" : "https://api.moomoo.io") + "/servers?v=1.27";
-        const ORACLE_BASE_URL = location.hostname === "sandbox.moomoo.io"
-            ? "sandbox.moomoo.io" : "moomoo.io";
+        /* The four host cases the bundle distinguishes, verbatim:
+         *
+         *   Cn = hostname === "sandbox-dev.moomoo.io" || hostname === "sandbox.moomoo.io"
+         *   Ma = hostname === "dev.moomoo.io"         || hostname === "dev2.moomoo.io"
+         *   Cn ? (mt="https://api-sandbox.moomoo.io", pt="moomoo.io")
+         *      : Ma ? (mt="https://api-dev.moomoo.io", pt="moomoo.io")
+         *      : (mt="https://api.moomoo.io", pt="moomoo.io")
+         *
+         * Only the API host moves. `pt` — the baseUrl the socket hostname is
+         * built from — is "moomoo.io" on ALL of them, sandbox included. */
+        const ORACLE_SANDBOX = location.hostname === "sandbox-dev.moomoo.io"
+            || location.hostname === "sandbox.moomoo.io";
+        const ORACLE_DEV = location.hostname === "dev.moomoo.io"
+            || location.hostname === "dev2.moomoo.io";
+        const ORACLE_API = (ORACLE_SANDBOX ? "https://api-sandbox.moomoo.io"
+            : ORACLE_DEV ? "https://api-dev.moomoo.io"
+            : "https://api.moomoo.io") + "/servers?v=1.27";
+        const ORACLE_BASE_URL = "moomoo.io";
         const ORACLE_SITEKEY = "0x4AAAAAAAMYHI96GFiJzMmp";
 
         // `?server=<region>:<name>`, the same query the game reads.
@@ -8704,26 +8718,51 @@ else {
             return [parts[0], parts[1]];
         }
 
+        /* NO PORT. This is the one that produced "Socket error" and then
+         * "disconnected": the port belongs to the /ping probe, not to the
+         * socket. The bundle appends it in processServers —
+         *
+         *     let g = this.serverAddress(m);
+         *     const h = this.serverPort(m);
+         *     h && (g += `:${h}`);
+         *     const u = `https://${g}/ping`;
+         *
+         * — and pointedly does NOT when it opens the connection:
+         *
+         *     re.start(St, function(t,i,s){ let a = "wss"+"://"+t; ... })
+         *
+         * where the callback's `t` is serverAddress(s) alone and `i`, the
+         * port, is simply not used. Appending it dialled a port nothing
+         * listens on, which fails at the TCP level — an onerror followed by an
+         * onclose, which is exactly the pair of messages reported. */
         function oracleServerHost(server) {
-            let host = server.region == 0
+            return server.region == 0
                 ? "localhost"
                 : server.key + "." + server.region + "." + ORACLE_BASE_URL;
-            if (server.port) host += ":" + server.port;
-            return host;
         }
 
-        /* The game's own pick when the query names no server: among servers
-         * that are not full, the lowest ping, and among those the fullest.
-         * Ping is not measured here, so the tie-break does the work. */
-        function oraclePickServer(list) {
+        /* Candidates in preference order, rather than a single pick.
+         *
+         * The game's own choice, from wa(e), is: among servers that are not
+         * full, the lowest ping, and among those the fullest. Ping is not
+         * measured here, so the fullest-first order does the work — and the
+         * rest of the list is KEPT, because one unreachable server should not
+         * end the attempt. A single pick that fails is indistinguishable from
+         * "the game is down", which is not usually what has happened. */
+        function oracleRankServers(list) {
             const [region, name] = oracleParseServerQuery();
+            const usable = list.filter(s => s && s.region !== undefined && s.key !== undefined);
+            const notFull = usable.filter(s => s.playerCount !== s.playerCapacity);
+            const pool = (notFull.length ? notFull : usable)
+                .slice()
+                .sort((a, b) => (b.playerCount || 0) - (a.playerCount || 0));
+            // An explicit ?server=region:name goes first but is not the only
+            // thing tried, so a stale link does not strand the player.
             if (region !== undefined && name !== undefined) {
-                const exact = list.find(s => String(s.region) === String(region) && s.name === name);
-                if (exact) return exact;
+                const i = pool.findIndex(s => String(s.region) === String(region) && s.name === name);
+                if (i > 0) pool.unshift(pool.splice(i, 1)[0]);
             }
-            const open = list.filter(s => s.playerCount !== s.playerCapacity);
-            const pool = open.length ? open : list;
-            return pool.reduce((a, b) => (a && a.playerCount >= b.playerCount ? a : b), pool[0]);
+            return pool;
         }
 
         /* A Cloudflare Turnstile token, which the server now requires. The
@@ -8773,6 +8812,30 @@ else {
         }
 
         let oracleConnecting = false;
+        let oracleToken = null;
+        // Candidates left to try on this attempt, and how many failures are
+        // allowed before the player is told rather than retried at silently.
+        let oracleCandidates = [];
+        let oracleTries = 0;
+        const ORACLE_MAX_TRIES = 3;
+
+        /* Called from disconnect(). Advances to the next candidate rather than
+         * giving up on the first unreachable server. It only retries a
+         * connection that never reached io-init — once the handshake has
+         * happened the drop is a real disconnect and belongs to the player,
+         * not to the server list. */
+        function oracleRetry(hadHandshake) {
+            if (hadHandshake) { oracleTries = 0; oracleCandidates = []; return; }
+            if (oracleTries >= ORACLE_MAX_TRIES || !oracleCandidates.length) return;
+            oracleTries++;
+            const next = oracleCandidates.shift();
+            let address = "wss://" + oracleServerHost(next);
+            if (oracleToken) address += "?token=" + encodeURIComponent("cf:" + oracleToken);
+            try { showLoadingText("Connecting..."); } catch (e) {}
+            wsAddress = address;
+            connectSocket(address);
+        }
+
         async function oracleConnect() {
             /* Guarded, but the guard is RELEASED on every path that does not
              * reach connectSocket. The live bundle gets this wrong — it latches
@@ -8785,11 +8848,13 @@ else {
             try {
                 const list = await fetch(ORACLE_API).then(r => r.json());
                 if (!Array.isArray(list) || !list.length) throw new Error("empty server list");
-                const server = oraclePickServer(list);
-                if (!server) throw new Error("no server to pick");
-                const token = await oracleTurnstileToken();
+                oracleCandidates = oracleRankServers(list);
+                if (!oracleCandidates.length) throw new Error("no usable server in the list");
+                oracleTries = 0;
+                oracleToken = await oracleTurnstileToken();
+                const server = oracleCandidates.shift();
                 let address = "wss://" + oracleServerHost(server);
-                if (token) address += "?token=" + encodeURIComponent("cf:" + token);
+                if (oracleToken) address += "?token=" + encodeURIComponent("cf:" + oracleToken);
                 wsAddress = address;
                 connectSocket(address);
             } catch (e) {
@@ -9101,11 +9166,16 @@ else {
              * `if (!inGame && socketReady())` — one drop and the Play button
              * did nothing for the rest of the page's life. */
             inGame = false;
+            // Read BEFORE close() clears it: a drop after the handshake is a
+            // real disconnect, a drop before it means this server never
+            // answered and the next candidate is worth trying.
+            const hadHandshake = oracleHandshake;
             io.close();
             // The connect guard has to come off too, or the retry below is the
             // one thing that can never happen.
             oracleConnecting = false;
             showLoadingText(reason);
+            oracleRetry(hadHandshake);
         }
         function showLoadingText(text) {
             mainMenu.style.display = "block";

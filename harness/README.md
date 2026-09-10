@@ -685,7 +685,7 @@ skipped rather than thrown; the host formula matches the game's; and a second
 io-init rebuilds the session with the new key, the new table and the sequence
 restarted.
 
-21 mutations, all caught. Three were missed on the first run and all three were
+30 mutations, all caught. Four were missed on the first run and all four were
 bench faults worth recording, because each is a way a green check can be
 worthless:
 
@@ -696,7 +696,13 @@ worthless:
   into it — the exact ordering bug — was invisible;
 * a check for `this.socket = null` matched the **comment** explaining why that
   line matters. Comments are now stripped from every lifted slice centrally,
-  after this happened twice.
+  after this happened twice;
+* the address section **hard-coded what it expected** and got it wrong the same
+  way the code was wrong — it asserted that the server record's port belongs in
+  the socket host, so it passed a client that dialled a port nothing listens on.
+  That is the bug users saw as "Socket error" then "disconnected". The
+  expectation is now lifted from the game's own `serverAddress`, because one
+  copied from the same misreading as the code cannot catch the misreading.
 
 ### `login-latch.js` and `login-latch-mutate.py`
 

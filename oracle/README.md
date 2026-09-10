@@ -90,9 +90,54 @@ Winning the race is not the answer either: Oracle resolves `gameCanvas` and
 `#enterGame` at module top level, so `@run-at document-start` would throw before
 the DOM exists and kill the script outright.
 
-**So the address is built here instead**, with the game's own formula —
-`key + "." + region + "." + baseUrl`, plus `:port`, honouring `?server=region:name`
-from the query — after fetching `api.moomoo.io/servers?v=1.27`.
+**So the address is built here instead**, with the game's own formula, after
+fetching `api.moomoo.io/servers?v=1.27`.
+
+### The port does not go in the socket address
+
+This one was reported as **"Socket error" then "disconnected"**, and the first
+version of this fix caused it. The bundle appends the port when it probes a
+server:
+
+```js
+let g = this.serverAddress(m);
+const h = this.serverPort(m);
+h && (g += `:${h}`);
+const u = `https://${g}/ping`;          // the PING url has the port
+```
+
+and pointedly does not when it opens the connection:
+
+```js
+re.start(St, function(t,i,s){ let a = "wss"+"://"+t; ... })
+```
+
+The callback's `t` is `serverAddress(s)` alone; `i` — the port — is simply not
+used. Appending it dialled a port nothing listens on, which fails at the TCP
+level: an `onerror` followed by an `onclose`, i.e. exactly those two messages.
+
+`serverAddress` is `key + "." + region + "." + baseUrl`, and **`baseUrl` is
+`moomoo.io` on every host the bundle distinguishes** — sandbox and dev included.
+Only the API host moves:
+
+```js
+Cn ? (mt="https://api-sandbox.moomoo.io", pt="moomoo.io")
+   : Ma ? (mt="https://api-dev.moomoo.io", pt="moomoo.io")
+   : (mt="https://api.moomoo.io", pt="moomoo.io")
+```
+
+The bench no longer takes anyone's word for this: it **lifts the game's own
+`serverAddress` out of the bundle** and compares. An expectation written down by
+hand is copied from the same reading as the code, so it cannot catch a
+misreading — which is precisely what happened the first time.
+
+### One bad server is not the end of the attempt
+
+The server list is kept as a ranked candidate list rather than a single pick.
+A connection that fails **before io-init** advances to the next candidate, up to
+three tries; one that fails **after** io-init is a real disconnect and is left
+alone. A single pick that fails is indistinguishable from "the game is down",
+which is not usually what has happened.
 
 And the captcha: the block at the top of the file waited for `#altcha_iframe`
 and clicked `#altcha_checkbox`. **moomoo replaced altcha with Cloudflare

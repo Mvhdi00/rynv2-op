@@ -59,7 +59,8 @@ MUTATIONS = [
     ("close() keeps the stale signed session",
      "                oracleNet = null;\n                oracleHandshake = false;\n", ""),
     ("a disconnect no longer clears inGame",
-     "            inGame = false;\n            io.close();", "            io.close();"),
+     "            inGame = false;\n            // Read BEFORE close() clears it",
+     "            // Read BEFORE close() clears it"),
     ("a disconnect no longer releases the connect guard",
      "            oracleConnecting = false;\n            showLoadingText(reason);",
      "            showLoadingText(reason);"),
@@ -71,10 +72,49 @@ MUTATIONS = [
     ("the host drops the region",
      '                : server.key + "." + server.region + "." + ORACLE_BASE_URL;',
      '                : server.key + "." + ORACLE_BASE_URL;'),
-    ("the port is left off the host",
-     '            if (server.port) host += ":" + server.port;\n', ""),
-    ("the token loses its cf: prefix",
-     'encodeURIComponent("cf:" + token)', "encodeURIComponent(token)"),
+    # The bug that produced the report: the port belongs to the /ping probe,
+    # not to the socket, and dialling it fails at the TCP level — an onerror
+    # then an onclose, i.e. "Socket error" followed by "disconnected".
+    ("the record's port is put back into the socket host",
+     '            return server.region == 0\n'
+     '                ? "localhost"\n'
+     '                : server.key + "." + server.region + "." + ORACLE_BASE_URL;',
+     '            let host = server.region == 0\n'
+     '                ? "localhost"\n'
+     '                : server.key + "." + server.region + "." + ORACLE_BASE_URL;\n'
+     '            if (server.port) host += ":" + server.port;\n'
+     '            return host;'),
+    ("the baseUrl follows the API host onto sandbox",
+     'const ORACLE_BASE_URL = "moomoo.io";',
+     'const ORACLE_BASE_URL = ORACLE_SANDBOX ? "sandbox.moomoo.io" : "moomoo.io";'),
+    ("the dev API host is dropped",
+     '            : ORACLE_DEV ? "https://api-dev.moomoo.io"\n', ""),
+    ("the token loses its cf: prefix on the first attempt",
+     '                if (oracleToken) address += "?token=" + encodeURIComponent("cf:" + oracleToken);\n'
+     '                wsAddress = address;',
+     '                if (oracleToken) address += "?token=" + encodeURIComponent(oracleToken);\n'
+     '                wsAddress = address;'),
+    # ── the fallback ───────────────────────────────────────────────────────
+    ("the candidate list collapses back to a single pick",
+     "            return pool;", "            return pool.slice(0, 1);"),
+    ("full servers are offered as candidates",
+     "            const notFull = usable.filter(s => s.playerCount !== s.playerCapacity);",
+     "            const notFull = usable;"),
+    ("the ranking prefers the emptiest instead of the fullest",
+     "                .sort((a, b) => (b.playerCount || 0) - (a.playerCount || 0));",
+     "                .sort((a, b) => (a.playerCount || 0) - (b.playerCount || 0));"),
+    ("a real disconnect is retried against another server",
+     "            if (hadHandshake) { oracleTries = 0; oracleCandidates = []; return; }\n", ""),
+    ("the retry is unbounded",
+     "            if (oracleTries >= ORACLE_MAX_TRIES || !oracleCandidates.length) return;",
+     "            if (!oracleCandidates.length) return;"),
+    ("the handshake flag is read after close() has cleared it",
+     "            const hadHandshake = oracleHandshake;\n            io.close();",
+     "            io.close();\n            const hadHandshake = oracleHandshake;"),
+    ("the retry drops the token from the address",
+     '            if (oracleToken) address += "?token=" + encodeURIComponent("cf:" + oracleToken);\n'
+     '            try { showLoadingText("Connecting..."); } catch (e) {}',
+     '            try { showLoadingText("Connecting..."); } catch (e) {}'),
     # ── the ghosts ─────────────────────────────────────────────────────────
     ("the transport block is removed but the client still calls it",
      "const RevTransport = (function () {", "const RevTransportX = (function () {"),

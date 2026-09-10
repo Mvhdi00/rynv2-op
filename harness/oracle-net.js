@@ -330,30 +330,116 @@ console.log("\n  RECONNECT — a drop must not be permanent\n");
 }
 
 // ── 4. the address ────────────────────────────────────────────────────────
-/* The game builds it as
- *     serverAddress(e){ return e.region==0?"localhost":e.key+"."+e.region+"."+this.baseUrl }
- *     serverPort(e){ return e.port }
- *     let a = "wss://"+t; e && (a += "?token="+encodeURIComponent(e));
- * so the client's has to agree, or it connects to nothing. */
-console.log("\n  ADDRESS — the same formula the game uses\n");
+/* Checked against the GAME'S OWN serverAddress, lifted out of the bundle,
+ * rather than against a formula written down here.
+ *
+ * The first version of this section hard-coded what it expected and got it
+ * wrong in exactly the way the client was wrong — it asserted that the port
+ * belongs in the host, so it passed a client that dialled the wrong port. An
+ * expectation copied from the same misreading as the code cannot catch the
+ * misreading. So the reference comes out of the bundle. */
+console.log("\n  ADDRESS — against the game's own serverAddress\n");
 {
+  const bundle = fs.readFileSync(path.join(ROOT, "harness/fixtures/moomoo_bundle.js"), "utf8");
+
+  const addrFn = /serverAddress=function\(([\s\S]{0,120}?)\};/.exec(bundle);
+  say(!!addrFn, "the game's serverAddress lifts out of the bundle");
+  const gameBox = {};
+  vm.createContext(gameBox);
+  vm.runInContext("this.f = function(" + "e" + "){" +
+    /serverAddress=function\(\w+\)\{(.*?)\}/.exec(bundle)[1] + "}.bind({baseUrl:'moomoo.io'})", gameBox);
+  const gameHost = gameBox.f;
+
   const hostFn = slice("function oracleServerHost(server) {", "oracleServerHost");
-  const box = { location: { hostname: "moomoo.io" } };
+  const box = {};
   vm.createContext(box);
   vm.runInContext('const ORACLE_BASE_URL = "moomoo.io";\n' + hostFn + "\nthis.h = oracleServerHost;", box);
+
   const cases = [
-    [{ region: "eu", key: "0", port: 0 }, "0.eu.moomoo.io"],
-    [{ region: "eu", key: "3", port: 8008 }, "3.eu.moomoo.io:8008"],
-    [{ region: 0, key: "0", port: 0 }, "localhost"],
+    { region: "eu", key: "0", port: 0 },
+    { region: "eu", key: "3", port: 8008 },
+    { region: "us-east", key: "12", port: 443 },
+    { region: 0, key: "0", port: 3000 },
   ];
   let ok = true, note = "";
-  for (const [server, want] of cases) {
-    const got = box.h(server);
-    if (got !== want) { ok = false; note = got + " != " + want; break; }
+  for (const server of cases) {
+    const want = gameHost(server), got = box.h(server);
+    if (got !== want) { ok = false; note = JSON.stringify(server) + " -> " + got + ", game says " + want; break; }
   }
-  say(ok, ok ? "region/key/port build the host the game builds" : note);
-  say(src.includes('encodeURIComponent("cf:" + token)'),
-      "and the Turnstile token goes on as ?token=cf:<token>, which is the form the server reads");
+  say(ok, ok ? "matches the game on every case, including a server that carries a port" : note);
+
+  // Stated on its own, because it is the bug that caused the report.
+  say(box.h({ region: "eu", key: "3", port: 8008 }) === "3.eu.moomoo.io",
+      "a port on the server record does NOT go into the socket host — it belongs to the /ping probe");
+
+  /* And the baseUrl really is moomoo.io everywhere. The bundle sets
+   *   Cn ? (mt="https://api-sandbox.moomoo.io", pt="moomoo.io")
+   *      : Ma ? (mt="https://api-dev.moomoo.io", pt="moomoo.io")
+   *      : (mt="https://api.moomoo.io", pt="moomoo.io")
+   * so only the API host moves. */
+  const pts = (bundle.match(/pt="([^"]+)"/g) || []).map(x => x.slice(4, -1));
+  say(pts.length >= 3 && pts.every(v => v === "moomoo.io"),
+      "the bundle's baseUrl is moomoo.io on every host it distinguishes (" +
+      [...new Set(pts)].join(", ") + ")");
+  say(/const ORACLE_BASE_URL = "moomoo.io";/.test(src),
+      "and the client uses that unconditionally, sandbox included");
+
+  const apis = /const ORACLE_API = ([\s\S]*?);\n/.exec(src)[1];
+  for (const host of ["api-sandbox.moomoo.io", "api-dev.moomoo.io", "api.moomoo.io"]) {
+    say(apis.includes(host), "the API host " + host + " is covered");
+  }
+
+  /* Both sites that build an address — the first attempt and the retry — must
+   * carry the prefix. Pinning a variable name here made this fail on a rename
+   * that changed nothing, so it matches the shape instead. */
+  const tokenSites = src.match(/encodeURIComponent\("cf:"\s*\+\s*\w+\)/g) || [];
+  const addrSites = src.match(/"wss:\/\/"\s*\+\s*oracleServerHost\(/g) || [];
+  say(tokenSites.length === addrSites.length && tokenSites.length >= 1,
+      "every address built carries ?token=cf:<token>, the form the server reads (" +
+      tokenSites.length + " of " + addrSites.length + " sites)");
+}
+
+/* The fallback across servers. One unreachable server should not end the
+ * attempt — a single pick that fails looks exactly like "the game is down",
+ * which is not usually what has happened. */
+console.log("\n  FALLBACK — one bad server is not the end of the attempt\n");
+{
+  const rankFn = slice("function oracleRankServers(list) {", "oracleRankServers");
+  // The real parser is lifted too, so the ordering is checked against the
+  // query handling the client actually ships.
+  const queryFn = slice("function oracleParseServerQuery() {", "oracleParseServerQuery");
+  const box = { location: { search: "" }, URLSearchParams };
+  vm.createContext(box);
+  vm.runInContext(queryFn + "\n" + rankFn + "\nthis.rank = oracleRankServers;" +
+    "\nthis.setQuery = function(q){ location.search = q; };", box);
+
+  const list = [
+    { region: "eu", key: "0", name: "0", playerCount: 5, playerCapacity: 50 },
+    { region: "eu", key: "1", name: "1", playerCount: 40, playerCapacity: 50 },
+    { region: "eu", key: "2", name: "2", playerCount: 50, playerCapacity: 50 },  // full
+    { region: "us", key: "3", name: "3", playerCount: 20, playerCapacity: 50 },
+  ];
+  const ranked = box.rank(list);
+  say(ranked.length === 3, "full servers are dropped from the candidates (" + ranked.length + " of 4)");
+  say(ranked[0].key === "1", "the fullest not-full server comes first, as the game prefers (" + ranked[0].key + ")");
+  say(ranked.length > 1, "and the rest are kept as fallbacks rather than discarded");
+
+  // An explicit ?server= goes first, but does not become the only candidate —
+  // a stale link should not strand the player.
+  box.setQuery("?server=us:3");
+  const pinned = box.rank(list);
+  say(pinned[0].key === "3", "an explicit ?server=region:name is tried first (" + pinned[0].key + ")");
+  say(pinned.length === 3, "and the others remain as fallbacks (" + pinned.length + ")");
+
+  const retryFn = slice("function oracleRetry(hadHandshake) {", "oracleRetry");
+  say(/if \(hadHandshake\)/.test(retryFn),
+      "a drop AFTER the handshake is not retried against another server — that is a real " +
+      "disconnect, not an unreachable host");
+  say(/oracleTries >= ORACLE_MAX_TRIES/.test(retryFn), "and the retry is bounded");
+
+  const discFn = slice("function disconnect(reason) {", "disconnect");
+  say(/const hadHandshake = oracleHandshake;[\s\S]*io\.close\(\)/.test(discFn),
+      "the handshake flag is read BEFORE close() clears it, or every drop would look pre-handshake");
 }
 
 // ── 5. the old protocol is really gone ────────────────────────────────────
