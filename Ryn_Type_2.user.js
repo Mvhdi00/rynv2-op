@@ -1701,10 +1701,10 @@ window.grbtp = 35;
   const Navbar_default = "<div id=\"navbar-container\">\n  <div class=\"rail-brand\">\n    <span class=\"rail-mark\">RYN</span>\n    <span class=\"rail-sub\">Type 2</span>\n  </div>\n\n  <div id=\"ryn-search-wrap\">\n    <input id=\"ryn-search-input\" type=\"text\" placeholder=\"Search settings\" autocomplete=\"off\" spellcheck=\"false\">\n    <span id=\"ryn-search-clear\" title=\"Clear\">&#10005;</span>\n    <div id=\"ryn-search-dropdown\"></div>\n  </div>\n\n  <div class=\"rail-label\">Categories</div>\n  <nav>\n    <button data-id=\"1\" class=\"open-menu active\"><span class=\"nav-index\">01</span><span class=\"nav-label\">Keybinds</span></button>\n    <button data-id=\"3\" class=\"open-menu\"><span class=\"nav-index\">02</span><span class=\"nav-label\">Visual</span></button>\n    <button data-id=\"2\" class=\"open-menu\"><span class=\"nav-index\">03</span><span class=\"nav-label\">Combat</span></button>\n    <button data-id=\"4\" class=\"open-menu\"><span class=\"nav-index\">04</span><span class=\"nav-label\">Misc</span></button>\n    <button data-id=\"7\" class=\"open-menu\"><span class=\"nav-index\">05</span><span class=\"nav-label\">Music</span></button>\n    <button data-id=\"5\" class=\"open-menu\"><span class=\"nav-index\">06</span><span class=\"nav-label\">Bots</span></button>\n  </nav>\n\n  <div class=\"rail-label\">In this category</div>\n  <div id=\"nav-outline\"></div>\n\n  <div class=\"rail-foot\">\n    <span id=\"ryn-version\">Ryn Type 2</span>\n    <svg id=\"close-button\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" title=\"Close menu\">\n      <line x1=\"5\" y1=\"5\" x2=\"19\" y2=\"19\" stroke-linecap=\"round\"/>\n      <line x1=\"19\" y1=\"5\" x2=\"5\" y2=\"19\" stroke-linecap=\"round\"/>\n    </svg>\n  </div>\n</div>";
   const Devtool_default = "";
   const Keybinds_default = "<div class=\"menu-page opened\" data-id=\"1\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Keybinds</h1>\n        <p class=\"page-description\">Click a key to start editing, then press the key or mouse button you want. Backspace clears a binding. A key used twice is marked as a conflict on both rows.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Items &amp; Weapons<span class=\"sec-sub\">Hotbar placement and the weapon slots.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Food</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_food\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Wall</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_wall\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spike\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Windmill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_windmill\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Farm</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_farm\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Trap</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_trap\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Turret</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_turret\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spawn</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spawn\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Client<span class=\"sec-sub\">Opening this menu and firing the instakill sequence.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Menu</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_toggleMenu\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Instakill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_instakill\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Quick Actions<span class=\"sec-sub\">One-press build patterns and on/off switches for the automations.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Quad Spikes</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_fourSpikes\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Quad Traps</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_fourTraps\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Boost Spike Rush</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_boostSpikes\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Automill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoMillKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Dash</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_dashMovementKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Auto Grind</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoGrindKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Autoplacer</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoplacerKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Controls<span class=\"sec-sub\">Everything that commands the bots you have connected.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spawn Bot</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spawnBot\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Kill All Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_killAllBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Hold Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_holdBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Release Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_releaseBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Bot Auto-Attack</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAutoAttack\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Auto Farm</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAutoFarm\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Repel Alts</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_repelAlts\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Bot Random Movement</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_scatterBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Avoid Shield Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAvoidShieldKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Volley Fire</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botVolleyKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Freeze Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_freezeBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Lock bot position</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_lockBotPosition\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n    <div class=\"section\">\n        <div class=\"section-title\">Possession<span class=\"sec-sub\">Which of your characters you are controlling. These three keys are taken before anything else sees them &mdash; the game maps the arrows to movement, so letting one through would walk the character you just left.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Next character</span>\n                    <span class=\"opt-desc\">Steps forward through you and every bot that is in the game.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessNext\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Previous character</span>\n                    <span class=\"opt-desc\">The same ring, backwards.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessPrev\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Back to your own character</span>\n                    <span class=\"opt-desc\">Jumps straight back to you from wherever you are.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessMain\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n</div>";
-  const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Combat</h1>\n        <p class=\"page-description\">Every automation the client runs during a fight, ordered by the moment it fires: the kill sequence first, then how it places, how it survives, and what it does with the rest of the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Kill Sequences<span class=\"sec-sub\">Timed weapon and hat chains that try to finish a target outright.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_toolSpearInsta\">Tool Spear Insta</label>\n                    <span class=\"opt-desc\">Tool hammer into polearm burst.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_toolSpearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeGearInsta\">Spike Gear Insta</label>\n                    <span class=\"opt-desc\">Spike placement combined with a gear swap on the same tick.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeGearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\n                    <span class=\"opt-desc\">Ranged finisher chaining musket and bow shots.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_musketBowInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Sync<span class=\"sec-sub\">Landing separate sources of damage on the same server tick.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\n                    <span class=\"opt-desc\">Lines up your hits with whatever else is about to damage the target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\n                    <span class=\"opt-desc\">Times your swing to a turret shot landing.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_velocityTick\">Velocity Tick</label>\n                    <span class=\"opt-desc\">Uses the target's movement to predict the tick worth hitting.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_velocityTick\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSync\">Spike sync</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSyncHammer\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Placement<span class=\"sec-sub\">Where spikes and traps go, and how fast they get replaced.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacer\">Autoplacer</label>\n                    <span class=\"opt-desc\">Keeps spikes going down around you without holding the key.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoplacer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoplacer radius</span>\n                    <span class=\"opt-desc\">How far from you the autoplacer is allowed to build.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Placer scanners</span>\n                    <span class=\"opt-desc\">How many spots the autoplacer looks at once. The first one is aimed at the enemy; each of the others owns its own slice of the ring around you and never builds in another's, so the open ground on your other sides gets used instead of ignored. 1 is the enemy-facing scanner alone.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerScanners\" type=\"range\" step=\"1\" min=\"1\" max=\"6\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacerResolution\">Placer resolution</label>\n                    <span class=\"opt-desc\">How finely the autoplacer cuts the ring around you when it looks for ground. A spike on the ring blocks about 153 degrees of it, so what is left is a few arcs and the slots between builds are thin - finer steps find slots a coarser pass walks straight past. Legality is solved for the whole ring at once rather than asked one angle at a time, so 144 costs about 0.003ms a tick more than 36. Used flat, every tick.</span>\n                </div>\n                <select id=\"_autoplacerResolution\" class=\"ryn-select\">\n                    <option value=\"36\">36 - coarse</option>\n                    <option value=\"72\">72 - default</option>\n                    <option value=\"144\">144 - fine</option>\n                </select>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_prePlace\">Preplace</label>\n                    <span class=\"opt-desc\">Puts the next spike down before the target arrives at it.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_prePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spamPrePlace\">Spam Preplace</label>\n                    <span class=\"opt-desc\">Lets a preplace that was refused for being a tick early try the same slot once more on the next tick, instead of being locked out of it by its own send.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spamPrePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_replace\">Replace</label>\n                    <span class=\"opt-desc\">Rebuilds a broken spike the moment it goes down.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_replace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\n                    <span class=\"opt-desc\">Builds to block an incoming placement against you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_placementDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapKB\">Trap KB</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapKB\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeKB\">Spike KB</label>\n                    <span class=\"opt-desc\">Swings the primary when the knockback would put them in one of your spikes, or when they are already standing in one. Katana or polearm.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeKB\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Healing, shielding and the hats that keep you alive.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\n                    <span class=\"opt-desc\">Predicts what can land this tick and eats before it does, not after.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoheal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_survivalPreheal\">Survival Preheal</label>\n                    <span class=\"opt-desc\">Lets a lethal spike push heal through the shame limit. Off keeps shame clean and accepts the death.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_survivalPreheal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoShield\">Auto Shield</label>\n                    <span class=\"opt-desc\">Raises the shield against incoming melee.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_rangedShield\">Ranged Shield</label>\n                    <span class=\"opt-desc\">Also shields against projectiles.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_rangedShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_empDefense\">Emp Defense</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_empDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoemp\">Auto emp</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoemp\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_soldierDefault\">Soldier default</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_soldierDefault\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeSoldier\">Safe Soldier</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeSoldier\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeWalk\">Safe walk</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeWalk\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Anti Systems<span class=\"sec-sub\">Reactions to what other players and the world do to you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\n                    <span class=\"opt-desc\">Reacts to an enemy closing in on you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_antienemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antianimal\">Anti animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antianimal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antispike\">Anti spike</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antispike\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiSpikePush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiRetrap\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you wear, and when it changes.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\n                    <span class=\"opt-desc\">Swaps to the hat that suits the biome you are standing in.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_biomehats\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\n                    <span class=\"opt-desc\">Picks gear from the threat in front of you rather than a fixed set.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_adaptiveGearSwitching\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_tailPriority\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_cowboyWhenSafe\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\n                    <span class=\"opt-desc\">Pushes a target toward your own spikes.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto Push Range</span>\n                    <span class=\"opt-desc\">How close a target has to be before autopush engages.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_trapStandoff\">Trap Standoff</label>\n                    <span class=\"opt-desc\">Keeps you off an enemy held in your trap. Your body is the only thing that can push a trapped player out - a weapon hit cannot, because the trap zeroes their velocity, but walking into them moves their position directly. Blocks only the part of your movement that closes the gap, so you still circle and reposition normally. Auto Push does the opposite on purpose and takes priority when it is on.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_trapStandoff\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Trap Standoff Distance</span>\n                    <span class=\"opt-desc\">The closest you will get. The game starts pushing at 70, so 70 and up stops the push outright; under 70 you still overlap and still shove them, and the number only caps how deep the overlap gets. Holding a direction against the line orbits outward a little before turning back in, so you sit between this number and about 28 above it - and a melee swing reaches weapon range plus 63, which is 128 for the shortest primary in the game, so every weapon stays in reach across the whole slider.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_trapStandoffRange\" type=\"range\" step=\"1\" min=\"50\" max=\"90\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\n                    <span class=\"opt-desc\">Short burst movement instead of a steady walk.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_dashMovement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\n                    <span class=\"opt-desc\">Breaks the structures standing between you and a target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autobreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_breakPosition\">Break Position</label>\n                        <span class=\"opt-desc\">Which trap Autobreak takes. Inside: only the trap you are caught in. Outside: only traps you are not in. Spikes break the same either way.</span>\n                    </div>\n                    <select id=\"_breakPosition\" class=\"ryn-select\">\n                        <option value=\"inside\">Inside</option>\n                        <option value=\"outside\">Outside</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_automill\">Automill</label>\n                    <span class=\"opt-desc\">Leaves windmills behind you while you move.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_automill\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\n                    <span class=\"opt-desc\">Gathers resources on its own when nothing is threatening you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoGrind\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetPrimary\">Grind Until (primary)</label>\n                        <span class=\"opt-desc\">Which variant to take your primary weapon to. Grinding idles once both slots reach their target, and picks straight back up if you raise one.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetPrimary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                    </select>\n                </div>\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetSecondary\">Grind Until (secondary)</label>\n                        <span class=\"opt-desc\">The same for your secondary. Only the great hammer is ground here, so this does nothing while you carry anything else.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetSecondary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPlay\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoSteal\">Autosteal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoSteal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_turretSteal\">Turret steal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSteal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapAnimal\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
+  const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Combat</h1>\n        <p class=\"page-description\">Every automation the client runs during a fight, ordered by the moment it fires: the kill sequence first, then how it places, how it survives, and what it does with the rest of the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Kill Sequences<span class=\"sec-sub\">Timed weapon and hat chains that try to finish a target outright.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_toolSpearInsta\">Tool Spear Insta</label>\n                    <span class=\"opt-desc\">Tool hammer into polearm burst.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_toolSpearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeGearInsta\">Spike Gear Insta</label>\n                    <span class=\"opt-desc\">Spike placement combined with a gear swap on the same tick.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeGearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\n                    <span class=\"opt-desc\">Ranged finisher chaining musket and bow shots.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_musketBowInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Sync<span class=\"sec-sub\">Landing separate sources of damage on the same server tick.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\n                    <span class=\"opt-desc\">Lines up your hits with whatever else is about to damage the target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\n                    <span class=\"opt-desc\">Times your swing to a turret shot landing.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_velocityTick\">Velocity Tick</label>\n                    <span class=\"opt-desc\">Uses the target's movement to predict the tick worth hitting.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_velocityTick\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSync\">Spike sync</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSyncHammer\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Placement<span class=\"sec-sub\">Where spikes and traps go, and how fast they get replaced.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacer\">Autoplacer</label>\n                    <span class=\"opt-desc\">Keeps spikes going down around you without holding the key.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoplacer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoplacer radius</span>\n                    <span class=\"opt-desc\">How far from you the autoplacer is allowed to build.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Placer scanners</span>\n                    <span class=\"opt-desc\">How many spots the autoplacer looks at once. The first one is aimed at the enemy; each of the others owns its own slice of the ring around you and never builds in another's, so the open ground on your other sides gets used instead of ignored. 1 is the enemy-facing scanner alone.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerScanners\" type=\"range\" step=\"1\" min=\"1\" max=\"6\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacerResolution\">Placer resolution</label>\n                    <span class=\"opt-desc\">How finely the autoplacer cuts the ring around you when it looks for ground. A spike on the ring blocks about 153 degrees of it, so what is left is a few arcs and the slots between builds are thin - finer steps find slots a coarser pass walks straight past. Legality is solved for the whole ring at once rather than asked one angle at a time, so 144 costs about 0.003ms a tick more than 36, which is why it is the default. One step moves the landing point 13.8 units at 36 and 3.4 at 144. Used flat, every tick.</span>\n                </div>\n                <select id=\"_autoplacerResolution\" class=\"ryn-select\">\n                    <option value=\"36\">36 - coarse</option>\n                    <option value=\"72\">72 - balanced</option>\n                    <option value=\"144\">144 - default</option>\n                </select>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_prePlace\">Preplace</label>\n                    <span class=\"opt-desc\">Puts the next spike down before the target arrives at it.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_prePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spamPrePlace\">Spam Preplace</label>\n                    <span class=\"opt-desc\">Lets a preplace that was refused for being a tick early try the same slot once more on the next tick, instead of being locked out of it by its own send.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spamPrePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_replace\">Replace</label>\n                    <span class=\"opt-desc\">Rebuilds a broken spike the moment it goes down.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_replace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\n                    <span class=\"opt-desc\">Builds to block an incoming placement against you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_placementDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapKB\">Trap KB</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapKB\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeKB\">Spike KB</label>\n                    <span class=\"opt-desc\">Swings the primary when the knockback would put them in one of your spikes, or when they are already standing in one. Katana or polearm.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeKB\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Healing, shielding and the hats that keep you alive.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\n                    <span class=\"opt-desc\">Predicts what can land this tick and eats before it does, not after.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoheal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoShield\">Auto Shield</label>\n                    <span class=\"opt-desc\">Raises the shield against incoming melee.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_rangedShield\">Ranged Shield</label>\n                    <span class=\"opt-desc\">Also shields against projectiles.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_rangedShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_empDefense\">Emp Defense</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_empDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoemp\">Auto emp</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoemp\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_soldierDefault\">Soldier default</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_soldierDefault\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeSoldier\">Safe Soldier</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeSoldier\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeWalk\">Safe walk</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeWalk\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Anti Systems<span class=\"sec-sub\">Reactions to what other players and the world do to you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\n                    <span class=\"opt-desc\">Reacts to an enemy closing in on you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_antienemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antianimal\">Anti animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antianimal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antispike\">Anti spike</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antispike\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiSpikePush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiRetrap\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you wear, and when it changes.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\n                    <span class=\"opt-desc\">Swaps to the hat that suits the biome you are standing in.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_biomehats\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\n                    <span class=\"opt-desc\">Picks gear from the threat in front of you rather than a fixed set.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_adaptiveGearSwitching\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_tailPriority\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_cowboyWhenSafe\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\n                    <span class=\"opt-desc\">Pushes a target toward your own spikes.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto Push Range</span>\n                    <span class=\"opt-desc\">How close a target has to be before autopush engages.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_trapStandoff\">Trap Standoff</label>\n                    <span class=\"opt-desc\">Keeps you off an enemy held in your trap. Your body is the only thing that can push a trapped player out - a weapon hit cannot, because the trap zeroes their velocity, but walking into them moves their position directly. Blocks only the part of your movement that closes the gap, so you still circle and reposition normally. Auto Push does the opposite on purpose and takes priority when it is on.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_trapStandoff\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Trap Standoff Distance</span>\n                    <span class=\"opt-desc\">The closest you will get. The game starts pushing at 70, so 70 and up stops the push outright; under 70 you still overlap and still shove them, and the number only caps how deep the overlap gets. Holding a direction against the line orbits outward a little before turning back in, so you sit between this number and about 28 above it - and a melee swing reaches weapon range plus 63, which is 128 for the shortest primary in the game, so every weapon stays in reach across the whole slider.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_trapStandoffRange\" type=\"range\" step=\"1\" min=\"50\" max=\"90\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\n                    <span class=\"opt-desc\">Short burst movement instead of a steady walk.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_dashMovement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\n                    <span class=\"opt-desc\">Breaks the structures standing between you and a target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autobreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_breakPosition\">Break Position</label>\n                        <span class=\"opt-desc\">Which trap Autobreak takes. Inside: only the trap you are caught in. Outside: only traps you are not in. Spikes break the same either way.</span>\n                    </div>\n                    <select id=\"_breakPosition\" class=\"ryn-select\">\n                        <option value=\"inside\">Inside</option>\n                        <option value=\"outside\">Outside</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_automill\">Automill</label>\n                    <span class=\"opt-desc\">Leaves windmills behind you while you move.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_automill\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\n                    <span class=\"opt-desc\">Gathers resources on its own when nothing is threatening you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoGrind\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetPrimary\">Grind Until (primary)</label>\n                        <span class=\"opt-desc\">Which variant to take your primary weapon to. Grinding idles once both slots reach their target, and picks straight back up if you raise one.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetPrimary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                    </select>\n                </div>\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetSecondary\">Grind Until (secondary)</label>\n                        <span class=\"opt-desc\">The same for your secondary. Only the great hammer is ground here, so this does nothing while you carry anything else.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetSecondary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPlay\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoSteal\">Autosteal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoSteal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_turretSteal\">Turret steal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSteal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapAnimal\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
   const Visuals_default = "<div class=\"menu-page\" data-id=\"3\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Visual</h1>\n        <p class=\"page-description\">Everything the client draws over the game. Turn off what you do not read during a fight — the fewer overlays are on, the less there is between you and the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Names<span class=\"sec-sub\">How players are labelled on the field.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">My Name</span>\n                    <span class=\"opt-desc\">Draws your own nickname in a colour of your choosing.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_myNameColorValue\" type=\"color\" title=\"Select Color\">\n                    <label class=\"switch-checkbox\"><input id=\"_myNameColor\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Mark RYN Players</span>\n                    <span class=\"opt-desc\">Flags other players running this client.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_markRynPlayers\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Player ID</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_showPlayerID\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Player HUD<span class=\"sec-sub\">Readouts drawn on and around players.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Weapon Reload Bar</span>\n                    <span class=\"opt-desc\">Shows how far every weapon is through its cooldown.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_weaponReloadBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Render HP</span>\n                    <span class=\"opt-desc\">Draws a health value on players instead of a bar alone.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_renderHP\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Position Prediction</span>\n                    <span class=\"opt-desc\">Marks where a moving player is expected to be on the next tick.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_positionPrediction\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">My Turret Reload Bar</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_playerTurretReloadBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Display player angle</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_displayPlayerAngle\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">World<span class=\"sec-sub\">Tint and weather drawn over the map itself.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Purple Tint</span>\n                    <span class=\"opt-desc\">Recolours world objects so structures read faster.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_objectTint\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Tint Transparency</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_objectTintOpacity\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_weather\">Rain &amp; Snow</label>\n                    <span class=\"opt-desc\">Rain across the map, turning to snow inside the snow biome.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_weather\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Intensity</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_weatherAmount\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_deathCorpse\">Death Corpses</label>\n                    <span class=\"opt-desc\">Leaves a body where a player you killed died, wearing a halo and angel wings &mdash; or a cowboy hat and a devil tail if they were the one carrying the skull. It holds on the spot, then floats up and fades away. Local and visual only.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_deathCorpse\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Structures<span class=\"sec-sub\">Who owns a building, and how much of it is left.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Structure Readout (Mine/Clan)</span>\n                    <span class=\"opt-desc\">Owner name and a health bar over your own and your clan's structures, within 500 units.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_itemHealthBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Structure Readout (Enemy)</span>\n                    <span class=\"opt-desc\">The same over everything that is not yours.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_itemHealthBarEnemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Health Bar Colour</span>\n                    <span class=\"opt-desc\">The fill inside the bar, for every structure.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_itemHealthBarColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Structure Colours<span class=\"sec-sub\">Spikes and traps recoloured by who placed them.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_structureColors\">Structure Colours</label>\n                    <span class=\"opt-desc\">Tints every spike and trap by its owner, so an enemy build reads at a glance. Ownership is the client's own team detection. Purely visual.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_structureColors\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Colour Strength</span>\n                    <span class=\"opt-desc\">How much of the original sprite the tint covers.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_structureColorStrength\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Own Spike</span>\n                    <span class=\"opt-desc\">Spikes you placed.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_ownSpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Ally Spike</span>\n                    <span class=\"opt-desc\">Spikes placed by your clan.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_allySpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enemy Spike</span>\n                    <span class=\"opt-desc\">Everyone else's spikes.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_enemySpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Own Trap</span>\n                    <span class=\"opt-desc\">Traps you placed.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_ownTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Ally Trap</span>\n                    <span class=\"opt-desc\">Traps placed by your clan.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_allyTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enemy Trap</span>\n                    <span class=\"opt-desc\">Everyone else's traps.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_enemyTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Hitboxes<span class=\"sec-sub\">Debug outlines. Useful while learning a range, noisy otherwise.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Weapon hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_weaponHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Collision hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_collisionHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Placement hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_placementHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Possible placement</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_possiblePlacement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Interface<span class=\"sec-sub\">The game's own interface and how much it draws.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Hide game HUD</span>\n                    <span class=\"opt-desc\">Removes moomoo's own interface and leaves the map alone.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_hideHUD\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Melee Animation</span>\n                    <span class=\"opt-desc\">Grip-based swing, thrust and chop animations for melee weapons. Off restores moomoo's own spin. Shields, every bow and the musket are never touched either way.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_meleeAnimation\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_visualSmoothing\">Visual Smoothing</label>\n                    <span class=\"opt-desc\">Keeps motion even rather than dropping frames to keep up. Off lets Low Quality Mode skip every second frame when the rate collapses.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_visualSmoothing\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_renderOptimization\">Rendering Optimization</label>\n                    <span class=\"opt-desc\">Caches the canvas contexts and skips canvas state writes that would not change anything.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_renderOptimization\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_performanceOptimization\">Performance Optimization</label>\n                    <span class=\"opt-desc\">Skips per-object overlay work for overlays that are switched off. Never touches anything the modules act on.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_performanceOptimization\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Low Quality Mode</span>\n                    <span class=\"opt-desc\">Cuts rendering detail. Turn this on if the game drops frames.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_lowQuality\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
   const Misc_default = "<div class=\"menu-page\" data-id=\"4\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Misc</h1>\n        <p class=\"page-description\">Everything around the fight: what happens on a kill, what gets typed into chat for you and for the bots, how this menu behaves, and the counters the client has kept since you installed it.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Match<span class=\"sec-sub\">What the client does when a round starts or ends.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Kill Message</span>\n                    <span class=\"opt-desc\">Sends this line in chat every time you get a kill.</span>\n                </div>\n                <div class=\"option-content\">\n                    <input id=\"_killMessageText\" class=\"input\" type=\"text\" maxlength=\"30\" placeholder=\"Message\">\n                    <label class=\"switch-checkbox\"><input id=\"_killMessage\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Provoke on Kill</span>\n                    <span class=\"opt-desc\">Reacts in chat when someone kills you instead.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_deathProvoke\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autospawn</span>\n                    <span class=\"opt-desc\">Respawns you as soon as the death screen appears.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autospawn\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoaccept</span>\n                    <span class=\"opt-desc\">Accepts incoming clan requests without asking.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoaccept\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Auto Chat<span class=\"sec-sub\">Lines you post on a timer. They cycle in the order listed.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enable</span>\n                    <span class=\"opt-desc\">Starts posting your messages while you are in game.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoChat\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Interval</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoChatInterval\" type=\"range\" step=\"1\" min=\"1\" max=\"60\" data-suffix=\"s\">\n                </label>\n            </div>\n            <div id=\"autoChatMsgList\"></div>\n            <div class=\"content-option centered\">\n                <button id=\"addAutoChatMsg\" class=\"option-button\">Add message</button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Auto Chat<span class=\"sec-sub\">The same thing, typed by every connected bot.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enable Player Chat</span>\n                    <span class=\"opt-desc\">Lets the bots post their own list of lines.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoBotChat\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div id=\"autoBotChatMsgList\"></div>\n            <div class=\"content-option centered\">\n                <button id=\"addAutoBotChatMsg\" class=\"option-button\">Add player message</button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Menu<span class=\"sec-sub\">How this interface itself behaves.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">See through the menu</span>\n                    <span class=\"opt-desc\">Lets the game show faintly behind this panel while it is open.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_menuTransparency\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Session<span class=\"sec-sub\">Counters kept by the client. They persist between games.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Total kills</span></div>\n                <span id=\"_totalKills\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Global kills with bots</span></div>\n                <span id=\"_globalKills\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Deaths</span></div>\n                <span id=\"_deaths\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Autosync</span></div>\n                <span id=\"_autoSyncTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike sync hammer</span></div>\n                <span id=\"_spikeSyncHammerTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike sync</span></div>\n                <span id=\"_spikeSyncTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Velocity tick</span></div>\n                <span id=\"_velocityTickTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Client</span></div>\n                <span id=\"author\" class=\"text-value\">Ryn Type 2</span>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Reset<span class=\"sec-sub\">Puts every setting on every page back to its shipped value.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Reset all settings</span>\n                    <span class=\"opt-desc\">Keybinds, combat, visual, misc and bot options all return to defaults. Your music library is not touched.</span>\n                </div>\n                <button id=\"resetSettings\" class=\"option-button red\">Reset settings</button>\n            </div>\n        </div>\n    </div>\n</div>";
-  const Bots_default = "<div class=\"menu-page\" data-id=\"5\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Bots</h1>\n        <p class=\"page-description\">Connect alternate clients, name them, and decide how they follow, fight, build and farm. Everything below applies to every bot you have connected.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Fleet<span class=\"sec-sub\">Add a bot, give it a name, connect it. Connected bots appear underneath.</span></div>\n        <div class=\"section-content\">\n            <div id=\"bot-container\"></div>\n            <div id=\"dynamic-bot-list\"></div>\n            <div class=\"content-option stacked\" id=\"_botBulkRow\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Name every bot</span>\n                    <span class=\"opt-desc\">One name for the whole fleet. Every new row is pre-filled with it, so bots you add from here on join under it. <b>Apply to all</b> also gives it to the rows and bots you already have &mdash; a bot that is alive keeps the name it spawned with until it next respawns.</span>\n                </div>\n                <div class=\"inline\">\n                    <input id=\"_botBulkName\" class=\"input\" type=\"text\" maxlength=\"15\" placeholder=\"Enter name\" autocomplete=\"off\" spellcheck=\"false\">\n                    <button id=\"_botBulkNameApply\" class=\"option-button\">Apply to all</button>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Number the fleet</span>\n                    <span class=\"opt-desc\">Off, every bot joins under the name exactly as typed. On, each bot gets its slot number appended &mdash; base <b>555</b> becomes 5551, 5552, 5553 and so on. Applied when a bot spawns, so turning it off puts them back on their next respawn.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botNameNumbering\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">First number</span></div>\n                <div class=\"inline\"><input id=\"_botNameNumberStart\" class=\"input\" type=\"number\" min=\"0\" max=\"99\" step=\"1\" value=\"1\"></div>\n            </div>\n            <div class=\"content-option centered\">\n                <button id=\"add-bot-dynamic\" class=\"option-button primary tall\">Add bot</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Clan joins</span>\n                    <span class=\"opt-desc\">Restarts the join rotation for any bot that is still outside your clan. Bots already in it are skipped.</span>\n                </div>\n                <button id=\"_clanRecheck\" class=\"option-button\">Re-check clan joins</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto random bot names</span>\n                    <span class=\"opt-desc\">Pre-fills each new row with a random 1&ndash;7 character name.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoRandomBotNames\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bots own clan</span>\n                    <span class=\"opt-desc\">Each bot creates its own clan instead of joining yours.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botIndividualClans\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Behaviour<span class=\"sec-sub\">What the bots do while they are following you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Follow cursor</span>\n                    <span class=\"opt-desc\">Bots move toward where you are pointing rather than to you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_followCursor\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Stop movement radius</span>\n                    <span class=\"opt-desc\">How close a bot gets to its target point before it stops.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_movementRadius\" type=\"range\" step=\"25\" min=\"25\" max=\"250\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Auto Break</span>\n                    <span class=\"opt-desc\">Bots break structures standing in their way.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAutoBreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Ranged Kiting</span>\n                    <span class=\"opt-desc\">Bots holding a ranged weapon back off instead of closing.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botRangedKite\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Kite distance</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botKiteDistance\" type=\"range\" step=\"25\" min=\"150\" max=\"1200\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Volley Fire</span>\n                    <span class=\"opt-desc\">Bots fire in waves rather than all at once.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botVolley\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">First wave size</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botVolleyWave\" type=\"range\" step=\"1\" min=\"1\" max=\"20\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Avoid Shield Bots</span>\n                    <span class=\"opt-desc\">Bots steer away from a target that is holding a shield up.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAvoidShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Be Angel</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_botBeAngel\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Formation<span class=\"sec-sub\">The shape the fleet holds around you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Shape</span>\n                    <span class=\"opt-desc\">Pick a formation, and bind a key to any of them from inside the picker.</span>\n                </div>\n                <div id=\"_formationGrid\"></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Circle rotation</span>\n                    <span class=\"opt-desc\">Rotates the formation around you instead of holding it still.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_circleRotation\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Circle radius</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_circleRadius\" type=\"range\" step=\"25\" min=\"50\" max=\"600\">\n                </label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Loadout<span class=\"sec-sub\">What each bot carries. &ldquo;Copy from me&rdquo; mirrors your own weapon.</span></div>\n        <div class=\"section-content\">\n            <div class=\"stack\">\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Primary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-weapon-selector\">\n                        <div class=\"bot-weapon-btn\" data-wid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"0\" title=\"Tool Hammer\">Tool Hammer</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"1\" title=\"Hand Axe\">Hand Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"2\" title=\"Great Axe\">Great Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"3\" title=\"Short Sword\">Short Sword</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"4\" title=\"Katana\">Katana</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"5\" title=\"Polearm\">Polearm</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"6\" title=\"Bat\">Bat</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"7\" title=\"Daggers\">Daggers</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"8\" title=\"Stick\">Stick</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Secondary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-sec-weapon-selector\">\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"9\" title=\"Hunting Bow\">Hunting Bow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"10\" title=\"Great Hammer\">Great Hammer</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"11\" title=\"Wooden Shield\">Wooden Shield</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"12\" title=\"Crossbow\">Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"13\" title=\"Repeater Crossbow\">Repeater Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"14\" title=\"Mc Grabby\">Mc Grabby</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"15\" title=\"Musket\">Musket</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-sec-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Age 4 building</div>\n                    <div class=\"wpn-grid\" id=\"bot-age4-selector\">\n                        <div class=\"bot-weapon-btn\" data-age4id=\"0\" title=\"Trap\">Trap</div>\n                        <div class=\"bot-weapon-btn\" data-age4id=\"1\" title=\"Boost Pad\">Boost Pad</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-age4-label\">Trap (default)</span></div>\n                </div>\n            </div>\n\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Platform w/ Musket</span>\n                    <span class=\"opt-desc\">Bots carrying a musket build a platform to shoot from.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_platformMusket\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Auto Farm<span class=\"sec-sub\">Bots gather on their own and come back when they are done.</span></div>\n        <div class=\"section-content\">\n            <div class=\"stack\">\n                <div class=\"field\">\n                    <div class=\"field-head\">Farm mode</div>\n                    <div class=\"seg\">\n                        <button id=\"_farmModeSingle\" class=\"seg-btn\">Single</button>\n                        <button id=\"_farmModeNearest\" class=\"seg-btn\">Nearest</button>\n                    </div>\n                    <p class=\"field-note\">In <b>Single</b> mode every bot goes for one resource type. In <b>Nearest</b> mode each bot takes whatever is closest to it.</p>\n                </div>\n\n                <div class=\"field\" id=\"_farmTypeRow\">\n                    <div class=\"field-head\">Resource type</div>\n                    <div class=\"seg\">\n                        <button data-farm-type=\"0\" class=\"farm-type-btn\">Wood</button>\n                        <button data-farm-type=\"1\" class=\"farm-type-btn\">Food</button>\n                        <button data-farm-type=\"2\" class=\"farm-type-btn\">Stone</button>\n                        <button data-farm-type=\"3\" class=\"farm-type-btn\">Gold</button>\n                    </div>\n                    <input id=\"_botFarmType\" type=\"hidden\" value=\"0\">\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"field-head\">Limit</div>\n                    <div class=\"inline\">\n                        <input id=\"_botFarmLimit\" class=\"input\" type=\"number\" min=\"0\" max=\"9999\" step=\"50\" value=\"0\">\n                        <p class=\"field-note\" style=\"margin-top:0;\">Bots stop and return to you at this amount. <b>0</b> means no limit.</p>\n                    </div>\n                </div>\n            </div>\n        </div>\n    </div>\n    <div class=\"section\">\n        <div class=\"section-title\">Possession<span class=\"sec-sub\">Switch control into a bot and it becomes your character: its camera, its world, its HUD, its resources, its age, its inventory, its chat. Not a spectator view &mdash; you are that character until you switch back.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Who you are controlling</span>\n                    <span class=\"opt-desc\">Click a character to take it over. The game's own HUD, camera and minimap follow whoever is selected, and the rest of the fleet follows that character too.</span>\n                </div>\n                <div id=\"_possessList\"></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Chat log</span>\n                    <span class=\"opt-desc\">moomoo keeps no chat history &mdash; a message is a bubble for a few seconds and then it is gone, and a message that arrived at a bot you were not controlling was never drawn at all. This records every message every one of your connections sees, in one list that switching does not touch.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_chatLog\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Scan<span class=\"sec-sub\">Who the fleet has found while it was out there. One record per player, updated by whoever can currently see them, with the bot that found them first kept as the discoverer.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Scan for players</span>\n                    <span class=\"opt-desc\">Records every player any bot can see. Your own bots and your clan are not players it has found.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botScan\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Mark them on the minimap</span>\n                    <span class=\"opt-desc\">Solid while a bot can see them, hollow once the sighting has gone stale.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_scanMapMarkers\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Found</span>\n                    <span class=\"opt-desc\">Name, id, which bot found them, where, and whether they are still in sight. <b>Finish</b> sends the whole fleet in. <b>Hold</b> sends everyone except the bot that found them and parks them at a distance &mdash; that bot's task ends and the kill is yours.</span>\n                </div>\n                <div id=\"_scanList\"></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Clear</span>\n                    <span class=\"opt-desc\">Forgets every record and calls off anything the fleet is doing about one.</span>\n                </div>\n                <button id=\"_scanClear\" class=\"option-button\">Clear scan</button>\n            </div>\n        </div>\n    </div>\n</div>";
+  const Bots_default = "<div class=\"menu-page\" data-id=\"5\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Bots</h1>\n        <p class=\"page-description\">Connect alternate clients, name them, and decide how they follow, fight, build and farm. Everything below applies to every bot you have connected.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Fleet<span class=\"sec-sub\">Add a bot, give it a name, connect it. Connected bots appear underneath.</span></div>\n        <div class=\"section-content\">\n            <div id=\"bot-container\"></div>\n            <div id=\"dynamic-bot-list\"></div>\n            <div class=\"content-option stacked\" id=\"_botBulkRow\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Name every bot</span>\n                    <span class=\"opt-desc\">One name for the whole fleet. Every new row is pre-filled with it, so bots you add from here on join under it. <b>Apply to all</b> also gives it to the rows and bots you already have &mdash; a bot that is alive keeps the name it spawned with until it next respawns.</span>\n                </div>\n                <div class=\"inline\">\n                    <input id=\"_botBulkName\" class=\"input\" type=\"text\" maxlength=\"15\" placeholder=\"Enter name\" autocomplete=\"off\" spellcheck=\"false\">\n                    <button id=\"_botBulkNameApply\" class=\"option-button\">Apply to all</button>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Number the fleet</span>\n                    <span class=\"opt-desc\">Off, every bot joins under the name exactly as typed. On, each bot gets its slot number appended &mdash; base <b>555</b> becomes 5551, 5552, 5553 and so on. Applied when a bot spawns, so turning it off puts them back on their next respawn.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botNameNumbering\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">First number</span></div>\n                <div class=\"inline\"><input id=\"_botNameNumberStart\" class=\"input\" type=\"number\" min=\"0\" max=\"99\" step=\"1\" value=\"1\"></div>\n            </div>\n            <div class=\"content-option centered\">\n                <button id=\"add-bot-dynamic\" class=\"option-button primary tall\">Add bot</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Clan joins</span>\n                    <span class=\"opt-desc\">Restarts the join rotation for any bot that is still outside your clan. Bots already in it are skipped.</span>\n                </div>\n                <button id=\"_clanRecheck\" class=\"option-button\">Re-check clan joins</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto random bot names</span>\n                    <span class=\"opt-desc\">Pre-fills each new row with a random 1&ndash;7 character name.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoRandomBotNames\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bots own clan</span>\n                    <span class=\"opt-desc\">Each bot creates its own clan instead of joining yours.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botIndividualClans\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Behaviour<span class=\"sec-sub\">What the bots do while they are following you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Follow cursor</span>\n                    <span class=\"opt-desc\">Bots move toward where you are pointing rather than to you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_followCursor\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Stop movement radius</span>\n                    <span class=\"opt-desc\">How close a bot gets to its target point before it stops.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_movementRadius\" type=\"range\" step=\"25\" min=\"25\" max=\"250\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Auto Break</span>\n                    <span class=\"opt-desc\">Bots break structures standing in their way.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAutoBreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Ranged Kiting</span>\n                    <span class=\"opt-desc\">Bots holding a ranged weapon back off instead of closing.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botRangedKite\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Kite distance</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botKiteDistance\" type=\"range\" step=\"25\" min=\"150\" max=\"1200\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Volley Fire</span>\n                    <span class=\"opt-desc\">Bots fire in waves rather than all at once.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botVolley\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">First wave size</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botVolleyWave\" type=\"range\" step=\"1\" min=\"1\" max=\"20\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Avoid Shield Bots</span>\n                    <span class=\"opt-desc\">Bots steer away from a target that is holding a shield up.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAvoidShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Be Angel</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_botBeAngel\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Formation<span class=\"sec-sub\">The shape the fleet holds around you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Shape</span>\n                    <span class=\"opt-desc\">Pick a formation, and bind a key to any of them from inside the picker.</span>\n                </div>\n                <div id=\"_formationGrid\"></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Circle rotation</span>\n                    <span class=\"opt-desc\">Rotates the formation around you instead of holding it still.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_circleRotation\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Circle radius</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_circleRadius\" type=\"range\" step=\"25\" min=\"50\" max=\"600\">\n                </label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Loadout<span class=\"sec-sub\">What each bot carries. &ldquo;Copy from me&rdquo; mirrors your own weapon.</span></div>\n        <div class=\"section-content\">\n            <div class=\"stack\">\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Primary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-weapon-selector\">\n                        <div class=\"bot-weapon-btn\" data-wid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"0\" title=\"Tool Hammer\">Tool Hammer</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"1\" title=\"Hand Axe\">Hand Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"2\" title=\"Great Axe\">Great Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"3\" title=\"Short Sword\">Short Sword</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"4\" title=\"Katana\">Katana</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"5\" title=\"Polearm\">Polearm</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"6\" title=\"Bat\">Bat</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"7\" title=\"Daggers\">Daggers</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"8\" title=\"Stick\">Stick</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Secondary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-sec-weapon-selector\">\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"9\" title=\"Hunting Bow\">Hunting Bow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"10\" title=\"Great Hammer\">Great Hammer</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"11\" title=\"Wooden Shield\">Wooden Shield</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"12\" title=\"Crossbow\">Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"13\" title=\"Repeater Crossbow\">Repeater Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"14\" title=\"Mc Grabby\">Mc Grabby</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"15\" title=\"Musket\">Musket</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-sec-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Age 4 building</div>\n                    <div class=\"wpn-grid\" id=\"bot-age4-selector\">\n                        <div class=\"bot-weapon-btn\" data-age4id=\"0\" title=\"Trap\">Trap</div>\n                        <div class=\"bot-weapon-btn\" data-age4id=\"1\" title=\"Boost Pad\">Boost Pad</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-age4-label\">Trap (default)</span></div>\n                </div>\n            </div>\n\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Platform w/ Musket</span>\n                    <span class=\"opt-desc\">Bots carrying a musket build a platform to shoot from.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_platformMusket\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Auto Farm<span class=\"sec-sub\">Bots gather on their own and come back when they are done.</span></div>\n        <div class=\"section-content\">\n            <div class=\"stack\">\n                <div class=\"field\">\n                    <div class=\"field-head\">Farm mode</div>\n                    <div class=\"seg\">\n                        <button id=\"_farmModeSingle\" class=\"seg-btn\">Single</button>\n                        <button id=\"_farmModeNearest\" class=\"seg-btn\">Nearest</button>\n                    </div>\n                    <p class=\"field-note\">In <b>Single</b> mode every bot goes for one resource type. In <b>Nearest</b> mode each bot takes whatever is closest to it.</p>\n                </div>\n\n                <div class=\"field\" id=\"_farmTypeRow\">\n                    <div class=\"field-head\">Resource type</div>\n                    <div class=\"seg\">\n                        <button data-farm-type=\"0\" class=\"farm-type-btn\">Wood</button>\n                        <button data-farm-type=\"1\" class=\"farm-type-btn\">Food</button>\n                        <button data-farm-type=\"2\" class=\"farm-type-btn\">Stone</button>\n                        <button data-farm-type=\"3\" class=\"farm-type-btn\">Gold</button>\n                    </div>\n                    <input id=\"_botFarmType\" type=\"hidden\" value=\"0\">\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"field-head\">Limit</div>\n                    <div class=\"inline\">\n                        <input id=\"_botFarmLimit\" class=\"input\" type=\"number\" min=\"0\" max=\"9999\" step=\"50\" value=\"0\">\n                        <p class=\"field-note\" style=\"margin-top:0;\">Bots stop and return to you at this amount. <b>0</b> means no limit.</p>\n                    </div>\n                </div>\n            </div>\n        </div>\n    </div>\n    <div class=\"section\">\n        <div class=\"section-title\">Possession<span class=\"sec-sub\">Switch control into a bot and it becomes your character: its camera, its world, its HUD, its resources, its age, its inventory, its chat. Not a spectator view &mdash; you are that character until you switch back.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Who you are controlling</span>\n                    <span class=\"opt-desc\">Click a character to take it over. The game's own HUD, camera and minimap follow whoever is selected, and the rest of the fleet follows that character too.</span>\n                </div>\n                <div id=\"_possessList\"></div>\n            </div>\n        </div>\n    </div>\n\n</div>";
   const Music_default = "<div class=\"menu-page\" data-id=\"7\">\n<style>\n@keyframes ryn-eq{0%,100%{height:4px;}50%{height:16px;}}\n\n.rm-root{display:flex;flex-direction:column;max-width:1180px;margin:0 auto;}\n\n/* ---------- now playing ---------- */\n.rm-player{\n  display:grid;\n  grid-template-columns:auto minmax(0,1fr) auto;\n  grid-template-areas:\"art meta actions\" \"art transport transport\";\n  column-gap:26px;row-gap:22px;align-items:center;\n  padding:26px 0 30px;\n  border-bottom:1px solid var(--line);\n}\n.rm-art{\n  grid-area:art;\n  width:96px;height:96px;flex-shrink:0;\n  display:flex;align-items:flex-end;justify-content:center;gap:4px;\n  padding-bottom:22px;\n  border-radius:var(--r3);\n  background:linear-gradient(150deg,#221D33,#131320);\n  border:1px solid var(--line);\n  position:relative;\n  transition:border-color 260ms var(--ease);\n}\n.rm-art::after{\n  content:'\\266B';\n  position:absolute;inset:0;\n  display:flex;align-items:center;justify-content:center;\n  font-size:30px;color:var(--tx-4);\n  transition:opacity 220ms var(--ease);\n}\n.rm-art.playing{border-color:var(--sage-40);}\n.rm-art.playing::after{opacity:0;}\n.rm-eq{display:none;align-items:flex-end;gap:4px;height:18px;}\n.rm-art.playing .rm-eq{display:flex;}\n.rm-eq-bar{width:3px;border-radius:2px;background:var(--sage);animation:ryn-eq .95s ease-in-out infinite;}\n.rm-eq-bar:nth-child(2){animation-delay:.16s;}\n.rm-eq-bar:nth-child(3){animation-delay:.32s;}\n\n.rm-meta{grid-area:meta;min-width:0;}\n.rm-kicker{\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.24em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:9px;\n}\n.rm-title{\n  font-size:clamp(22px,2.1vw,29px);font-weight:800;line-height:1.12;\n  letter-spacing:-.028em;color:var(--tx-1);\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n}\n.rm-artist{\n  margin-top:7px;font-size:14px;font-weight:600;color:var(--tx-3);\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n}\n.rm-album-badge{\n  display:inline-block;margin-top:10px;\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--iris-hi);\n}\n.rm-album-badge:empty{display:none;}\n\n.rm-actions{grid-area:actions;display:flex;gap:8px;align-self:start;}\n.rm-like-btn,.rm-save-now-btn{\n  width:42px;height:42px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);border:1px solid var(--line);\n  font-size:16px;line-height:1;color:var(--tx-3);cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.rm-like-btn:hover,.rm-save-now-btn:hover{background:rgba(255,255,255,.08);color:var(--tx-1);border-color:var(--line-2);}\n.rm-like-btn.liked,.rm-like-btn.on{color:var(--rose);border-color:rgba(217,163,171,.4);background:var(--rose-12);}\n.rm-save-now-btn.on{color:var(--sky);border-color:var(--sky-45);background:var(--sky-12);}\n\n.rm-transport{grid-area:transport;display:flex;align-items:center;gap:24px;min-width:0;}\n.rm-ctrl{display:flex;align-items:center;gap:8px;flex-shrink:0;}\n.rm-btn{\n  width:38px;height:38px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r2);\n  background:transparent;border:1px solid transparent;\n  color:var(--tx-3);font-size:12.5px;cursor:pointer;\n  transition:background 150ms var(--ease),color 150ms var(--ease),border-color 150ms var(--ease);\n}\n.rm-btn:hover{background:rgba(255,255,255,.06);color:var(--tx-1);}\n.rm-btn.rm-on,.rm-btn.on{color:var(--sage);border-color:var(--sage-40);background:var(--sage-14);}\n.rm-play-btn{\n  width:52px;height:52px;flex-shrink:0;\n  border-radius:16px;\n  background:var(--tx-1);border:none;color:#0A0A0D;\n  font-size:15.5px;\n  transition:transform 150ms var(--ease),background 150ms var(--ease);\n}\n.rm-play-btn:hover{background:#FFFFFF;transform:scale(1.04);}\n.rm-play-btn:active{transform:scale(.97);}\n\n.rm-prog-wrap{flex:1;min-width:0;display:flex;align-items:center;gap:14px;}\n.rm-prog-rail{\n  flex:1;min-width:0;height:5px;border-radius:999px;cursor:pointer;\n  background:rgba(255,255,255,.08);position:relative;\n}\n.rm-prog-fill{\n  height:100%;border-radius:999px;width:0;\n  background:var(--sky);position:relative;\n  transition:width 120ms linear;\n}\n.rm-prog-fill::after{\n  content:'';position:absolute;right:-5px;top:50%;\n  width:11px;height:11px;border-radius:50%;background:#EEF4FA;\n  transform:translateY(-50%) scale(0);\n  transition:transform 150ms var(--ease);\n  box-shadow:0 1px 4px rgba(0,0,0,.6);\n}\n.rm-prog-wrap:hover .rm-prog-fill::after{transform:translateY(-50%) scale(1);}\n.rm-time{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);flex-shrink:0;\n}\n.rm-vol{display:flex;align-items:center;gap:10px;flex-shrink:0;}\n.rm-vol-icon{font-size:13px;color:var(--tx-4);}\n#music-volume{\n  -webkit-appearance:none;appearance:none;\n  width:110px;height:18px;background:transparent;cursor:pointer;\n}\n#music-volume::-webkit-slider-runnable-track{height:4px;border-radius:999px;background:rgba(255,255,255,.09);}\n#music-volume::-webkit-slider-thumb{\n  -webkit-appearance:none;width:12px;height:12px;margin-top:-4px;\n  border-radius:50%;background:#EEF4FA;border:1px solid rgba(0,0,0,.35);\n  transition:transform 130ms var(--ease);\n}\n#music-volume:hover::-webkit-slider-thumb{transform:scale(1.15);}\n.rm-vol-val{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);min-width:34px;text-align:right;\n}\n\n/* ---------- sections ---------- */\n.rm-sec{border-bottom:1px solid var(--line);}\n.rm-sec-head{\n  display:flex;align-items:center;gap:12px;\n  padding:22px 2px;cursor:pointer;user-select:none;\n}\n.rm-sec-dot{\n  width:5px;height:5px;border-radius:50%;flex-shrink:0;\n  background:var(--tx-4);transition:background 200ms var(--ease);\n}\n.rm-sec.open .rm-sec-dot{background:var(--iris-hi);}\n.rm-sec-title{\n  flex:1;font-family:var(--mono);font-size:11.5px;font-weight:700;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-2);\n}\n.rm-sec.open .rm-sec-title{color:var(--iris-hi);}\n.rm-sec-arrow{font-size:9px;color:var(--tx-4);transition:transform 200ms var(--ease);}\n.rm-sec.open .rm-sec-arrow{transform:rotate(180deg);}\n.rm-sec-body{display:none;flex-direction:column;gap:14px;padding:0 2px 26px;}\n.rm-sec.open .rm-sec-body{display:flex;animation:soft-in 180ms var(--ease);}\n\n/* ---------- library ---------- */\n.rm-filter-bar{display:flex;gap:7px;flex-wrap:wrap;}\n.rm-filter-btn{\n  height:34px;padding:0 16px;border-radius:999px;\n  background:rgba(255,255,255,.04);border:1px solid var(--line);\n  font-size:12.5px;font-weight:700;color:var(--tx-3);cursor:pointer;\n  transition:background 150ms var(--ease),color 150ms var(--ease),border-color 150ms var(--ease);\n}\n.rm-filter-btn:hover{background:rgba(255,255,255,.08);color:var(--tx-1);}\n.rm-filter-btn.active{background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;}\n\n#song-list{display:flex;flex-direction:column;}\n.rm-song-row{\n  display:flex;align-items:center;gap:15px;\n  padding:12px 13px;border-radius:var(--r2);cursor:pointer;\n  position:relative;\n  transition:background 140ms var(--ease);\n}\n.rm-song-row:hover{background:rgba(255,255,255,.035);}\n.rm-song-row.active{background:var(--sage-14);}\n.rm-song-row.active::before{\n  content:'';position:absolute;left:0;top:10px;bottom:10px;\n  width:2px;border-radius:0 2px 2px 0;background:var(--sage);\n}\n.rm-snum{\n  width:23px;flex-shrink:0;text-align:center;\n  font-family:var(--mono);font-size:12.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);\n}\n.rm-song-row.active .rm-snum{color:var(--sage);}\n.rm-stitle{\n  flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n}\n.rm-sartist{\n  flex-shrink:1;min-width:0;max-width:30%;\n  font-size:12.5px;font-weight:500;color:var(--tx-4);\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n}\n.rm-s-icons{display:flex;gap:4px;flex-shrink:0;opacity:0;transition:opacity 150ms var(--ease);}\n.rm-song-row:hover .rm-s-icons,.rm-song-row.active .rm-s-icons{opacity:1;}\n.rm-s-like,.rm-s-save,.rm-sdel{\n  width:30px;height:30px;flex-shrink:0;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r1);font-size:12.5px;line-height:1;\n  color:var(--tx-4);cursor:pointer;\n  transition:background 140ms var(--ease),color 140ms var(--ease);\n}\n.rm-s-like:hover,.rm-sdel:hover{background:var(--rose-12);color:var(--rose);}\n.rm-s-save:hover{background:var(--sky-12);color:var(--sky);}\n.rm-s-like.on{color:var(--rose);}\n.rm-s-save.on{color:var(--sky);}\n.rm-song-row:not(:hover) .rm-s-icons:has(.on){opacity:1;}\n.rm-empty{\n  padding:26px 0;text-align:center;\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n\n/* ---------- albums ---------- */\n.rm-album-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}\n.rm-album-card{\n  position:relative;padding:14px;border-radius:var(--r3);cursor:pointer;\n  background:rgba(255,255,255,.03);border:1px solid var(--line);\n  transition:background 160ms var(--ease),border-color 160ms var(--ease),transform 160ms var(--ease);\n}\n.rm-album-card:hover{background:rgba(255,255,255,.06);border-color:var(--line-2);transform:translateY(-2px);}\n.rm-album-card.active{background:var(--iris-12);border-color:var(--iris-45);}\n.rm-album-icon{\n  display:flex;align-items:center;justify-content:center;\n  width:100%;aspect-ratio:1.6;border-radius:var(--r2);margin-bottom:11px;\n  font-size:22px;\n  background:linear-gradient(150deg,#221D33,#131320);\n}\n.rm-album-name{font-size:13.5px;font-weight:700;color:var(--tx-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}\n.rm-album-count{margin-top:3px;font-size:11.5px;font-weight:500;color:var(--tx-4);}\n.rm-album-del{\n  position:absolute;top:8px;right:8px;\n  width:22px;height:22px;border-radius:var(--r1);\n  display:flex;align-items:center;justify-content:center;\n  background:rgba(0,0,0,.55);color:var(--tx-3);\n  font-size:10px;cursor:pointer;opacity:0;\n  transition:opacity 150ms var(--ease),color 150ms var(--ease);\n}\n.rm-album-card:hover .rm-album-del{opacity:1;}\n.rm-album-del:hover{color:var(--rose);}\n\n/* ---------- forms ---------- */\n.rm-form{display:flex;flex-direction:column;gap:9px;max-width:620px;}\n.rm-inp{\n  width:100%;height:42px;padding:0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);border:1px solid var(--line-2);\n  color:var(--tx-1);font-size:13.5px;font-weight:600;\n  outline:none;\n  transition:border-color 150ms var(--ease),background 150ms var(--ease);\n}\n.rm-inp::placeholder{color:var(--tx-4);font-weight:500;}\n.rm-inp:focus{border-color:var(--sky-45);background:var(--sky-12);}\ninput[type=\"file\"].rm-inp{padding:10px 12px;height:auto;font-size:12.5px;font-weight:500;cursor:pointer;}\n.rm-lrc{\n  padding:14px;border-radius:var(--r3);\n  background:rgba(255,255,255,.022);border:1px solid var(--line);\n}\n.rm-lrc-head{\n  display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n#lrc-status{font-family:var(--mono);font-size:11.5px;letter-spacing:0;text-transform:none;color:var(--sky);}\ntextarea.rm-inp{\n  height:98px;padding:11px 13px;resize:vertical;\n  font-family:var(--mono);font-size:12.5px;font-weight:500;line-height:1.6;\n}\n.rm-check{\n  display:flex;align-items:center;gap:9px;margin-top:11px;\n  font-size:12.5px;font-weight:600;color:var(--tx-3);cursor:pointer;\n}\n.rm-check input{accent-color:#A6D7B2;width:15px;height:15px;cursor:pointer;}\n.rm-row{display:flex;gap:9px;}\n\n/* ---------- sync ---------- */\n.rm-sync-row{\n  display:flex;align-items:center;justify-content:space-between;gap:16px;\n  padding:12px 14px;border-radius:var(--r2);\n  transition:background 140ms var(--ease);\n}\n.rm-sync-row:hover{background:rgba(255,255,255,.028);}\n.rm-sync-label{flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);}\n.rm-sync-note{padding:0 14px 8px;font-size:12.5px;font-weight:500;line-height:1.5;color:var(--tx-4);}\n.rm-badge{\n  display:inline-block;margin-left:9px;padding:2px 8px;border-radius:999px;\n  background:var(--iris-12);color:var(--iris-hi);\n  font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;\n  vertical-align:middle;\n}\n.rm-divider{height:1px;background:var(--line);margin:6px 0;}\n.rm-status{\n  font-family:var(--mono);font-size:11.5px;font-weight:500;\n  color:var(--tx-4);min-height:16px;\n}\n#bm-dbg-box{\n  margin:0;padding:11px 13px;border-radius:var(--r2);\n  background:rgba(0,0,0,.4);border:1px solid var(--line);\n  font-family:var(--mono);font-size:11.5px;color:var(--tx-3);\n  white-space:pre-wrap;max-height:150px;overflow-y:auto;\n}\n\n/* ---------- toast + guide ---------- */\n.rm-toast{\n  display:none;position:fixed;left:50%;bottom:28px;\n  transform:translateX(-50%);\n  padding:11px 20px;border-radius:999px;z-index:99999;\n  background:var(--tx-1);color:#0A0A0D;\n  font-size:12.5px;font-weight:700;\n  box-shadow:0 16px 40px -12px rgba(0,0,0,.8);\n}\n.rm-guide{\n  padding:18px 20px;margin-bottom:4px;\n  border-radius:var(--r3);\n  background:rgba(255,255,255,.022);border:1px solid var(--line);\n}\n.rm-guide summary{\n  cursor:pointer;list-style:none;\n  font-size:13.5px;font-weight:700;color:var(--tx-2);\n  display:flex;align-items:center;gap:10px;\n}\n.rm-guide summary::-webkit-details-marker{display:none;}\n.rm-guide summary::before{\n  content:'?';flex-shrink:0;width:20px;height:20px;border-radius:50%;\n  background:var(--iris-12);color:var(--iris-hi);\n  font-family:var(--mono);font-size:11px;font-weight:700;\n  display:grid;place-items:center;\n}\n.rm-guide[open] summary{margin-bottom:14px;color:var(--tx-1);}\n.rm-guide ol{margin:0;padding-left:20px;color:var(--tx-3);font-size:12.5px;line-height:2;}\n.rm-guide code{\n  background:rgba(255,255,255,.06);color:var(--sky);\n  padding:2px 7px;border-radius:5px;font-family:var(--mono);font-size:11.5px;\n}\n.rm-guide a{color:var(--sky);border-bottom:1px solid rgba(155,197,232,.35);}\n.rm-guide a:hover{color:var(--tx-1);border-bottom-color:var(--tx-1);}\n.rm-guide-note{margin-top:14px;color:var(--tx-4);font-size:11.5px;line-height:1.75;}\n</style>\n\n<div id=\"rm-toast\" class=\"rm-toast\"></div>\n\n<div class=\"page-head\">\n    <h1 class=\"page-title\">Music</h1>\n    <p class=\"page-description\">A local library that plays inside the client and can type synced lyrics into chat for you, for your bots, or for both at once.</p>\n</div>\n\n<div class=\"rm-root\">\n\n  <div class=\"rm-player\">\n    <div class=\"rm-art\" id=\"rm-art\">\n      <div class=\"rm-eq\"><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div></div>\n    </div>\n    <div class=\"rm-meta\">\n      <div class=\"rm-kicker\">Now playing</div>\n      <div id=\"music-title\" class=\"rm-title\">No song selected</div>\n      <div id=\"music-artist\" class=\"rm-artist\">--</div>\n      <div id=\"music-album-badge\" class=\"rm-album-badge\"></div>\n    </div>\n    <div class=\"rm-actions\">\n      <button id=\"rm-like-now\" class=\"rm-like-btn\" title=\"Like\">&#9825;</button>\n      <button id=\"rm-save-now\" class=\"rm-save-now-btn\" title=\"Save\">&#9733;</button>\n    </div>\n    <div class=\"rm-transport\">\n      <div class=\"rm-ctrl\">\n        <button id=\"music-prev\" class=\"rm-btn\" title=\"Previous\">&#9664;&#9664;</button>\n        <button id=\"music-play\" class=\"rm-btn rm-play-btn\" title=\"Play / pause\">&#9654;</button>\n        <button id=\"music-next\" class=\"rm-btn\" title=\"Next\">&#9654;&#9654;</button>\n        <button id=\"music-loop\" class=\"rm-btn\" title=\"Loop\">&#8635;</button>\n        <button id=\"music-shuffle\" class=\"rm-btn\" title=\"Shuffle\" style=\"font-size:10px;letter-spacing:.08em;font-weight:700;\">SHF</button>\n      </div>\n      <div class=\"rm-prog-wrap\">\n        <span id=\"music-time-current\" class=\"rm-time\">0:00</span>\n        <div id=\"music-progress-bar\" class=\"rm-prog-rail\"><div id=\"music-progress-fill\" class=\"rm-prog-fill\"></div></div>\n        <span id=\"music-time-total\" class=\"rm-time\">0:00</span>\n      </div>\n      <div class=\"rm-vol\">\n        <span class=\"rm-vol-icon\">&#9834;</span>\n        <input id=\"music-volume\" type=\"range\" min=\"0\" max=\"100\" value=\"70\">\n        <span id=\"music-volume-label\" class=\"rm-vol-val\">70%</span>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec open\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Library</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div id=\"rm-filter-bar\" class=\"rm-filter-bar\">\n        <button class=\"rm-filter-btn active\" data-filter=\"\">All songs</button>\n        <button class=\"rm-filter-btn\" data-filter=\"__liked\">&#9829; Liked</button>\n      </div>\n      <div id=\"song-list\"></div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec open\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Albums</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div id=\"rm-album-grid\" class=\"rm-album-grid\"></div>\n      <div class=\"rm-row\" style=\"max-width:480px;\">\n        <input id=\"album-name-input\" class=\"rm-inp\" type=\"text\" placeholder=\"New album name\" maxlength=\"30\">\n        <button id=\"add-album\" class=\"option-button\">Add</button>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Add song</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <details class=\"rm-guide\">\n        <summary>How to add a song with its lyrics</summary>\n        <ol>\n          <li>Find the song on <a href=\"https://www.youtube.com/\" target=\"_blank\" rel=\"noreferrer\">youtube.com</a> and copy its link.</li>\n          <li>Turn the link into a file on <a href=\"https://ytmp3.gl/\" target=\"_blank\" rel=\"noreferrer\">ytmp3.gl</a> and download the <code>.mp3</code>.</li>\n          <li>Search the same song on <a href=\"https://lrclib.net/\" target=\"_blank\" rel=\"noreferrer\">lrclib.net</a> and download the <b>synced</b> lyrics as <code>.lrc</code>.</li>\n          <li>Fill in the <b>Title</b> below and pick the <code>.mp3</code> in the file box, or paste a direct link in <b>URL</b>.</li>\n          <li>In the <b>LRC sync</b> box, pick the <code>.lrc</code> file &mdash; or paste its lines into the text area.</li>\n          <li>Press <b>Add song</b>. It shows up in the library with its lyrics attached.</li>\n        </ol>\n        <div class=\"rm-guide-note\">The <code>.lrc</code> has to be the synced kind &mdash; the one whose lines start with a timestamp like <code>[01:23.45]</code>. Plain lyrics still show up, but they will not follow the song. If the words drift, an <code>.lrc</code> from a different release of the track is usually the reason.</div>\n      </details>\n      <div class=\"rm-form\">\n        <input id=\"song-title-input\" class=\"rm-inp\" type=\"text\" placeholder=\"Title *\" maxlength=\"50\">\n        <input id=\"song-artist-input\" class=\"rm-inp\" type=\"text\" placeholder=\"Artist\" maxlength=\"30\">\n        <input id=\"song-url-input\" class=\"rm-inp\" type=\"text\" placeholder=\"URL (.mp3  .ogg  .wav)\">\n        <input id=\"song-file-input\" class=\"rm-inp\" type=\"file\" accept=\".mp3,.ogg,.wav,.flac,.aac,.m4a\">\n        <select id=\"song-album-select\" class=\"rm-inp ryn-select\"><option value=\"\">No album</option></select>\n        <div class=\"rm-lrc\">\n          <div class=\"rm-lrc-head\"><span>LRC sync</span><span id=\"lrc-status\"></span></div>\n          <input id=\"lrc-file-input\" class=\"rm-inp\" type=\"file\" accept=\".lrc,.txt\" style=\"margin-bottom:9px;\">\n          <textarea id=\"song-lyrics-input\" class=\"rm-inp\" placeholder=\"[0:15] Line 1&#10;[0:30] Line 2\"></textarea>\n          <label class=\"rm-check\"><input id=\"song-autosync\" type=\"checkbox\"> Auto-play and sync when added</label>\n        </div>\n        <div class=\"rm-row\">\n          <button id=\"add-song\" class=\"option-button primary wide\">Add song</button>\n          <button id=\"save-song-btn\" class=\"option-button\">Save lyrics</button>\n        </div>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Chat sync</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Enable chat sync</span><label class=\"switch-checkbox\"><input id=\"music-chat-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Mixed sync<span class=\"rm-badge\">Me + bots</span></span><label class=\"switch-checkbox\"><input id=\"music-mixed-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">You: line &#8594; bots: line &#8594; you &hellip;</div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Bots only sync<span class=\"rm-badge\">Bots</span></span><label class=\"switch-checkbox\"><input id=\"music-bots-only-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">Bot 1: line 1 &bull; bot 2: line 2 &bull; bot 3: line 3 &hellip;</div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Unified sync<span class=\"rm-badge\">All</span></span><label class=\"switch-checkbox\"><input id=\"music-unified-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">You and every bot post the same line at the same moment.</div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Auto delay<span id=\"bm-auto-delay-badge\" class=\"rm-badge\">off</span></span><label class=\"switch-checkbox\"><input id=\"music-auto-delay\" type=\"checkbox\" checked><span></span></label></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Sync bot<span id=\"bm-sync-bot-badge\" class=\"rm-badge\">off</span></span><button id=\"music-sync-bot-btn\" class=\"option-button\">OFF</button></div>\n      <div id=\"bm-manual-delay-row\" class=\"rm-sync-row\" style=\"display:none;\"><span class=\"rm-sync-label\">Delay</span><label class=\"slider\"><span class=\"slider-value\">0ms</span><input id=\"music-sync-delay\" type=\"range\" min=\"-3000\" max=\"3000\" step=\"50\" value=\"0\"></label></div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-row\" style=\"align-items:center;\">\n        <button id=\"bm-test-chat\" class=\"option-button\">Test chat</button>\n        <span id=\"bm-test-chat-status\" class=\"rm-status\" style=\"align-self:center;\"></span>\n      </div>\n      <button id=\"bm-send-all-lyrics\" class=\"option-button wide\">&#9836; Send All Lyrics: OFF</button>\n      <div id=\"bm-send-lyrics-status\" class=\"rm-status\" style=\"text-align:center;\"></div>\n      <div id=\"bm-dbg-wrap\" style=\"display:none;\"><pre id=\"bm-dbg-box\"></pre></div>\n      <button id=\"bm-dbg-toggle\" class=\"option-button wide\">Show Debug Log</button>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Backup &amp; restore</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <p class=\"rm-sync-note\" style=\"padding-left:0;\">Export the whole library to a JSON file and bring it back on another machine.</p>\n      <div class=\"rm-row\" style=\"max-width:420px;\">\n        <button id=\"music-export-btn\" class=\"option-button wide\">Export</button>\n        <button id=\"music-import-btn\" class=\"option-button wide\">Import</button>\n        <input id=\"music-import-file\" type=\"file\" accept=\".json\" style=\"display:none;\">\n      </div>\n      <div id=\"music-backup-status\" class=\"rm-status\"></div>\n    </div>\n  </div>\n\n</div>\n</div>";
   const styles_default = "@import url(\"https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap\");\n\n/* ============================================================\n   RYN TYPE 2 — interface stylesheet\n   Ground: near-black neutral. Iris (muted purple) = navigation.\n   Sage (soft light green) = enabled. Sky (light blue) = values,\n   focus and interaction. Nothing else carries colour.\n   ============================================================ */\n\n:root{\n  --ink-0:#07070A;\n  --ink-1:#0C0C11;\n  --ink-2:#101016;\n  --ink-3:#15151C;\n  --ink-4:#1B1B24;\n\n  --line:rgba(255,255,255,0.055);\n  --line-2:rgba(255,255,255,0.10);\n  --line-3:rgba(255,255,255,0.16);\n\n  --iris:#8E76CE;\n  --iris-hi:#A894E0;\n  --iris-05:rgba(142,118,206,0.05);\n  --iris-12:rgba(142,118,206,0.12);\n  --iris-18:rgba(142,118,206,0.18);\n  --iris-45:rgba(142,118,206,0.45);\n\n  --sage:#A6D7B2;\n  --sage-14:rgba(166,215,178,0.14);\n  --sage-40:rgba(166,215,178,0.40);\n\n  --sky:#9BC5E8;\n  --sky-12:rgba(155,197,232,0.12);\n  --sky-45:rgba(155,197,232,0.45);\n\n  --rose:#D9A3AB;\n  --rose-12:rgba(217,163,171,0.12);\n\n  --tx-1:#F3F2F7;\n  --tx-2:#ACA9BA;\n  --tx-3:#726F80;\n  --tx-4:#4E4B5A;\n\n  --r1:6px;\n  --r2:10px;\n  --r3:14px;\n  --r4:22px;\n\n  --s1:4px;  --s2:8px;   --s3:12px;  --s4:16px;\n  --s5:24px; --s6:32px;  --s7:44px;  --s8:64px;\n\n  --ease:cubic-bezier(.2,.8,.3,1);\n  --font:'Manrope','Segoe UI',system-ui,sans-serif;\n  --mono:'Space Grotesk','Manrope',system-ui,sans-serif;\n\n  /* legacy aliases kept so any stray rule still resolves */\n  --accent:#8E76CE;\n  --accent2:#9BC5E8;\n  --border:rgba(255,255,255,0.055);\n  --text:#F3F2F7;\n  --text-muted:#ACA9BA;\n  --text-dim:#726F80;\n}\n\n*{box-sizing:border-box;-webkit-user-select:none;user-select:none;}\nhtml,body{margin:0;padding:0;height:100%;overflow:hidden;background:transparent;}\nbody{font-family:var(--font);color:var(--tx-1);-webkit-font-smoothing:antialiased;}\nh1,h2,h3,p{margin:0;}\nbutton{font-family:inherit;border:none;outline:none;background:none;cursor:pointer;color:inherit;}\ninput,textarea,select{font-family:inherit;}\ninput,textarea{-webkit-user-select:text;user-select:text;}\na{color:var(--sky);text-decoration:none;}\n\n@keyframes toopen{from{opacity:0;transform:translateY(8px) scale(.994);}to{opacity:1;transform:none;}}\n@keyframes toclose{from{opacity:1;transform:none;}to{opacity:0;transform:translateY(6px) scale(.994);}}\n@keyframes page-in{from{opacity:0;transform:translateX(10px);}to{opacity:1;transform:none;}}\n@keyframes cap-pulse{0%,100%{opacity:1;}50%{opacity:.55;}}\n@keyframes ripple{from{opacity:.22;transform:scale(0);}to{opacity:0;transform:scale(1.3);}}\n@keyframes soft-in{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:none;}}\n\n/* ------------------------------------------------------------------\n   SHELL\n   ------------------------------------------------------------------ */\n\n#menu-container{\n  position:absolute;inset:0;\n  display:flex;align-items:center;justify-content:center;\n  padding:18px;\n}\n\n#menu-wrapper{\n  position:relative;\n  width:min(1100px,100%);\n  height:min(690px,100%);\n  min-width:860px;min-height:520px;\n  display:flex;\n  background:var(--ink-1);\n  border:1px solid var(--line-2);\n  border-radius:var(--r4);\n  overflow:hidden;\n  box-shadow:0 48px 110px -34px rgba(0,0,0,.92),0 0 0 1px rgba(0,0,0,.4);\n  transform:scale(var(--ryn-scale,1));\n  transform-origin:center center;\n}\n#menu-container.transparent #menu-wrapper{background:rgba(12,12,17,0.90);}\n#menu-wrapper.toopen{animation:180ms var(--ease) toopen both;}\n#menu-wrapper.toclose{animation:140ms ease-in toclose both;}\n\nmain{display:flex;flex:1;min-width:0;min-height:0;}\n\n/* the old top bar is gone — everything identifying lives in the rail */\nheader{display:none;}\n\n/* ------------------------------------------------------------------\n   NAVIGATION RAIL\n   ------------------------------------------------------------------ */\n\n#navbar-container{\n  width:236px;min-width:236px;flex-shrink:0;\n  display:flex;flex-direction:column;\n  background:var(--ink-2);\n  border-right:1px solid var(--line);\n  padding:22px 12px 12px;\n}\n\n.rail-brand{display:flex;align-items:baseline;gap:9px;padding:0 12px 18px;}\n.rail-mark{\n  font-family:var(--mono);font-weight:700;font-size:25px;line-height:1;\n  letter-spacing:-.02em;color:var(--tx-1);\n}\n.rail-sub{\n  font-family:var(--mono);font-weight:600;font-size:10.5px;line-height:1;\n  letter-spacing:.24em;text-transform:uppercase;color:var(--iris-hi);\n}\n\n.rail-label{\n  font-family:var(--mono);font-weight:600;font-size:10px;\n  letter-spacing:.22em;text-transform:uppercase;color:var(--tx-4);\n  padding:0 12px;margin:20px 0 7px;\n}\n\n#navbar-container nav{display:flex;flex-direction:column;gap:2px;}\n\n.open-menu{\n  position:relative;\n  display:flex;align-items:center;gap:13px;\n  width:100%;padding:12px 13px;\n  border-radius:var(--r2);\n  background:transparent;\n  color:var(--tx-2);\n  text-align:left;\n  overflow:hidden;\n  transition:background 150ms var(--ease),color 150ms var(--ease);\n}\n.open-menu .nav-index{\n  font-family:var(--mono);font-weight:600;font-size:11px;line-height:1;\n  letter-spacing:.06em;color:var(--tx-4);\n  width:20px;flex-shrink:0;\n  transition:color 150ms var(--ease);\n}\n.open-menu .nav-label{\n  font-weight:800;font-size:15px;line-height:1.1;letter-spacing:-.012em;\n}\n.open-menu:hover{background:rgba(255,255,255,.035);color:var(--tx-1);}\n.open-menu:active{background:rgba(255,255,255,.06);}\n.open-menu.active{background:var(--iris-12);color:#FFFFFF;}\n.open-menu.active .nav-index{color:var(--iris-hi);}\n.open-menu.active::before{\n  content:'';position:absolute;left:0;top:11px;bottom:11px;\n  width:3px;border-radius:0 3px 3px 0;background:var(--iris);\n}\n.open-menu .ripple{\n  position:absolute;border-radius:50%;\n  background:rgba(255,255,255,.07);\n  opacity:0;pointer-events:none;\n  animation:ripple 420ms ease-out;\n}\n\n/* live outline of the open category */\n#nav-outline{\n  display:flex;flex-direction:column;gap:1px;\n  margin-top:4px;padding-left:6px;\n  overflow-y:auto;flex:1;min-height:0;\n}\n#nav-outline::-webkit-scrollbar{width:6px;}\n#nav-outline::-webkit-scrollbar-thumb{background:rgba(255,255,255,.07);border-radius:6px;}\n.outline-item{\n  position:relative;\n  padding:7px 10px 7px 16px;\n  border-radius:var(--r1);\n  font-size:12.5px;font-weight:600;line-height:1.3;\n  color:var(--tx-3);text-align:left;\n  transition:color 140ms var(--ease),background 140ms var(--ease);\n}\n.outline-item::before{\n  content:'';position:absolute;left:4px;top:50%;\n  width:4px;height:4px;margin-top:-2px;border-radius:50%;\n  background:var(--tx-4);\n  transition:background 160ms var(--ease),transform 160ms var(--ease);\n}\n.outline-item:hover{color:var(--tx-1);background:rgba(255,255,255,.03);}\n.outline-item.current{color:var(--tx-1);}\n.outline-item.current::before{background:var(--iris-hi);transform:scale(1.35);}\n\n.rail-foot{\n  margin-top:auto;padding-top:16px;\n  border-top:1px solid var(--line);\n  display:flex;align-items:center;gap:10px;\n}\n#ryn-version{\n  font-family:var(--mono);font-size:10.5px;font-weight:500;\n  letter-spacing:.14em;text-transform:uppercase;color:var(--tx-4);\n  padding-left:12px;margin-right:auto;\n}\n#close-button{\n  width:34px;height:34px;padding:8px;flex-shrink:0;\n  border-radius:var(--r2);\n  fill:none;stroke:var(--tx-3);stroke-width:1.9;\n  background:transparent;cursor:pointer;\n  transition:background 150ms var(--ease),stroke 150ms var(--ease);\n}\n#close-button:hover{background:rgba(255,255,255,.06);stroke:var(--tx-1);}\n#close-button:active{background:rgba(255,255,255,.09);}\n\n/* search lives in the rail head */\n#ryn-search-wrap{\n  position:relative;\n  display:flex;align-items:center;gap:8px;\n  height:40px;padding:0 13px;\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line-2);\n  border-radius:var(--r2);\n  transition:border-color 160ms var(--ease),background 160ms var(--ease),box-shadow 160ms var(--ease);\n}\n#ryn-search-wrap:focus-within{\n  border-color:var(--sky-45);\n  background:var(--sky-12);\n  box-shadow:0 0 0 3px rgba(155,197,232,.10);\n}\n#ryn-search-wrap::before{\n  content:'';flex-shrink:0;width:15px;height:15px;\n  background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23726F80' stroke-width='1.6' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='4.6'/%3E%3Cpath d='M10.4 10.4L14 14'/%3E%3C/svg%3E\");\n  background-repeat:no-repeat;background-position:center;background-size:contain;\n}\n#ryn-search-input{\n  flex:1;min-width:0;\n  background:transparent;border:none;outline:none;\n  font-size:13.5px;font-weight:600;color:var(--tx-1);\n}\n#ryn-search-input::placeholder{color:var(--tx-4);font-weight:500;}\n#ryn-search-clear{\n  display:none;flex-shrink:0;\n  font-size:11px;line-height:1;color:var(--tx-4);cursor:pointer;\n  transition:color 140ms;\n}\n#ryn-search-clear:hover{color:var(--tx-1);}\n#ryn-search-dropdown{\n  display:none;position:absolute;top:calc(100% + 8px);left:0;\n  width:320px;max-height:340px;overflow-y:auto;\n  padding:6px;\n  background:var(--ink-3);\n  border:1px solid var(--line-2);\n  border-radius:var(--r3);\n  box-shadow:0 26px 60px -18px rgba(0,0,0,.9);\n  z-index:9999;\n  animation:soft-in 150ms var(--ease);\n}\n#ryn-search-dropdown::-webkit-scrollbar{width:8px;}\n#ryn-search-dropdown::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:8px;border:2px solid transparent;background-clip:padding-box;}\n.ryn-si{\n  display:flex;flex-direction:column;gap:3px;\n  padding:9px 11px;border-radius:var(--r2);cursor:pointer;\n  transition:background 130ms var(--ease);\n}\n.ryn-si:hover,.ryn-si.ryn-fx{background:var(--iris-12);}\n.ryn-st{font-size:13px;font-weight:700;color:var(--tx-1);line-height:1.3;}\n.ryn-st mark{background:var(--iris-45);color:#fff;border-radius:3px;padding:0 2px;}\n.ryn-sp{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--tx-4);}\n.ryn-se{text-align:center;padding:22px 12px;font-size:12.5px;font-weight:600;color:var(--tx-4);}\n.ryn-sl{\n  font-family:var(--mono);font-size:9.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--iris-hi);\n  padding:9px 11px 4px;\n}\n\n/* ------------------------------------------------------------------\n   CONTENT COLUMN — one continuous vertical flow, full available width\n   ------------------------------------------------------------------ */\n\n#page-container{\n  flex:1;min-width:0;\n  overflow-y:auto;overflow-x:hidden;\n  background:var(--ink-1);\n}\n#page-container::-webkit-scrollbar{width:12px;}\n#page-container::-webkit-scrollbar-track{background:transparent;}\n#page-container::-webkit-scrollbar-thumb{\n  background:rgba(255,255,255,.09);\n  border-radius:12px;\n  border:4px solid transparent;\n  background-clip:padding-box;\n}\n#page-container::-webkit-scrollbar-thumb:hover{background:rgba(142,118,206,.55);background-clip:padding-box;}\n\n.menu-page{display:none;}\n.menu-page.opened{\n  display:block;\n  padding:34px clamp(20px,2.6vw,38px) 92px;\n  animation:page-in 190ms var(--ease);\n}\n.page-head{\n  max-width:1180px;margin:0 auto 6px;\n  padding-bottom:24px;\n  border-bottom:1px solid var(--line);\n}\n.menu-page .page-title{\n  font-size:clamp(27px,2.5vw,33px);font-weight:800;line-height:1.03;\n  letter-spacing:-.03em;color:var(--tx-1);\n}\n.page-description{\n  margin-top:12px;max-width:74ch;\n  font-size:13.5px;font-weight:500;line-height:1.6;color:var(--tx-3);\n}\n\n.section{max-width:1180px;margin:0 auto;padding-top:36px;}\n.section-title{\n  display:flex;flex-direction:column;gap:7px;\n  padding:0 2px 13px;\n  border-bottom:1px solid var(--line);\n  font-family:var(--mono);font-size:11.5px;font-weight:700;\n  letter-spacing:.19em;text-transform:uppercase;color:var(--iris-hi);\n}\nh2.section-title{font-family:var(--mono);}\n.sec-sub{\n  font-family:var(--font);font-size:12.5px;font-weight:500;\n  letter-spacing:0;text-transform:none;line-height:1.55;color:var(--tx-3);\n}\n.section-content{display:flex;flex-direction:column;padding-top:4px;}\n\n/* ------------------------------------------------------------------\n   SETTING ROW\n   ------------------------------------------------------------------ */\n\n.content-option{\n  position:relative;\n  display:flex;align-items:center;justify-content:space-between;gap:24px;\n  min-height:60px;\n  padding:13px 15px 13px 17px;\n  border-radius:var(--r2);\n  border-bottom:1px solid rgba(255,255,255,.032);\n  transition:background 150ms var(--ease);\n}\n.content-option:last-child{border-bottom:none;}\n.content-option:hover{background:rgba(255,255,255,.026);}\n.content-option::before{\n  content:'';position:absolute;left:0;top:14px;bottom:14px;\n  width:2px;border-radius:0 2px 2px 0;\n  background:var(--sage);\n  opacity:0;\n  transition:opacity 190ms var(--ease);\n}\n.content-option:has(input[type=\"checkbox\"]:checked)::before{opacity:.85;}\n\n.content-option.centered{justify-content:center;}\n.content-option.left-flex{justify-content:flex-start;gap:14px;}\n.content-option.text{justify-content:flex-start;}\n.content-option.stacked{flex-direction:column;align-items:stretch;gap:14px;}\n\n.opt-main{display:flex;flex-direction:column;gap:5px;min-width:0;flex:1;}\n.option-title{\n  font-size:15.5px;font-weight:700;line-height:1.32;\n  letter-spacing:-.008em;color:var(--tx-1);\n}\nlabel.option-title{cursor:pointer;}\nlabel.option-title:active{opacity:.75;}\n.opt-desc{\n  font-size:12.5px;font-weight:500;line-height:1.5;\n  color:var(--tx-3);max-width:74ch;\n}\n.content-option.quiet .option-title{font-size:14.5px;font-weight:600;color:var(--tx-2);}\n.content-option.quiet{min-height:54px;}\n.content-option.quiet:hover .option-title{color:var(--tx-1);}\n.option-content{display:flex;align-items:center;gap:12px;flex-shrink:0;}.ryn-select{appearance:none;-webkit-appearance:none;background:rgba(255,255,255,.06);color:inherit;border:1px solid rgba(255,255,255,.18);border-radius:7px;padding:5px 26px 5px 10px;font:inherit;font-size:12px;cursor:pointer;flex-shrink:0;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 14px) calc(50% + 1px),calc(100% - 9px) calc(50% + 1px);background-size:5px 5px,5px 5px;background-repeat:no-repeat;}.ryn-select:hover{border-color:rgba(255,255,255,.32);}.ryn-select:focus{outline:none;border-color:var(--iris);}.ryn-select option{background:#1a1526;color:#fff;}\n\n.text-value{\n  font-family:var(--mono);font-size:15px;font-weight:700;\n  color:var(--sky);font-variant-numeric:tabular-nums;\n}\n.simplified{font-size:12.5px;font-weight:500;color:var(--tx-3);line-height:1.6;}\n.highlight{color:var(--iris-hi);}\n\n/* nested detail rows under a parent toggle */\n.sub-options{\n  margin:2px 0 6px 18px;\n  padding-left:16px;\n  border-left:1px solid var(--line-2);\n  transition:opacity 200ms var(--ease);\n}\n.sub-options .content-option{min-height:50px;padding-top:9px;padding-bottom:9px;}\n.sub-options .option-title{font-size:14px;font-weight:600;color:var(--tx-2);}\n.sub-options .content-option:hover .option-title{color:var(--tx-1);}\n.content-option:has(> .switch-checkbox > input:not(:checked)) + .sub-options{\n  opacity:.32;pointer-events:none;\n}\n\n/* ------------------------------------------------------------------\n   CONTROLS\n   ------------------------------------------------------------------ */\n\n/* toggle */\n.switch-checkbox{position:relative;width:48px;height:27px;flex-shrink:0;}\n.switch-checkbox input{position:absolute;opacity:0;width:0;height:0;}\n.switch-checkbox span{\n  position:absolute;inset:0;\n  border-radius:10px;cursor:pointer;\n  background:rgba(255,255,255,.06);\n  border:1px solid rgba(255,255,255,.11);\n  transition:background 180ms var(--ease),border-color 180ms var(--ease);\n}\n.switch-checkbox span::before{\n  content:'';position:absolute;left:4px;top:50%;\n  width:18px;height:18px;border-radius:6px;\n  background:rgba(255,255,255,.32);\n  transform:translateY(-50%);\n  transition:transform 190ms var(--ease),background 190ms var(--ease);\n}\n.switch-checkbox span:hover{border-color:rgba(255,255,255,.2);}\n.switch-checkbox input:checked + span{\n  background:var(--sage-14);\n  border-color:var(--sage-40);\n}\n.switch-checkbox input:checked + span::before{\n  transform:translateY(-50%) translateX(21px);\n  background:var(--sage);\n}\n.switch-checkbox input:focus-visible + span{box-shadow:0 0 0 3px rgba(155,197,232,.20);}\n\n/* keycap */\n.hotkeyInput{\n  display:flex;align-items:center;justify-content:center;\n  min-width:82px;height:42px;padding:0 15px;\n  border-radius:10px;\n  background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.028));\n  border:1px solid rgba(255,255,255,.115);\n  box-shadow:0 2px 0 rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.10);\n  font-family:var(--mono);font-size:13.5px;font-weight:700;\n  letter-spacing:.07em;text-transform:uppercase;color:var(--tx-1);\n  transition:transform 120ms var(--ease),border-color 150ms var(--ease),\n             background 150ms var(--ease),box-shadow 150ms var(--ease),color 150ms var(--ease);\n}\n.hotkeyInput:hover{border-color:var(--sky-45);color:#fff;}\n.hotkeyInput:active{transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.06);}\n.hotkeyInput.active{\n  border-color:var(--iris);background:var(--iris-18);color:var(--iris-hi);\n  box-shadow:inset 0 1px 0 rgba(255,255,255,.08);\n  transform:translateY(2px);\n  animation:cap-pulse 1.15s ease-in-out infinite;\n}\n.hotkeyInput.red{\n  border-color:rgba(217,163,171,.5);background:var(--rose-12);color:var(--rose);\n}\n.key-state{\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--tx-4);\n  min-width:78px;text-align:right;\n}\n.key-state::after{content:'';}\n.content-option:has(.hotkeyInput.red) .key-state::after{content:'Conflict';color:var(--rose);}\n.content-option:has(.hotkeyInput.active) .key-state::after{content:'Press a key';color:var(--iris-hi);}\n.content-option:has(.hotkeyInput.red) .key-state,\n.content-option:has(.hotkeyInput.active) .key-state{color:inherit;}\n\n/* button */\n.option-button{\n  display:inline-flex;align-items:center;justify-content:center;gap:8px;\n  height:42px;padding:0 21px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.05);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);\n  font-size:13.5px;font-weight:700;letter-spacing:.005em;\n  white-space:nowrap;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),\n             transform 110ms var(--ease),color 150ms var(--ease);\n}\n.option-button:hover{background:rgba(255,255,255,.085);border-color:var(--line-3);}\n.option-button:active{transform:translateY(1px);background:rgba(255,255,255,.11);}\n.option-button:disabled{opacity:.4;pointer-events:none;}\n.option-button.primary{\n  background:var(--iris-18);border-color:var(--iris-45);color:#EFEAFF;\n}\n.option-button.primary:hover{background:rgba(142,118,206,.26);border-color:rgba(142,118,206,.7);}\n.option-button.wide{width:100%;}\n.option-button.tall{height:48px;padding:0 28px;font-size:14.5px;}\n.option-button.red,.option-button.danger{\n  background:transparent;border-color:rgba(217,163,171,.28);color:var(--rose);\n}\n.option-button.red:hover,.option-button.danger:hover{\n  background:var(--rose-12);border-color:rgba(217,163,171,.5);color:#F0CDD2;\n}\n.option-button.icon-only{width:42px;padding:0;}\n\n/* segmented control */\n.seg{display:flex;gap:6px;flex-wrap:wrap;max-width:680px;}\n.seg-btn,.farm-type-btn{\n  flex:1;min-width:92px;height:44px;padding:0 15px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line);\n  color:var(--tx-3);\n  font-family:var(--font);font-size:13.5px;font-weight:700;\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.seg-btn:hover,.farm-type-btn:hover{background:rgba(255,255,255,.06);color:var(--tx-1);}\n.seg-btn.seg-active,.farm-type-btn.seg-active{\n  background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;\n}\n\n/* text / number input */\n.input{\n  height:42px;width:235px;padding:0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);\n  font-size:13.5px;font-weight:600;text-align:left;\n  transition:border-color 150ms var(--ease),background 150ms var(--ease),box-shadow 150ms var(--ease);\n}\n.input::placeholder{color:var(--tx-4);font-weight:500;}\n.input:focus{\n  outline:none;border-color:var(--sky-45);\n  background:var(--sky-12);\n  box-shadow:0 0 0 3px rgba(155,197,232,.11);\n}\ninput[type=\"number\"].input{width:122px;font-family:var(--mono);font-variant-numeric:tabular-nums;}\n.input.invalid{border-color:rgba(217,163,171,.6);background:var(--rose-12);}\n\n/* rows the client builds for auto chat: input plus a remove control */\n.chat-row{min-height:58px;}\n.chat-row .input{flex:1;min-width:0;}\n\n/* colour */\ninput[id][type=\"color\"]{\n  width:36px;height:36px;padding:0;\n  border:none;border-radius:9px;background:transparent;cursor:pointer;\n  box-shadow:0 0 0 1px rgba(255,255,255,.16);\n  transition:box-shadow 160ms var(--ease),transform 160ms var(--ease);\n}\ninput[id][type=\"color\"]::-webkit-color-swatch-wrapper{padding:3px;}\ninput[id][type=\"color\"]::-webkit-color-swatch{border:none;border-radius:7px;}\ninput[id][type=\"color\"]:hover{transform:scale(1.06);box-shadow:0 0 0 1px rgba(255,255,255,.34);}\n.reset-color{\n  width:15px;height:15px;flex-shrink:0;\n  border-radius:50%;border:1px solid rgba(255,255,255,.22);\n  background:var(--data-color,var(--iris));\n  opacity:0;cursor:pointer;\n  transition:opacity 160ms var(--ease),transform 160ms var(--ease);\n}\n.content-option:hover .reset-color{opacity:.85;}\n.reset-color:hover{opacity:1;transform:scale(1.2);}\n\n/* slider */\n.slider{display:flex;align-items:center;gap:18px;flex-shrink:0;}\n.slider input[type=\"range\"]{order:1;}\n.slider-value{\n  order:2;\n  font-family:var(--mono);font-size:13.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;\n  color:var(--sky);min-width:58px;text-align:right;\n}\n.slider input[type=\"range\"]{\n  -webkit-appearance:none;appearance:none;\n  width:clamp(150px,17vw,250px);height:22px;\n  background:transparent;cursor:pointer;outline:none;border:none;\n}\n.slider input[type=\"range\"]::-webkit-slider-runnable-track{\n  height:4px;border-radius:999px;\n  background:linear-gradient(90deg,var(--sky) var(--val,0%),rgba(255,255,255,.09) var(--val,0%));\n}\n.slider input[type=\"range\"]::-webkit-slider-thumb{\n  -webkit-appearance:none;\n  width:15px;height:15px;margin-top:-5.5px;\n  border-radius:50%;background:#EEF4FA;\n  border:1px solid rgba(0,0,0,.35);\n  box-shadow:0 1px 4px rgba(0,0,0,.55);\n  transition:transform 130ms var(--ease),box-shadow 130ms var(--ease);\n}\n.slider input[type=\"range\"]:hover::-webkit-slider-thumb{transform:scale(1.14);}\n.slider input[type=\"range\"]:active::-webkit-slider-thumb{\n  transform:scale(1.06);box-shadow:0 0 0 6px rgba(155,197,232,.16);\n}\n\n/* select */\nselect.ryn-select{\n  height:42px;padding:0 38px 0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);font-size:13.5px;font-weight:600;\n  -webkit-appearance:none;appearance:none;cursor:pointer;\n  background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7' viewBox='0 0 11 7'%3E%3Cpath d='M1 1l4.5 4.5L10 1' stroke='%239BC5E8' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\");\n  background-repeat:no-repeat;background-position:right 14px center;\n  transition:border-color 150ms var(--ease);\n}\nselect.ryn-select:focus{outline:none;border-color:var(--sky-45);}\nselect.ryn-select option{background:var(--ink-3);color:var(--tx-1);}\n\n/* misc atoms */\n.icon{width:20px;height:20px;}\n.small-icon{width:15px;height:15px;}\n.key-badge{\n  display:inline-flex;align-items:center;justify-content:center;\n  min-width:26px;height:20px;padding:0 6px;\n  border-radius:var(--r1);\n  background:rgba(255,255,255,.05);border:1px solid var(--line-2);\n  font-family:var(--mono);font-size:10.5px;font-weight:600;color:var(--tx-2);\n}\n.note{\n  max-width:1180px;margin:14px auto 0;\n  padding:14px 18px;\n  border-left:2px solid var(--line-2);\n  font-size:12.5px;font-weight:500;line-height:1.6;color:var(--tx-3);\n}\n\n/* ------------------------------------------------------------------\n   BOTS\n   ------------------------------------------------------------------ */\n\n#bot-container{display:flex;flex-direction:column;}\n#bot-container:empty{display:none;}\n.content-option[data-bot-id]{\n  background:rgba(255,255,255,.028);\n  border:1px solid var(--line);border-bottom:1px solid var(--line);\n  margin-bottom:6px;min-height:52px;\n}\n.content-option[data-bot-id] .option-title{font-family:var(--mono);font-size:13.5px;font-weight:600;}\n.disconnect-button{\n  width:16px;height:16px;flex-shrink:0;\n  fill:var(--tx-4);cursor:pointer;\n  transition:fill 150ms var(--ease);\n}\n.content-option:hover .disconnect-button{fill:var(--tx-2);}\n.disconnect-button:hover{fill:var(--rose)!important;}\n\n#connectingBot{\n  padding:14px 18px;margin-bottom:6px;\n  border-radius:var(--r2);\n  border:1px dashed var(--line-2);\n  font-family:var(--mono);font-size:12px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--tx-4);\n}\n\n#dynamic-bot-list{display:flex;flex-direction:column;gap:8px;}\n.bot-row{\n  display:flex;align-items:center;gap:10px;\n  padding:10px 12px;\n  background:rgba(255,255,255,.028);\n  border:1px solid var(--line);\n  border-radius:var(--r2);\n  transition:border-color 150ms var(--ease),opacity 150ms var(--ease);\n}\n.bot-row:hover{border-color:var(--line-2);}\n.bot-row.connected{background:var(--sage-14);border-color:var(--sage-40);}\n.bot-row-label{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  letter-spacing:.12em;text-transform:uppercase;color:var(--tx-4);\n  min-width:74px;flex-shrink:0;\n}\n.bot-row-name{flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}\n.bot-row-name .pending{color:var(--tx-4);font-weight:600;}\n.bot-row .input{flex:1;min-width:0;width:auto;}\n.bot-row-check{width:17px;height:17px;flex-shrink:0;fill:var(--sage);}\n.icon-btn{\n  display:flex;align-items:center;justify-content:center;\n  width:42px;height:42px;flex-shrink:0;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.045);\n  border:1px solid var(--line-2);\n  font-size:15px;line-height:1;color:var(--tx-2);\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.icon-btn:hover{background:rgba(255,255,255,.08);border-color:var(--line-3);color:var(--tx-1);}\n.icon-btn.danger:hover{background:var(--rose-12);border-color:rgba(217,163,171,.45);color:var(--rose);}\n\n/* option grids (weapons, age-4 building) */\n.wpn-label{\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:12px;\n}\n.wpn-grid{\n  display:grid;grid-template-columns:repeat(auto-fill,minmax(124px,1fr));\n  gap:8px;\n}\n.bot-weapon-btn,.bot-sec-weapon-btn{\n  display:flex;align-items:center;justify-content:center;\n  min-height:54px;padding:10px 12px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.03);\n  border:1px solid var(--line);\n  color:var(--tx-3);\n  font-size:13px;font-weight:600;text-align:center;line-height:1.3;\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.bot-weapon-btn:hover,.bot-sec-weapon-btn:hover{\n  background:rgba(255,255,255,.06);border-color:var(--line-2);color:var(--tx-1);\n}\n.bot-weapon-btn.wpn-active,.bot-sec-weapon-btn.wpn-active{\n  background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;\n}\n.wpn-selected-bar{\n  display:flex;align-items:center;gap:10px;\n  margin-top:12px;padding:11px 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.025);\n  border:1px solid var(--line);\n}\n.wpn-selected-dot{\n  width:6px;height:6px;flex-shrink:0;border-radius:50%;background:var(--iris-hi);\n}\n.wpn-selected-text{font-size:13px;font-weight:600;color:var(--tx-2);}\n\n.stack{display:flex;flex-direction:column;gap:22px;padding-top:8px;}\n.field{display:flex;flex-direction:column;gap:0;}\n.field-head{\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:10px;\n}\n.field-note{margin-top:10px;font-size:12.5px;font-weight:500;line-height:1.55;color:var(--tx-3);}\n.field-note b{color:var(--tx-2);font-weight:700;}\n.inline{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}\n#_botBulkRow .input{flex:1;min-width:180px;width:auto;}\n.bot-row-id{\n  font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.06em;\n  color:var(--tx-4);flex-shrink:0;padding:0 9px;height:25px;\n  display:flex;align-items:center;white-space:nowrap;\n  border:1px solid var(--line);border-radius:var(--r2);\n}\n\n#_formationGrid{width:100%;}\n\n/* ------------------------------------------------------------------\n   FORMATION POPUP (built in JS, lives on document.body)\n   ------------------------------------------------------------------ */\n\n.fsel-trigger{\n  display:flex;align-items:center;gap:12px;\n  width:100%;padding:13px 14px;max-width:680px;\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line-2);\n  border-radius:var(--r2);\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease);\n}\n.fsel-trigger:hover{background:rgba(255,255,255,.06);border-color:var(--line-3);}\n.fsel-trigger.open{border-color:var(--iris-45);background:var(--iris-12);}\n.fsel-trigger .fsel-icon{width:26px;flex-shrink:0;text-align:center;font-size:16px;color:var(--iris-hi);}\n.fsel-trigger .fsel-label{flex:1;font-size:14.5px;font-weight:700;color:var(--tx-1);}\n.fsel-trigger .fsel-arrow{font-size:10px;color:var(--tx-4);transition:transform 170ms var(--ease);}\n.fsel-trigger.open .fsel-arrow{transform:rotate(180deg);}\n\n.fsel-popup{\n  position:fixed;z-index:99999;width:300px;\n  display:flex;flex-direction:column;overflow:hidden;\n  background:var(--ink-3);\n  border:1px solid var(--line-2);\n  border-radius:var(--r3);\n  box-shadow:0 30px 70px -20px rgba(0,0,0,.92);\n}\n.fsel-popup.toopen{animation:soft-in 160ms var(--ease);}\n.fsel-popup-header{\n  display:flex;align-items:center;gap:10px;\n  padding:12px 14px;\n  border-bottom:1px solid var(--line);\n  cursor:grab;\n}\n.fsel-popup-header:active{cursor:grabbing;}\n.fsel-popup-title{\n  flex:1;font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n.fsel-popup-close{\n  width:22px;height:22px;flex-shrink:0;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r1);font-size:11px;color:var(--tx-4);cursor:pointer;\n  transition:background 140ms,color 140ms;\n}\n.fsel-popup-close:hover{background:rgba(255,255,255,.07);color:var(--tx-1);}\n.fsel-popup-body{\n  display:grid;grid-template-columns:repeat(4,1fr);gap:8px;\n  padding:12px;max-height:280px;overflow-y:auto;\n}\n.fsel-popup-body::-webkit-scrollbar{width:8px;}\n.fsel-popup-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:8px;border:2px solid transparent;background-clip:padding-box;}\n.fcat-btn{\n  position:relative;\n  display:flex;align-items:center;justify-content:center;\n  aspect-ratio:1;border-radius:var(--r2);\n  background:rgba(255,255,255,.03);\n  border:1px solid var(--line);\n  color:var(--tx-2);font-size:17px;cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.fcat-btn:hover{background:rgba(255,255,255,.07);border-color:var(--line-2);color:var(--tx-1);}\n.fcat-btn.active{background:var(--iris-18);border-color:var(--iris-45);color:#fff;}\n.fcat-tip{\n  display:none;position:absolute;top:calc(100% + 6px);left:50%;\n  transform:translateX(-50%);\n  padding:4px 9px;border-radius:var(--r1);\n  background:var(--ink-4);border:1px solid var(--line-2);\n  font-family:var(--font);font-size:11px;font-weight:600;color:var(--tx-1);\n  white-space:nowrap;pointer-events:none;z-index:5;\n}\n.fcat-btn:hover .fcat-tip{display:block;}\n.fcat-key{\n  position:absolute;top:3px;right:3px;\n  min-width:17px;height:15px;padding:0 3px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:4px;\n  background:rgba(0,0,0,.45);border:1px solid var(--line);\n  font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--tx-3);\n  line-height:1;cursor:pointer;\n  transition:background 130ms,border-color 130ms,color 130ms;\n}\n.fcat-key:hover{background:rgba(255,255,255,.10);color:var(--tx-1);}\n.fcat-key.set{background:var(--iris-18);border-color:var(--iris-45);color:#EFEAFF;}\n.fcat-key.recording{background:var(--sky-12);border-color:var(--sky-45);color:var(--sky);animation:cap-pulse 1.1s ease-in-out infinite;}\n.fcat-reset{\n  position:absolute;bottom:3px;left:3px;\n  width:15px;height:15px;display:none;\n  align-items:center;justify-content:center;\n  border-radius:4px;\n  background:var(--rose-12);border:1px solid rgba(217,163,171,.3);\n  font-size:9px;line-height:1;color:var(--rose);cursor:pointer;\n}\n.fcat-reset.show{display:flex;}\n.fcat-reset:hover{background:rgba(217,163,171,.24);}\n.fsel-popup-footer{padding:10px 12px;border-top:1px solid var(--line);}\n.fsel-reset-all{\n  width:100%;padding:9px 0;\n  border-radius:var(--r2);\n  background:transparent;border:1px solid rgba(217,163,171,.26);\n  font-family:var(--font);font-size:12px;font-weight:700;\n  color:var(--rose);text-align:center;cursor:pointer;\n  transition:background 140ms,border-color 140ms;\n}\n.fsel-reset-all:hover{background:var(--rose-12);border-color:rgba(217,163,171,.48);}";
   const Game_default = "#ryn-menu-frame {\r\n    position: absolute;\r\n    top: 0;\r\n    left: 0;\r\n    bottom: 0;\r\n    right: 0;\r\n    width: 100%;\r\n    height: 100%;\r\n    border: none;\r\n    outline: none;\r\n    z-index: 10;\r\n}\r\n\r\n#promoImgHolder,\r\n.menuHeader,\r\n.menuText,\r\n#guideCard,\r\n#gameName,\r\n#pingDisplay,\r\n#partyButton,\r\n#onetrust-consent-sdk,\r\n.adMenuCard,\r\n#topInfoHolder > div:not([id]):not([class]),\r\n#touch-controls-fullscreen,\r\n#altcha,\r\n#joinPartyButton {\r\n    display: none!important;\r\n}\r\n\r\n.menuCard {\r\n    box-shadow: none;\r\n}\r\n\r\n#setupCard {\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 12px;\r\n    background: rgba(25,25,25,0.45);\r\n    backdrop-filter: blur(25px);\r\n    -webkit-backdrop-filter: blur(25px);\r\n    border: 1px solid rgba(255,255,255,0.2);\r\n    border-radius: 20px;\r\n    box-shadow: 0 8px 32px 0 rgba(0,0,0,0.2), inset 0 1px 1px rgba(255,255,255,0.1);\r\n    max-height: auto;\r\n    width: 280px;\r\n}\r\n\r\n#setupCard > * {\r\n    margin: 0!important;\r\n}\r\n\r\n#linksContainer2 {\r\n    background: #6d6d6d77;\r\n}\r\n\r\n#bottomContainer {\r\n    bottom: 20px;\r\n}\r\n\r\n#topInfoHolder {\r\n    display: flex;\r\n    flex-direction: column;\r\n    justify-content: right;\r\n    align-items: flex-end;\r\n    gap: 10px;\r\n}\r\n\r\n#killCounter, #totalKillCounter {\r\n    position: static;\r\n    margin: 0;\r\n    background-image: url(../img/icons/skull.png);\r\n}\r\n\r\n.actionBarItem {\r\n    position: relative;\r\n    border: 2px solid rgba(80,30,160,0.45) !important;\r\n    border-radius: 4px !important;\r\n}\r\n\r\n.itemCounter {\r\n    position: absolute;\r\n    top: 3px;\r\n    right: 3px;\r\n    font-size: 0.95em;\r\n    color: white;\r\n    text-shadow: #3d3f42 2px 0px 0px, #3d3f42 1.75517px 0.958851px 0px, #3d3f42 1.0806px 1.68294px 0px, #3d3f42 0.141474px 1.99499px 0px, #3d3f42 -0.832294px 1.81859px 0px, #3d3f42 -1.60229px 1.19694px 0px, #3d3f42 -1.97998px 0.28224px 0px, #3d3f42 -1.87291px -0.701566px 0px, #3d3f42 -1.30729px -1.5136px 0px, #3d3f42 -0.421592px -1.95506px 0px, #3d3f42 0.567324px -1.91785px 0px, #3d3f42 1.41734px -1.41108px 0px, #3d3f42 1.92034px -0.558831px 0px;\r\n}\r\n\r\n.itemCounter.hidden {\r\n    display: none;\r\n}\r\n\r\n#ryn-topright-hud { position: fixed; top: 12px; right: 12px; z-index: 9999; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; pointer-events: none; font-family: \"Hammersmith One\", Arial, sans-serif; }\r\n.ryn-hud-row { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 160px; }\r\n.ryn-hud-bar-bg { width: 160px; height: 8px; background: rgba(0,0,0,0.55); border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }\r\n.ryn-hud-bar-fill { height: 100%; border-radius: 4px; transition: width 0.15s ease; }\r\n#ryn-hud-hp-fill { background: linear-gradient(90deg,#cc5151,#e05151); }\r\n#ryn-hud-r1-fill { background: linear-gradient(90deg,#f0b429,#f0c060); }\r\n#ryn-hud-r2-fill { background: linear-gradient(90deg,#51cc88,#60e0a0); }\r\n.ryn-hud-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.6); text-shadow: 0 1px 3px rgba(0,0,0,0.9); }\r\n.ryn-hud-val { font-size: 11px; color: rgba(255,255,255,0.9); text-shadow: 0 1px 4px rgba(0,0,0,0.9); letter-spacing: 0.05em; }\r\n\r\n#rynStats {\r\n    position: absolute;\r\n    color: rgb(225, 210, 255);\r\n    font: 13px \"Hammersmith One\";\r\n    bottom: 210px;\r\n    left: 20px;\r\n\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 5px;\r\n}\r\n\r\n.hidden {\r\n    display: none!important;\r\n}";
@@ -3572,12 +3572,13 @@ window.grbtp = 35;
           this.damages.length = 0;
         }
         this.tickDamage += difference;
-        // Misery's `damages.push(UTILS.fixTo(damage, 2))`. The array was already
-        // declared and cleared here and never written to; MiseryHeal reads it as
-        // the tick's damage bucket and splits it into hits, shots and spikes the
-        // way Misery's distributionDamages does. Rounded to two places for the
-        // same reason Misery rounds: the numbers are matched against computed
-        // weapon damage, and float drift would stop them matching.
+        // novastorm's `damages.push(UTILS.fixTo(damage, 2))`. The array was
+        // already declared and cleared here and never written to; NovastormHeal
+        // reads it as the tick's damage bucket and splits it into hits, shots
+        // and spikes the way novastorm's distributionDamages does. Rounded to
+        // two places for the same reason novastorm rounds: the numbers are
+        // matched against computed weapon damage, and float drift would stop
+        // them matching.
         this.damages.push(Math.round(difference * 100) / 100);
         this.damageTick = this.tickCount + 1;
         if (isEnemy) {
@@ -4829,29 +4830,6 @@ window.grbtp = 35;
             ctx.fill();
           }
         });
-      } catch (e) {}
-      // Players the fleet has found. A live sighting is solid, a record whose
-      // sightings have gone stale is hollow, so the map distinguishes "there
-      // now" from "was there".
-      try {
-        if (typeof BotScan !== "undefined" && Settings_default._scanMapMarkers !== false) {
-          const wall = Date.now();
-          for (const rec of BotScan.records.values()) {
-            const mx = rec.x / Config_default.mapScale * width;
-            const my = rec.y / Config_default.mapScale * height;
-            const live = wall - rec.lastSeen < SCAN_LOST_MS;
-            ctx.beginPath();
-            ctx.arc(mx, my, 6, 0, 2 * Math.PI);
-            if (live) {
-              ctx.fillStyle = rec.state === "engaged" ? "#ff2222" : "#ff8800";
-              ctx.fill();
-            } else {
-              ctx.strokeStyle = "rgba(255,136,0,0.7)";
-              ctx.lineWidth = 2;
-              ctx.stroke();
-            }
-          }
-        }
       } catch (e) {}
       ctx.restore();
     }
@@ -10138,8 +10116,8 @@ window.grbtp = 35;
   // the count is free to be a setting. These are the three offered:
   //
   //   36    10.0 deg apart — misses a gap narrower than one step
-  //   72     5.0 deg apart — Luna's own number, the default
-  //  144     2.5 deg apart — resolves gaps a spike can actually fit
+  //   72     5.0 deg apart — Luna's own number
+  //  144     2.5 deg apart — resolves gaps a spike can actually fit, default
   //
   // The step table is still sampled rather than solved because the ladder
   // below compares candidates by identity (`config === closestSpikeToEnemy`),
@@ -10164,16 +10142,59 @@ window.grbtp = 35;
   // the lower rung during a sustained fight, which is precisely when the
   // finer table is worth having. So the setting is the rate, flat, and there
   // is no ladder.
+  //
+  // 144 is the default. The measured cost of the whole step up from 36 is
+  // 0.003ms a tick, which buys back the gaps the coarser tables walk past: a
+  // spike ring is 79 units out, so one step at 36 moves the landing point 13.8
+  // units and at 144 it moves it 3.4 — fine enough that the sampled table
+  // stops being the thing that decides whether a slot exists.
   const LUNA_ANGLE_RESOLUTIONS = [ 36, 72, 144 ];
-  const LUNA_ANGLE_STEPS_DEFAULT = 72;
+  const LUNA_ANGLE_STEPS_DEFAULT = 144;
 
   // Luna's own budget check was `packets + 5 > 119` against a counter it owned
   // outright. RYN shares one allowance across every module, so the same guard
   // is written against ModuleHandler's counter and limit.
   const LUNA_PLACE_COST = 5;
 
-  // How long an angle stays banned after a build that the server dropped.
+  // How long a slot stays banned after a build the server dropped.
+  //
+  // Luna bans the angle — the float itself, as a Map key — and that only works
+  // while the table is coarse enough for one step to be one slot. It is not,
+  // at any of the three rates. A spike lands 79 units out and is 49 across, so
+  // two sends are the same ground until they are ~36 deg apart: 1.8 steps at
+  // 36, 3.6 at 72, 14.4 at 144. Banning the one float leaves every one of its
+  // neighbours free to re-send the build the server just refused, and the
+  // finer the table the more of them there are.
+  //
+  // So the ban is on the ground, not the angle: the world point the refused
+  // build was aimed at, for as long as the ban lasts, against that item only.
+  // It costs one distance test per candidate, holds at any resolution, and
+  // survives the player walking — an angle-keyed ban follows me around and
+  // bans somewhere new every tick, which is not where the server said no.
+  //
+  // This is what the engine's PlacementMemory already does on the preplace
+  // side, where the key is quantised by `2 * asin(footR / ringR)` — the same
+  // footprint argument, arrived at from the other direction.
   const LUNA_BAN_TICKS = 18;
+
+  // How long a send is given to come back before the ground under it is read
+  // as refused.
+  //
+  // "Still empty next tick" is not "refused" — it is also every build that has
+  // not finished its round trip. A place goes out on tick N, the server adds
+  // the object, and the add packet lands back here at about one ping later: at
+  // 100ms that is inside tick N+1, at 250ms it is not. So on a bad connection
+  // the tick after a *successful* build reads the ground as empty.
+  //
+  // Luna's angle-keyed ban could afford to be wrong about that — one float out
+  // of the table, and the angle 2.5 deg over still built. A ban on the ground
+  // cannot: it holds the whole slot, so a false positive locks a slot that
+  // just built successfully out of being rebuilt for the rest of the 18 ticks,
+  // which is exactly the case replace exists for.
+  //
+  // Two ticks, which is what the engine already gives its own hard claim in
+  // ModuleHandler._notePlacement, and covers a round trip up to ~222ms.
+  const LUNA_BAN_GRACE_TICKS = 2;
 
   // How many builds the trapped fallback below is allowed to queue in one
   // tick. Every free angle would be five packets each and would empty the
@@ -10217,8 +10238,8 @@ window.grbtp = 35;
     moduleName="autoPlacer";
     client;
     _predictObjects=[];
-    _placedAngles=[];
-    _bannedAngles=new Map;
+    _placedSlots=[];
+    _bannedSlots=[];
     _angleCache=new Map;
     _angleCacheTick=-1;
     _tick=0;
@@ -10232,8 +10253,8 @@ window.grbtp = 35;
     }
     reset() {
       this._predictObjects = [];
-      this._placedAngles = [];
-      this._bannedAngles.clear();
+      this._placedSlots = [];
+      this._bannedSlots.length = 0;
       this._angleCache.clear();
       this._angleCacheTick = -1;
       this._lastPrePlaceObj = null;
@@ -10297,11 +10318,12 @@ window.grbtp = 35;
       });
     }
 
-    // Luna canPlace: the landing point has to clear every object, and stay out
-    // of the river unless it is a platform.
-    _canPlace(id, angle, myPos, ObjectManager2, excludeObj) {
-      const cfg = this._getConfig(id, myPos)(angle);
-      const cx = cfg.x, cy = cfg.y, cs = cfg.scale;
+    // Luna canPlace, split so the same question can be asked about a world
+    // point and not only about an angle off my own ring. The ban list below
+    // needs the point form: it remembers where a refused build was aimed, and
+    // by the time it asks whether that ground is still empty I have moved and
+    // the angle that produced it no longer points at it.
+    _pointFree(id, cx, cy, cs, ObjectManager2, excludeObj) {
       const blocked = ObjectManager2.grid2D.query(cx, cy, 4, objId => {
         const obj = ObjectManager2.objects.get(objId);
         if (!obj) return false;
@@ -10315,6 +10337,22 @@ window.grbtp = 35;
         if (cy >= mid - riverHalf && cy <= mid + riverHalf) return false;
       }
       return true;
+    }
+    _canPlace(id, angle, myPos, ObjectManager2, excludeObj) {
+      const cfg = this._getConfig(id, myPos)(angle);
+      return this._pointFree(id, cfg.x, cfg.y, cfg.scale, ObjectManager2, excludeObj);
+    }
+
+    // Is this candidate the ground a refused build was already aimed at? Same
+    // item, and its centre inside that build's own footprint — two sends whose
+    // centres are closer than one scale are the same slot, whatever angles
+    // produced them.
+    _isBanned(cfg) {
+      for (const slot of this._bannedSlots) {
+        if (slot.id !== cfg.id) continue;
+        if (hyp(cfg.x - slot.x, cfg.y - slot.y) < slot.r) return true;
+      }
+      return false;
     }
 
     // Luna isItemLimit. Luna reads `group.sandboxLimit || Math.max(...)`
@@ -10472,7 +10510,7 @@ window.grbtp = 35;
         // refused: `placeable` is Luna's _canPlace, and the ban list is the
         // resend guard the tick above fills in.
         if (!a.placeable) continue;
-        if (this._bannedAngles.has(a.angle)) continue;
+        if (this._isBanned(a)) continue;
         if (this._sectorOf(a.angle, base, count) !== sector) continue;
         // The two tests the ladder applies to any build it makes for a reason
         // other than catching the target: never wall off my own path, and never
@@ -10677,8 +10715,8 @@ window.grbtp = 35;
       // Settled before anything is scanned, so every scan this tick shares one
       // resolution and the per-tick cache keys stay stable.
       this._steps = this._resolutionFor();
-      for (const [angle, expiry] of this._bannedAngles) {
-        if (this._tick > expiry) this._bannedAngles.delete(angle);
+      for (let i = this._bannedSlots.length - 1; i >= 0; i--) {
+        if (this._tick > this._bannedSlots[i].expires) this._bannedSlots.splice(i, 1);
       }
 
       const enemy = EnemyManager2.nearestEnemy;
@@ -10749,17 +10787,42 @@ window.grbtp = 35;
       this._spamPrePlacer = false;
       if (ModuleHandler.packetCount >= ModuleHandler.packetLimit) return;
 
-      // Not Luna's: an angle we built at last tick that is still free this
-      // tick is an angle the server refused. Sit it out rather than spend the
-      // tick's packets on it again.
-      if (this._placedAngles.length > 0) {
-        const checked = [ ...this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null, LUNA_SPIKE_TYPE), ...this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null, LUNA_TRAP_TYPE) ];
-        for (const placed of this._placedAngles) {
-          const match = checked.find(a => Math.abs(a.angle - placed) < .01);
-          if (match && match.placeable) this._bannedAngles.set(placed, this._tick + LUNA_BAN_TICKS);
+      // Not Luna's: ground we built on that is still empty once the send has
+      // had time to come back is ground the server refused. Sit it out rather
+      // than spend the tick's packets on it again.
+      //
+      // Asked of the remembered landing point rather than of the angle that
+      // produced it. Luna matches `Math.abs(a.angle - placed) < .01` against
+      // this tick's table, which answers a different question every time I
+      // move — and at 144 the angle either side of the match is the same slot
+      // anyway, so the answer was never the one being banned.
+      //
+      // A send younger than the grace window is not judged yet: it is still in
+      // flight, and reading empty ground under it as a refusal is how a build
+      // that worked gets its own slot banned.
+      {
+        const waiting = [];
+        for (const placed of this._placedSlots) {
+          const age = this._tick - placed.tick;
+          if (age < LUNA_BAN_GRACE_TICKS) {
+            waiting.push(placed);
+            continue;
+          }
+          // Past the window the evidence is stale — the placer sat out a few
+          // ticks and the ground has moved on — so the send is dropped
+          // unjudged rather than banning somewhere on old information.
+          if (age > LUNA_BAN_GRACE_TICKS + 2) continue;
+          if (!this._pointFree(placed.id, placed.x, placed.y, placed.scale, ObjectManager2, null)) continue;
+          this._bannedSlots.push({
+            id: placed.id,
+            x: placed.x,
+            y: placed.y,
+            r: placed.scale,
+            expires: this._tick + LUNA_BAN_TICKS
+          });
         }
+        this._placedSlots = waiting;
       }
-      this._placedAngles = [];
 
       // ────────────────────────────────────────────────────────────────────
       // AUTO PLACER — Luna updateAngles + isAutoPlaceAngle
@@ -10767,7 +10830,7 @@ window.grbtp = 35;
       {
         const spikeAngles = this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null, LUNA_SPIKE_TYPE);
         const trapAngles = this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null, LUNA_TRAP_TYPE);
-        const notBanned = a => !this._bannedAngles.has(a.angle);
+        const notBanned = a => !this._isBanned(a);
         const validSpike = spikeAngles.filter(a => notBanned(a) && (a.placeable || a.perfect));
         const validTrap = trapAngles.filter(a => notBanned(a) && (a.placeable || a.perfect));
         const validAngles = [ ...validSpike, ...validTrap ];
@@ -10855,7 +10918,7 @@ window.grbtp = 35;
           // which already rejects every angle a build — mine or anyone's — is
           // occupying, so a blocked angle is never scanned twice.
           const openAngles = list => {
-            const free = list.filter(a => a.placeable && !this._bannedAngles.has(a.angle));
+            const free = list.filter(a => a.placeable && !this._isBanned(a));
             // Same order the ladder above uses: packed against something
             // first, then the rest, each of them nearest the enemy first.
             return [ ...free.filter(a => a.perfect).sort(nearestFirst), ...free.filter(a => !a.perfect).sort(nearestFirst) ];
@@ -10910,7 +10973,17 @@ window.grbtp = 35;
           type: type
         });
         ModuleHandler.moduleActive = true;
-        this._placedAngles.push(obj.angle);
+        // The whole build, not just its angle: the ban check asks whether
+        // *this ground* is still empty, and the point is what answers that
+        // once I have moved off the ring position that produced it. The tick
+        // rides along so the check knows how long the send has had.
+        this._placedSlots.push({
+          id: obj.id,
+          x: obj.x,
+          y: obj.y,
+          scale: obj.scale,
+          tick: this._tick
+        });
       };
 
       for (const obj of this._predictObjects) {
@@ -15608,100 +15681,106 @@ window.grbtp = 35;
     }
   }
   // ==========================================================================
-  // Auto Heal — Misery Client's system, on RYN's packets, ticks and variables.
+  // Auto Heal — novastorm 1.4's system, on RYN's packets, ticks and variables.
   //
-  // Misery heals against a *prediction*, not against a health drop. Every tick
-  // it sums what could land on this tick — spike contact, spikes it is about to
-  // be pushed or walked into, weapon hits that have a reason to connect, turret
-  // shots, ranged secondaries, poison — caps the sum, adjusts it for the hat
-  // that is about to go on, and eats if that number reaches its health. A
-  // lethal spike push gets its own branch that fires before the rest of the
-  // tick's packets, because a hit that shoves you onto a spike resolves inside
-  // one tick and a heal queued behind the tick's other sends arrives after you
-  // are already dead:
+  // novastorm heals against a *prediction*, not against a health drop. Every
+  // tick it sums what could land on this tick — spike contact, spikes it is
+  // about to be pushed or walked into, weapon hits that have a reason to
+  // connect, turret shots, ranged secondaries, poison — caps the sum, adjusts
+  // it for the hat that is about to go on, and eats if that number reaches its
+  // health. The whole decision is one block, run once, late in the tick:
   //
   //     totalDmgPot = spikeDmgPot + hitDmgPot + turretDmgPot + secDmgPot + poisonDmgPot
   //     if (totalDmgPot > 140) totalDmgPot = 140;
-  //     if (totalDmgPot >= 100 || (spikeDangerNow && totalDmgPot >= health)) soldierAnti = true;
-  //     if (spikeDangerNow && health < 100 && (shameCount < 7 || lethalSpikeHealOverride))
-  //         heal(100 - health);                       // emergency, ahead of everything
+  //     if (totalDmgPot >= 100) soldierAnti = true;
+  //     ...
+  //     hatFc();
   //     if (currentHat == 6) totalDmgPot *= 0.75;
   //     if (currentHat == 7) totalDmgPot += 5;
-  //     if (health <= totalDmgPot) healing = true;
-  //     if (((healing && shameCount < 7) || (tick - damageTick) > 0) && health < 100)
-  //         heal(100 - health);
+  //     if (myPlayer.health <= totalDmgPot) healing = true;
+  //     if (((healing && myPlayer.shameCount < 7) || (tick - damageTick) > 0)
+  //         && myPlayer.health < 100) { heal(100 - myPlayer.health); damageHealed = true; }
   //
-  // What this replaces: one number read straight out of EnemyManager
-  // (potentialDamage + potentialSpikeDamage), capped at 140 and compared against
-  // health. That number is an *eager* sum — every enemy in reach and off reload
-  // counts their whole swing, whether or not the swing has any reason to land —
-  // and it has no term at all for the two things that kill without a swing
-  // landing on us: being knocked onto a spike, and walking into one. RYN had
-  // deleted its KB-spike detection outright, and its spike term only fires on
-  // contact that has already happened, which is a tick too late.
+  // What this replaces: the Misery port that stood here. Misery is a fork of
+  // this same estimator with three additions, and all three are gone:
   //
-  // So the estimator changes in both directions. Each weapon hit is now gated
-  // behind a reason it will connect (we are standing on a spike, we are about to
-  // be, or that one hit alone is lethal), which stops five bystanders reading as
-  // certain death; and swept tests are added from our current position, our
-  // extrapolated position, and along each enemy's knockback segment, which is
-  // what makes it heal *before* a spike rather than after.
+  //   · the early spike-push branch — a second heal call placed ahead of the
+  //     tick's other packets, fired on `spikeDangerNow` before the hat terms
+  //     were applied. novastorm has one heal site, after hatFc, and reaches
+  //     the same spike push through spikeDmgPot inside the one sum.
+  //   · the shame override — Misery's Survival Preheal let a lethal prediction
+  //     spend a +1 shame to eat at shameCount 7. novastorm never crosses 7:
+  //     `healing && shameCount < 7` is the whole gate, and a shamed tick waits
+  //     for `(tick - damageTick) > 0` instead. The setting goes with it.
+  //   · the extra soldier trigger — `spikeDangerNow && totalDmgPot >= health`
+  //     put soldier on below 100 predicted. novastorm's threshold is the flat
+  //     `totalDmgPot >= 100`, and nothing else.
+  //
+  // The in-flight projectile term goes too. RYN's ProjectileManager knows what
+  // is already in the air and Misery added that as a sixth summand; novastorm's
+  // sum has five terms and no equivalent. Its turret and ranged-secondary
+  // branches predict the *next* shot from a reloaded enemy rather than the one
+  // already flying, so the shot in the air is now only healed for once it is
+  // one of those. ProjectileManager is still read, for attribution — telling a
+  // turret bolt apart from a spike tier is what makes damagesByTurrets work.
   //
   // Everything on RYN's side is kept whole:
   //   · one module slot in ModuleHandler.modules, in the same tick position
   //   · food goes out through ModuleHandler.heal() under the 119 packet/s
   //     budget, and healedOnce still makes UpdateAngle resend the direction —
-  //     which is Misery's `io.send("D", angle)` after a heal
+  //     which is novastorm's `io.send("D", angle)` after a heal
   //   · myPlayer.shameActive — never spend food the server is refusing anyway
-  //   · shame accounting stays where RYN keeps it, in Player.updateHealth, which
-  //     already implements Misery's +1 inside 120ms / -2 outside rule
+  //   · shame accounting stays where RYN keeps it, in Player.updateHealth,
+  //     which already implements novastorm's +1 inside 120ms / -2 outside rule
   //   · EnemyManager is untouched: its numbers still drive every other module,
   //     they just no longer decide when to eat
-  //   · in-flight projectiles keep counting through ProjectileManager, which
-  //     Misery has no equivalent for at all (see projDmgPot below)
   //
-  // Two flags leave this module for the rest of the client, both Misery's own:
-  // soldierAnti, which joins RYN's soldier-equip condition, and
+  // Two flags leave this module for the rest of the client, both novastorm's
+  // own: soldierAnti, which joins RYN's soldier-equip condition, and
   // shouldResetShame, which ShameReset consults before putting bull on.
   // ==========================================================================
-  const MISERY_DMG_CAP = 140;
+  const NOVA_DMG_CAP = 140;
   // Bull is worn to reset shame and gives up all defence for it, so the tick it
   // goes on is worth five more damage than the sum says.
-  const MISERY_BULL_BIAS = 5;
-  const MISERY_TURRET_DMG = 25;
-  const MISERY_CACTUS_DMG = 35;
-  // Misery's `111 * (.3 + knock)`. RYN stores knockback already multiplied by
-  // 111, so the same distance is 33.3 + weapon.knockback.
-  const MISERY_KB_BASE = 33.3;
-  const MISERY_POISON_DMG = 5;
-  const MISERY_POISON_PERIOD = 9;
-  // Poison runs five seconds, which is five 9-tick periods. Misery has no window
-  // at all: it re-stamps damageByPoisonTick out of a `damages` array it never
-  // clears, so `(tick - damageByPoisonTick) % 9` is pinned at 0 and the term
-  // fires once and then never again. The window is what the term was meant to be.
-  const MISERY_POISON_WINDOW = MISERY_POISON_PERIOD * 5;
-  const MISERY_SEC_RANGE = 400;
-  const MISERY_TURRET_RANGE = 350;
-  const MISERY_VELOCITY_MIN_RANGE = 150;
-  const MISERY_VELOCITY_MAX_RANGE = 350;
+  const NOVA_BULL_BIAS = 5;
+  const NOVA_TURRET_DMG = 25;
+  const NOVA_CACTUS_DMG = 35;
+  // novastorm's `111 * (.3 + knock)`. RYN stores knockback already multiplied
+  // by 111, so the same distance is 33.3 + weapon.knockback.
+  const NOVA_KB_BASE = 33.3;
+  const NOVA_POISON_DMG = 5;
+  const NOVA_POISON_PERIOD = 9;
+  // Poison runs five seconds, which is five 9-tick periods. novastorm has no
+  // window at all: it re-stamps damageByPoisonTick out of a `damages` array it
+  // never clears, so `(tick - damageByPoisonTick) % 9` is pinned at 0 and the
+  // term either fires forever or never. The window is what the term was meant
+  // to be — "5 damage every 9 ticks, for as long as the poison lasts".
+  const NOVA_POISON_WINDOW = NOVA_POISON_PERIOD * 5;
+  const NOVA_SEC_RANGE = 400;
+  const NOVA_TURRET_RANGE = 350;
+  const NOVA_VELOCITY_MIN_RANGE = 150;
+  const NOVA_VELOCITY_MAX_RANGE = 350;
   // Spinning spikes: the worst thing an enemy can drop next to you, and what
-  // Misery tests the ring with.
-  const MISERY_RING_SPIKE_ID = 9;
-  const MISERY_RING_STEPS = 36;
+  // novastorm tests the ring with.
+  const NOVA_RING_SPIKE_ID = 9;
+  const NOVA_RING_STEPS = 36;
   // 100px grid cells, so ±4 covers 400px — further than a hit plus its full
   // knockback can move us inside one tick.
-  const MISERY_GRID_SEARCH = 4;
+  const NOVA_GRID_SEARCH = 4;
   // ModuleHandler.heal() is selectItem + attack + whichWeapon.
-  const MISERY_HEAL_PACKET_COST = 3;
+  const NOVA_HEAL_PACKET_COST = 3;
   // Deep enough to hold a full lethal tick for the post-mortem, shallow enough
   // that a long fight cannot grow it without bound.
-  const MISERY_DEATH_LOG_LIMIT = 32;
+  const NOVA_DEATH_LOG_LIMIT = 32;
   // The spike tiers a player takes, with and without soldier's 0.75.
-  const MISERY_SPIKE_TIERS = [ 20, 30, 35, 45 ];
+  const NOVA_SPIKE_TIERS = [ 20, 30, 35, 45 ];
+  // novastorm's `myPlayer.shameCount < 7`, and its `totalDmgPot >= 100`.
+  const NOVA_SHAME_LIMIT = 7;
+  const NOVA_SOLDIER_ANTI_DMG = 100;
   const nearlyEqual = (a, b) => Math.abs(a - b) < .01;
-  const isMiserySpikeDamage = damage => MISERY_SPIKE_TIERS.some(tier => nearlyEqual(tier, damage) || nearlyEqual(tier * .75, damage));
-  const isMiserySoldieredSpike = damage => MISERY_SPIKE_TIERS.some(tier => nearlyEqual(tier * .75, damage));
-  class MiseryHeal {
+  const isNovaSpikeDamage = damage => NOVA_SPIKE_TIERS.some(tier => nearlyEqual(tier, damage) || nearlyEqual(tier * .75, damage));
+  const isNovaSoldieredSpike = damage => NOVA_SPIKE_TIERS.some(tier => nearlyEqual(tier * .75, damage));
+  class NovastormHeal {
     // The slot, the name and the tick position are RYN's. "antiInsta" is what
     // ModuleHandler registers, what RynPlacementEngine.priorityFor reads as
     // DEFENSE, and what the debug HUD prints — only the rule inside changed.
@@ -15715,15 +15794,13 @@ window.grbtp = 35;
     turretDmgPot=0;
     secDmgPot=0;
     poisonDmgPot=0;
-    projDmgPot=0;
     collidingSpike=false;
     willCollide=false;
-    spikeDangerNow=false;
     soldierAnti=false;
     spikeTickAnti=false;
     shouldResetShame=false;
-    // Misery's canStillGather: a knockback-into-spike we set up ourselves is not
-    // a reason to stop swinging.
+    // novastorm's canStillGather: a knockback-into-spike we set up ourselves is
+    // not a reason to stop swinging.
     canStillGather=false;
     // ---- carried across ticks --------------------------------------------
     lastColliding=false;
@@ -15765,19 +15842,20 @@ window.grbtp = 35;
       this.cactuses.length = 0;
     }
 
-    // novastorm's `(tick - damageTick) > 0`, which Misery inherits verbatim.
-    // damageTick is set to tickCount + 1 on damage, so this reads true two ticks
-    // (~222ms) after a hit — clear of the 120ms window in which an apple adds
-    // shame rather than removing two.
+    // novastorm's `(tick - damageTick) > 0`. damageTick is set to tickCount + 1
+    // on damage, so this reads true two ticks (~222ms) after a hit — clear of
+    // the 120ms window in which an apple adds shame rather than removing two.
+    // It is the whole of novastorm's answer to a shamed tick: no override, just
+    // wait for a tick nothing landed on.
     isSaveHealTick() {
       const {tickCount: tickCount, damageTick: damageTick} = this.client.myPlayer;
       return tickCount - damageTick > 0;
     }
 
     // ------------------------------------------------------------------------
-    // World cache. Misery filters `visibleObjects` every tick into spikes_enemy
-    // and cactuses; RYN has a spatial grid, so the same two lists come out of one
-    // query around us instead of a scan of everything on screen.
+    // World cache. novastorm filters `visibleObjects` every tick into
+    // spikes_enemy and cactuses; RYN has a spatial grid, so the same two lists
+    // come out of one query around us instead of a scan of everything on screen.
     // ------------------------------------------------------------------------
     _isEnemyObject(object) {
       if (!(object instanceof PlayerObject)) {
@@ -15796,14 +15874,14 @@ window.grbtp = 35;
       this.enemySpikes.length = 0;
       this.cactuses.length = 0;
       const pos = myPlayer.pos.current;
-      const ids = ObjectManager.grid2D.queryFull(pos.x, pos.y, MISERY_GRID_SEARCH);
+      const ids = ObjectManager.grid2D.queryFull(pos.x, pos.y, NOVA_GRID_SEARCH);
       for (let i = 0; i < ids.length; i++) {
         const object = ObjectManager.objects.get(ids[i]);
         if (object === undefined) {
           continue;
         }
         if (object instanceof PlayerObject) {
-          // Misery's `object.id > 5 && object.id < 10`: the four spike items,
+          // novastorm's `object.id > 5 && object.id < 10`: the four spike items,
           // which is itemGroup 2 here.
           if (object.itemGroup === 2 && this._isEnemyObject(object)) {
             this.enemySpikes.push(object);
@@ -15815,15 +15893,15 @@ window.grbtp = 35;
     }
 
     // ------------------------------------------------------------------------
-    // Misery's distributionDamages, taken once instead of three times. RYN's
+    // novastorm's distributionDamages, taken once instead of three times. RYN's
     // Player.updateHealth keeps this damage tick's health deltas in
     // myPlayer.damages and clears them when a new damage tick starts, so the
     // bucket is here to be read — what is missing is which of the three things
-    // each delta came from. Misery answers that from three separate packet
+    // each delta came from. novastorm answers that from three separate packet
     // handlers; the answer is the same taken once, against what RYN already
     // knows about every enemy and every projectile aimed at us.
     //
-    // The buckets are per tick, as Misery's are: it clears damagesByHits and
+    // The buckets are per tick, as novastorm's are: it clears damagesByHits and
     // spikeDamages at the bottom of every tick. myPlayer.damages persists until
     // the next damage tick, so the damage tick it belongs to is remembered and
     // each one is attributed exactly once.
@@ -15873,7 +15951,7 @@ window.grbtp = 35;
       }
       // "shoot": a projectile aimed at us whose damage is in the bucket. RYN
       // tracks these, so the turret ones can be told apart — which is what
-      // Misery's own damagesByTurrets was declared for and never filled. Only
+      // novastorm's own damagesByTurrets was declared for and never filled. Only
       // still-airborne shots are matched: ProjectileManager.postTick runs earlier
       // in the tick and drops one as it lands, so a shot that arrived ahead of
       // its removal packet is caught here and the rest fall through unattributed,
@@ -15894,22 +15972,22 @@ window.grbtp = 35;
       }
       // "spikes": whatever is left that lands on a spike tier.
       for (const damage of pending) {
-        if (isMiserySpikeDamage(damage)) {
+        if (isNovaSpikeDamage(damage)) {
           this.spikeDamages.push(damage);
         }
       }
-      // Misery counts consecutive spike ticks so hatFc can read
+      // novastorm counts consecutive spike ticks so hatFc can read
       // `imTrapped && spikeDmgCount > 0` as "pinned on spikes, wear soldier".
       this.spikeDmgCount = this.spikeDamages.length > 0 ? this.spikeDmgCount + 1 : 0;
       // Poison arrives as a bare 5 (3.75 under soldier) that nothing else
       // claims. Stamp the tick so the term below can run its 9-tick cycle.
       for (const damage of pending) {
-        if (nearlyEqual(damage, MISERY_POISON_DMG) || nearlyEqual(damage, MISERY_POISON_DMG * .75)) {
+        if (nearlyEqual(damage, NOVA_POISON_DMG) || nearlyEqual(damage, NOVA_POISON_DMG * .75)) {
           this.poisonTick = myPlayer.tickCount;
         }
       }
       for (const damage of damages) {
-        if (this.deathDamages.length >= MISERY_DEATH_LOG_LIMIT) {
+        if (this.deathDamages.length >= NOVA_DEATH_LOG_LIMIT) {
           this.deathDamages.shift();
         }
         this.deathDamages.push({
@@ -15927,13 +16005,13 @@ window.grbtp = 35;
     _primaryDamage(enemy, lookingShield) {
       return enemy.getMaxWeaponDamage(enemy.weapon.primary, lookingShield);
     }
-    // Misery's `111 * (.3 + primaryKnockback)`.
+    // novastorm's `111 * (.3 + primaryKnockback)`.
     _primaryKnockback(enemy) {
       const primary = enemy.weapon.primary;
       if (primary === null) {
-        return MISERY_KB_BASE;
+        return NOVA_KB_BASE;
       }
-      return MISERY_KB_BASE + DataHandler_default.getWeapon(primary).knockback;
+      return NOVA_KB_BASE + DataHandler_default.getWeapon(primary).knockback;
     }
     // The swept movement test: our box, dragged from where we are to where we
     // are about to be, against every enemy spike and cactus it crosses.
@@ -15951,16 +16029,17 @@ window.grbtp = 35;
         const pos = cactus.pos.current;
         const box = myScale + cactus.scale;
         if (lineInRect(pos.x - box, pos.y - box, pos.x + box, pos.y + box, fromX, fromY, toX, toY)) {
-          damage += MISERY_CACTUS_DMG;
+          damage += NOVA_CACTUS_DMG;
         }
       }
       return damage;
     }
-    // "They swing, we fly, we land on a spike." Misery runs this from both our
-    // extrapolated and our current position, because a knockback resolved from
-    // either can be the one that lands. Note the cactus box here is drawn
-    // without the player's scale, unlike the movement sweep above: kept as
-    // written, both numbers are load bearing.
+    // "They swing, we fly, we land on a spike." novastorm runs this twice, once
+    // off xVel/yVel and once off x2/y2 — velocity and position, not one or the
+    // other — because a knockback resolved from either can be the one that
+    // lands. Note the cactus box here is drawn without the player's scale,
+    // unlike the movement sweep above: kept as written, both numbers are load
+    // bearing.
     _knockbackIntoSpike(enemy, fromX, fromY, useFuture, lookingShield) {
       const {myPlayer: myPlayer} = this.client;
       const origin = useFuture ? enemy.pos.future : enemy.pos.current;
@@ -15983,19 +16062,19 @@ window.grbtp = 35;
         const pos = cactus.pos.current;
         const box = cactus.scale;
         if (lineInRect(pos.x - box, pos.y - box, pos.x + box, pos.y + box, fromX, fromY, toX, toY)) {
-          this.spikeDmgPot += MISERY_CACTUS_DMG;
+          this.spikeDmgPot += NOVA_CACTUS_DMG;
           this.hitDmgPot += this._primaryDamage(enemy, lookingShield);
           this.canStillGather = true;
           return;
         }
       }
     }
-    // Misery's ring test: can this enemy drop a spinning spike around itself that
-    // our next position would already be standing in? The spike is not on the map
-    // yet, so no swept test can see it.
+    // novastorm's ring test: can this enemy drop a spinning spike around itself
+    // that our next position would already be standing in? The spike is not on
+    // the map yet, so no swept test can see it.
     _spikeRingThreat(enemy, inPrimaryRange, primaryReloaded, lookingShield) {
       const {myPlayer: myPlayer, ObjectManager: ObjectManager} = this.client;
-      const item = Items[MISERY_RING_SPIKE_ID];
+      const item = Items[NOVA_RING_SPIKE_ID];
       const ringR = myPlayer.scale + item.scale + (item.placeOffset || 0);
       const reach = myPlayer.scale + item.scale;
       const myFuture = myPlayer.pos.future;
@@ -16011,13 +16090,13 @@ window.grbtp = 35;
       const spikeDamage = item.damage;
       const primaryDamage = this._primaryDamage(enemy, lookingShield);
       const ringPos = this._ringPos;
-      for (let i = 0; i < MISERY_RING_STEPS; i++) {
-        const angle = i * (Math.PI * 2 / MISERY_RING_STEPS);
+      for (let i = 0; i < NOVA_RING_STEPS; i++) {
+        const angle = i * (Math.PI * 2 / NOVA_RING_STEPS);
         ringPos._setXY(enemyPos.x + ringR * Math.cos(angle), enemyPos.y + ringR * Math.sin(angle));
         if (myFuture.distance(ringPos) > reach) {
           continue;
         }
-        if (!ObjectManager.canPlaceItem(MISERY_RING_SPIKE_ID, ringPos)) {
+        if (!ObjectManager.canPlaceItem(NOVA_RING_SPIKE_ID, ringPos)) {
           continue;
         }
         if (inPrimaryRange && primaryReloaded) {
@@ -16030,9 +16109,12 @@ window.grbtp = 35;
             return;
           }
         } else if (health <= 70 && this.damagesByHits.length > 0) {
+          // novastorm has no break on this branch, so a wide open ring charges
+          // 45 once per free angle and the sum saturates on the cap. One spike
+          // is one spike: counted once, like the branch above it.
           this.spikeDmgPot += spikeDamage;
           if (enemy.isReloaded(2, 1)) {
-            this.turretDmgPot += MISERY_TURRET_DMG;
+            this.turretDmgPot += NOVA_TURRET_DMG;
           }
           return;
         }
@@ -16040,17 +16122,16 @@ window.grbtp = 35;
     }
 
     // ------------------------------------------------------------------------
-    // Misery's damage prediction, whole. Section order and every branch
+    // novastorm's damage prediction, whole. Section order and every branch
     // condition are its own; only the primitives underneath are RYN's.
     // ------------------------------------------------------------------------
     calculateTotalDamage() {
-      const {myPlayer: myPlayer, PlayerManager: PlayerManager, ProjectileManager: ProjectileManager} = this.client;
+      const {myPlayer: myPlayer, PlayerManager: PlayerManager} = this.client;
       this.spikeDmgPot = 0;
       this.hitDmgPot = 0;
       this.turretDmgPot = 0;
       this.secDmgPot = 0;
       this.poisonDmgPot = 0;
-      this.projDmgPot = 0;
       this.collidingSpike = false;
       this.willCollide = false;
       this.canStillGather = false;
@@ -16065,10 +16146,10 @@ window.grbtp = 35;
       // lands so the food is already in flight when it does.
       if (this.poisonTick !== null) {
         const elapsed = tickCount - this.poisonTick;
-        if (elapsed > MISERY_POISON_WINDOW) {
+        if (elapsed > NOVA_POISON_WINDOW) {
           this.poisonTick = null;
-        } else if (elapsed % MISERY_POISON_PERIOD === MISERY_POISON_PERIOD - 1) {
-          this.poisonDmgPot = MISERY_POISON_DMG;
+        } else if (elapsed % NOVA_POISON_PERIOD === NOVA_POISON_PERIOD - 1) {
+          this.poisonDmgPot = NOVA_POISON_DMG;
         }
       }
 
@@ -16086,7 +16167,7 @@ window.grbtp = 35;
       }
       if (this.collidingSpike) {
         for (const damage of this.spikeDamages) {
-          this.spikeDmgPot += isMiserySoldieredSpike(damage) ? damage / .75 : damage;
+          this.spikeDmgPot += isNovaSoldieredSpike(damage) ? damage / .75 : damage;
         }
       }
 
@@ -16122,8 +16203,7 @@ window.grbtp = 35;
         const inPrimaryRange = distance <= myScale * 1.8 + primaryRange;
 
         // A weapon hit only counts when there is a reason it lands: we are on a
-        // spike, we are about to be, or that hit alone takes the bar off. This
-        // gate is the whole difference from RYN's eager sum.
+        // spike, we are about to be, or that hit alone takes the bar off.
         if (primaryReloaded && inPrimaryRange) {
           if (this.collidingSpike) {
             if (!this.lastColliding) {
@@ -16142,13 +16222,13 @@ window.grbtp = 35;
         }
 
         // Turret, on the same three reasons.
-        if (distance <= MISERY_TURRET_RANGE && turretReloaded) {
+        if (distance <= NOVA_TURRET_RANGE && turretReloaded) {
           if (this.collidingSpike && this._wasReloaded(enemy, 0, 1) && !primaryReloaded) {
-            this.turretDmgPot += MISERY_TURRET_DMG;
+            this.turretDmgPot += NOVA_TURRET_DMG;
           } else if (this.willCollide && !primaryReloaded) {
-            this.turretDmgPot += MISERY_TURRET_DMG;
-          } else if (health <= MISERY_TURRET_DMG && this.hitDmgPot + this.turretDmgPot + this.spikeDmgPot < MISERY_TURRET_DMG) {
-            this.turretDmgPot += MISERY_TURRET_DMG;
+            this.turretDmgPot += NOVA_TURRET_DMG;
+          } else if (health <= NOVA_TURRET_DMG && this.hitDmgPot + this.turretDmgPot + this.spikeDmgPot < NOVA_TURRET_DMG) {
+            this.turretDmgPot += NOVA_TURRET_DMG;
           }
         }
 
@@ -16156,14 +16236,15 @@ window.grbtp = 35;
         // from beyond melee reach. The swing lands as they arrive, so neither of
         // the range tests above can see it coming.
         const closing = myFuture.distance(enemy.pos.future);
-        if (closing > MISERY_VELOCITY_MIN_RANGE && closing < MISERY_VELOCITY_MAX_RANGE) {
+        if (closing > NOVA_VELOCITY_MIN_RANGE && closing < NOVA_VELOCITY_MAX_RANGE) {
           if (!turretReloaded && primaryReloaded && enemy.hatID === 53) {
-            this.turretDmgPot += MISERY_TURRET_DMG;
+            this.turretDmgPot += NOVA_TURRET_DMG;
             this.hitDmgPot += primaryDamage;
           }
         }
 
-        // Knockback into a spike or cactus — the thing RYN had deleted outright.
+        // Knockback into a spike or cactus, from our velocity and from our
+        // position — novastorm's two blocks, in its order.
         if (!imTrapped && primaryReloaded && inPrimaryRange) {
           this._knockbackIntoSpike(enemy, myFuture.x, myFuture.y, true, lookingShield);
           this._knockbackIntoSpike(enemy, myPos.x, myPos.y, false, lookingShield);
@@ -16173,10 +16254,10 @@ window.grbtp = 35;
         // will be fired again. Hammer's number is the bull-multiplied melee
         // damage, so take that one without the multiplier.
         if (secondary !== null && (secondary === 10 || DataHandler_default.isShootable(secondary))) {
-          if (this.damagesByHits.length > 0 && distance <= MISERY_SEC_RANGE) {
+          if (this.damagesByHits.length > 0 && distance <= NOVA_SEC_RANGE) {
             const secondaryDamage = enemy.getMaxWeaponDamage(secondary, lookingShield, secondary !== 10);
             if (turretReloaded) {
-              this.turretDmgPot += MISERY_TURRET_DMG;
+              this.turretDmgPot += NOVA_TURRET_DMG;
               if (enemy.isReloaded(1, 1)) {
                 this.secDmgPot += secondaryDamage;
               }
@@ -16194,43 +16275,36 @@ window.grbtp = 35;
       this.lastColliding = this.collidingSpike;
       this.lastPredicted = predicted;
 
-      // RYN's own term, and the one thing Misery has no equivalent for: a
-      // projectile already in the air, aimed at us, that arrives whatever its
-      // shooter does next. Misery pays for shots it has not seen fired with the
-      // flat turret and secondary guesses above; those predict the *next* shot,
-      // so this is not the same damage counted twice.
-      this.projDmgPot = ProjectileManager.totalDamage;
-
-      let total = this.spikeDmgPot + this.hitDmgPot + this.turretDmgPot + this.secDmgPot + this.poisonDmgPot + this.projDmgPot;
-      if (total > MISERY_DMG_CAP) {
-        total = MISERY_DMG_CAP;
+      // novastorm's sum, its five terms and no others:
+      //   totalDmgPot = spikeDmgPot + hitDmgPot + turretDmgPot + secDmgPot + poisonDmgPot
+      let total = this.spikeDmgPot + this.hitDmgPot + this.turretDmgPot + this.secDmgPot + this.poisonDmgPot;
+      if (total > NOVA_DMG_CAP) {
+        total = NOVA_DMG_CAP;
       }
       this.totalDmgPot = total;
 
-      // A spike push kills below 100 even when the sum does not reach 100, so a
-      // lethal spike combo counts as an emergency in its own right.
-      this.spikeDangerNow = this.spikeDmgPot > 0 && (this.collidingSpike || this.willCollide || this.hitDmgPot > 0);
-      if (total >= 100 || this.spikeDangerNow && total >= health) {
+      // The flat threshold, which is the whole of novastorm's soldier trigger.
+      if (total >= NOVA_SOLDIER_ANTI_DMG) {
         this.soldierAnti = true;
       }
       return total;
     }
 
     // ------------------------------------------------------------------------
-    // The hat the heal math is measured against. Misery applies the 0.75 and the
-    // +5 after hatFc() has already chosen, so the term belongs to the hat that is
-    // about to go on, not the one currently worn. soldierAnti is this module's
-    // own reason for choosing soldier, so it is read here exactly where hatFc's
-    // `else if (isBoughtHat(6,0) && soldierAnti)` reads it — after anything that
-    // has already forced a hat, which is Misery's tank-breaker precedence and
-    // RYN's forceHat precedence at once.
+    // The hat the heal math is measured against. novastorm applies the 0.75 and
+    // the +5 after hatFc() has already chosen, so the term belongs to the hat
+    // that is about to go on, not the one currently worn. soldierAnti is this
+    // module's own reason for choosing soldier, so it is read here exactly where
+    // hatFc's closing `if (isBoughtHat(6, 0)) { if (soldierAnti) currentHat = 6 }`
+    // reads it — after anything that has already forced a hat, which is RYN's
+    // forceHat precedence and novastorm's last-write-wins precedence at once.
     // ------------------------------------------------------------------------
     // Every reason hatFc has for putting soldier on, gathered in one place so the
     // hat term below and ModuleHandler's equip condition cannot disagree:
     //
     //     if (((imTrapped && spikeDmgCount > 0) || spikeTickAnti) && isBoughtHat(6,0))
     //         currentHat = 6;
-    //     ... else if (isBoughtHat(6, 0) && soldierAnti) currentHat = 6;
+    //     ... if (isBoughtHat(6, 0)) { if (soldierAnti) currentHat = 6; }
     //
     // spikeTickAnti is the ring case — an enemy who can drop a spinning spike
     // under us and hit us on the same tick for 100 — and spikeDmgCount is being
@@ -16253,16 +16327,22 @@ window.grbtp = 35;
     }
 
     // ------------------------------------------------------------------------
-    // Misery's heal(value): one food place per heal step until the deficit is
-    // covered, and no in-flight accounting — it re-sends the whole deficit every
-    // tick until the server's health echo comes back.
+    // novastorm's heal(value):
     //
-    // The one thing added is the packet budget, because RYN has one and Misery
-    // does not. An emergency spends whatever it needs; a preventive top-up is
-    // trimmed to what is left of the 119/s allowance, which is the only kind of
-    // heal packet it is ever safe to drop.
+    //     for (let i = 0; i < value; i += items.list[myPlayer.items[0]].heal)
+    //         place(myPlayer.items[0], null);
+    //
+    // one food place per heal step until the deficit is covered, and no
+    // in-flight accounting — it re-sends the whole deficit every tick until the
+    // server's health echo comes back.
+    //
+    // The one thing added is RYN's packet budget, because novastorm's placer
+    // guards its own sends with `packets + 5 > 119` and never guards the heal.
+    // A heal the prediction demands is survival and spends whatever it needs;
+    // the `(tick - damageTick) > 0` top-up is the recovery heal, and that one
+    // is trimmed to what is left of the 119/s allowance.
     // ------------------------------------------------------------------------
-    heal(value, emergency) {
+    heal(value, mandatory) {
       const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
       const foodID = myPlayer.getItemByType(2);
       if (foodID === null || foodID === void 0 || !Items[foodID]) {
@@ -16276,9 +16356,9 @@ window.grbtp = 35;
       if (times <= 0) {
         return false;
       }
-      if (!emergency) {
+      if (!mandatory) {
         const left = ModuleHandler.packetLimit - ModuleHandler.packetCount;
-        const affordable = Math.floor(left / MISERY_HEAL_PACKET_COST);
+        const affordable = Math.floor(left / NOVA_HEAL_PACKET_COST);
         if (affordable < times) {
           times = affordable;
         }
@@ -16287,7 +16367,7 @@ window.grbtp = 35;
         }
       }
       // healedOnce is what makes UpdateAngle resend the direction this tick,
-      // which is Misery's `io.send("D", angle)` after a heal.
+      // which is novastorm's `io.send("D", angle)` after a heal.
       ModuleHandler.healedOnce = true;
       for (let i = 0; i < times; i++) {
         ModuleHandler.heal();
@@ -16302,7 +16382,7 @@ window.grbtp = 35;
       this.shouldResetShame = false;
       this.spikeTickAnti = false;
       if (!myPlayer.inGame) {
-        // Misery's post-mortem: what the last tick predicted against what
+        // novastorm's post-mortem: what the last tick predicted against what
         // actually landed. Logger.log is a no-op in a production build, so this
         // costs nothing there and is the first thing worth reading when the
         // autoheal let someone die.
@@ -16318,14 +16398,16 @@ window.grbtp = 35;
       const shameCount = myPlayer.shameCount;
 
       // The prediction runs whether or not autoheal is on: soldierAnti and
-      // shouldResetShame are read by the hat systems, and Misery computes both
-      // unconditionally, at full health included.
+      // shouldResetShame are read by the hat systems, and novastorm computes
+      // both unconditionally, at full health included.
       this.refreshWorld();
       this.attributeDamages();
       const total = this.calculateTotalDamage();
 
-      // Misery's shame-reset condition: nothing at all is coming, so this is the
-      // tick to put bull on and walk the count back down. ShameReset reads it.
+      // novastorm's shame-reset condition: nothing at all is coming, so this is
+      // the tick to put bull on and walk the count back down. ShameReset reads
+      // it. Taken before the hat terms below, as novastorm takes it — the sum
+      // that has to be zero here is the raw one, not the hat-adjusted one.
       if (shameCount > 0 && !this.soldierAnti && !this.collidingSpike && this.poisonDmgPot === 0 && total === 0) {
         this.shouldResetShame = true;
       }
@@ -16333,6 +16415,7 @@ window.grbtp = 35;
       if (!Settings_default._autoheal) {
         return;
       }
+      // novastorm's `myPlayer.health < 100`.
       if (health >= maxHealth) {
         this.deathDamages.length = 0;
         return;
@@ -16342,44 +16425,30 @@ window.grbtp = 35;
         return;
       }
 
-      // Emergency pre-heal. It goes out ahead of the tick's other packets
-      // because a hit that shoves us onto a spike resolves inside one tick, and
-      // it overrides the shame gate when the prediction is lethal: +1 shame is a
-      // better outcome than dying, which is the entire point of healing into a
-      // hit. Misery puts that override behind its own Survival Preheal toggle,
-      // so RYN gets the same switch, on by default as it is there.
+      // The hat terms, against the hat that is about to go on:
       //
-      // `lethal` and the override are kept apart on purpose: the toggle decides
-      // whether shame may be spent to survive, while `lethal` decides whether the
-      // packet budget may be, and turning the toggle off is not a reason to let
-      // the budget drop the apple that stops a death.
-      const lethal = total >= health;
-      const lethalSpikeHealOverride = Settings_default._survivalPreheal && lethal;
-      let damageHealed = false;
-      if (this.spikeDangerNow && (shameCount < 7 || lethalSpikeHealOverride)) {
-        damageHealed = this.heal(maxHealth - health, true);
-      }
-
-      // The hat terms, against the hat that is about to go on.
+      //     if (currentHat == 6) totalDmgPot *= 0.75;
+      //     if (currentHat == 7) totalDmgPot += 5;
+      //     if (myPlayer.health <= totalDmgPot) healing = true;
       let dmgPot = total;
       const hatID = this.nextHatID();
       if (hatID === 6) {
         dmgPot *= Hats[6].dmgMult;
       }
       if (hatID === 7) {
-        dmgPot += MISERY_BULL_BIAS;
+        dmgPot += NOVA_BULL_BIAS;
       }
       this.healing = health <= dmgPot;
 
-      if (damageHealed) {
-        return;
-      }
-      if ((this.healing && shameCount < 7) || this.isSaveHealTick()) {
-        this.heal(maxHealth - health, this.healing && lethal);
+      // The one heal site. Shame is a hard wall at 7 — novastorm has no
+      // override for it, and a shamed tick heals only once `(tick - damageTick)`
+      // has gone positive.
+      if ((this.healing && shameCount < NOVA_SHAME_LIMIT) || this.isSaveHealTick()) {
+        this.heal(maxHealth - health, this.healing);
       }
     }
   }
-  const AntiInsta_default = MiseryHeal;
+  const AntiInsta_default = NovastormHeal;
   class Autohat {
     moduleName="autoHat";
     client;
@@ -16686,22 +16755,22 @@ window.grbtp = 35;
       const {myPlayer: myPlayer} = this.client;
       return !myPlayer.shameActive && myPlayer.shameCount > 0 && myPlayer.poisonCount === 0 && myPlayer.isBullTickTime();
     }
-    // Misery's own gate for putting bull on:
+    // novastorm's own gate for putting bull on:
     //
     //     if (myPlayer.shameCount > 0 && !soldierAnti && !collidingspike
     //         && poisonDmgPot == 0 && totalDmgPot == 0) shouldResetShame = true;
-    //     ... if (isBoughtHat(7, 0) && shouldResetShame) currentHat = 7;
+    //     ... if (isBoughtHat(7, 0)) { if (shouldResetShame) currentHat = 7; }
     //
     // isBullTickTime already covers shame > 0 and poison, and notSave() covers
     // spike contact. What RYN had no term for is "something is predicted to land
     // this tick", which is the one that matters: bull gives up all defence, so
-    // wearing it into an incoming hit is how a shame reset kills you. MiseryHeal
-    // has already answered that on this tick — it runs immediately before this
-    // module — so read its answer rather than form a second one.
+    // wearing it into an incoming hit is how a shame reset kills you.
+    // NovastormHeal has already answered that on this tick — it runs immediately
+    // before this module — so read its answer rather than form a second one.
     get shouldReset() {
       const {_ModuleHandler: ModuleHandler} = this.client;
-      const miseryHeal = ModuleHandler.staticModules.antiInsta;
-      const quietTick = miseryHeal === undefined || miseryHeal.shouldResetShame;
+      const novaHeal = ModuleHandler.staticModules.antiInsta;
+      const quietTick = novaHeal === undefined || novaHeal.shouldResetShame;
       return quietTick && this.isBullTickTime() && ModuleHandler.canBuy(0, 7);
     }
     notSave() {
@@ -20761,21 +20830,22 @@ window.grbtp = 35;
         // tick too late against anything that closes fast — a bull-hat rush or a
         // spike push covers the gap between reach and 300 inside one tick.
         const _safeSoldier = Settings_default._safeSoldier && _dist < SAFE_SOLDIER_RANGE;
-        // Misery's Auto Soldier, which is its own reading of the same question:
+        // novastorm's Auto Soldier, which is its own reading of the same
+        // question, and the last hat write in its hatFc — so it wins over
+        // everything above it, biome hats and the shame-reset bull included:
         //
-        //     if (totalDmgPot >= 100 || (spikeDangerNow && totalDmgPot >= health))
-        //         soldierAnti = true;
-        //     ... else if (isBoughtHat(6, 0) && soldierAnti) currentHat = 6;
+        //     if (totalDmgPot >= 100) soldierAnti = true;
+        //     ... if (isBoughtHat(6, 0)) { if (soldierAnti) currentHat = 6; }
         //
         // It catches the case _isDanger cannot, because _isDanger comes from
         // EnemyManager's eager sum and has no term for a spike push: an enemy
         // whose swing alone is survivable but whose knockback puts us on a spike.
-        // MiseryHeal has already resolved that on this tick, so read its answer
-        // rather than a second estimate of it. wantsSoldier is hatFc's whole set
-        // of soldier reasons: the lethal prediction, the spike-ring tick, and
-        // being pinned on spikes inside a trap.
-        const _miseryHeal = this.staticModules.antiInsta;
-        const _soldierAnti = _miseryHeal !== undefined && _miseryHeal.wantsSoldier;
+        // NovastormHeal has already resolved that on this tick, so read its
+        // answer rather than a second estimate of it. wantsSoldier is hatFc's
+        // whole set of soldier reasons: the 100-damage prediction, the spike-ring
+        // tick, and being pinned on spikes inside a trap.
+        const _novaHeal = this.staticModules.antiInsta;
+        const _soldierAnti = _novaHeal !== undefined && _novaHeal.wantsSoldier;
         if (Settings_default._antienemy && _isDanger || _isClose || _safeSoldier || _soldierAnti) {
           this.forceHat = 6;
           this.shouldEquipSoldier = true;
@@ -22756,10 +22826,6 @@ window.grbtp = 35;
     _possessNext: "ArrowRight",
     _possessPrev: "ArrowLeft",
     _possessMain: "ArrowUp",
-    // Scan: the fleet's record of who it has found.
-    _botScan: true,
-    _scanMapMarkers: true,
-    _chatLog: true,
     // Fleet naming. Numbering is opt-in — off, every bot joins under the base
     // name exactly as typed.
     _botNameNumbering: false,
@@ -22806,7 +22872,6 @@ window.grbtp = 35;
     _antispike: true,
     _empDefense: true,
     _autoheal: true,
-    _survivalPreheal: true,
     _autoSync: true,
     _adaptiveGearSwitching: false,
     _autoShield: true,
@@ -22839,7 +22904,11 @@ window.grbtp = 35;
     _botAge4BoostPad: false,
     _autoplacerRadius: 350,
     _autoplacerScanners: 4,
-    _autoplacerResolution: 72,
+    _autoplacerResolution: LUNA_ANGLE_STEPS_DEFAULT,
+    // Not a setting — the stamp that says the 72-to-144 default move has
+    // already been applied to this save. No element carries this id, so the
+    // menu never shows it; it is here so the unknown-key prune below keeps it.
+    _placerResolutionMigrated: false,
     _autobreak: true,
     _breakPosition: "inside",
     _safeWalk: true,
@@ -22952,9 +23021,19 @@ window.grbtp = 35;
   // The resolution comes back off a <select>, so it is a string, and off an
   // older save it may not be there at all. Normalised to one of the supported
   // step counts as a number, because that is what the placer arithmetic wants.
+  //
+  // The default moved from 72 to 144, and a save written under the old default
+  // holds a 72 that nobody chose — the select was simply never opened. Those
+  // are moved up once, stamped so it happens only the once, and a 72 set by
+  // hand after that stays where it was put. A save that already picked 36 or
+  // 144 is left alone either way.
   {
     const stored = Number(settings._autoplacerResolution);
     settings._autoplacerResolution = LUNA_ANGLE_RESOLUTIONS.indexOf(stored) === -1 ? LUNA_ANGLE_STEPS_DEFAULT : stored;
+    if (!settings._placerResolutionMigrated) {
+      if (settings._autoplacerResolution === 72) settings._autoplacerResolution = LUNA_ANGLE_STEPS_DEFAULT;
+      settings._placerResolutionMigrated = true;
+    }
   }
   for (const key of [ "_autoGrindTargetPrimary", "_autoGrindTargetSecondary" ]) {
     if (!Object.prototype.hasOwnProperty.call(GRIND_TARGETS, settings[key])) {
@@ -25005,10 +25084,20 @@ window.grbtp = 35;
   // ===========================================================================
 
   // Frames the bundle must always be given on the main connection, whoever is
-  // active. io-init carries that connection's opcode seed and HMAC key, and B
-  // is the disconnect/kick path — holding either back would break the game
-  // rather than the feature.
-  const POSSESS_MAIN_ALWAYS = new Set([ "io-init", "B" ]);
+  // active.
+  //
+  // io-init carries that connection's opcode seed and HMAC key, and B is the
+  // disconnect/kick path — holding either back would break the game rather than
+  // the feature.
+  //
+  // Q and R are here because a structure being destroyed is not an opinion about
+  // a view, it is a fact about the world. Holding them back left the bundle
+  // drawing a spike that had already been broken: our own model dropped it, so
+  // the switch back never re-sent it, and nothing ever told the bundle it was
+  // gone. A Q naming a sid the bundle does not hold finds nothing and costs
+  // nothing, so letting these through can only ever bring its store closer to
+  // the truth.
+  const POSSESS_MAIN_ALWAYS = new Set([ "io-init", "B", "Q", "R" ]);
   // Frames a bot must never have forwarded. io-init would overwrite the game
   // connection's crypto with the bot's, B would show you a kick that did not
   // happen to you, and 0 is a ping whose bundle-side state was removed.
@@ -25149,84 +25238,6 @@ window.grbtp = 35;
       }
     } catch (_) {}
   }
-
-  // ===========================================================================
-  //  CHAT LOG
-  //
-  //  moomoo has no chat history — a message is a bubble over a head for a few
-  //  seconds and then it is gone. Switching entities makes that a real problem:
-  //  the bundle only ever draws the active stream, so a message that arrived at
-  //  the bot you were not controlling was never drawn at all.
-  //
-  //  So every message every connection sees is recorded once, here, in one list
-  //  that no switch touches. Duplicates are collapsed: with a fleet in the same
-  //  area the same message arrives on every connection that can see the sender.
-  // ===========================================================================
-  const CHATLOG_LIMIT = 300;
-  const CHATLOG_DEDUPE_MS = 1200;
-  const ChatLog = new class {
-    entries=[];
-    _seen=new Map;
-    listeners=[];
-    observe(c, type, args) {
-      if (type !== "6") {
-        return;
-      }
-      const id = args[0];
-      const text = args[1];
-      if (typeof text !== "string" || text.length === 0) {
-        return;
-      }
-      const now = Date.now();
-      const key = id + " " + text;
-      const last = this._seen.get(key);
-      if (last !== undefined && now - last < CHATLOG_DEDUPE_MS) {
-        return;
-      }
-      this._seen.set(key, now);
-      if (this._seen.size > 512) {
-        for (const [k, t] of this._seen) {
-          if (now - t > CHATLOG_DEDUPE_MS * 4) {
-            this._seen.delete(k);
-          }
-        }
-      }
-      const player = c.PlayerManager.playerData.get(id);
-      const owner = Possess.owner;
-      // Who this is, from the point of view of the person reading it: your own
-      // main player, one of your bots, or somebody else.
-      let kind = "other";
-      if (owner !== null) {
-        if (owner.myPlayer && owner.myPlayer.id === id) {
-          kind = "self";
-        } else if (owner.clientIDList.has(id)) {
-          kind = "bot";
-        }
-      }
-      this.push({
-        at: now,
-        id: id,
-        name: player && player.nickname || (kind === "self" ? "you" : "unknown"),
-        text: text,
-        kind: kind,
-        via: c === owner ? "you" : "bot " + c.id
-      });
-    }
-    push(entry) {
-      this.entries.push(entry);
-      if (this.entries.length > CHATLOG_LIMIT) {
-        this.entries.splice(0, this.entries.length - CHATLOG_LIMIT);
-      }
-      for (let i = 0; i < this.listeners.length; i++) {
-        try {
-          this.listeners[i](entry);
-        } catch (_) {}
-      }
-    }
-    onEntry(fn) {
-      this.listeners.push(fn);
-    }
-  }();
 
   Possess = new class {
     owner=null;
@@ -25432,12 +25443,47 @@ window.grbtp = 35;
         this._noteType = type;
       }
       this._mirror(c, type, args);
-      try {
-        ChatLog.observe(c, type, args);
-      } catch (_) {}
       if (c === this.active && c !== this.owner && !POSSESS_NEVER_FORWARD.has(type)) {
         this._emit(type, args);
+        return;
       }
+      // The same fact-about-the-world rule, from the other direction. The bundle
+      // can be holding objects a bot showed it while that bot was the one on
+      // screen; once you switch away, nothing on the main connection is watching
+      // that ground, so a structure dying there would never reach the bundle and
+      // would sit on the map as a drawing of something that is not here.
+      //
+      // Every connection that sees a destruction reports it, and the report is
+      // deduplicated for the tick: twenty bots watching the same spike fall cost
+      // the bundle one lookup, not twenty. The connection the bundle is already
+      // reading in full is skipped — it has been told by the line above, or by
+      // the socket itself.
+      if (type === "Q" || type === "R") {
+        this._forwardRemoval(c, type, args);
+      }
+    }
+    _removalTick=-1;
+    _removalsSeen=new Set;
+    _forwardRemoval(c, type, args) {
+      if (c === this.owner || c === this.active) {
+        return;
+      }
+      const sid = args[0];
+      if (sid === void 0 || sid === null) {
+        return;
+      }
+      const mh = this.owner._ModuleHandler;
+      const tick = mh ? mh.tickCount : 0;
+      if (this._removalTick !== tick) {
+        this._removalTick = tick;
+        this._removalsSeen.clear();
+      }
+      const key = type + ":" + sid;
+      if (this._removalsSeen.has(key)) {
+        return;
+      }
+      this._removalsSeen.add(key);
+      this._emit(type, args);
     }
     // True when the bundle must not see this frame from the main connection.
     holdMain(event) {
@@ -25851,399 +25897,6 @@ window.grbtp = 35;
   Possess.init(client);
   FrameDriver.add(() => Possess.frame());
 
-  // ===========================================================================
-  //  BOT SCAN — who the fleet has found, and what to do about it
-  //
-  //  Each bot has its own world model, so each bot sees a different set of
-  //  players. Scan is the union of those sets over time: one record per player,
-  //  updated by whichever bot can currently see them rather than duplicated per
-  //  sighting, with the bot that found them first kept as the discoverer.
-  //
-  //  A new record raises the choice the fleet is for: send everyone and finish
-  //  it, or send everyone except the bot that found them and hold at a distance
-  //  while you do it yourself. A finish needs at least two bots and they open
-  //  together — a single bot walking in alone is how a fleet loses bots one at a
-  //  time, and staggered arrivals are the same thing more slowly.
-  // ===========================================================================
-  const SCAN_TICK_MS = 260;
-  const SCAN_LOST_MS = 2e4;
-  const SCAN_FORGET_MS = 6e5;
-  const SCAN_RENOTIFY_MS = 9e4;
-  const SCAN_STANDOFF = 760;
-  const SCAN_STANDOFF_BAND = 90;
-  const SCAN_ENGAGE = 150;
-  const SCAN_ATTACK = 190;
-  const SCAN_MIN_FINISH_BOTS = 2;
-  const SCAN_MISSION_TIMEOUT_MS = 12e4;
-
-  const BotScan = new class {
-    records=new Map;
-    pending=null;
-    mission=null;
-    _lastTick=0;
-    _sweepId=0;
-
-    // Nothing is read off the wire: every connection's PlayerManager is already
-    // the decoded truth of what that connection can see, so a scan is a walk
-    // over state this client keeps regardless, on a timer rather than per frame.
-
-    enabled() {
-      return Settings_default._botScan !== false;
-    }
-    list() {
-      return [ ...this.records.values() ].sort((a, b) => b.lastSeen - a.lastSeen);
-    }
-    clear() {
-      this.records.clear();
-      this.pending = null;
-      this.endMission("cleared");
-    }
-
-    frame(now) {
-      if (now - this._lastTick < SCAN_TICK_MS) {
-        return;
-      }
-      this._lastTick = now;
-      const wall = Date.now();
-      if (this.enabled()) {
-        this._sweep(wall);
-      }
-      this._age(wall);
-      this._missionTick(wall);
-    }
-
-    // One pass over the fleet. A player counts as found when a bot can see them
-    // and they are neither you, nor one of your bots, nor a clanmate.
-    _sweep(wall) {
-      this._sweepId += 1;
-      const owner = client;
-      const ownID = owner.myPlayer ? owner.myPlayer.id : -1;
-      for (const bot of owner.clients) {
-        if (!bot.myPlayer || !bot.myPlayer.inGame) {
-          continue;
-        }
-        const players = bot.PlayerManager.players;
-        for (let i = 0; i < players.length; i++) {
-          const p = players[i];
-          if (!p || p.id === ownID || p.id === bot.myPlayer.id) {
-            continue;
-          }
-          if (owner.clientIDList.has(p.id)) {
-            continue;
-          }
-          if (bot.myPlayer.isTeammateByID(p.id)) {
-            continue;
-          }
-          this._record(p, bot, wall);
-        }
-      }
-    }
-    // One record per player. A second bot seeing the same player updates the
-    // record it already has — the position, the sighting count and the list of
-    // bots that can currently see them — rather than adding a duplicate.
-    _record(player, bot, wall) {
-      const pos = player.pos && player.pos.current || {
-        x: 0,
-        y: 0
-      };
-      let rec = this.records.get(player.id);
-      if (rec === undefined) {
-        rec = {
-          id: player.id,
-          name: player.nickname || "unknown",
-          botSlot: bot.id,
-          botName: bot.myPlayer && bot.myPlayer.nickname || bot._botCustomName || "bot",
-          bot: bot,
-          x: pos.x,
-          y: pos.y,
-          firstSeen: wall,
-          lastSeen: wall,
-          sightings: 0,
-          seenBy: new Set,
-          sweep: 0,
-          state: "seen",
-          notifiedAt: 0
-        };
-        this.records.set(player.id, rec);
-      }
-      rec.name = player.nickname || rec.name;
-      rec.x = pos.x;
-      rec.y = pos.y;
-      rec.lastSeen = wall;
-      rec.sightings += 1;
-      if (rec.sweep !== this._sweepId) {
-        rec.sweep = this._sweepId;
-        rec.seenBy = new Set;
-      }
-      rec.seenBy.add(bot.id);
-      const returned = rec.state === "lost" && wall - rec.notifiedAt > SCAN_RENOTIFY_MS;
-      if (rec.state === "lost") {
-        rec.state = "seen";
-      }
-      // The stamp goes on only when a prompt actually went up, so a player the
-      // fleet found while you happened to be looking at them can still raise one
-      // later, when a bot finds them somewhere you are not.
-      if ((rec.notifiedAt === 0 || returned) && this._notify(rec)) {
-        rec.notifiedAt = wall;
-      }
-    }
-    _age(wall) {
-      for (const [id, rec] of this.records) {
-        if (wall - rec.lastSeen > SCAN_FORGET_MS) {
-          this.records.delete(id);
-          continue;
-        }
-        if (rec.state !== "lost" && rec.state !== "engaged" && wall - rec.lastSeen > SCAN_LOST_MS) {
-          rec.state = "lost";
-          rec.seenBy.clear();
-        }
-      }
-    }
-    _notify(rec) {
-      if (this.mission !== null) {
-        return false;
-      }
-      // A player you are already looking at is not a discovery. Bots follow you
-      // by default, so without this the prompt would fire for everyone you walk
-      // past. The record is written either way — only the prompt is held back.
-      const own = client.PlayerManager;
-      if (own && own.players.indexOf(own.playerData.get(rec.id)) >= 0) {
-        return false;
-      }
-      this.pending = rec;
-      try {
-        _scanRenderPrompt();
-      } catch (_) {}
-      return true;
-    }
-
-    // ── the two choices ─────────────────────────────────────────────────────
-    //
-    // "all"  — every bot goes and finishes the target.
-    // "hold" — every bot except the one that found them goes and waits at a
-    //          distance; the discoverer's task ends there and you take it.
-    engage(rec, mode) {
-      if (!rec) {
-        return false;
-      }
-      const bots = [];
-      for (const bot of client.clients) {
-        if (!bot.myPlayer || !bot.myPlayer.inGame) {
-          continue;
-        }
-        if (Possess.isActive(bot)) {
-          continue;
-        }
-        if (mode === "hold" && bot === rec.bot) {
-          continue;
-        }
-        bots.push(bot);
-      }
-      if (mode === "all" && bots.length < SCAN_MIN_FINISH_BOTS) {
-        this._toast("Need at least " + SCAN_MIN_FINISH_BOTS + " bots to finish — " + bots.length + " available");
-        return false;
-      }
-      if (bots.length === 0) {
-        this._toast("No bots available");
-        return false;
-      }
-      this.endMission("replaced");
-      rec.state = "engaged";
-      this.mission = {
-        rec: rec,
-        mode: mode,
-        bots: bots,
-        started: Date.now(),
-        open: false,
-        openedAt: 0
-      };
-      for (let i = 0; i < bots.length; i++) {
-        const mh = bots[i]._ModuleHandler;
-        if (mh) {
-          mh._scanMissionActive = true;
-        }
-      }
-      this.pending = null;
-      try {
-        _scanRenderPrompt();
-      } catch (_) {}
-      this._toast(mode === "all" ? bots.length + " bots sent to finish " + rec.name : bots.length + " bots holding on " + rec.name + " — it is yours");
-      return true;
-    }
-    endMission(reason) {
-      const mission = this.mission;
-      this.mission = null;
-      if (!mission) {
-        return;
-      }
-      for (let i = 0; i < mission.bots.length; i++) {
-        const mh = mission.bots[i]._ModuleHandler;
-        if (!mh) {
-          continue;
-        }
-        mh._scanMissionActive = false;
-        try {
-          mh.startMovement(null);
-          mh.staticModules.tempData.setAttacking(Settings_default._botAutoAttackEnabled ? 1 : 0);
-        } catch (_) {}
-      }
-      if (mission.rec && mission.rec.state === "engaged") {
-        mission.rec.state = reason === "finished" ? "finished" : "seen";
-      }
-    }
-    // Where the target is right now, asked of whoever can currently see them.
-    // Falls back to the last recorded position, which is what makes a target
-    // that walked out of every bot's view still worth walking toward.
-    _targetPos(mission) {
-      const id = mission.rec.id;
-      for (let i = 0; i < mission.bots.length; i++) {
-        const live = mission.bots[i].PlayerManager.playerData.get(id);
-        if (live && live.pos && live.pos.current) {
-          const seen = mission.bots[i].PlayerManager.players.indexOf(live) >= 0;
-          if (seen) {
-            mission.rec.x = live.pos.current.x;
-            mission.rec.y = live.pos.current.y;
-            mission.rec.lastSeen = Date.now();
-            return live.pos.current;
-          }
-        }
-      }
-      const own = client.PlayerManager.playerData.get(id);
-      if (own && own.pos && own.pos.current && client.PlayerManager.players.indexOf(own) >= 0) {
-        mission.rec.x = own.pos.current.x;
-        mission.rec.y = own.pos.current.y;
-        return own.pos.current;
-      }
-      return {
-        x: mission.rec.x,
-        y: mission.rec.y
-      };
-    }
-    _missionTick(wall) {
-      const mission = this.mission;
-      if (mission === null) {
-        return;
-      }
-      // Drop bots that died or disconnected mid-mission.
-      mission.bots = mission.bots.filter(b => client.clients.has(b) && b.myPlayer && b.myPlayer.inGame && !Possess.isActive(b));
-      if (mission.bots.length === 0) {
-        this.endMission("lost");
-        return;
-      }
-      if (wall - mission.started > SCAN_MISSION_TIMEOUT_MS) {
-        this.endMission("timeout");
-        return;
-      }
-      const target = this._targetPos(mission);
-      const finishing = mission.mode === "all";
-      // Synchronised opening: the bots walk in and hold their swing until enough
-      // of them are in range, then they all commit on the same pass. Below the
-      // minimum nobody opens at all, which is the multi-bot rule doing its job
-      // rather than a preference.
-      if (finishing) {
-        let ready = 0;
-        for (let i = 0; i < mission.bots.length; i++) {
-          const pos = mission.bots[i].myPlayer.pos.current;
-          if (hyp(target.x - pos.x, target.y - pos.y) <= SCAN_ATTACK) {
-            ready += 1;
-          }
-        }
-        const enough = Math.min(SCAN_MIN_FINISH_BOTS, mission.bots.length);
-        if (!mission.open && ready >= enough && mission.bots.length >= SCAN_MIN_FINISH_BOTS) {
-          mission.open = true;
-          mission.openedAt = wall;
-        } else if (mission.open && ready === 0) {
-          mission.open = false;
-        }
-      }
-      for (let i = 0; i < mission.bots.length; i++) {
-        const bot = mission.bots[i];
-        const mh = bot._ModuleHandler;
-        if (!mh) {
-          continue;
-        }
-        const pos = bot.myPlayer.pos.current;
-        const dx = target.x - pos.x;
-        const dy = target.y - pos.y;
-        const dist = hyp(dx, dy);
-        const bearing = Math.atan2(dy, dx);
-        mh._currentAngle = bearing;
-        if (finishing) {
-          if (dist > SCAN_ENGAGE) {
-            mh.startMovement(bearing);
-          } else {
-            mh.startMovement(null);
-          }
-          _rynSetAttackingStaggered(mh, mission.open && dist <= SCAN_ATTACK ? 1 : 0, i);
-          continue;
-        }
-        // Holding: sit on a ring around the target, spread around it so the
-        // fleet surrounds rather than stacks, and do not swing.
-        const slot = i / Math.max(1, mission.bots.length) * Math.PI * 2;
-        const ringX = target.x + Math.cos(slot) * SCAN_STANDOFF;
-        const ringY = target.y + Math.sin(slot) * SCAN_STANDOFF;
-        const rdx = ringX - pos.x;
-        const rdy = ringY - pos.y;
-        const rdist = hyp(rdx, rdy);
-        if (rdist > SCAN_STANDOFF_BAND) {
-          mh.startMovement(Math.atan2(rdy, rdx));
-        } else {
-          mh.startMovement(null);
-        }
-        _rynSetAttackingStaggered(mh, 0, i);
-      }
-      // The target dying is the mission ending. Its record stops being live for
-      // every bot at once, which is what this is reading.
-      if (finishing && wall - mission.rec.lastSeen > 4e3) {
-        this.endMission("finished");
-      }
-    }
-    _toast(text) {
-      try {
-        if (window._rynBotToast) {
-          window._rynBotToast(text);
-        }
-      } catch (_) {}
-    }
-  }();
-  FrameDriver.add(now => {
-    try {
-      BotScan.frame(now || performance.now());
-    } catch (_) {}
-  });
-
-  // ── discovery prompt ──────────────────────────────────────────────────────
-  //
-  // The two choices, on screen, where a discovery can be acted on without
-  // opening the menu. Built once and shown or hidden.
-  let _scanPromptEl = null;
-  function _scanRenderPrompt() {
-    if (_scanPromptEl === null || !_scanPromptEl.isConnected) {
-      const host = document.querySelector("#gameUI") || document.body;
-      if (!host) {
-        return;
-      }
-      const el = document.createElement("div");
-      el.id = "ryn-scan-prompt";
-      el.style.cssText = "position:fixed;right:16px;bottom:96px;z-index:99998;width:296px;display:none;" + "padding:14px 15px;border-radius:16px;font-family:'Exo 2',sans-serif;color:#fff;" + "background:rgba(28,22,46,.82);border:1px solid rgba(170,130,255,.55);" + "box-shadow:0 12px 34px rgba(0,0,0,.5);backdrop-filter:blur(18px);" + "-webkit-backdrop-filter:blur(18px);";
-      el.innerHTML = '<div id="ryn-scan-head" style="font-family:\'Orbitron\',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#b18cff;margin-bottom:6px;">Player found</div>' + '<div id="ryn-scan-body" style="font-size:13px;font-weight:600;line-height:1.45;margin-bottom:11px;"></div>' + '<button id="ryn-scan-all" style="display:block;width:100%;margin-bottom:7px;padding:9px 10px;border-radius:11px;border:1px solid rgba(255,255,255,.18);background:linear-gradient(135deg,rgba(150,96,255,.92),rgba(110,64,220,.92));color:#fff;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;">Send all bots — finish</button>' + '<button id="ryn-scan-hold" style="display:block;width:100%;margin-bottom:7px;padding:9px 10px;border-radius:11px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);color:#fff;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;">Hold at distance — I finish it</button>' + '<button id="ryn-scan-skip" style="display:block;width:100%;padding:7px 10px;border-radius:11px;border:1px solid rgba(255,255,255,.10);background:transparent;color:rgba(255,255,255,.55);font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;">Ignore</button>';
-      host.appendChild(el);
-      el.querySelector("#ryn-scan-all").onclick = () => BotScan.engage(BotScan.pending, "all");
-      el.querySelector("#ryn-scan-hold").onclick = () => BotScan.engage(BotScan.pending, "hold");
-      el.querySelector("#ryn-scan-skip").onclick = () => {
-        BotScan.pending = null;
-        _scanRenderPrompt();
-      };
-      _scanPromptEl = el;
-    }
-    const rec = BotScan.pending;
-    if (!rec) {
-      _scanPromptEl.style.display = "none";
-      return;
-    }
-    _scanPromptEl.querySelector("#ryn-scan-body").innerHTML = "<b>" + _escapeHTML(rec.name) + "</b> <span style=\"opacity:.6\">#" + rec.id + "</span><br>" + "<span style=\"opacity:.75\">found by bot " + rec.botSlot + " (" + _escapeHTML(rec.botName) + ")</span><br>" + "<span style=\"opacity:.55\">at " + Math.round(rec.x) + ", " + Math.round(rec.y) + "</span>";
-    _scanPromptEl.style.display = "block";
-  }
   function _escapeHTML(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, ch => ({
       "&": "&amp;",
@@ -26254,59 +25907,10 @@ window.grbtp = 35;
     })[ch]);
   }
 
-  // ── chat log ──────────────────────────────────────────────────────────────
-  //
-  // Bottom-left, deliberately small and click-through. It exists because the
-  // game has no history at all, and because switching entities means a message
-  // can arrive on a connection that is not the one being drawn.
-  let _chatLogEl = null;
-  let _chatLogBody = null;
-  let _chatLogDirty = true;
-  function _chatLogPanel() {
-    if (!Settings_default._chatLog) {
-      if (_chatLogEl) {
-        _chatLogEl.style.display = "none";
-      }
-      return;
-    }
-    if (_chatLogEl === null || !_chatLogEl.isConnected) {
-      const host = document.querySelector("#gameUI") || document.body;
-      if (!host) {
-        return;
-      }
-      const el = document.createElement("div");
-      el.id = "ryn-chat-log";
-      el.style.cssText = "position:fixed;left:14px;bottom:96px;z-index:99997;width:294px;max-height:196px;" + "overflow:hidden;padding:9px 11px;border-radius:13px;pointer-events:none;user-select:none;" + "font-family:'Exo 2',sans-serif;font-size:12px;line-height:1.45;color:rgba(255,255,255,.9);" + "background:rgba(20,16,34,.5);border:1px solid rgba(255,255,255,.09);" + "backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);";
-      el.innerHTML = '<div id="ryn-chat-log-body"></div>';
-      host.appendChild(el);
-      _chatLogEl = el;
-      _chatLogBody = el.querySelector("#ryn-chat-log-body");
-      _chatLogDirty = true;
-    }
-    const inGame = AC().myPlayer && AC().myPlayer.inGame;
-    _chatLogEl.style.display = inGame && ChatLog.entries.length !== 0 ? "block" : "none";
-    if (!_chatLogDirty) {
-      return;
-    }
-    _chatLogDirty = false;
-    const rows = ChatLog.entries.slice(-9);
-    let html = "";
-    for (let i = 0; i < rows.length; i++) {
-      const e = rows[i];
-      const color = e.kind === "self" ? "#b18cff" : e.kind === "bot" ? "#7fd8a6" : "rgba(255,255,255,.62)";
-      html += '<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + '<span style="color:' + color + ';font-weight:700;">' + _escapeHTML(e.name) + "</span>" + '<span style="opacity:.42;"> · ' + _escapeHTML(e.via) + "</span> " + _escapeHTML(e.text) + "</div>";
-    }
-    _chatLogBody.innerHTML = html;
-  }
-  ChatLog.onEntry(() => {
-    _chatLogDirty = true;
-  });
-
   // ── menu wiring ───────────────────────────────────────────────────────────
   //
-  // The two lists that have to be rebuilt as the fleet and the scan change, plus
-  // the handful of controls the generic attach passes cannot bind (a number
-  // input and a button whose id the button switch does not know).
+  // The fleet list, which has to be rebuilt as the fleet changes, plus the one
+  // control the generic attach passes cannot bind — a number input.
   function _possessRenderMenu(doc) {
     const host = doc.getElementById("_possessList");
     if (!host) {
@@ -26340,49 +25944,7 @@ window.grbtp = 35;
     }
   }
 
-  function _scanRenderMenu(doc) {
-    const host = doc.getElementById("_scanList");
-    if (!host) {
-      return;
-    }
-    const wall = Date.now();
-    const list = BotScan.list();
-    let html = "";
-    if (list.length === 0) {
-      html = '<p class="field-note">Nothing found yet. Bots record every player they can see while they are out there.</p>';
-    }
-    for (let i = 0; i < list.length && i < 24; i++) {
-      const rec = list[i];
-      const live = wall - rec.lastSeen < SCAN_LOST_MS;
-      const state = rec.state === "engaged" ? "engaged" : live ? "in sight" : "lost";
-      const color = rec.state === "engaged" ? "#ff5555" : live ? "#7fd8a6" : "rgba(255,255,255,.45)";
-      html += '<div class="content-option" style="align-items:flex-start;">' + '<div class="opt-main"><span class="option-title">' + _escapeHTML(rec.name) + ' <span style="opacity:.5">#' + rec.id + "</span></span>" + '<span class="opt-desc">found by bot ' + rec.botSlot + " (" + _escapeHTML(rec.botName) + ") · " + Math.round(rec.x) + ", " + Math.round(rec.y) + " · seen by " + rec.seenBy.size + " bot" + (rec.seenBy.size === 1 ? "" : "s") + ' · <span style="color:' + color + '">' + state + "</span></span></div>" + '<div class="inline">' + '<button class="option-button" data-scan-all="' + rec.id + '">Finish</button>' + '<button class="option-button" data-scan-hold="' + rec.id + '">Hold</button>' + "</div></div>";
-    }
-    if (host._rynHTML === html) {
-      return;
-    }
-    host._rynHTML = html;
-    host.innerHTML = html;
-    const bind = (attr, mode) => {
-      for (const btn of host.querySelectorAll("[" + attr + "]")) {
-        btn.onclick = () => {
-          BotScan.engage(BotScan.records.get(Number(btn.getAttribute(attr))), mode);
-          _scanRenderMenu(doc);
-        };
-      }
-    };
-    bind("data-scan-all", "all");
-    bind("data-scan-hold", "hold");
-  }
-
   function _possessAttachMenu(doc) {
-    const clear = doc.getElementById("_scanClear");
-    if (clear) {
-      clear.onclick = () => {
-        BotScan.clear();
-        _scanRenderMenu(doc);
-      };
-    }
     // A number input, which the generic text/slider passes do not cover.
     const start = doc.getElementById("_botNameNumberStart");
     if (start) {
@@ -26404,7 +25966,6 @@ window.grbtp = 35;
 
   setInterval(() => {
     try {
-      _chatLogPanel();
       _possessBadge();
     } catch (_) {}
     try {
@@ -26421,11 +25982,10 @@ window.grbtp = 35;
         page._rynPossessAttached = true;
         _possessAttachMenu(doc);
       }
-      // Only while the menu is open — these two rebuild DOM and there is no
-      // reason to do it against a hidden iframe.
+      // Only while the menu is open — this rebuilds DOM and there is no reason
+      // to do it against a hidden iframe.
       if (UI_default.isMenuOpened) {
         _possessRenderMenu(doc);
-        _scanRenderMenu(doc);
       }
     } catch (_) {}
   }, 500);
