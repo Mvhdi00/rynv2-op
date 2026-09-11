@@ -184,6 +184,43 @@ const t = (name, got, want) => {
   t("Spike KB yields the contact tick to Velocity Tick", w.ModuleHandler.shouldAttack, false);
 }
 
+// ── Spike Sync 2 does not answer to the Velocity Tick switch ───────────────
+{
+  Settings_default._velocityTick = false;
+  const w = mkWorld({ touching: true });
+  w.velocityTick.postTick();
+  t("contact burst fires with Velocity Tick off", w.ModuleHandler.moduleActive, true);
+  t("...still in turret for the first tick", w.ModuleHandler.forceHat, 53);
+  // A burst is two ticks. A first half that cannot reach its second is a hat
+  // swap that does nothing, so the follow-up has to survive the same switch.
+  w.ModuleHandler.moduleActive = false;
+  w.ModuleHandler.moveTo = "disable";
+  w.velocityTick.postTick();
+  t("...and the swing still lands on the next tick", w.ModuleHandler.shouldAttack, true);
+  t("...wearing bull for it", w.ModuleHandler.forceHat, 7);
+  t("...with the burst then cleared", w.velocityTick.nearestTarget, null);
+}
+{
+  // Velocity Tick's own band stays off when its switch is off.
+  Settings_default._velocityTick = false;
+  const w = mkWorld({ touching: false });
+  w.client.EnemyManager.nearestEnemyPush = null;
+  w.client.EnemyManager.nearestPushSpike = null;
+  w.enemy.pos.future = pt(230, 0);
+  w.velocityTick.postTick();
+  t("Velocity Tick's own band stays off with its switch off", w.ModuleHandler.moduleActive, false);
+}
+{
+  // Both off means the module does nothing at all.
+  Settings_default._velocityTick = false;
+  Settings_default._spikeSync2 = false;
+  const w = mkWorld({ touching: true });
+  w.velocityTick.postTick();
+  t("both switches off leaves the module silent", w.ModuleHandler.moduleActive, false);
+  Settings_default._velocityTick = true;
+  Settings_default._spikeSync2 = true;
+}
+
 // ── the Spike Sync 2 switch turns the whole interaction off ────────────────
 {
   Settings_default._spikeSync2 = false;
