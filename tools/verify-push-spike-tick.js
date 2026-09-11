@@ -36,7 +36,7 @@ const classSrc = name => {
 };
 
 // ── stub world ─────────────────────────────────────────────────────────────
-const Settings_default = { _autoPush: true, _autoPushRange: 250, _spikeKB: true, _velocityTick: true };
+const Settings_default = { _autoPush: true, _autoPushRange: 250, _spikeKB: true, _velocityTick: true, _spikeSync2: true };
 const getAngleDist = (a, b) => { const d = Math.abs(a - b) % (Math.PI * 2); return d > Math.PI ? Math.PI * 2 - d : d; };
 const inRange = (v, lo, hi) => v >= lo && v <= hi;
 const DataHandler_default = {
@@ -182,6 +182,38 @@ const t = (name, got, want) => {
   w.ModuleHandler.shouldAttack = false;
   w.spikeKB.postTick();
   t("Spike KB yields the contact tick to Velocity Tick", w.ModuleHandler.shouldAttack, false);
+}
+
+// ── the Spike Sync 2 switch turns the whole interaction off ────────────────
+{
+  Settings_default._spikeSync2 = false;
+  const w = mkWorld({ touching: false });
+  w.client.EnemyManager.enemySpikeCollider = w.enemy;
+  w.spikeKB.postTick();
+  t("Spike KB is untouched with Spike Sync 2 off", w.ModuleHandler.shouldAttack, true);
+}
+{
+  const w = mkWorld({ touching: true });
+  w.velocityTick.postTick();
+  t("Velocity Tick does not take the contact with Spike Sync 2 off", w.ModuleHandler.moduleActive, false);
+}
+{
+  const w = mkWorld({ touching: false });
+  w.autoPush.postTick();
+  t("Auto Push still shoves with Spike Sync 2 off", w.autoPush.pushPos !== null, true);
+  Settings_default._spikeSync2 = true;
+}
+
+// ── the switch is wired end to end ─────────────────────────────────────────
+{
+  const whole = lines.join("\n");
+  t("_spikeSync2 has a default", /_spikeSync2:\s*(true|false),/.test(whole), true);
+  t("_spikeSync2 has a menu toggle", whole.includes('id=\\"_spikeSync2\\" type=\\"checkbox\\"'), true);
+  t("...labelled Spike Sync 2", whole.includes(">Spike Sync 2</label>"), true);
+  // attachCheckboxes binds by id and logs an error for any checkbox with no
+  // matching setting, so the two above have to agree for the toggle to work.
+  t("...and both halves read by the same key",
+    /for=\\"_spikeSync2\\"/.test(whole) && /Settings_default\._spikeSync2/.test(whole), true);
 }
 
 // ── Auto Push itself is unchanged in its two exits ─────────────────────────
