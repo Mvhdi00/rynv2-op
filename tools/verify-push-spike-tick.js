@@ -62,7 +62,7 @@ if (typeof AutoPush.prototype.pushState !== "function") {
 }
 
 // `touching` drives both collision predicates the handoff turns on.
-const mkWorld = ({ pushEnemy = true, touching = false, enemyInSpike = null } = {}) => {
+const mkWorld = ({ pushEnemy = true, touching = false, enemyInSpike = null, engaged = true } = {}) => {
   const enemy = {
     id: 9, collisionScale: 35, hitScale: 63, trappedIn: { collisionScale: 50, pos: { current: pt(100, 0) } },
     pos: { current: pt(100, 0), future: pt(100, 0) }, weapon: { current: 0 }, futureHat: 0,
@@ -94,6 +94,10 @@ const mkWorld = ({ pushEnemy = true, touching = false, enemyInSpike = null } = {
     StatsManager: { set velocityTickTimes(_v) {} },
   };
   const autoPush = new AutoPush(client);
+  // pushPos is what the purple line is drawn from, and what pushState reports
+  // as `engaged`. A module ahead of Auto Push reads the last completed tick's
+  // value, so a live shove is one that left it set.
+  if (engaged) autoPush.pushPos = pt(200, 0);
   ModuleHandler.staticModules.autoPush = autoPush;
   return { client, ModuleHandler, enemy, spike, autoPush,
     spikeKB: new SpikeKB(client), velocityTick: new VelocityTick(client) };
@@ -153,16 +157,37 @@ const t = (name, got, want) => {
 
 // ── Velocity Tick takes the contact ────────────────────────────────────────
 {
+  // The swing goes out on the contact tick itself - the spike is hurting them
+  // now and the hit is meant to land with it.
   const w = mkWorld({ touching: true });
   w.velocityTick.postTick();
   t("Velocity Tick fires on contact", w.ModuleHandler.moduleActive, true);
-  t("...wearing turret for the first tick", w.ModuleHandler.forceHat, 53);
-  t("...and arms the swing for the next one", w.velocityTick.nearestTarget, w.enemy);
+  t("...swinging on that very tick", w.ModuleHandler.shouldAttack, true);
+  t("...wearing bull for it", w.ModuleHandler.forceHat, 7);
+  t("...with the primary", w.ModuleHandler.forceWeapon, 0);
+  t("...and the turret chasing it next tick", w.velocityTick.syncTurret, true);
+  // Next tick: turret on, and no second swing.
+  w.ModuleHandler.moduleActive = false;
+  w.ModuleHandler.moveTo = "disable";
+  w.ModuleHandler.shouldAttack = false;
+  w.ModuleHandler.forceHat = null;
+  w.velocityTick.postTick();
+  t("the follow-up wears turret", w.ModuleHandler.forceHat, 53);
+  t("...and does not swing again", w.ModuleHandler.shouldAttack, false);
+  t("...leaving nothing armed", w.velocityTick.syncTurret, false);
 }
 {
   const w = mkWorld({ touching: false });
   w.velocityTick.postTick();
   t("Velocity Tick does not fire mid-shove", w.ModuleHandler.moduleActive, false);
+}
+{
+  // Contact alone is not the trigger. The shove has to have been live - the
+  // purple line up - or this is just an enemy standing near a spike, which is
+  // Spike KB's case and not this one.
+  const w = mkWorld({ touching: true, engaged: false });
+  w.velocityTick.postTick();
+  t("contact without a live shove does not fire", w.ModuleHandler.moduleActive, false);
 }
 {
   // The far distance band is what the normal path needs; the contact path must
@@ -190,15 +215,15 @@ const t = (name, got, want) => {
   const w = mkWorld({ touching: true });
   w.velocityTick.postTick();
   t("contact burst fires with Velocity Tick off", w.ModuleHandler.moduleActive, true);
-  t("...still in turret for the first tick", w.ModuleHandler.forceHat, 53);
-  // A burst is two ticks. A first half that cannot reach its second is a hat
-  // swap that does nothing, so the follow-up has to survive the same switch.
+  t("...still swinging on the contact tick", w.ModuleHandler.shouldAttack, true);
+  // A burst is two ticks. A first half that cannot reach its second leaves the
+  // turret shot unspent, so the follow-up has to survive the same switch.
   w.ModuleHandler.moduleActive = false;
   w.ModuleHandler.moveTo = "disable";
+  w.ModuleHandler.forceHat = null;
   w.velocityTick.postTick();
-  t("...and the swing still lands on the next tick", w.ModuleHandler.shouldAttack, true);
-  t("...wearing bull for it", w.ModuleHandler.forceHat, 7);
-  t("...with the burst then cleared", w.velocityTick.nearestTarget, null);
+  t("...and the turret still follows on the next tick", w.ModuleHandler.forceHat, 53);
+  t("...with the burst then cleared", w.velocityTick.syncTurret, false);
 }
 {
   // Velocity Tick's own band stays off when its switch is off.
