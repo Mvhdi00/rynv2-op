@@ -33,6 +33,7 @@ const ledgerAt = find(/^  class PlacementLedger \{/);
 const conflictAt = find(/^  class ConflictResolver \{/);
 const schedAt = find(/^  class PlacementScheduler \{/);
 const engineAt = find(/^  class RynPlacementEngine \{/);
+const forecastAt = find(/^  class StealForecast \{/);
 
 // Class bodies end at the first line that is exactly two-space "}".
 const endOf = start => {
@@ -44,7 +45,18 @@ const src = [
   slice(ledgerAt, endOf(ledgerAt)),
   slice(conflictAt, endOf(conflictAt)),
   slice(schedAt, endOf(schedAt)),
+  slice(forecastAt, endOf(forecastAt)),
 ].join("\n\n");
+
+// _generateSteal is too entangled with the world to instantiate, so the one
+// line of it under test - the deadline it stamps on a candidate - is lifted out
+// and evaluated directly against a forecast verdict.
+const dueTickExpr = (() => {
+  const i = lines.findIndex(l => /^\s*dueTick: frame\.tick \+ /.test(l) && /entry\.ticks/.test(l));
+  if (i < 0) throw new Error("no steal dueTick line");
+  return lines[i].trim().replace(/^dueTick:\s*/, "").replace(/,\s*$/, "");
+})();
+const stealDueTick = (frame, entry) => new Function("frame", "entry", "Math", "return " + dueTickExpr)(frame, entry, Math);
 
 // The three retry methods are pulled out of the engine class and re-wrapped as
 // a standalone class, so they are the shipped bodies verbatim.
@@ -71,14 +83,18 @@ const RPE_PREPLACE_FIRE_LEAD = 2;
 const RPE_MAX_RETRIES = 4;
 const RPE_PLACE_PACKETS = 5;
 const RPE_BATCH_PACKETS = 2;
+const RPE_STEAL_MAX_LEAD = 3;
+const RPE_STEAL_HISTORY_TICKS = 14;
+const RPE_STEAL_MAX_TRACKED = 32;
 const Settings_default = { _spamPrePlace: true };
 
 const scope = { hyp, RPE_PRIORITY, RPE_MODE, RPE_SOFT_DOMINANCE, RPE_PREPLACE_MIN_CONFIDENCE,
-  RPE_PREPLACE_FIRE_LEAD, RPE_MAX_RETRIES, RPE_PLACE_PACKETS, RPE_BATCH_PACKETS, Settings_default };
+  RPE_PREPLACE_FIRE_LEAD, RPE_MAX_RETRIES, RPE_PLACE_PACKETS, RPE_BATCH_PACKETS,
+  RPE_STEAL_MAX_LEAD, RPE_STEAL_HISTORY_TICKS, RPE_STEAL_MAX_TRACKED, Settings_default };
 const names = Object.keys(scope);
-const [PlacementLedger, ConflictResolver, PlacementScheduler, Retries] =
+const [PlacementLedger, ConflictResolver, PlacementScheduler, StealForecast, Retries] =
   new Function(...names, src + "\n" + retryClass +
-    "\nreturn [PlacementLedger, ConflictResolver, PlacementScheduler, Retries];")(...names.map(n => scope[n]));
+    "\nreturn [PlacementLedger, ConflictResolver, PlacementScheduler, StealForecast, Retries];")(...names.map(n => scope[n]));
 
 // ── harness ────────────────────────────────────────────────────────────────
 const profile = { type: 2, footR: 35, ringR: 70 };
@@ -152,7 +168,31 @@ const r2 = mkCand({ mode: RPE_MODE.REPLACE, kind: "replace", priority: RPE_PRIOR
 noteOnly._attachRetry(r2, 6);
 t("without the _noteSpeculative change, REPLACE is blocked", c2.availableGround(r2), false);
 
-// 3. The claim must not outlive its usefulness: ttl 2 means tick 7 is clear
+// 3. The one-tick floor on the steal deadline. assess() reports a building the
+//    client has already seen reach zero health as ticks 0 - nothing left to
+//    predict - and Math.max(1, ...) used to make that wait a tick anyway.
+const forecast = new StealForecast();
+const deadWall = { id: 1, health: 0, scale: 50 };
+const dead = forecast.assess(deadWall, 10, 200, 200);
+t("assess reports a zero-health wall as ticks 0", dead.ticks, 0);
+t("...at full confidence", dead.confidence, 1);
+t("no floor: a ticks-0 verdict is due on the generating tick",
+  stealDueTick({ tick: 10 }, dead), 10);
+
+Settings_default._spamPrePlace = true;
+t("a ticks-0 steal is due the same tick it is generated",
+  sched.due(mkCand({ dueTick: stealDueTick({ tick: 10 }, dead), confidence: 1 }), 10), true);
+
+// A live wall still lands exactly where the floor used to put it, because
+// assess never returns a positive value below one.
+const liveWall = { id: 2, health: 100, scale: 50 };
+for (let k = 0; k < 3; k++) { liveWall.health -= 20; forecast.assess(liveWall, 10 + k, 60, 60); }
+const live = forecast.assess(liveWall, 13, 60, 60);
+t("a live wall still forecasts at least one tick out", live.ticks >= 1, true);
+t("...so its deadline is unchanged by dropping the floor",
+  stealDueTick({ tick: 10 }, live), 10 + Math.max(1, live.ticks));
+
+// 4. The claim must not outlive its usefulness: ttl 2 means tick 7 is clear
 //    even if nothing spends the retry.
 const l3 = new PlacementLedger();
 const c3 = new ConflictResolver(l3, { sentThisTick: () => false }, { records: [], has: () => false });

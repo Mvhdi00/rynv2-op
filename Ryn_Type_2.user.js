@@ -13774,9 +13774,21 @@ window.grbtp = 35;
           kind: "steal",
           confidence: entry.confidence,
           interceptTick: entry.ticks,
-          // The deadline is what the forecast is for; the scheduler still will
-          // not send until the ground is actually free.
-          dueTick: frame.tick + Math.max(1, entry.ticks),
+          // The deadline is what the forecast is for. StealForecast.assess
+          // reports a building the client has already watched reach zero health
+          // as ticks 0, confidence 1 — the deletion packet is in flight and the
+          // ground is gone in everything but name. Flooring that at one tick
+          // spent 111ms waiting for a break that had already happened, which is
+          // the one case with nothing left to predict. So the forecast's own
+          // number is used: zero means this tick, and a real forecast still
+          // lands exactly where max() used to put it, since assess never
+          // returns a positive value below one.
+          //
+          // Module order is what this buys. The engine runs after autoBreak in
+          // ModuleHandler.modules, so a send released on this tick leaves
+          // behind the swing that emptied the slot, and the server reads them
+          // in that order.
+          dueTick: frame.tick + entry.ticks,
           vacates: obj.id,
           excludes: obj
         });
