@@ -40,15 +40,16 @@ const num = name => {
 
 const RPE_TICK_MS = num("RPE_TICK_MS");
 const RPE_RETRAP_RESEND_MAX = num("RPE_RETRAP_RESEND_MAX");
+const RPE_RETRAP_LEAD = num("RPE_RETRAP_LEAD");
 const RPE_MODE = { AUTO: "auto", PREPLACE: "preplace", REPLACE: "replace" };
 const Settings_default = { _spamPrePlace: true, _retrapResend: 2 };
 
-const Engine = new Function("Settings_default", "RPE_MODE", "RPE_TICK_MS", "RPE_RETRAP_RESEND_MAX",
+const Engine = new Function("Settings_default", "RPE_MODE", "RPE_TICK_MS", "RPE_RETRAP_RESEND_MAX", "RPE_RETRAP_LEAD",
   "class Engine {\n  constructor(c){ this.client=c; this.stats={retrapped:0}; }\n" +
   "  _attritionSweep(){ return this.client._sweep; }\n" +
   "  get forecast(){ return this.client._forecast; }\n" +
-  grab("_retrapResends(cand, frame)") + "\n" + grab("_scheduleRetrap(cand, frame)") +
-  "\n}\nreturn Engine;")(Settings_default, RPE_MODE, RPE_TICK_MS, RPE_RETRAP_RESEND_MAX);
+  grab("_retrapResends(cand, frame)") + "\n" + grab("_retrapOffsets(n, pong)") + "\n" + grab("_scheduleRetrap(cand, frame)") +
+  "\n}\nreturn Engine;")(Settings_default, RPE_MODE, RPE_TICK_MS, RPE_RETRAP_RESEND_MAX, RPE_RETRAP_LEAD);
 
 let pass = 0, fail = 0;
 const t = (name, got, want) => {
@@ -80,21 +81,25 @@ const cand = (over = {}) => ({
 const frame = { tick: 10, targetTrapped: trap };
 
 // ── the ramp ───────────────────────────────────────────────────────────────
-Settings_default._retrapResend = 3;
-t("three ticks out spends nothing", mk({ ticks: 3 }).engine._retrapResends(cand(), frame), 0);
-t("two ticks out spends one", mk({ ticks: 2 }).engine._retrapResends(cand(), frame), 1);
-t("one tick out spends the lot", mk({ ticks: 1 }).engine._retrapResends(cand(), frame), 3);
-t("zero ticks out spends the lot", mk({ ticks: 0 }).engine._retrapResends(cand(), frame), 3);
+Settings_default._retrapResend = 6;
+t("past the lead spends nothing",
+  mk({ ticks: RPE_RETRAP_LEAD + 1 }).engine._retrapResends(cand(), frame), 0);
+t("at the lead it is already holding", mk({ ticks: RPE_RETRAP_LEAD }).engine._retrapResends(cand(), frame), 1);
+t("three ticks out still holds", mk({ ticks: 3 }).engine._retrapResends(cand(), frame), 1);
+t("two ticks out spends half", mk({ ticks: 2 }).engine._retrapResends(cand(), frame), 3);
+t("one tick out spends the lot", mk({ ticks: 1 }).engine._retrapResends(cand(), frame), 6);
+t("zero ticks out spends the lot", mk({ ticks: 0 }).engine._retrapResends(cand(), frame), 6);
 t("an unforecastable trap spends nothing",
   mk({ ticks: Infinity }).engine._retrapResends(cand(), frame), 0);
 
 Settings_default._retrapResend = 1;
 t("the setting caps the ramp", mk({ ticks: 1 }).engine._retrapResends(cand(), frame), 1);
+t("...and caps the half step too", mk({ ticks: 2 }).engine._retrapResends(cand(), frame), 1);
 Settings_default._retrapResend = 99;
 t("the hard ceiling caps the setting", mk({ ticks: 1 }).engine._retrapResends(cand(), frame), RPE_RETRAP_RESEND_MAX);
 Settings_default._retrapResend = 0;
 t("zero turns it off", mk({ ticks: 1 }).engine._retrapResends(cand(), frame), 0);
-Settings_default._retrapResend = 2;
+Settings_default._retrapResend = 6;
 
 // ── the gate ───────────────────────────────────────────────────────────────
 t("off with Spam Preplace off", (() => {
@@ -115,8 +120,8 @@ t("not when nothing is hitting it", mk({ dealt: false }).engine._retrapResends(c
 {
   const w = mk({ ticks: 1 });
   const armed = w.engine._scheduleRetrap(cand(), frame);
-  t("a due trap arms the sends", armed, 2);
-  t("...and counts them", w.engine.stats.retrapped, 2);
+  t("a due trap arms the sends", armed, 6);
+  t("...and counts them", w.engine.stats.retrapped, 6);
   t("...but nothing is on the wire yet", w.sends.length, 0);
 }
 {
@@ -129,7 +134,7 @@ t("not when nothing is hitting it", mk({ dealt: false }).engine._retrapResends(c
   global.setTimeout = real;
   t("a huge ping still schedules inside the tick",
     delays.every(d => d >= 8 && d <= RPE_TICK_MS - 6), true);
-  t("...and still arms them all", delays.length, 2);
+  t("...and still arms them all", delays.length, 6);
 }
 {
   // What actually reaches the wire, and by which door.
@@ -140,7 +145,7 @@ t("not when nothing is hitting it", mk({ dealt: false }).engine._retrapResends(c
   w.engine._scheduleRetrap(cand(), frame);
   global.setTimeout = real;
   queued.forEach(fn => fn());
-  t("the repeats reach resendPlace", w.sends.length, 2);
+  t("the repeats reach resendPlace", w.sends.length, 6);
   t("...carrying the original angle", w.sends[0].angle, 1.2);
   t("...and the original item", w.sends[0].type, 4);
   // Leaving the game between the schedule and the fire cancels the rest.
@@ -164,6 +169,55 @@ t("not when nothing is hitting it", mk({ dealt: false }).engine._retrapResends(c
 }
 t("_retrapResend has a default", /_retrapResend:\s*\d+,/.test(src), true);
 t("_retrapResend has a menu slider", src.includes('id=\\"_retrapResend\\" type=\\"range\\"'), true);
+
+// ── the sweep: several sends, several moments ──────────────────────────────
+{
+  const e = mk().engine;
+  const one = e._retrapOffsets(1, 100);
+  t("one send takes the anchor alone", one.length, 1);
+  const six = e._retrapOffsets(6, 100);
+  t("six sends give six moments", new Set(six).size, 6);
+  t("...late first", six[0] > six[5], true);
+  t("...all inside the window", six.every(d => d >= 8 && d <= RPE_TICK_MS - 6), true);
+  t("...and strictly ordered", six.every((d, i) => i === 0 || d < six[i - 1]), true);
+  // Ping moves the anchor, which is the whole point of compensating for it.
+  t("a higher ping anchors earlier", e._retrapOffsets(1, 200)[0] < e._retrapOffsets(1, 0)[0], true);
+}
+
+// ── attrition looks further ahead at the trap they are standing in ─────────
+{
+  const Attr = new Function("RPE_RETRAP_LEAD",
+    "class A { constructor(s){ this.s=s; } _attritionSweep(){ return this.s; }\n" +
+    grab("attrition(frame)") + "\n}\nreturn A;")(RPE_RETRAP_LEAD);
+  const other = { id: 1 }, theirs = { id: 2 };
+  const pos = { distance: () => 0 };
+  for (const o of [other, theirs]) o.pos = { current: pos };
+  const legacy = new Map([[other, RPE_RETRAP_LEAD], [theirs, RPE_RETRAP_LEAD]]);
+  const a = new Attr({ legacy });
+  const f = { targetPos: pos, targetTrapped: theirs };
+  const out = a.attrition(f);
+  t("an ordinary build past two swings is not offered", out.some(e => e.object === other), false);
+  t("...but the trap they are in is", out.some(e => e.object === theirs), true);
+  t("...and it leads the list", out[0].object === theirs, true);
+  // Past the lead even the retrap drops out.
+  const far = new Attr({ legacy: new Map([[theirs, RPE_RETRAP_LEAD + 1]]) });
+  t("past the lead it drops out too", far.attrition(f).length, 0);
+  // With nobody trapped, the old two-swing horizon is all there is.
+  const none = new Attr({ legacy: new Map([[theirs, 3]]) });
+  t("with nobody trapped the old horizon holds",
+    none.attrition({ targetPos: pos, targetTrapped: null }).length, 0);
+}
+
+// ── Anti Retrap: it has to be able to reach the wire at all ────────────────
+{
+  const order = src.match(/this\.modules = \[[^\]]*\]/)[0];
+  const idx = n => order.indexOf("staticModules." + n + ",");
+  t("Anti Retrap runs before Autobreak", idx("antiRetrap") < idx("autoBreak"), true);
+  t("...and Autobreak yields to it while trapped",
+    /ModuleHandler\.activeModule === "antiRetrap"/.test(src), true);
+  t("...without dropping its override over anything else",
+    /moduleActive && \(!myPlayer\.isTrapped \|\|/.test(src), true);
+}
 
 console.log("");
 if (fail) {
