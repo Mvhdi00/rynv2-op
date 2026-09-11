@@ -9749,30 +9749,60 @@ window.grbtp = 35;
     reset() {
       this.pushPos = null;
     }
+    // The shove as a situation, separate from this module's turn at it. Read
+    // only, and cheap: the two candidates were already found by EnemyManager
+    // before any module ran, so this is the gauntlet below without the grid
+    // query, the destination geometry or the arbitration.
+    //
+    // It exists because the shove is not this module's alone. Spike KB and
+    // Velocity Tick both run before this one and both want to know what the
+    // push is doing, and neither can ask postTick — it has not run yet, and
+    // reading pushPos would answer for last tick. `contact` is the whole
+    // shape of it: a shove in progress is ground this module owns, and a shove
+    // that has landed is over, which is why postTick returns on it too.
+    pushState() {
+      const {EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      if (!Settings_default._autoPush) {
+        return null;
+      }
+      const enemy = EnemyManager2.nearestEnemyPush;
+      const spike = EnemyManager2.nearestPushSpike;
+      if (enemy === null || spike === null) {
+        return null;
+      }
+      if (enemy.trappedIn === null || myPlayer.trappedIn) {
+        return null;
+      }
+      const pushRange = Settings_default._autoPushRange ?? 250;
+      if (!myPlayer.collidingSimple(enemy, pushRange)) {
+        return null;
+      }
+      return {
+        enemy: enemy,
+        spike: spike,
+        contact: enemy.colliding(spike, enemy.collisionScale + spike.collisionScale + 1)
+      };
+    }
     postTick() {
       const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2} = this.client;
       this.pushPos = null;
-      const nearestEnemyPush = EnemyManager2.nearestEnemyPush;
-      const nearestPushSpike = EnemyManager2.nearestPushSpike;
+      const state = this.pushState();
       EnemyManager2.nearestEnemyPush = null;
       EnemyManager2.nearestPushSpike = null;
       if (ModuleHandler.moduleActive || !Settings_default._autoPush || ModuleHandler.moveTo !== "disable") {
         return;
       }
-      if (nearestEnemyPush === null || nearestPushSpike === null) {
+      // Same two exits as before, read off the state: no shove to make, or one
+      // that has already landed on the spike.
+      if (state === null || state.contact) {
         return;
       }
+      const nearestEnemyPush = state.enemy;
+      const nearestPushSpike = state.spike;
       const trappedIn = nearestEnemyPush.trappedIn;
-      if (trappedIn === null || myPlayer.trappedIn) {
-        return;
-      }
       const pos0 = myPlayer.pos.current;
       const pos1 = nearestEnemyPush.pos.current;
       const pos2 = nearestPushSpike.pos.current;
-      const pushRange = Settings_default._autoPushRange ?? 250;
-      if (!myPlayer.collidingSimple(nearestEnemyPush, pushRange) || nearestEnemyPush.colliding(nearestPushSpike, nearestEnemyPush.collisionScale + nearestPushSpike.collisionScale + 1)) {
-        return;
-      }
       const distanceFromSpikeToEnemy = pos2.distance(pos1);
       const angleFromSpikeToEnemy = pos2.angle(pos1);
       const angleToEnemy = pos0.angle(pos1);
@@ -19525,6 +19555,31 @@ window.grbtp = 35;
       if (nearestEnemy === null || !isPolearm || !isDiamond || !isReloadedPrimary || !isReloadedTurret) {
         return;
       }
+      // Auto Push, on the tick the shove lands. `contact` is the enemy meeting
+      // the spike, and it is the one tick this combo is worth most: they are
+      // trapped, pinned against the spike, and already taking its damage, so
+      // the turret and the swing land on something that cannot step out of the
+      // way. Auto Push ends on this tick too, which is what makes the moment
+      // free to take.
+      //
+      // The distance band below is deliberately not consulted. It is there to
+      // ask whether a knockback from here would carry them onto something, and
+      // the shove has just answered that by putting them on it. Everything the
+      // combo mechanically needs - polearm, diamond, both reloads - was
+      // required above and still is; only the question the shove already
+      // settled is skipped.
+      const push = ModuleHandler.staticModules.autoPush.pushState();
+      if (push !== null && push.contact) {
+        const pushed = push.enemy;
+        const pushedAngle = myPlayer.pos.current.angle(pushed.pos.current);
+        this.target = pushed;
+        ModuleHandler.moduleActive = true;
+        ModuleHandler.forceHat = 53;
+        ModuleHandler.moveTo = pushedAngle;
+        this.nearestTarget = pushed;
+        this.client.StatsManager.velocityTickTimes = 1;
+        return;
+      }
       this.target = nearestEnemy;
       const pos1 = myPlayer.pos.current;
       const pos2 = nearestEnemy.pos.future;
@@ -20257,6 +20312,22 @@ window.grbtp = 35;
         return;
       }
       if (ModuleHandler.moduleActive || EnemyManager2.shouldIgnoreModule()) {
+        return;
+      }
+      // A shove in progress owns the target until it lands. Knockback is the
+      // one thing that undoes it: this module's whole purpose is to move them,
+      // and the direction it moves them is away from us, which is off the line
+      // Auto Push is walking them down. Firing here trades a spike they were
+      // going to hit anyway for one they now will not.
+      //
+      // So it holds for the shove and not a tick longer. `contact` is the end
+      // of the push - Auto Push returns on it as well - and from that tick the
+      // target is simply an enemy standing in a spike, which is a case this
+      // module already handles. The moment itself belongs to Velocity Tick,
+      // which runs earlier in the tick and will have taken moduleActive above
+      // if it wanted it.
+      const push = ModuleHandler.staticModules.autoPush.pushState();
+      if (push !== null && !push.contact) {
         return;
       }
       const primary = myPlayer.getItemByType(0);
