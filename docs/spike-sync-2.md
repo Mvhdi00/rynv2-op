@@ -90,8 +90,12 @@ One shove onto one spike is one event, identified by the `victim:spike` pair.
   old one is dropped — this is what "Auto Push changed its target spike" does.
 - It is **consumed** once: the burst calls `autoPush.consumeSync()`, so four
   ticks of contact produce one swing, not four.
-- It **expires** after `SYNC_WINDOW_TICKS` (3) if nothing spends it, so a
-  window nobody can use hands Spike KB its tick back instead of holding it.
+- It **expires** after `SYNC_WINDOW_TICKS` (9 — a second, one polearm reload)
+  if nothing spends it. It is that long on purpose: the one thing that usually
+  stops the burst is a primary still on cooldown, the victim is pinned and
+  going nowhere, and every module that could take the tick instead needs the
+  same reload. A refusal that will *not* fix itself — the wrong weapon, a
+  victim out of reach — releases the window on the spot instead of waiting.
 - It falls out of existence with the shove: victim leaves the trap, victim or
   spike disappears, you get trapped, the pair goes out of range — `pushState()`
   returns null and the ladder is torn down in one place.
@@ -122,14 +126,40 @@ KB's own module against the victim the shove names:
 
 No turret requirement: the turret is the follow-up, and it checks itself.
 
+### The reload, reserved
+
+The reason it was never seen firing: something else swung a tick or two before
+contact and the primary was still on cooldown at the moment that mattered.
+`Spike Sync` and `Spike Sync Hammer` both swing the primary at the nearest
+enemy, both run before Velocity Tick, and during a shove you are standing right
+next to the victim — so they were in range, they fired, and the burst arrived to
+find an empty reload.
+
+All three swing modules now ask Auto Push one question before spending it:
+
+```js
+autoPush.ownsTarget(enemy)   // is this the player being walked onto a spike,
+                             // with the hit that lands there still to come?
+```
+
+Scoped to the victim, deliberately: a module with a *different* enemy in range
+keeps its tick. The hold is one action against one player, for as long as the
+shove needs it — Spike KB's hold moved down to sit against the target it
+actually picked, for the same reason.
+
+And because the window now waits out a reload, a swing the player themselves
+spent (holding attack) no longer loses the burst either: it fires on the tick
+the weapon comes back, as long as the victim is still on the spike.
+
 ### The yield (Spike KB)
 
 ```js
-if (push !== null && (!push.contact || push.syncPending)) return;
+if (Settings_default._spikeSync2 && autoPush.ownsTarget(target)) return;
 ```
 
-Two holds, both self-releasing: the approach, as before, and now the contact
-window while it is live and unspent. The moment the burst fires, the event is
+Asked after Spike KB has picked its target, so the hold is against that target
+and not the tick. Two holds inside `ownsTarget`, both self-releasing: the
+approach, as before, and now the contact window while it is live and unspent. The moment the burst fires, the event is
 consumed and the hold is gone; so is it if the window expires, the victim comes
 off the spike, or the shove ends. Nothing is disabled — Spike KB keeps its own
 follow-up tick, its own targets and every other case it handles, and stands
@@ -185,6 +215,12 @@ against stubbed managers — 37 cases:
 - four more ticks of contact producing no second burst
 - Spike KB holding through the approach and through the window, and released
   the tick after
+- a cooled-down primary at contact: the window waits, keeps waiting while the
+  weapon reloads, and fires the tick it lands — then expires if it never does
+- a structural refusal (wrong weapon, out of reach) releasing the hold on the
+  contact tick itself
+- Spike Sync holding its swing through a shove, keeping it when nothing is
+  being shoved, and keeping it for a different target
 - a window nobody can spend expiring inside its stated life
 - victim leaves the trap; victim moves away; spike swapped; victim swapped;
   spike gone; victim gone

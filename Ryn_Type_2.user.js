@@ -9879,11 +9879,16 @@ window.grbtp = 35;
   // Standoff makes for its own step, and the reason the window needs no
   // threshold of its own: one step is one tick, and the window is one tick.
   const SYNC_PUSH_STEP = Config_default.playerSpeed / (1 - Config_default.playerDecel) * (1e3 / Config_default.serverUpdateRate);
-  // How long a window may stay open without being spent before Spike KB takes
-  // its tick back. Three ticks is a third of a second: long enough for a swing
-  // that is one tick off its reload, short enough that a shove which stalled
-  // against the spike does not hold the knockback module hostage.
-  const SYNC_WINDOW_TICKS = 3;
+  // How long a window may stay open waiting for a swing. Nine ticks is a second
+  // — one polearm reload — and it is that long on purpose: a victim pinned in a
+  // trap against a spike stays there, and the one thing that usually stops the
+  // burst is a primary still on cooldown. Waiting costs nothing, because every
+  // module that could take the tick instead needs the same reload.
+  //
+  // A window that cannot be spent for any *other* reason does not wait at all:
+  // Velocity Tick releases it the moment it sees the wrong weapon or a victim
+  // out of reach, because neither of those fixes itself while we stand here.
+  const SYNC_WINDOW_TICKS = 9;
   // ---- the pathfinder ------------------------------------------------------
   // chicken's grid is 10 wide and steps two cells at a time, over the box
   // around the two points grown by twenty cells.
@@ -9963,6 +9968,42 @@ window.grbtp = 35;
     // many ticks it lasts or however many modules ask.
     consumeSync() {
       this._syncConsumed = this._syncEvent;
+    }
+
+    // The same mark, for a window that cannot be spent rather than one that
+    // was. Velocity Tick calls it when the refusal is structural — a primary
+    // Spike KB would not swing, a victim out of reach — because neither of
+    // those resolves itself while the window sits open, and holding the other
+    // modules for a burst that is never coming is the one thing this must not
+    // do. A reload is not a structural refusal: that one is worth waiting for.
+    releaseSync() {
+      this._syncConsumed = this._syncEvent;
+    }
+
+    // ------------------------------------------------------------------------
+    // "Is this the player the shove is walking onto a spike, with the hit that
+    // lands there still to come?"
+    //
+    // Asked by every module that would swing the primary at them. There is one
+    // reload between the swing before the spike and the swing on it, and the
+    // one on it is worth more: it lands while the spike is doing its own
+    // damage, on a target that is pinned and cannot step away. A swing spent
+    // two ticks early is the whole feature missed.
+    //
+    // Scoped to the victim, deliberately. A module with a different target in
+    // range is not in this feature's way and keeps its tick — the hold is one
+    // action against one player, exactly as long as the shove needs it.
+    ownsTarget(enemy) {
+      if (enemy === null || enemy === void 0) {
+        return false;
+      }
+      const state = this.pushState();
+      if (state === null || state.enemy !== enemy) {
+        return false;
+      }
+      // Walking them in: the swing has to wait. On the spike: it waits until
+      // the burst has been taken, or given up on.
+      return !state.contact || state.syncPending;
     }
     // The shove as a situation, separate from this module's turn at it. Read
     // only, and cheap: the two candidates were already found by EnemyManager
@@ -10187,10 +10228,13 @@ window.grbtp = 35;
         this._syncOpenedTick = tick;
       }
       const expired = this._syncOpenedTick !== -1 && tick - this._syncOpenedTick > SYNC_WINDOW_TICKS;
-      const consumed = this._syncConsumed === this._syncEvent;
       const armed = this.pushPos !== null || this._syncWindowPrev;
       this._syncGap = gap;
       this._syncWindowPrev = window;
+      // consumed and syncPending are deliberately not cached here. They are
+      // derived when they are read, because they change *within* a tick: the
+      // burst fires in Velocity Tick and Spike KB asks a few modules later, and
+      // it has to see the answer this tick rather than the next.
       return {
         gap: gap,
         closing: closing,
@@ -10199,9 +10243,7 @@ window.grbtp = 35;
         touching: touching,
         window: window,
         armed: armed,
-        expired: expired,
-        consumed: consumed,
-        syncPending: touching && armed && !consumed && !expired
+        expired: expired
       };
     }
 
@@ -10228,6 +10270,9 @@ window.grbtp = 35;
       if (geo === null) {
         return null;
       }
+      // Read now, not when the ladder was stepped: the burst is spent inside
+      // this tick and the modules after it have to see that it was.
+      const consumed = this._syncConsumed === this._syncEvent;
       return {
         enemy: geo.enemy,
         spike: geo.spike,
@@ -10263,8 +10308,8 @@ window.grbtp = 35;
         window: geo.window,
         armed: geo.armed,
         expired: geo.expired,
-        consumed: geo.consumed,
-        syncPending: geo.syncPending
+        consumed: consumed,
+        syncPending: geo.touching && geo.armed && !consumed && !geo.expired
       };
     }
 
@@ -16130,6 +16175,14 @@ window.grbtp = 35;
         }
         return;
       }
+      // Spike Sync 2 owns the swing at a player being walked onto a spike. This
+      // module would spend the same reload a tick or two earlier, on a spike it
+      // is placing now instead of the one they are about to be pinned against —
+      // and there is only one reload between the two. It stands aside for that
+      // player alone; any other target is still its own.
+      if (Settings_default._spikeSync2 && ModuleHandler.staticModules.autoPush.ownsTarget(nearest)) {
+        return;
+      }
       if (!EnemyManager2.shouldIgnoreModule() && nearest !== null && EnemyManager2.canSpikeSync && placementAngles !== null && isPolearm && primaryReloaded) {
         const spear = DataHandler_default.getWeapon(primary);
         const range = spear.range + nearest.hitScale;
@@ -16173,6 +16226,13 @@ window.grbtp = 35;
         return;
       }
       const nearestSyncEnemy = EnemyManager2.nearestSyncEnemy;
+      // Same hold as Spike Sync's, for the same reason: one reload, and the
+      // swing on the spike they are being walked onto is the better half of it.
+      if (Settings_default._spikeSync2 && ModuleHandler.staticModules.autoPush.ownsTarget(nearestSyncEnemy)) {
+        this.targetEnemy = null;
+        this.useTurret = false;
+        return;
+      }
       const reloading = ModuleHandler.staticModules.reloading;
       const primary = myPlayer.getItemByType(0);
       const secondary = myPlayer.getItemByType(1);
@@ -20872,9 +20932,14 @@ window.grbtp = 35;
       if (push !== null && push.syncPending) {
         const pushed = push.enemy;
         const spikeKB = ModuleHandler.staticModules.spikeKB;
-        const canSwing = primary !== null && primary !== void 0 && spikeKB.isValidPrimary(primary) && reloading.isReloaded(0);
-        const reach = canSwing ? DataHandler_default.getWeapon(primary).range + pushed.hitScale : 0;
-        if (canSwing && myPlayer.collidingSimple(pushed, reach)) {
+        const hasWeapon = primary !== null && primary !== void 0 && spikeKB.isValidPrimary(primary);
+        const inReach = hasWeapon && myPlayer.collidingSimple(pushed, DataHandler_default.getWeapon(primary).range + pushed.hitScale);
+        // The two refusals that will not fix themselves while the window sits
+        // open. Release it now so Spike KB and the sync modules get their tick
+        // back rather than waiting out a burst that is not coming.
+        if (!hasWeapon || !inReach) {
+          ModuleHandler.staticModules.autoPush.releaseSync();
+        } else if (reloading.isReloaded(0)) {
           const pushedAngle = myPlayer.pos.current.angle(pushed.pos.current);
           this.target = pushed;
           ModuleHandler.moduleActive = true;
@@ -21656,11 +21721,10 @@ window.grbtp = 35;
       //
       // Nothing here disables anything. The module keeps its own second tick,
       // its own targets and every other case it handles; it stands aside for
-      // one target, for as long as that target's contact window is open.
-      const push = Settings_default._spikeSync2 ? ModuleHandler.staticModules.autoPush.pushState() : null;
-      if (push !== null && (!push.contact || push.syncPending)) {
-        return;
-      }
+      // one target, for as long as that target's contact window is open — which
+      // is why the test is asked below, against the target it actually picked,
+      // rather than up here against the tick as a whole. An enemy this module
+      // wants who is not the one being shoved is not in the way of anything.
       const primary = myPlayer.getItemByType(0);
       if (primary === null || !this.isValidPrimary(primary) || !reloading.isReloaded(0)) {
         return;
@@ -21674,6 +21738,9 @@ window.grbtp = 35;
       // and a trapped enemy cannot leave the box between ticks.
       const target = kbTarget !== null && EnemyManager2.spikeCollider !== null ? kbTarget : EnemyManager2.enemySpikeCollider;
       if (target === null) {
+        return;
+      }
+      if (Settings_default._spikeSync2 && ModuleHandler.staticModules.autoPush.ownsTarget(target)) {
         return;
       }
       // Oracle's `dist <= 35 * 1.8 + range`, which is RYN's hitScale + range.
