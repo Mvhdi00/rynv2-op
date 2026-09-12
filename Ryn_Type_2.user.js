@@ -9843,6 +9843,47 @@ window.grbtp = 35;
   // victim until the line through the three of us closes.
   const CHK_PUSH_FAR = 250;
   const CHK_PUSH_LINEUP_SCALE = 3.2;
+  // ==========================================================================
+  // Spike Sync 2's half of the shove: the contact ladder.
+  //
+  // The feature is "they met the spike, hit them now", and it lives in Velocity
+  // Tick because the burst it fires is Velocity Tick's. What it was missing is
+  // here: a reading of how close the victim actually is, kept by the module
+  // that is doing the pushing, on the geometry it already computes every tick.
+  //
+  //   FAR           nothing to prepare for
+  //   APPROACHING   the gap is closing
+  //   CLOSE         two steps out
+  //   WINDOW        one step out — contact lands next tick at this rate
+  //   CONTACT       the collision the game itself resolves
+  //
+  // WINDOW is the prepare. CONTACT is the commit. Nothing fires on "near the
+  // spike", on "moving toward it", or on "predicted to reach it" — the
+  // prediction only arms the tick that the real collision then spends.
+  //
+  // The gap is measured edge to edge against the real spike object rather than
+  // the two-spike seam the shove may be walking them at: `contact` is what
+  // Spike KB and Velocity Tick have always read, and it is an object's
+  // collision box, not a midpoint.
+  // ==========================================================================
+  const SYNC_PHASE_FAR = 0;
+  const SYNC_PHASE_APPROACHING = 1;
+  const SYNC_PHASE_CLOSE = 2;
+  const SYNC_PHASE_WINDOW = 3;
+  const SYNC_PHASE_CONTACT = 4;
+  const SYNC_PHASE_NAMES = [ "FAR", "APPROACHING", "CLOSE", "WINDOW", "CONTACT" ];
+  // What one tick of walking covers, from the game's own numbers: velocity
+  // gains playerSpeed per millisecond and keeps playerDecel of itself, so a
+  // held direction settles at playerSpeed / (1 - playerDecel) and a tick is
+  // 1000 / serverUpdateRate of that — about 25 units. The same derivation Trap
+  // Standoff makes for its own step, and the reason the window needs no
+  // threshold of its own: one step is one tick, and the window is one tick.
+  const SYNC_PUSH_STEP = Config_default.playerSpeed / (1 - Config_default.playerDecel) * (1e3 / Config_default.serverUpdateRate);
+  // How long a window may stay open without being spent before Spike KB takes
+  // its tick back. Three ticks is a third of a second: long enough for a swing
+  // that is one tick off its reload, short enough that a shove which stalled
+  // against the spike does not hold the knockback module hostage.
+  const SYNC_WINDOW_TICKS = 3;
   // ---- the pathfinder ------------------------------------------------------
   // chicken's grid is 10 wide and steps two cells at a time, over the box
   // around the two points grown by twenty cells.
@@ -9886,6 +9927,18 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
+    // ---- Spike Sync 2's contact event --------------------------------------
+    // One shove onto one spike is one event. It is identified by the pair, so
+    // a new victim or a new spike is a new event and anything prepared against
+    // the old one is dropped; it is consumed exactly once, so a contact that
+    // lasts four ticks fires once; and it expires, so a window nothing spends
+    // gives Spike KB its tick back instead of holding it.
+    _syncEvent=0;
+    _syncKey="";
+    _syncConsumed=-1;
+    _syncOpenedTick=-1;
+    _syncGap=null;
+    _syncWindowPrev=false;
     reset() {
       this.pushPos = null;
       this._path = null;
@@ -9893,6 +9946,23 @@ window.grbtp = 35;
       this._pathCacheTick = -1;
       this._geo = null;
       this._geoTick = -1;
+      this._syncReset();
+    }
+    // Every way a shove can end — the victim leaves the trap or dies, the spike
+    // is gone, we get trapped ourselves, the pair moves out of range — arrives
+    // here as _geometry returning null, so the ladder is torn down in one
+    // place rather than guarded in five.
+    _syncReset() {
+      this._syncKey = "";
+      this._syncOpenedTick = -1;
+      this._syncGap = null;
+      this._syncWindowPrev = false;
+    }
+    // Velocity Tick calls this the moment it spends the window. The event id it
+    // marks is this tick's, so the same contact cannot be spent twice however
+    // many ticks it lasts or however many modules ask.
+    consumeSync() {
+      this._syncConsumed = this._syncEvent;
     }
     // The shove as a situation, separate from this module's turn at it. Read
     // only, and cheap: the two candidates were already found by EnemyManager
@@ -9990,18 +10060,22 @@ window.grbtp = 35;
       this._geoTick = tick;
       this._geo = null;
       if (!Settings_default._autoPush) {
+        this._syncReset();
         return null;
       }
       const enemy = EnemyManager2.nearestEnemyPush;
       const spike = EnemyManager2.nearestPushSpike;
       if (enemy === null || spike === null) {
+        this._syncReset();
         return null;
       }
       if (enemy.trappedIn === null || myPlayer.trappedIn) {
+        this._syncReset();
         return null;
       }
       const pushRange = Settings_default._autoPushRange ?? 250;
       if (!myPlayer.collidingSimple(enemy, pushRange)) {
+        this._syncReset();
         return null;
       }
       const myPos = myPlayer.pos.current;
@@ -10009,6 +10083,7 @@ window.grbtp = 35;
       // chicken's autoPushDistance, on the spike rather than the victim: a
       // spike across the screen is not one this shove can reach.
       if (myPos.distance(spikePos) > CHK_PUSH_DISTANCE) {
+        this._syncReset();
         return null;
       }
       const enemyPos = enemy.pos.current;
@@ -10030,13 +10105,16 @@ window.grbtp = 35;
         }
         first = targetPos.addDirection(h, g);
       }
-      this._geo = {
+      // Unchanged, and deliberately measured against the real spike rather than
+      // a two-spike midpoint: Spike KB and Velocity Tick read this to mean
+      // "they are on the thing", and the thing is an object. colliding sweeps
+      // previous, current and future, so it is already the tightest reading of
+      // the collision the game will resolve.
+      const contact = enemy.colliding(spike, enemy.collisionScale + spike.collisionScale + 1);
+      this._geo = Object.assign({
         enemy: enemy,
         spike: spike,
-        // Unchanged, and deliberately measured against the real spike rather
-        // than a two-spike midpoint: Spike KB and Velocity Tick read this to
-        // mean "they are on the thing", and the thing is an object.
-        contact: enemy.colliding(spike, enemy.collisionScale + spike.collisionScale + 1),
+        contact: contact,
         first: first,
         last: target,
         pushAngle: h,
@@ -10045,8 +10123,86 @@ window.grbtp = 35;
         scale: target.scale,
         isSpike: spike instanceof PlayerObject && spike.itemGroup === 2,
         double: target.double
-      };
+      }, this._syncLadder(enemy, spike, contact, tick));
       return this._geo;
+    }
+
+    // ------------------------------------------------------------------------
+    // The contact ladder, stepped once a tick with the rest of the geometry.
+    //
+    // The gap is edge to edge — centres minus both collision scales — so it is
+    // zero at the moment the boxes meet rather than at some distance that has
+    // to be guessed. The step it is measured against is what the victim
+    // actually moved last tick, floored at one tick of walking, because the
+    // thing moving them is a player walking into them: the window is open when
+    // one more step of the movement already happening closes the gap.
+    //
+    //   window    one step out, or already touching — prepare
+    //   touching  the game's own answer, from two independent readings: this
+    //             module's swept collision test and EnemyManager's
+    //             enemySpikeCollider, which it computes for every enemy
+    //             against every spike hostile to them, every tick
+    //   armed     the shove was live on the last completed tick, or the window
+    //             was already open on it. An enemy who arrived at a spike
+    //             without this module walking them there is not this feature's
+    //             moment; an enemy who arrived a tick faster than the flag
+    //             could follow is.
+    //   pending   touching, armed, not yet spent, not expired
+    // ------------------------------------------------------------------------
+    _syncLadder(enemy, spike, contact, tick) {
+      const {EnemyManager: EnemyManager2} = this.client;
+      const gap = spike.pos.current.distance(enemy.pos.current) - (enemy.collisionScale + spike.collisionScale);
+      const previousGap = this._syncGap;
+      const closing = previousGap === null ? 0 : previousGap - gap;
+      const step = Math.max(closing, SYNC_PUSH_STEP);
+      // A new pair is a new event, and anything prepared against the old one
+      // goes with it — the shove changing spike mid-approach is exactly the
+      // case this is for.
+      const key = `${enemy.id}:${spike.id}`;
+      if (key !== this._syncKey) {
+        this._syncKey = key;
+        this._syncEvent += 1;
+        this._syncOpenedTick = -1;
+        this._syncWindowPrev = false;
+      }
+      const touching = contact || EnemyManager2.enemySpikeCollider === enemy;
+      const window = touching || gap <= step;
+      let phase = SYNC_PHASE_FAR;
+      if (touching) {
+        phase = SYNC_PHASE_CONTACT;
+      } else if (gap <= step) {
+        phase = SYNC_PHASE_WINDOW;
+      } else if (gap <= step * 2) {
+        phase = SYNC_PHASE_CLOSE;
+      } else if (closing > 0) {
+        phase = SYNC_PHASE_APPROACHING;
+      }
+      // A ladder that falls back out of the window closes its event: the next
+      // approach is a new one, and gets its own single execution.
+      if (!window && this._syncOpenedTick !== -1) {
+        this._syncEvent += 1;
+        this._syncOpenedTick = -1;
+      }
+      if (window && this._syncOpenedTick === -1) {
+        this._syncOpenedTick = tick;
+      }
+      const expired = this._syncOpenedTick !== -1 && tick - this._syncOpenedTick > SYNC_WINDOW_TICKS;
+      const consumed = this._syncConsumed === this._syncEvent;
+      const armed = this.pushPos !== null || this._syncWindowPrev;
+      this._syncGap = gap;
+      this._syncWindowPrev = window;
+      return {
+        gap: gap,
+        closing: closing,
+        phase: phase,
+        phaseName: SYNC_PHASE_NAMES[phase],
+        touching: touching,
+        window: window,
+        armed: armed,
+        expired: expired,
+        consumed: consumed,
+        syncPending: touching && armed && !consumed && !expired
+      };
     }
 
     // The shove as a situation, separate from this module's turn at it. Read
@@ -10094,7 +10250,21 @@ window.grbtp = 35;
         ang: geo.ang,
         scale: geo.scale,
         isSpike: geo.isSpike,
-        double: geo.double
+        double: geo.double,
+        // Spike Sync 2's ladder. syncPending is the one flag that acts: it is
+        // the contact window, live, armed by the shove and not yet spent.
+        // Velocity Tick fires on it and calls consumeSync; Spike KB holds its
+        // own swing while it is up.
+        gap: geo.gap,
+        closing: geo.closing,
+        phase: geo.phase,
+        phaseName: geo.phaseName,
+        touching: geo.touching,
+        window: geo.window,
+        armed: geo.armed,
+        expired: geo.expired,
+        consumed: geo.consumed,
+        syncPending: geo.syncPending
       };
     }
 
@@ -20661,18 +20831,22 @@ window.grbtp = 35;
         this.nearestTarget = null;
         return;
       }
-      if (nearestEnemy === null || !isPolearm || !isDiamond || !isReloadedPrimary || !isReloadedTurret) {
-        return;
-      }
-      // Spike Sync 2. Two conditions, and both are the point:
+      // ---- Spike Sync 2 ------------------------------------------------------
+      // The moment: an enemy held in our trap, walked onto a spike by Auto
+      // Push, has met it. Auto Push keeps the ladder — FAR, APPROACHING,
+      // CLOSE, WINDOW, CONTACT — off the geometry it computes anyway, and
+      // hands it over as one flag:
       //
-      //   engaged   the shove was live on the last completed tick - the purple
-      //             line was up. A shove that was merely available and never
-      //             taken is not this feature's moment.
-      //   contact   they have met the spike. Not "about to", not "near it":
-      //             the collision the game itself resolves, which is the same
-      //             condition Auto Push returns on, because the shove is over
-      //             the instant it lands.
+      //   syncPending   they are touching the spike (this module's swept
+      //                 collision test, or EnemyManager's own
+      //                 enemySpikeCollider, independently), the shove armed it
+      //                 (the line was live last tick, or they were one step
+      //                 out on it), no other tick has spent this contact, and
+      //                 the window has not gone stale.
+      //
+      // The prediction only ever prepares. The commit is the collision the
+      // game itself resolves — nothing here fires because they are near a
+      // spike, moving toward one, or predicted to reach one.
       //
       // The swing goes out on this tick, not the next. That is what the spike
       // is worth: it is hurting them right now, they are trapped and pinned
@@ -20684,25 +20858,40 @@ window.grbtp = 35;
       // fires on a knockback that would put them in a spike while this one
       // waits until they are already in it.
       //
-      // The distance band below is deliberately not consulted. It is there to
-      // ask whether a knockback from here would carry them onto something, and
-      // the shove has just answered that by putting them on it. Everything the
-      // combo mechanically needs - polearm, diamond, both reloads - was
-      // required above and still is; only the question the shove already
-      // settled is skipped.
+      // It is taken before Velocity Tick's own gate rather than behind it.
+      // That gate is polearm, diamond, both reloads and a nearest enemy, and
+      // it is there for the knockback band below — a combo that throws them
+      // 220 to 245 units and meets them there. This burst throws nobody: they
+      // are pinned. What it does need is a weapon that can reach them, so it
+      // asks Spike KB's own two questions, on Spike KB's own module, against
+      // the victim the shove names rather than whoever happens to be nearest:
+      // a primary Spike KB would swing, reloaded now, and the target inside
+      // its reach. Standing behind them at the stand point is exactly where
+      // that reach matters.
       const push = Settings_default._spikeSync2 ? ModuleHandler.staticModules.autoPush.pushState() : null;
-      if (push !== null && push.contact && push.engaged) {
+      if (push !== null && push.syncPending) {
         const pushed = push.enemy;
-        const pushedAngle = myPlayer.pos.current.angle(pushed.pos.current);
-        this.target = pushed;
-        ModuleHandler.moduleActive = true;
-        ModuleHandler.useAngle = pushedAngle;
-        ModuleHandler.forceHat = 7;
-        ModuleHandler.forceWeapon = 0;
-        ModuleHandler.shouldAttack = true;
-        ModuleHandler.moveTo = pushedAngle;
-        this.syncTurret = true;
-        this.client.StatsManager.velocityTickTimes = 1;
+        const spikeKB = ModuleHandler.staticModules.spikeKB;
+        const canSwing = primary !== null && primary !== void 0 && spikeKB.isValidPrimary(primary) && reloading.isReloaded(0);
+        const reach = canSwing ? DataHandler_default.getWeapon(primary).range + pushed.hitScale : 0;
+        if (canSwing && myPlayer.collidingSimple(pushed, reach)) {
+          const pushedAngle = myPlayer.pos.current.angle(pushed.pos.current);
+          this.target = pushed;
+          ModuleHandler.moduleActive = true;
+          ModuleHandler.useAngle = pushedAngle;
+          ModuleHandler.forceHat = 7;
+          ModuleHandler.forceWeapon = 0;
+          ModuleHandler.shouldAttack = true;
+          ModuleHandler.moveTo = pushedAngle;
+          this.syncTurret = true;
+          this.client.StatsManager.velocityTickTimes = 1;
+          // One contact, one burst. Spike KB reads the same flag and takes its
+          // own tick back the moment this is marked.
+          ModuleHandler.staticModules.autoPush.consumeSync();
+          return;
+        }
+      }
+      if (nearestEnemy === null || !isPolearm || !isDiamond || !isReloadedPrimary || !isReloadedTurret) {
         return;
       }
       // Everything past here is Velocity Tick's own: its target, its distance
@@ -21445,20 +21634,31 @@ window.grbtp = 35;
       if (ModuleHandler.moduleActive || EnemyManager2.shouldIgnoreModule()) {
         return;
       }
-      // Spike Sync 2: a shove in progress owns the target until it lands.
-      // Knockback is the one thing that undoes it - this module's whole purpose
-      // is to move them, and the direction it moves them is away from us, which
-      // is off the line Auto Push is walking them down. Firing here trades a
-      // spike they were going to hit anyway for one they now will not.
+      // Spike Sync 2: a shove in progress owns the target until it lands, and
+      // the contact it lands on belongs to the sync.
       //
-      // So it holds for the shove and not a tick longer. `contact` is the end
-      // of the push - Auto Push returns on it as well - and from that tick the
-      // target is simply an enemy standing in a spike, which is a case this
-      // module already handles. The moment itself belongs to Velocity Tick,
-      // which runs earlier in the tick and will have taken moduleActive above
-      // if it wanted it.
+      // Knockback is the one thing that undoes a shove - this module's whole
+      // purpose is to move them, and the direction it moves them is away from
+      // us, which is off the line Auto Push is walking them down. Firing during
+      // the approach trades a spike they were going to hit anyway for one they
+      // now will not.
+      //
+      // Two holds, then, and both end by themselves:
+      //
+      //   !contact      the approach, as before
+      //   syncPending   the contact window, live and unspent. Velocity Tick
+      //                 runs earlier in the tick and fires the burst on exactly
+      //                 this flag; the moment it does, it marks the contact
+      //                 consumed and this hold is gone. So is it if the window
+      //                 goes stale without a burst, if the victim comes off the
+      //                 spike, or if the shove ends - Auto Push drops the whole
+      //                 state and this reads null.
+      //
+      // Nothing here disables anything. The module keeps its own second tick,
+      // its own targets and every other case it handles; it stands aside for
+      // one target, for as long as that target's contact window is open.
       const push = Settings_default._spikeSync2 ? ModuleHandler.staticModules.autoPush.pushState() : null;
-      if (push !== null && !push.contact) {
+      if (push !== null && (!push.contact || push.syncPending)) {
         return;
       }
       const primary = myPlayer.getItemByType(0);
