@@ -8,7 +8,7 @@ bug the old client had. A check that cannot catch them is not worth keeping.
 """
 import subprocess, sys
 
-SRC = "oracle/Oracle_Laffer_v1.2.user.js"
+SRC = sys.argv[1] if len(sys.argv) > 1 else "oracle/Oracle_Laffer_v1.2.user.js"
 MUT = "/tmp/claude-0/-home-user-rynv2-op/84985967-839c-5cb9-84f9-ceebbe0cce70/scratchpad/oracle_mut.js"
 base = open(SRC, encoding="utf-8").read()
 
@@ -147,7 +147,7 @@ MUTATIONS = [
      "// @require      https://code.jquery.com/jquery-3.6.0.min.js"),
 ]
 
-print("Oracle connection — break it on purpose, confirm oracle-net.js goes red\n")
+print(SRC + " — break the connection on purpose, confirm oracle-net.js goes red\n")
 missed = 0
 for label, old, new in MUTATIONS:
     n = base.count(old)

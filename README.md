@@ -185,3 +185,5 @@ understood.
 
 * `oracle/` — Oracle Laffer v1.2, with the current transport ported in and its
   connection, captcha and reconnect paths fixed. See `oracle/README.md`.
+* `laffer/` — Laffer Remake v1, the same base as `oracle/`; the same connection
+  fixes ported across and checked by the same tools. See `laffer/README.md`.

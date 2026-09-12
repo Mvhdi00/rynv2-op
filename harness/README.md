@@ -667,7 +667,10 @@ detection, the soldier hat and every insta module, not only the heal).
 
 ### `oracle-net.js` and `oracle-net-mutate.py`
 
-Oracle's connection, checked the way the **server** checks it.
+A laffer-family client's connection, checked the way the **server** checks it.
+Both take a client path, so the same 36 mutations cover `oracle/` and
+`laffer/` — their connection blocks were byte-identical before either was
+fixed, so one set of checks is the honest way to cover them.
 
 `transport-check.js` proves a ported transport is byte-identical to the game's
 primitives. That is not the same as proving the client *uses* them, which is
