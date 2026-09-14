@@ -177,3 +177,97 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# Ryn Type 2 — 200-angle auto place, ping-aware predictive preplace
+
+`Ryn_Type_2.user.js` is a separate client from the ReUp Mix build above. It is
+checked in here so the placement work below has a reviewable diff; nothing in
+`tools/build-reup.js` reads it, and `ReUp_Mix.user.js` is unaffected.
+
+## Auto place: 144 → 200 angles
+
+The placer resolution setting's top rung moved from 144 to 200. The point is
+not the count, it is where the extra samples land.
+
+A uniform table of *n* samples is `{ k·2π/n }`, and two such tables share
+exactly `gcd(a, b)` angles. `gcd(144, 200) = 8`, so only 8 of the 200 samples
+coincide with the old table — the eight 45° apart. The other 192 are ground the
+144-table never looked at. Counted the other way: of the 144 intervals the old
+table cut the ring into, **96 receive one new interior sample and 48 receive
+two**. Every interval is subdivided; none is left as it was.
+
+Measured against the game's own tables (`drivers/game-drivers.json`: spikes
+scale 49, pit trap scale 50, both `placeOffset -5`, `playerScale 35`, so the
+spike ring is 79 units out):
+
+| steps | spacing | arc at the spike ring | worst-case miss |
+|------:|--------:|----------------------:|----------------:|
+| 36 | 10.0° | 13.788 u | 6.894 u |
+| 72 | 5.0° | 6.894 u | 3.447 u |
+| 144 | 2.5° | 3.447 u | 1.724 u |
+| **200** | **1.8°** | **2.482 u** | **1.241 u** |
+
+Both cut by 28%. No duplicates: the minimum separation inside the table is the
+step itself, 2.482 u at the ring. A placed spike removes 153.3° of the spike
+ring and a placed trap 154.7° of the trap ring, so the narrowest arc a spike
+can stand in is 76.7° wide — 30.7 samples at 144, 42.6 at 200.
+
+## One angle generator
+
+`RingScan` is the scan table lifted out of `AutoPlacer` so the engine's
+predictive side reads the same lattice. Preplace and replace used to pick a
+direction with `GeometrySolver.nearestFree`, which returns an arbitrary real —
+so auto place named a slot by sample index and preplace named the same ground
+by a float that was never one of those samples. `RingScan.snap` takes the
+analytic answer and moves it to the nearest sample still inside the same
+aperture, bounded at five aperture tests. Aperture **edges** stay analytic:
+an edge is the exact packed placement, which is what `perfect` in the sampled
+table approximates.
+
+## Ping-aware predictive preplace
+
+`SocketManager.pong` is already measured. At 70–120 ms against a 111.11 ms tick
+that is one tick of round trip, and it is spent on *lead*, never on packet rate:
+
+- prediction horizon and interception lead extended by the round trip;
+- `PlacementScheduler.due` brings every predictive deadline forward by it;
+- book records reserve their ground for that much longer.
+
+`_breakPressure` drives preparation intensity on a 0–1 scale. Health alone is
+the wrong driver — a 500-health trap at 50% is five swings from a great hammer
+and ten from a tool hammer — so the driver is `StealForecast`'s ticks-to-break
+(which already folds health, every actor's next swing, observed damage rate and
+cadence), with the health fraction as a floor for a build with no observed
+history. It sets booking confidence, reservation TTL, and the retrap resend
+count, which ramps 0 → 1 → 2 → 4 at the default setting instead of a fixed
+ladder.
+
+Escape denial is scored: `_escapeContext` solves the line out of a containment
+that is about to break, and candidates are paid for taking the opening or
+standing across that line, and penalised for doing neither during a break.
+The predictive buffer is capped at one primary and one fallback per dying
+object (`RPE_PREPLACE_PER_OBJECT`), six pending records in total.
+
+## Performance
+
+The 200-angle table costs no trigonometry and no allocation per tick:
+`RingScan` precomputes sin/cos per step count for the life of the page, and
+`_getPrePlaceAngles` mutates a pooled row array instead of building 400 objects
+a tick. Beyond that: an exact early rejection in `_bestPrimaryKbSpike`,
+cheapest-test-first ordering in `_sectorPick`, a single-pass `_closestToEnemy`
+(no filter/sort), three fewer whole-table arrays per tick in the ladder, and a
+state-change early-out that skips the scan when nothing that could change the
+answer has moved and the previous pass produced nothing.
+
+## Verification
+
+```sh
+node --check Ryn_Type_2.user.js
+node tools/verify-drivers.js Ryn_Type_2.user.js   # data tables vs. the bundle
+node tools/check-hooks.js Ryn_Type_2.user.js      # needs: npm i --no-save terser
+```
+
+Current state: driver tables match `src/game_index.js`, and 52/52
+bundle-rewrite hooks bind.
