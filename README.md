@@ -180,86 +180,133 @@ understood.
 
 ---
 
-# Ryn Type 2 — 200-angle auto place, ping-aware predictive preplace
+# Ryn Type 2 — angle resolution, placement selection, KB/sync fixes
 
 `Ryn_Type_2.user.js` is a separate client from the ReUp Mix build above. It is
 checked in here so the placement work below has a reviewable diff; nothing in
 `tools/build-reup.js` reads it, and `ReUp_Mix.user.js` is unaffected.
 
-## Auto place: 144 → 200 angles
+## The bug that made 200 angles worthless
 
-The placer resolution setting's top rung moved from 144 to 200. The point is
-not the count, it is where the extra samples land.
+An earlier pass raised the auto-place scan from 144 to 200 angles and it made
+no difference in play. A forensic trace found why, and it was not the table.
 
-A uniform table of *n* samples is `{ k·2π/n }`, and two such tables share
-exactly `gcd(a, b)` angles. `gcd(144, 200) = 8`, so only 8 of the 200 samples
-coincide with the old table — the eight 45° apart. The other 192 are ground the
-144-table never looked at. Counted the other way: of the 144 intervals the old
-table cut the ring into, **96 receive one new interior sample and 48 receive
-two**. Every interval is subdivided; none is left as it was.
+`AutoPlacer`'s ladder has two branches that answer `true` for *every* angle
+clearing their gates rather than for one chosen angle — spike branch 3
+(`enemyTrapped && !blockFuture && !blockEnemy`) and trap branch 2
+(`neitherTrapped`, which is live whenever neither side is pinned, i.e. the
+default state of a fight). The two passes then walked the table in **array
+index order** and `_addPredictObject` is first-come-first-served with a
+footprint reject. So the build that went down was simply the first offered:
+index 0, due east, with no relation to where the enemy stood.
 
-Measured against the game's own tables (`drivers/game-drivers.json`: spikes
-scale 49, pit trap scale 50, both `placeOffset -5`, `playerScale 35`, so the
-spike ring is 79 units out):
+Measured over 3,285 generated fight boards, driving the shipped
+`GeometrySolver`:
 
-| steps | spacing | arc at the spike ring | worst-case miss |
-|------:|--------:|----------------------:|----------------:|
-| 36 | 10.0° | 13.788 u | 6.894 u |
-| 72 | 5.0° | 6.894 u | 3.447 u |
-| 144 | 2.5° | 3.447 u | 1.724 u |
-| **200** | **1.8°** | **2.482 u** | **1.241 u** |
+| | mean aim error vs. the enemy |
+|---|---|
+| index order, 144 angles | 89.6° |
+| index order, 200 angles | 89.7° |
 
-Both cut by 28%. No duplicates: the minimum separation inside the table is the
-step itself, 2.482 u at the ring. A placed spike removes 153.3° of the spike
-ring and a placed trap 154.7° of the trap ring, so the narrowest arc a spike
-can stand in is 76.7° wide — 30.7 samples at 144, 42.6 at 200.
+Uniform random is 90°. And because index 0 is 0° in both tables, the two
+agreed on that angle every time — a finer ring cannot help a selection made by
+array position.
 
-## One angle generator
+## The fix: order, not more angles
 
-`RingScan` is the scan table lifted out of `AutoPlacer` so the engine's
-predictive side reads the same lattice. Preplace and replace used to pick a
-direction with `GeometrySolver.nearestFree`, which returns an arbitrary real —
-so auto place named a slot by sample index and preplace named the same ground
-by a float that was never one of those samples. `RingScan.snap` takes the
-analytic answer and moves it to the nearest sample still inside the same
-aperture, bounded at five aperture tests. Aperture **edges** stay analytic:
-an edge is the exact packed placement, which is what `perfect` in the sampled
-table approximates.
+Every branch, gate and veto is untouched. What changed is which qualifying
+angle is offered first:
 
-## Ping-aware predictive preplace
+1. the named picks keep absolute priority — `closestSpikeToEnemy`,
+   `closestSpikeToKb`, `primaryKbSpike`, `closestTrapToEnemy`;
+2. everything else, nearest the target's predicted position first.
 
-`SocketManager.pong` is already measured. At 70–120 ms against a 111.11 ms tick
-that is one tick of round trip, and it is spent on *lead*, never on packet rate:
+Rule 2 is `nearestFirst`, which the trapped fallback in the same module already
+sorted by; the main ladder was the one place still going by index.
 
-- prediction horizon and interception lead extended by the round trip;
-- `PlacementScheduler.due` brings every predictive deadline forward by it;
-- book records reserve their ground for that much longer.
+Measured over 4,079 boards — mean distance from the chosen build to the enemy:
 
-`_breakPressure` drives preparation intensity on a 0–1 scale. Health alone is
-the wrong driver — a 500-health trap at 50% is five swings from a great hammer
-and ten from a tool hammer — so the driver is `StealForecast`'s ticks-to-break
-(which already folds health, every actor's next swing, observed damage rate and
-cadence), with the health fraction as a floor for a build with no observed
-history. It sets booking confidence, reservation TTL, and the retrap resend
-count, which ramps 0 → 1 → 2 → 4 at the default setting instead of a fixed
-ladder.
+| | 144 | 200 |
+|---|---|---|
+| before | 153.4 u | 153.4 u |
+| after | 120.3 u | **120.0 u** |
 
-Escape denial is scored: `_escapeContext` solves the line out of a containment
-that is about to break, and candidates are paid for taking the opening or
-standing across that line, and penalised for doing neither during a break.
-The predictive buffer is capped at one primary and one fallback per dying
-object (`RPE_PREPLACE_PER_OBJECT`), six pending records in total.
+**21.8% closer**, and with the ordering fixed the finer table finally matters:
+200 strictly beats 144 on **56.6%** of boards (identical on 3.8%, the
+`gcd(144,200)=8` coincidences plus ties).
+
+## 144 restored as an explicit option
+
+Rungs are **36 / 72 / 144 / 200**, default 200. 144 reproduces the original
+behaviour exactly. Nothing else differs between them — same validation, same
+collision solve, same scoring, same prediction, same scheduler, same executor.
+Only the ring discretisation changes.
+
+## Preplace now consumes the lattice instead of being blunted by it
+
+The previous pass had preplace *snap* its chosen direction onto the scan table,
+so both systems would name one piece of ground by one number. They did, and it
+made placement worse: snapping quantises a direction that is already solved and
+enumerates nothing. Measured over 19,100 directions it moved the angle 99.6% of
+the time, cost a mean of 0.24 u of aim at the ring (2.23 u worst) and added
+**zero** candidates.
+
+All snapping is removed — `GeometrySolver.nearestFree` is the answer wherever a
+direction is wanted. Instead `AngleSolver.propose` offers the ring itself as
+candidates: ranked nearest the target's predicted position, cut to
+`RPE_RING_CANDIDATES` (8), deduped against the reasoned proposals by
+`PlacementMemory`'s own quantum, and scored on the same terms as everything
+else. That is what lets a sample no named reason pointed at actually win a
+preplace.
+
+## Predictive buffer: primary / secondary / fallback
+
+`RPE_PREPLACE_PER_OBJECT` is 3. Primary is the ground that is opening,
+secondary the line out of it, fallback a slot beside the opening that neither
+is standing on — taken off the scan ring (`_fallbackAim`), and booked only once
+`_breakPressure` reaches 0.5. Eight pending records in total across all
+opportunities.
+
+## KB Spike — never while the enemy is in our trap
+
+`SpikeKB.postTick` had no trapped check at all (`TrapKB` beside it always had
+one), and its target selection deliberately included Oracle's "pinned in our
+trap" case. A pinned player has their velocity zeroed by the game, so the push
+cannot move them, and the stored shove carries them out the moment the trap
+breaks.
+
+Gated on `EnemyManager.enemyTrappedByMe` — the client's own state, which
+already existed: `isTrapped`/`trappedIn` set every tick in `checkCollision`,
+plus the ownership test and a four-tick hold. The hold matters: without it the
+gate flickers open on a tick the collision reads clear and fires exactly the
+swing it exists to prevent. No new detector, no distance proxy.
+
+## Spike Sync 2 — fires on contact, no Auto Push requirement
+
+It used to run only off `autoPush.pushState()`, which made it a sub-feature of
+the shove behind three separate gates: the `_autoPush` setting, a named push
+victim and spike, and `armed = pushPos !== null` (the shove had to have been
+live last tick).
+
+The trigger is now the contact itself, read from
+`EnemyManager.enemySpikeCollider` — the enemy touching a spike hostile to them,
+swept over previous/current/future, already computed every tick and already the
+signal the shove's own ladder used for `touching`. Auto Push is still honoured
+when running (the shove path keeps `consumeSync`/`releaseSync`); a contact with
+no shove behind it now gets its own one-shot, keyed `victim:spike` so a new
+touch is a new event. `EnemyManager` gained one field,
+`enemySpikeColliderObject`, set at the existing assignment site — the victim
+alone cannot tell one contact from the next.
 
 ## Performance
 
-The 200-angle table costs no trigonometry and no allocation per tick:
-`RingScan` precomputes sin/cos per step count for the life of the page, and
-`_getPrePlaceAngles` mutates a pooled row array instead of building 400 objects
-a tick. Beyond that: an exact early rejection in `_bestPrimaryKbSpike`,
-cheapest-test-first ordering in `_sectorPick`, a single-pass `_closestToEnemy`
-(no filter/sort), three fewer whole-table arrays per tick in the ladder, and a
-state-change early-out that skips the scan when nothing that could change the
-answer has moved and the previous pass produced nothing.
+At 200 steps, per item per cycle: auto-place table 0.0034 ms, ring candidates
+0.0059 ms. Both items = 0.017 ms, **0.016% of a 111.11 ms tick**. With 20 bots:
+0.35 ms, **0.31% of a tick**. The 144 → 200 step costs 0.0053 ms per item.
+
+`RingScan` precomputes sin/cos per step count for the life of the page and
+`_getPrePlaceAngles` mutates a pooled row array, so the finer settings add no
+trigonometry and no allocation per tick.
 
 ## Verification
 
@@ -269,5 +316,6 @@ node tools/verify-drivers.js Ryn_Type_2.user.js   # data tables vs. the bundle
 node tools/check-hooks.js Ryn_Type_2.user.js      # needs: npm i --no-save terser
 ```
 
-Current state: driver tables match `src/game_index.js`, and 52/52
-bundle-rewrite hooks bind.
+Driver tables match `src/game_index.js`; 52/52 bundle-rewrite hooks bind. The
+geometry, ordering, pressure-ramp and module-fix claims above are each checked
+by driving the shipped source directly rather than a copy of it.
