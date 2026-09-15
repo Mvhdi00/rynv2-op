@@ -5,7 +5,7 @@ Changes to **`Ryn_Type_2.user.js`**, worked against the shipped game bundle in
 `drivers/game-drivers.json`.
 
 ```sh
-node tools/test-ryn-type2.js     # 170 behaviour tests
+node tools/test-ryn-type2.js     # 180 behaviour tests
 node --check Ryn_Type_2.user.js
 ```
 
@@ -156,8 +156,11 @@ the keyboard over.
 It shows ready, solving, why it is going at the speed it is (the rate, or
 *holding off — frames are running long*), spawns waiting, spent, expired unused
 and timed out, and says *paused until you are in the game* when it is not
-running. **Fill now** skips the wait for the next keeper tick after a burst of
-spawns has drained the pool.
+running. **Stop / Start** is the manual switch — Stop halts all minting while
+keeping whatever is already on the shelf, so the tokens you have are still
+spendable and any spawn waiting on one is released to mint its own rather than
+sitting out its timeout. **Fill now** skips the wait for the next keeper tick
+after a burst of spawns has drained the pool.
 
 *Timed out* moving is the wedge recovery doing its job, not something stuck. A
 number that keeps climbing means Cloudflare is not answering.

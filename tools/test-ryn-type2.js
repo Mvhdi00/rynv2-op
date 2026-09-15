@@ -616,6 +616,38 @@ async function testPool() {
     ok("a failed mint releases its slot so the keeper retries", hh.minted > before, "minted=" + hh.minted);
   }
 
+  // ── the manual switch ─────────────────────────────────────────────────────
+  {
+    const hh = poolHarness();
+    await hh.tick();
+    const before = hh.minted;
+    ok("the pool starts enabled", hh.pool.enabled === true);
+
+    hh.pool.stop();
+    for (let i = 0; i < 10; i++) await hh.tick();
+    ok("stop halts minting", hh.minted === before, "minted=" + hh.minted);
+    ok("and the panel reports it stopped", hh.pool.running === false);
+    ok("tokens already held are kept", hh.pool.size > 0, "size=" + hh.pool.size);
+    ok("and can still be spent", typeof hh.pool.take() === "string");
+
+    hh.pool.start();
+    hh.flushIdle();
+    ok("start resumes it", hh.minted > before, "minted=" + hh.minted);
+    ok("and the panel reports it running", hh.pool.running === true);
+  }
+
+  // A spawn waiting on a token that is no longer coming must not sit out its
+  // timeout.
+  {
+    const hh = poolHarness();
+    hh.pump();
+    const spawn = hh.pool.waitFor(5000);
+    ok("a spawn is queued", hh.pool.waiting === 1);
+    hh.pool.stop();
+    ok("stopping releases it", (await spawn) === null);
+    ok("and takes it off the queue", hh.pool.waiting === 0);
+  }
+
   // The target is a constant now, not a setting.
   ok("the target is fixed at forty", h.k.TARGET === 40, "target=" + h.k.TARGET);
   ok("the pool reports the same target it fills to", h.pool.target === h.k.TARGET);
