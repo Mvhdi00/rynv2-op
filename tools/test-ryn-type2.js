@@ -89,6 +89,7 @@ function buildPool(env) {
     const generateTurnstileToken = env.mint;
     const Date = env.Date;
     const window = env.window;
+    const client = env.client;
     ${poolSrc}
     return { TokenPool: TokenPool, TTL: TURNSTILE_TTL_MS, CF: TURNSTILE_CF_LIFETIME_MS,
              SAFETY: TURNSTILE_SAFETY_MS, MAXC: TURNSTILE_MAX_CONCURRENT,
@@ -304,18 +305,22 @@ function poolHarness(opts) {
   let now = 1e6;
   let minted = 0;
   let inflight = [];
-  // The Turnstile script's presence, which the pool checks before starting
-  // anything. Present by default; the load-order test flips it.
+  // The two gates the pool checks before starting anything: Cloudflare's own
+  // script being on the page, and the main player being in the game. Both open
+  // by default; the gate tests close them.
   const win = { turnstile: o.noTurnstile ? undefined : { render: () => {} }, top: null };
+  const cl = { myPlayer: { inGame: o.outOfGame ? false : true } };
   const built = buildPool({
     Date: { now: () => now },
     window: win,
+    client: cl,
     mint: () => new Promise((res, rej) => { minted++; inflight.push({ res: res, rej: rej }); })
   });
   return {
     pool: built.TokenPool,
     k: built,
     win: win,
+    client: cl,
     advance: ms => { now += ms; },
     get minted() { return minted; },
     get inflight() { return inflight.length; },
@@ -375,9 +380,37 @@ async function testPool() {
     ok("minting starts as soon as it is there", h.minted === h.k.MAXC, "minted=" + h.minted);
   }
 
+  // And nothing is started until the main player is actually in the game. A
+  // tab parked on the name box mints nothing at all.
+  {
+    const h = poolHarness({ outOfGame: true });
+    h.pool.refill();
+    ok("nothing is minted on the menu", h.minted === 0);
+    ok("the panel reports it as paused", h.pool.running === false);
+    for (let i = 0; i < 20; i++) h.pool.refill();
+    ok("twenty keeper ticks on the menu still mint nothing", h.minted === 0);
+
+    h.client.myPlayer.inGame = true;
+    ok("the panel reports it as running once in the game", h.pool.running === true);
+    await h.fill();
+    ok("entering the game fills the pool", h.pool.size === h.k.TARGET, "size=" + h.pool.size);
+
+    // Death takes it out of the game again. The pool does not drain in that
+    // time, but nothing new is minted either.
+    h.client.myPlayer.inGame = false;
+    const before = h.minted;
+    h.pool.take();
+    h.pool.refill();
+    ok("a death pauses minting", h.minted === before);
+    ok("but the pool it already has survives", h.pool.size === h.k.TARGET - 1, "size=" + h.pool.size);
+    h.client.myPlayer.inGame = true;
+    h.pool.refill();
+    ok("respawning resumes it", h.minted > before);
+  }
+
   let h = poolHarness();
   h.pool.refill();
-  ok("the pool fills itself with no prompting", h.minted > 0);
+  ok("the pool fills once you are in the game", h.minted > 0);
   ok("it does not start forty challenges at once", h.inflight === h.k.MAXC, "inflight=" + h.inflight);
   h.pool.refill();
   ok("a refill does not double-mint what is already in flight", h.minted === h.k.MAXC, "minted=" + h.minted);

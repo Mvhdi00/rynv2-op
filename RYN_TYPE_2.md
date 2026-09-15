@@ -5,7 +5,7 @@ Changes to **`Ryn_Type_2.user.js`**, worked against the shipped game bundle in
 `drivers/game-drivers.json`.
 
 ```sh
-node tools/test-ryn-type2.js     # 108 behaviour tests
+node tools/test-ryn-type2.js     # 116 behaviour tests
 node --check Ryn_Type_2.user.js
 ```
 
@@ -66,11 +66,18 @@ of work, same server-side validation. Only the timing moves.
   comes back every 2.5s for the rest, so a cold pool reaches forty in ten ticks
   (~25s). Nothing ever waits on a full pool — an empty one just mints inline the
   way it did before.
-- **Always running.** The pool fills from page load and keeps itself full, so a
-  bot can be spawned instantly at any moment with nothing having warmed it up
-  first. It does wait for Cloudflare's own script to appear before starting —
-  the userscript runs at `document-start`, and without that check the keeper
-  would fire four challenges every 2.5s that could only reject.
+- **Runs while you are in the game, and only then.** Two gates, both live: the
+  pool waits for Cloudflare's own script to appear (the userscript runs at
+  `document-start`, and without that check the keeper would fire four
+  challenges every 2.5s that could only reject), and it waits for the main
+  player to be in the game. A tab parked on the name box, or left on the death
+  screen, mints nothing at all. From the moment you are playing it fills and
+  stays full, so any bot you ask for is instant.
+
+  Read live rather than latched on the first spawn, so leaving the tab on the
+  death screen stops it the same way the menu does. A death itself costs
+  nothing: tokens last four minutes, so the pause until you respawn is far too
+  short for the pool to drain.
 - **Recoverable.** A socket that opens and closes without ever producing
   `io-init` is what a declined token looks like from the client. That gets
   exactly one retry with the pool bypassed, so a pooled token can never leave a
@@ -82,29 +89,29 @@ of work, same server-side validation. Only the timing moves.
 | challenges rendering at once | 4 |
 | pool lifetime | derived: Cloudflare's 300s − 60s margin = 240s |
 | keeper interval | 2.5s |
+| runs when | Turnstile loaded **and** `myPlayer.inGame` |
 
-**Bots → Spawn** shows how many are ready, solving, spent, and expired unused.
-**Fill now** skips the wait for the next keeper tick after a burst of spawns has
-drained the pool.
+**Bots → Spawn** shows how many are ready, solving, spent and expired unused,
+and says *paused until you are in the game* when it is not running. **Fill now**
+skips the wait for the next keeper tick after a burst of spawns has drained the
+pool.
 
-### The standing cost
+### The standing cost, and what the gate buys
 
-Keeping forty tokens permanently ready is not free, and the panel shows the
-part of it that is waste. Forty tokens ageing out at 240s is **one challenge
-solved roughly every six seconds for as long as the tab is open**, whether or
-not a bot is ever spawned — and a token that ages out unused is a solve spent
-on nothing, which is what the *expired unused* counter is there to make
-visible.
+Holding forty tokens ready is not free. Forty ageing out at 240s is **a
+challenge solved every few seconds for as long as the pool runs**, and a token
+that ages out unused is a solve spent on nothing — which is what the *expired
+unused* counter exists to make visible.
 
-There is no way around it at this setting: tokens expire at 240s regardless, so
-holding forty ready means re-minting forty every 240s. The alternative is to
-mint only on intent — opening the Bots page, adding a row, pressing the spawn
-key — which is what the previous version did, at the cost of the first spawn
-after a quiet spell waiting on a challenge.
+There is no way to hold forty ready more cheaply: tokens expire at 240s
+whatever we do, so forty ready means re-minting forty every 240s. The only
+lever is *when* the pool runs at all, and that is what the in-game gate is. A
+tab on the main menu — which is where a browser tab spends most of its life —
+mints nothing, and neither does one left on the death screen.
 
-Worth knowing: Cloudflare may respond to sustained volume from one client by
-making challenges harder or interactive, which would make spawning slower
-rather than faster. If the *expired unused* count climbs while spawns stay rare,
+Worth knowing either way: Cloudflare may respond to sustained volume from one
+client by making challenges harder or interactive, which would make spawning
+slower rather than faster. If *expired unused* climbs while spawns stay rare,
 that is the trade going the wrong way.
 
 The weapon patch move is a correctness fix as well as a speed one: `newUpgrade`
