@@ -345,3 +345,93 @@ node tools/check-hooks.js Ryn_Type_2.user.js      # needs: npm i --no-save terse
 Driver tables match `src/game_index.js`; 52/52 bundle-rewrite hooks bind. The
 geometry, ordering, pressure-ramp and module-fix claims above are each checked
 by driving the shipped source directly rather than a copy of it.
+
+## Auto Heal — Falcons' decisions on RYN's prediction
+
+RYN already had an autoheal, ported from **novastorm**: damage attribution,
+a five-term potential-damage prediction, four priority tiers, shame gating,
+packet budget, cooldown. What it did not have was what Falcons does *with* the
+verdict. Four things were genuinely missing; the prediction itself was not
+replaced, because a second damage model is the thing this client must not grow.
+
+### 1. The damage palette — an attribution bug, not a feature
+
+`ClientPlayer.getMaxWeaponDamage` is the **max**: it already multiplies by
+`Hats[7].dmgMultO` (bull). Attribution matched that number exactly, so an
+enemy *not* wearing bull hit for `expected / 1.5`, matched nothing, was not a
+spike tier either, and was attributed to nothing at all — the prediction that
+decides whether to eat never counted the swing that had just landed.
+
+Falcons solves it with `findCachedDamage`: every value one swing can arrive
+as. All four multipliers are in the game's own tables:
+
+| | source | applies to |
+|---|---|---|
+| ×1.5 | Bull Helmet (hat 7) `dmgMultO` | attacker |
+| ×1.2 | Bloodthirster (hat 55) `dmgMultO` | attacker |
+| ×0.2 | Monkey Tail (acc 11) `dmgMultO` | us |
+| ×0.75 | Soldier Helmet (hat 6) `dmgMult` | us |
+
+The first three form a six-entry palette cached per distinct damage value; the
+fourth is applied at comparison time (Falcons' `soldierRound`), because it
+depends on the hat worn when the server resolved the hit rather than the one on
+now.
+
+### 2. EMP anti — absent entirely
+
+EMP Helmet is `antiTurret: 1`: a turret will not fire at someone wearing it. So
+against a tick whose lethal half is turret fire it *removes* the damage instead
+of reducing it, and beats soldier outright. Against anything else it does
+nothing, which is why it is gated on `empSafe` — every source that hit us this
+tick must be one EMP answers. A melee secondary is never EMP-safe; a primary is
+only EMP-safe when their secondary is a projectile and their turret is aimed at
+someone else (`_turretAimedAtMe`, Falcons' `doTurretTargetLineMath`); spike
+damage disqualifies the tick.
+
+`empSafe` starts **false** and is only raised once damage has actually been
+attributed — Falcons evaluates `canEMP` only from entries in `damages`, and a
+quiet tick must not read as "everything this tick was a turret".
+
+### 3. Forced add-ons — a hat held across ticks
+
+`forcedAddOns` in Falcons, `_forced[4]` here, decremented at the top of
+`postTick`. A hat asked for on tick N is still on for tick N, because the hit
+it answers lands on a tick we do not choose. The spike-ring finding now also
+takes Falcons' `antiSpikeTick` two-tick trap-soldier lock — a ring spike
+dropped under a pinned player and swung on resolves over two server ticks, and
+a soldier that comes off after one is off for the half that lands.
+
+### 4. `start0ShameHeal` — a heal that waits
+
+The server charges shame for food eaten inside its window, and at seven it
+stops feeding you. Mode 2 (nothing lethal coming, shame already carried) holds
+the food two ticks unless a spike over 20 damage is close enough to land inside
+the wait; mode 1 (lethal, shame at the wall) holds only when the close spike
+cannot kill us.
+
+### Settings
+
+`_healPriority` and `_soldierEMP`, both default on, under **Defense →
+Autoheal**. With Heal Priority off the autoheal eats exactly as it did before.
+
+### Where this port deviates from the brief, and why
+
+- **`heal()` stays 3 packets.** The brief asked for 4, adding `sendAtck(0)`.
+  Falcons itself sends 3 (`selectToBuild` → `sendHit(1)` → `selectToBuild`), and
+  `NOVA_HEAL_PACKET_COST` is 3 across RYN's budget maths. A fourth packet would
+  desync the budget from what is actually sent.
+- **`validate("emp")` is included.** The brief's Part 1 and Part 14 both call
+  `addForcedAddOnValue(onlyEMP, …)` with only `soldierEMP && allCanEMP` —
+  Falcons' real line is `soldierEMP && r && this.validate("emp", n)`. Without it
+  EMP would be forced without owning the helmet or surviving the tick.
+- **`canEMP` on a primary hit is inverted in the brief.** It has
+  `if (!doTurretTargetLineMath(e) && !weapons[sec].projectile) canEMP = false`.
+  Falcons is `(!doTurretTargetLineMath(e) && weapons[sec].projectile) || (canEMP = false)`
+  — EMP survives only when the secondary *is* a projectile.
+- **The spike ring stays at 36 steps.** The brief asked for Falcons' 32
+  (`π/16`); RYN's existing `NOVA_RING_STEPS` is 36 (10° vs 11.25°), which is
+  strictly finer.
+- **`interpretDamage`'s magnitude arithmetic is not duplicated.** RYN's
+  `calculateTotalDamage` already solves the potential with five terms including
+  knockback-into-spike and the spike ring. Only the per-source *kind* (`canEMP`)
+  was missing, and that is what was added.
