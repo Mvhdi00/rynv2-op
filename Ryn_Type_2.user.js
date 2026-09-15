@@ -18012,8 +18012,12 @@ window.grbtp = 35;
   const HEAL_FORCE_SOLDIER = 0;
   const HEAL_FORCE_EMP = 1;
   const HEAL_FORCE_TRAP_SOLDIER = 2;
-  const HEAL_FORCE_ONETICK_SOLDIER = 3;
-  const HEAL_FORCE_SLOTS = 4;
+  const HEAL_FORCE_SLOTS = 3;
+  // Falcons has a fourth slot, otSoldier, held against an enemy who can deal
+  // 100 in one tick. It is not ported: RYN answers that question already, in
+  // ClientPlayer.canPossiblyInstakill and EnemyManager.instaThreat, and those
+  // already drive both the hat and shouldIgnoreModule. A second detector for
+  // the same thing would be two answers that can disagree.
   // How far Falcons looks for the player or animal an enemy's turret might be
   // aimed at instead of us, and how close to that line we have to be before
   // the shot is read as ours. Its own `600` and `60`.
@@ -18026,6 +18030,10 @@ window.grbtp = 35;
   // it is worth -2. 120ms against a 111.11ms tick, which is why one tick of
   // patience is not enough and two are.
   const NOVA_SHAME_WINDOW_MS = 120;
+  // How far past the window a deliberately-timed food aims for. Enough to clear
+  // the boundary and the jitter on a 70-120ms connection without giving back
+  // the exposure the precise timing exists to save.
+  const NOVA_SHAME_CLEAR_MARGIN_MS = 15;
   // ==========================================================================
   // Heal priority. novastorm has one question — "does the prediction reach my
   // health" — and one answer, the full deficit. That is right for the tick it
@@ -18129,6 +18137,12 @@ window.grbtp = 35;
     damagesByTurrets=[];
     deathDamages=[];
     _seenDamageTick=null;
+    // The receivedDamage stamp the free drain has already spent. See
+    // drainShame.
+    _drainedAt=null;
+    // The receivedDamage stamp a clean heal is already timed for. See
+    // _scheduleCleanHeal.
+    _cleanHealAt=null;
     // Six damage values per distinct swing, built once and reused. See
     // _paletteFor.
     _palette=new Map;
@@ -18176,6 +18190,8 @@ window.grbtp = 35;
       // palette is keyed on numbers, and the weapons behind those numbers are
       // whatever the next life is carrying.
       this._palette.clear();
+      this._drainedAt = null;
+      this._cleanHealAt = null;
       this.empSafe = true;
       this._forced.fill(0);
     }
@@ -18365,15 +18381,9 @@ window.grbtp = 35;
         this._forced[index] = ticks;
       }
     }
-    resetAddOn(index) {
-      if (index < 0 || index >= HEAL_FORCE_SLOTS) {
-        return;
-      }
-      this._forced[index] = 0;
-    }
     // Falcons' onlySoldier(): every forced slot except the EMP one.
     get forcedSoldier() {
-      return this._forced[HEAL_FORCE_SOLDIER] > 0 || this._forced[HEAL_FORCE_TRAP_SOLDIER] > 0 || this._forced[HEAL_FORCE_ONETICK_SOLDIER] > 0;
+      return this._forced[HEAL_FORCE_SOLDIER] > 0 || this._forced[HEAL_FORCE_TRAP_SOLDIER] > 0;
     }
     get forcedEMP() {
       return this._forced[HEAL_FORCE_EMP] > 0;
@@ -18933,6 +18943,149 @@ window.grbtp = 35;
       const elapsed = this.shameElapsed();
       return elapsed !== null && elapsed <= NOVA_SHAME_WINDOW_MS;
     }
+    // ------------------------------------------------------------------------
+    // The free drain — why the count sat at 3-4 and took seconds to move.
+    //
+    // Read the server's own buildItem (src/game_index.js, `this.buildItem`),
+    // because the order of its three steps is the whole thing:
+    //
+    //     if (f.consume) {
+    //         if (this.hitTime) {                       // (1) shame accounting
+    //             const W = Date.now() - this.hitTime;
+    //             this.hitTime = 0;
+    //             W <= 120 ? shameCount++ : shameCount -= 2;
+    //         }
+    //         this.shameTimer <= 0 && (V = f.consume(this))   // (2) the heal
+    //     }
+    //     V && (this.useRes(f), ...)                          // (3) the cost
+    //
+    // Three facts fall out of that, and together they are the answer:
+    //
+    //   · The accounting is gated on `hitTime`, and clears it. So shame moves
+    //     once per hit, on the *first* food after it, and a burst of five
+    //     foods is one shame event. There is no farming it.
+    //   · The accounting runs BEFORE the heal and does not depend on it. It is
+    //     not "healing costs shame", it is "the first food after a hit costs
+    //     shame, or pays it back".
+    //   · Food is a apple: `consume` is `e.changeHealth(20, e)`, and
+    //     changeHealth opens with `if (f > 0 && this.health >= this.maxHealth)
+    //     return !1`. At full health it returns false, so V is false, so
+    //     step (3) never runs and the food is never deducted.
+    //
+    // Put together: one food eaten at full health, more than 120ms after a
+    // hit, is -2 shame and costs nothing but the packets to send it.
+    //
+    // That is the drain this client never had. Every other path here needs a
+    // health deficit to earn its -2, and in a fight the deficit is closed by
+    // the same heal that took the +1 — so the count ratchets up during the
+    // fight and then freezes the moment the bar is full, which is exactly a
+    // count that sits at 3-4 and takes seconds to come down. Worse, it sits
+    // above HEAL_CHIP_SHAME_LIMIT while it is there, which is what turns a
+    // stuck count into a death.
+    //
+    // One food, once per hit. `_drainedAt` is what makes it once: the client's
+    // own receivedDamage is cleared when it sees health rise, and at full
+    // health there is no rise to see, so the marker has to be ours.
+    drainShame() {
+      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
+      if (myPlayer.shameCount <= 0 || myPlayer.shameActive) {
+        return false;
+      }
+      const received = myPlayer.receivedDamage;
+      if (received === null || received === undefined) {
+        return false;
+      }
+      // Still inside the window: a food now would be +1, which is the opposite
+      // of the point. shameElapsed is the same reading the gate above uses.
+      if (Date.now() - received <= NOVA_SHAME_WINDOW_MS) {
+        return false;
+      }
+      // Already spent this hit's one accounting.
+      if (this._drainedAt === received) {
+        return false;
+      }
+      // Below full health the ordinary heal is about to take this same hit's
+      // accounting and earn the same -2, and it restores health as well. Two
+      // foods cannot both claim it — the first clears hitTime — so the drain
+      // stands aside and lets the heal have it.
+      if (myPlayer.tempHealth < myPlayer.maxHealth) {
+        return false;
+      }
+      // A food we cannot afford is a block the server skips entirely
+      // (`canBuild` fails before the accounting), so it would drain nothing
+      // and still cost the packets.
+      if (!myPlayer.canPlace(2)) {
+        return false;
+      }
+      if (ModuleHandler.packetCount + NOVA_HEAL_PACKET_COST > ModuleHandler.packetLimit) {
+        return false;
+      }
+      this._drainedAt = received;
+      ModuleHandler.heal();
+      // The server took 2 off and will not tell us: no health changed, so no
+      // health packet comes back, so ClientPlayer.updateHealth never runs and
+      // the mirror would sit stale at the old value. Mirroring it here is what
+      // keeps the count this module gates on — and the one on the HUD — equal
+      // to the server's rather than drifting above it.
+      myPlayer.shameCount = Math.max(0, myPlayer.shameCount - 2);
+      return true;
+    }
+
+    // ------------------------------------------------------------------------
+    // Waiting the *right* amount, not a whole tick.
+    //
+    // The window is 120ms and a tick is 111.11ms, so a heal deferred to the
+    // next postTick lands at about 222ms — nearly twice as long as it needs to
+    // be. That difference is the whole economics of the count: waiting costs
+    // exposure, and the more it costs the less often waiting is the right call,
+    // so an over-long wait quietly forces the immediate +1 heal in cases where
+    // a short one would have earned -2.
+    //
+    // So the deferred food is not left to the next tick, it is timed. One
+    // setTimeout for the milliseconds actually remaining plus a small margin,
+    // which is the same sub-tick scheduling the placement engine already uses
+    // for its retrap resends. The heal then lands at ~135ms instead of ~222 —
+    // just outside the window, with about half the exposure.
+    //
+    // One timer per hit. `_cleanHealAt` is the receivedDamage stamp already
+    // scheduled for, so a refusal repeated on the next tick does not stack a
+    // second timer on the same hit.
+    _scheduleCleanHeal(priority) {
+      const {myPlayer: myPlayer} = this.client;
+      const received = myPlayer.receivedDamage;
+      if (received === null || received === undefined) {
+        return false;
+      }
+      if (this._cleanHealAt === received) {
+        return false;
+      }
+      const remaining = NOVA_SHAME_WINDOW_MS - (Date.now() - received);
+      if (remaining <= 0) {
+        return false;
+      }
+      this._cleanHealAt = received;
+      const wait = remaining + NOVA_SHAME_CLEAR_MARGIN_MS;
+      setTimeout(() => {
+        try {
+          const mp = this.client.myPlayer;
+          if (!mp || !mp.inGame || mp.shameActive) {
+            return;
+          }
+          // The hit this was scheduled for has already been answered — by the
+          // heal that fired anyway, or by a later one. Nothing to do.
+          if (mp.receivedDamage !== received) {
+            return;
+          }
+          if (mp.tempHealth >= mp.maxHealth) {
+            return;
+          }
+          // Now outside the window, so this food is worth -2 rather than +1.
+          this.doBestHeal(priority);
+        } catch (_) {}
+      }, wait);
+      return true;
+    }
+
     // Can this heal afford to wait for the window to pass?
     //
     // Only when nothing is forcing it. A prediction that says the next tick is
@@ -19148,9 +19301,11 @@ window.grbtp = 35;
       // way that dying is not.
       if (!manual && myPlayer.shameCount >= NOVA_SHAME_LIMIT) {
         if (this.healCostsShame() && this.healCanWait(priority)) {
+          this._scheduleCleanHeal(priority);
           return false;
         }
       } else if (!manual && this.healCostsShame() && this.healCanWait(priority)) {
+        this._scheduleCleanHeal(priority);
         // Under the wall the same timing still applies, and for the same
         // reason: a food that can afford to wait is worth -2 instead of +1.
         // See shameElapsed above for why one tick of patience is not enough.
@@ -19165,7 +19320,17 @@ window.grbtp = 35;
         return false;
       }
       if (!manual && priority === HEAL_PRIORITY_CHIP) {
-        if (this.isBuildingManually() || myPlayer.shameCount >= HEAL_CHIP_SHAME_LIMIT) {
+        if (this.isBuildingManually()) {
+          return false;
+        }
+        // The chip tier's own shame ceiling, and it only makes sense against a
+        // food that would *raise* the count. Refusing one that would lower it
+        // is backwards: outside the window this food is -2, so the higher the
+        // count the more it is worth sending, and refusing it at 4 is what
+        // kept the count at 4 while the spike kept chipping. The ceiling now
+        // guards the case it was written for — a chip top-up inside the window,
+        // paying +1 for damage that is not going to kill us — and nothing else.
+        if (this.healCostsShame() && myPlayer.shameCount >= HEAL_CHIP_SHAME_LIMIT) {
           return false;
         }
       }
@@ -19269,13 +19434,16 @@ window.grbtp = 35;
       if (!Settings_default._autoheal) {
         return;
       }
+      // RYN's, and it stays: the server is refusing food, so do not spend it.
+      if (myPlayer.shameActive) {
+        return;
+      }
+      // The free drain, taken before the full-health return below because full
+      // health is exactly when it is available. See drainShame.
+      this.drainShame();
       // novastorm's `myPlayer.health < 100`.
       if (health >= maxHealth) {
         this.deathDamages.length = 0;
-        return;
-      }
-      // RYN's, and it stays: the server is refusing food, so do not spend it.
-      if (myPlayer.shameActive) {
         return;
       }
 

@@ -441,6 +441,77 @@ is one tick clear, and one tick is 111 ms — still inside the server's 120 — 
 that path was pushing the count *up* on exactly the ticks meant to bring it
 down.
 
+#### The drain — why the count sat at 3–4
+
+The server's `buildItem` (`src/game_index.js`) settles how the count moves, and
+the order of its three steps is the whole thing:
+
+```js
+if (f.consume) {
+    if (this.hitTime) {                              // 1. shame accounting
+        const W = Date.now() - this.hitTime;
+        this.hitTime = 0;
+        W <= 120 ? shameCount++ : shameCount -= 2;
+    }
+    this.shameTimer <= 0 && (V = f.consume(this))     // 2. the heal
+}
+V && (this.useRes(f), ...)                            // 3. the cost
+```
+
+Three facts fall out, all verified against the shipped bundle:
+
+- **One shame event per hit.** The accounting is gated on `hitTime` and clears
+  it, so it is the *first* food after a hit that counts. A burst of five foods
+  is one event. The count cannot be farmed.
+- **The accounting runs before the heal and does not depend on it.** It is not
+  "healing costs shame", it is "the first food after a hit costs shame — or
+  pays it back".
+- **At full health the food is never deducted.** `consume` is
+  `e.changeHealth(20, e)`, and `changeHealth` opens with
+  `if (f > 0 && this.health >= this.maxHealth) return !1`, so `V` is false and
+  step 3 never runs — while step 1 has already given the −2.
+
+So the equilibrium is a ratio, not a rate. Each hit is +1 or −2, which means
+**the count only climbs when more than two thirds of hits are answered inside
+the window**:
+
+| hits answered inside | drift per hit |
+|---|---|
+| 100% | +1.00 |
+| 75% | +0.25 |
+| 67% | ±0 |
+| 50% | −0.50 |
+
+Two things were holding it at 3–4:
+
+**The deferred heal waited a whole tick too long.** A heal pushed to the next
+`postTick` lands at ~222 ms when it only needs to clear 120 ms. That extra
+exposure is what made waiting look expensive and forced the immediate +1 in
+cases a short wait would have earned −2. The deferred food is now *timed* — one
+`setTimeout` for the milliseconds actually remaining plus a 15 ms margin, the
+same sub-tick scheduling the placement engine uses for retrap resends:
+
+| policy | waits | earns |
+|---|---|---|
+| eat immediately | 0 ms | +1 |
+| wait one tick | 111 ms | +1 — still inside |
+| wait to next postTick | 222 ms | −2 |
+| **timed clean heal** | **135 ms** | **−2** |
+
+87 ms less exposure per deferred heal, for the same −2.
+
+**`HEAL_CHIP_SHAME_LIMIT` refused heals that would lower the count.** It fired
+on the count alone, so at shame 4 a chip heal was refused *even outside the
+window* — where that food is −2. Refusing it is precisely what pinned the count
+at 4, and 4 is where chip healing stops, which is how a stuck count becomes a
+death. The ceiling now guards only the case it was written for: a chip top-up
+**inside** the window, paying +1 for damage that will not kill us.
+
+**`drainShame`** is the third, and narrow: one food at full health with an
+unspent hit is −2 at no cost. Reachable only when health was restored without
+food, which in this game means cheese's `dmgOverTime` — there is no passive
+regen. Free when it applies, never farmable.
+
 #### What this is and is not worth
 
 Measured against the server's rule with the 30-second ban at 8 modelled:
