@@ -401,21 +401,74 @@ takes Falcons' `antiSpikeTick` two-tick trap-soldier lock — a ring spike
 dropped under a pinned player and swung on resolves over two server ticks, and
 a soldier that comes off after one is off for the half that lands.
 
-### 4. `start0ShameHeal` — a heal that waits
+### 4. Shame — the wall that could not be escaped
 
-The server charges shame for food eaten inside its window, and at seven it
-stops feeding you. Mode 2 (nothing lethal coming, shame already carried) holds
-the food two ticks unless a spike over 20 damage is close enough to land inside
-the wait; mode 1 (lethal, shame at the wall) holds only when the close spike
-cannot kill us.
+The server does not count heals, it times them, and RYN already mirrors the
+rule in `ClientPlayer.updateHealth`:
 
-### Settings
+```
+step = Date.now() - receivedDamage      // measured when the food lands
+if (step <= 120) shameCount += 1
+else             shameCount = max(0, shameCount - 2)
+```
 
-`_healPriority` and `_soldierEMP`, both default on, under **Defense →
-Autoheal**. With Heal Priority off the autoheal eats exactly as it did before.
+A tick is 111.11 ms, so the numbers do not line up the way they look:
+
+| heal lands | step | shame |
+|---|---|---|
+| on the damage tick | ~0 ms | **+1** |
+| **one tick later** | ~111 ms | **+1** — still inside 120 |
+| two ticks later | ~222 ms | **−2** |
+
+One tick of patience buys nothing; two buy −2.
+
+`doBestHeal` refused outright at `shameCount >= 7`. That is a trap, because the
+count only moves when a food lands: a client that stops healing at 7 can never
+earn the −2 that would take it back under 7. It is stuck there until it dies or
+respawns. Falcons never stops — at `shameCount < 7` it heals outright and at 7
+or over it calls `start0ShameHeal`, which still heals and only waits when a
+spike that cannot kill it is close enough to make waiting safer.
+
+So the wall is now something to time around rather than stand at: wait for the
+window when waiting is safe (that food is worth −2 and puts you straight back
+to 5), and eat inside it when the prediction says the tick is lethal or you are
+pinned on a spike and the window will never open. `shameActive` — the server
+having actually put the shame hat on — stays an absolute refusal, because there
+the food is simply thrown away.
+
+The recovery heal now goes through the same test. `tickCount - damageTick > 0`
+is one tick clear, and one tick is 111 ms — still inside the server's 120 — so
+that path was pushing the count *up* on exactly the ticks meant to bring it
+down.
+
+#### What this is and is not worth
+
+Measured against the server's rule with the 30-second ban at 8 modelled:
+
+| scenario | stop at 7 | time it |
+|---|---|---|
+| 35 damage every 3 ticks | 133 heals, no shame, survives | identical |
+| 35 damage every 2 ticks | dies at tick 31 | dies at tick 35 |
+| pinned on a spike, 20/tick | dies at tick 19 | dies at tick 23 |
+
+In the ordinary case RYN's heal was **already correct** — shame sits at zero and
+nothing locks out, which is why the earlier port changed nothing anyone could
+feel. Under sustained lethal pressure the fix buys about four ticks and then the
+server's ban lands: no client can out-heal 35 every two ticks through a 120 ms
+window, and this one does not pretend to.
+
+### No new settings
+
+All of this rides the existing **Autoheal** switch. The two toggles an earlier
+pass added have been removed.
 
 ### Where this port deviates from the brief, and why
 
+- **`start0ShameHeal` is not ported as a queue.** Its job — put the food
+  outside the window — is done by refusing in `doBestHeal`, which runs every
+  tick, so the heal fires on the first tick the window has passed. A delay
+  counter beside the heal site was measurably a no-op: the ordinary
+  `doBestHeal` call ran immediately after it and healed anyway.
 - **`heal()` stays 3 packets.** The brief asked for 4, adding `sendAtck(0)`.
   Falcons itself sends 3 (`selectToBuild` → `sendHit(1)` → `selectToBuild`), and
   `NOVA_HEAL_PACKET_COST` is 3 across RYN's budget maths. A fourth packet would
