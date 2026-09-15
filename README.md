@@ -117,6 +117,7 @@ but nothing in the client needs it. It is stripped from the build.
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
+Ryn_Type_2.user.js        RYN Type 2, a separate client (see RYN_TYPE_2.md)
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
@@ -126,7 +127,13 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/test-ryn-type2.js   behaviour tests for Ryn_Type_2.user.js
 ```
+
+`Ryn_Type_2.user.js` is its own client, not a build product of this tree. It
+shares the game bundle and the extracted drivers, and nothing else — the ReUp
+build does not read it and does not produce it. Its bot spawn, target scan and
+weapon-state work is documented in **[RYN_TYPE_2.md](RYN_TYPE_2.md)**.
 
 ## Build
 

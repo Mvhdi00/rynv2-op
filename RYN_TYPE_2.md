@@ -1,0 +1,281 @@
+# RYN Type 2 — bot spawn, target scan, second weapon
+
+Changes to **`Ryn_Type_2.user.js`**, worked against the shipped game bundle in
+`src/game_index.js` and the tables extracted from it in
+`drivers/game-drivers.json`.
+
+```sh
+node tools/test-ryn-type2.js     # 96 behaviour tests
+node --check Ryn_Type_2.user.js
+```
+
+---
+
+## 1. Spawning a bot
+
+### What the game requires
+
+`src/game_index.js` fixes the order, and there is no room in it:
+
+```
+hold a token  ->  wss://host/?token=…  ->  server sends io-init  ->  send "M" (spawn)
+```
+
+`O.connect` runs its ready callback on the `io-init` frame, and the client's
+`Ct()` sends the spawn frame from inside it, gated only on `O.connected`.
+RYN already does the same — `SocketManager`'s `case "io-init"` calls
+`myPlayer.spawn()` on the frame itself. **That is the earliest point the
+protocol will accept a spawn, and it was already being hit.**
+
+So nothing after the socket opens was worth optimising. Everything that made
+SPAWN BOT feel slow was in front of it.
+
+### Where the time went
+
+| | before | after |
+|---|---|---|
+| `_spawnBot` hotkey | `setTimeout(…, 100)` between adding the row and clicking Connect | gone — the row is built synchronously, so there was never anything to wait for |
+| `createSocket` | `await generateTurnstileToken()` on the critical path: a fresh Turnstile widget rendered and answered before a single byte reached the server, up to a 20s ceiling | takes a pre-minted token; mints inline only if the pool is empty |
+| after `connected` | `setInterval(…, 100)` polling for `inGame` before installing the bot's weapon patch | installed when the `PlayerClient` is constructed |
+
+### The token pool
+
+A Cloudflare Turnstile token is valid for 300 seconds and may be redeemed once.
+A token minted while nothing is happening is therefore worth exactly the same
+as one minted on the press — so the pool mints two ahead of time and hands them
+out single-use.
+
+Nothing about the verification changes: same widget, same sitekey, same proof
+of work, same server-side validation. Only the timing moves.
+
+- **Single use.** `take()` removes the token from the pool. It is never copied
+  and never handed to two sockets.
+- **Fresh.** Anything older than 120s is discarded rather than offered — less
+  than half Cloudflare's own window, so a pooled token is never near expiry.
+- **Not speculative.** The pool mints nothing until there is a sign a bot is
+  about to be asked for: opening the Bots page, adding a row, pressing the
+  hotkey. Interest expires after five minutes and the keeper goes quiet again.
+- **Recoverable.** A socket that opens and closes without ever producing
+  `io-init` is what a declined token looks like from the client. That gets
+  exactly one retry with the pool bypassed, so a pooled token can never leave a
+  bot silently unconnected.
+
+The weapon patch move is a correctness fix as well as a speed one: `newUpgrade`
+is driven by the server's `"U"` frame, and the first of those can arrive in the
+same burst as the spawn. A patch applied up to a poll interval later was a race
+the bot could lose, and its first upgrade would come out of the owner's order
+instead of the configured loadout.
+
+### What is left
+
+The socket open and the server's `io-init` round trip. Both are network, and
+neither can be started earlier than it already is.
+
+---
+
+## 2. The second-weapon stuck state
+
+### The bug
+
+Reported as: the bot fires its secondary and then will not switch weapons,
+move, attack with anything else, or run any of its normal logic.
+
+The cause is two halves of the same line in the server's own player update
+(`src/game_index.js`, `Player.update`):
+
+```js
+else if (weapons[wi].projectile != null && this.hasRes(weapons[wi], projCost)) {
+    this.useRes(...); addProjectile(...)
+} else C = false;
+this.gathering = this.mouseState,
+C && (this.reloads[wi] = weapons[wi].speed * atkSpd)
+```
+
+Without the resources the weapon charges per shot — 4 wood for the bow, 5 for
+the crossbow, 10 for the repeater, 10 stone for the musket — **nothing is
+fired, and because the reload is only armed when something was fired, nothing
+goes on cooldown either.** The attack frame is accepted, consumed, and has no
+effect whatsoever.
+
+RYN's own reload model mirrors the server faithfully:
+`Player.updateReloads` only resets the counter when it recognises the
+projectile the shot produced. A shot the server dropped produces none, so the
+counter stays pinned at max and the weapon reads "ready" on every tick that
+follows.
+
+`BotRangedAttack.postTick` then took the tick unconditionally:
+
+```js
+ModuleHandler.moduleActive = true;
+ModuleHandler.forceWeapon = 1;
+ModuleHandler.shouldAttack = turn.mayFire;
+```
+
+`moduleActive` is the flag every other module reads as *someone else owns this
+tick*. Held on every tick, it stops the bot placing, healing, breaking,
+switching or doing anything at all — which is every symptom in the report.
+
+Measured on the original file, 90 ticks (10 seconds) with a musket and no
+stone:
+
+| | before | after |
+|---|---|---|
+| ticks locked out | 90 | 0 |
+| ticks holding the secondary | 90 | 0 |
+| attack frames sent | 90 | 0 |
+
+### The fix
+
+Two changes, both of them the server's own rules rather than new ones.
+
+**The shot is gated on the game's `hasRes`.** `botHasAmmoFor` reads
+`Weapons[id].cost` — the game's `req` pair normalised into the four resources —
+and applies the hat's `projCost` with the same `Math.round` the server applies
+it with. The multiplier is read off the hat rather than tested against the
+Musketeer Hat's id, because that is what the server does. A shot the server
+would drop is never sent, so the reload it would not arm is never waited on.
+
+`tools/test-ryn-type2.js` checks this against `drivers/game-drivers.json` for
+every weapon × resource set × hat: 336 combinations, all agreeing with the
+game's own `hasRes`.
+
+**The weapon claim is scoped to the firing tick.** Standing in the kite band
+and pointing at someone is a movement decision and an aim decision; neither
+needs the weapon, so neither takes it.
+
+- `this.active` — the movement claim — is taken whenever the bot is kiting.
+  Movement and BotExplorer keep standing aside, so kiting is unchanged.
+- `moduleActive`, `forceWeapon` and `shouldAttack` are now taken **only** on a
+  tick where the shot can actually go out: off cooldown, with the ammo for it,
+  and the bot's volley wave cleared to fire.
+
+Off the firing tick the bot is under normal control with its normal loadout.
+That is what returns it to normal after the secondary completes, and the client
+already knew what to do with those ticks — `UseFastest` holds whichever weapon
+is on cooldown so it reloads, which is exactly the game's model
+(`updateReloads` only advances the held weapon's counter) and was previously
+unreachable because the tick was never free.
+
+**A backstop, for the same failure arriving by a route the ammo test cannot
+see** — a hat swap mid-flight, a resource count a frame out of date. A
+requested shot whose reload counter has not moved two ticks later did not
+happen; three of those in a row and the secondary stands down for 1.5s rather
+than being asked again every tick. Judged at two ticks rather than one because
+the projectile frame and the player update that reads it arrive in the same
+burst and the order between them is the server's to choose. On a bot shooting
+normally neither counter ever leaves zero.
+
+The same ammo test is applied to `UseAttacking`'s secondary branch, which could
+otherwise re-enter the identical wasted-frame loop.
+
+### What is deliberately not changed
+
+Weapon switching, reload timing, cooldowns, attack cadence, inventory sync, the
+primary, and the owner's own insta sequences. No fake reloads, no bypassed
+cooldowns, no duplicate attack frames — the fix removes frames, it does not add
+any.
+
+---
+
+## 3. Player index and target scan
+
+Both live in the **Bots → Target Scan** panel.
+
+### The index
+
+Everyone this tab has seen, from any of its connections, in one deduplicated
+list. Two sources, both already in the client:
+
+- **`PlayerManager.createPlayer`** runs on the server's add-player frame — the
+  one that carries a name — for every player entering any connection's view. A
+  fleet spread over the map sees most of the server between them.
+- **`LeaderboardManager.updatePlayer`** names the top ten wherever they are
+  standing, so someone no connection has had in view is still listed, just
+  without a position.
+
+Positions come from the player update stream, which is already walked once a
+tick per connection.
+
+The key is the player's **sid** — the id the update stream, the leaderboard,
+the clan list and every packet that names a player all use. Keying on it is
+what makes the list deduplicate itself: the same player seen by nine bots is
+nine writes to one entry.
+
+Each entry carries the id, name, last known position, health, clan, which
+connection saw them and when.
+
+**Your own bots are never in it.** They are filtered on the way in by the
+owner's id, the fleet's `clientIDList`, and the live `clients` set — and
+removed again when a bot registers, because a bot can be seen by another bot
+one tick before it learns its own id.
+
+### The scan
+
+Pick a player, press **SCAN**. It is a toggle, and nothing switches it off but
+pressing it again.
+
+**Searching.** Every bot roams. This is not new machinery: `BotExplorer`
+already scores all 36 map sectors on every destination choice, keeps no
+explored/unexplored state anywhere, applies a decaying penalty to a sector a
+bot has just stood in, pulls the fleet's destinations apart from one another,
+and pulls destinations onto the map edge half the time so the rim and corners
+get visited rather than passed near. Searching the whole server for one player
+is what it does, so the scan drives it rather than duplicating it — one extra
+term in its "should I be roaming" test.
+
+**Detection is not a search.** Each connection is told about a player exactly
+when the server decides that bot can see them, and already walks that list once
+a tick. A bot spotting the target is one integer compare inside a loop that was
+running anyway. There is no per-bot map sweep and no distance matrix, and
+nothing costs more at forty bots than the update stream already did.
+
+**On contact:** a marker on the minimap at the target's position — an expanding
+ring on the game's own `mapPingScale` and `mapPingTime`, so it reads as a ping —
+with the target's name and distance beside it, and the coordinates, distance and
+which bot has them in the panel. The ring is drawn locally rather than sent as
+the game's ping frame, which would ping from the *bot's* position and show it to
+everyone on the server.
+
+**The converge.** Every other bot walks in. Each takes its own slot on a ring
+around the target, from its fleet index, so forty bots surround it instead of
+stacking on one coordinate where the game's collision would spend the fight
+shoving them off each other. The ring is 170 units — inside the polearm's 142
+reach plus a player's 63 of hit scale, so every bot can swing from its slot.
+The bot that found them holds the inside at 80 and keeps the engagement; a bot
+arriving later never displaces it. A bot already kiting the target is left to
+kite.
+
+**Tracking.** The confirmed server position always wins. The client's existing
+one-tick extrapolation is added as a lead only while the sighting is under
+170ms old, and never extends past the one tick the server itself moved them —
+so the fleet is not chasing ghosts. Past 1400ms with nobody reporting, the
+sighting is dropped.
+
+**After the target dies** — or walks out of view; from the client the two look
+identical and the right response is the same — the sighting expires, the scan
+stays on, and every bot is back to distributed searching on the next tick.
+Found again, they converge again. Only pressing SCAN again stops it.
+
+### Cost
+
+| | |
+|---|---|
+| detection | one integer compare per visible player per tick, inside an existing loop |
+| index positions | throttled to 4 writes/second per player |
+| staleness | once per tick, on the owner's connection only |
+| converge | ~10 arithmetic ops per bot per tick, off a cached fleet index |
+| search | BotExplorer's existing fleet-wide budget of 3 path plans per 100ms |
+| panel | 500ms timer, revision-gated, and only while its page is open |
+| minimap marker | a handful of draws, only while a target is found |
+
+### Arbitration
+
+The mission owns `_scanMissionActive` — a flag `Movement.postTick`,
+`BotExplorer.postTick` and the targets system already stood aside for. It is
+set and cleared once a tick, before either reader runs.
+
+Order in `botModules`: ranged attack, **scan mission**, explorer, movement.
+That is the order the three movement claims resolve in — a bot in range should
+be shooting rather than walking, a bot that knows where the target is should be
+walking to them rather than roaming, and roaming is what is left. Possession,
+frozen bots, duels, auto-farm and squad gating all still outrank the mission.
