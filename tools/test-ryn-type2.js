@@ -55,7 +55,7 @@ const dexSrc = between(find(/^  const DEX_LIMIT = 400;/), find(/^  \/\/ ={10,}$/
 const scanSrc = between(find(/^  const SCAN_STALE_MS = /), find(/^  class PlayerManager \{/));
 const kiteSrc = between(find(/^  const BOT_KITE_BAND = /), find(/^  \/\/ The bot half\. Sits in botModules/));
 const missionSrc = between(find(/^  \/\/ The bot half\. Sits in botModules/), find(/^  class Automill \{/));
-const poolSrc = between(find(/^  const TURNSTILE_POOL_TARGET = /), find(/^  setInterval\(\(\) => \{/));
+const poolSrc = between(find(/^  const TURNSTILE_CF_LIFETIME_MS = /), find(/^  setInterval\(\(\) => \{/));
 
 // Everything the slices reach for that lives elsewhere in the script, stubbed
 // at the same shape.
@@ -88,8 +88,11 @@ function buildPool(env) {
   const body = `
     const generateTurnstileToken = env.mint;
     const Date = env.Date;
+    const Settings_default = env.Settings;
     ${poolSrc}
-    return TokenPool;
+    return { TokenPool: TokenPool, TTL: TURNSTILE_TTL_MS, CF: TURNSTILE_CF_LIFETIME_MS,
+             SAFETY: TURNSTILE_SAFETY_MS, MAXC: TURNSTILE_MAX_CONCURRENT,
+             ARM: TURNSTILE_ARM_MS, POOL_MAX: TURNSTILE_POOL_MAX };
   `;
   return new Function("env", body)(env);
 }
@@ -296,22 +299,33 @@ function testScan() {
 
 // ── 4. the token pool ──────────────────────────────────────────────────────
 
-function poolHarness() {
+function poolHarness(size) {
   let now = 1e6;
   let minted = 0;
   let inflight = [];
-  const pool = buildPool({
+  const built = buildPool({
     Date: { now: () => now },
+    Settings: { _tokenPoolSize: size === undefined ? 2 : size },
     mint: () => new Promise((res, rej) => { minted++; inflight.push({ res: res, rej: rej }); })
   });
   return {
-    pool: pool,
+    pool: built.TokenPool,
+    k: built,
     advance: ms => { now += ms; },
     get minted() { return minted; },
+    get inflight() { return inflight.length; },
+    // One keeper tick: top up, then let whatever it started resolve.
+    tick: async () => {
+      built.TokenPool.refill();
+      const batch = inflight;
+      inflight = [];
+      batch.forEach(p => p.res("tok" + minted + "_" + Math.random().toString(36).slice(2)));
+      await new Promise(r => setImmediate(r));
+    },
     settleAll: async () => {
       const batch = inflight;
       inflight = [];
-      batch.forEach(p => p.res("tok" + Math.random().toString(36).slice(2)));
+      batch.forEach(p => p.res("tok" + minted + "_" + Math.random().toString(36).slice(2)));
       await new Promise(r => setImmediate(r));
     },
     failAll: async () => {
@@ -326,7 +340,16 @@ function poolHarness() {
 async function testPool() {
   section("4. turnstile token pool");
 
-  let h = poolHarness();
+  // The one constraint that is not ours: a pooled token must never outlive
+  // Cloudflare's own acceptance window.
+  {
+    const k = poolHarness().k;
+    ok("the pool lifetime is derived from Cloudflare's, not chosen", k.TTL === k.CF - k.SAFETY);
+    ok("the pool lifetime is inside Cloudflare's window", k.TTL < k.CF, k.TTL + " vs " + k.CF);
+    ok("the safety margin is a real one", k.SAFETY >= 3e4, "safety=" + k.SAFETY);
+  }
+
+  let h = poolHarness(2);
   h.pool.refill();
   ok("an unarmed pool mints nothing", h.minted === 0);
 
@@ -345,34 +368,109 @@ async function testPool() {
   ok("taking removes them from the pool", h.pool.size === 0);
   ok("an empty pool returns null rather than reusing one", h.pool.take() === null);
 
-  // Cloudflare's own window is 300s; the pool's is 120s.
-  h = poolHarness();
+  h = poolHarness(2);
   h.pool.arm();
   await h.settleAll();
-  h.advance(119000);
+  h.advance(h.k.TTL - 1000);
   ok("a token inside its window is still offered", h.pool.take() !== null);
   h.advance(2000);
   ok("a token past its window is discarded, not handed out", h.pool.take() === null);
   ok("the pruned pool reports empty", h.pool.size === 0);
 
-  h = poolHarness();
+  h = poolHarness(2);
   h.pool.arm();
   await h.failAll();
   ok("a failed mint leaves the pool empty", h.pool.size === 0);
   h.pool.refill();
   ok("a failed mint releases its slot so the keeper retries", h.minted === 4, "minted=" + h.minted);
 
-  h = poolHarness();
+  h = poolHarness(2);
   h.pool.arm();
   await h.settleAll();
   h.pool.take();
   h.pool.take();
-  h.advance(300001);
+  h.advance(h.k.ARM + 1);
   h.pool.refill();
   ok("the keeper stops minting once interest goes stale", h.minted === 2, "minted=" + h.minted);
   h.pool.take();
   h.pool.refill();
   ok("take() re-arms the pool", h.minted === 4, "minted=" + h.minted);
+
+  // ── a large pool ──────────────────────────────────────────────────────────
+
+  h = poolHarness(40);
+  h.pool.arm();
+  ok("a big pool does not start forty challenges at once", h.inflight === h.k.MAXC, "inflight=" + h.inflight);
+  let rounds = 0;
+  while (h.pool.size < 40 && rounds < 60) {
+    await h.tick();
+    rounds++;
+  }
+  ok("a big pool fills a few at a time", h.pool.size === 40, "size=" + h.pool.size);
+  ok("it fills in the expected number of keeper ticks", rounds === 10, "rounds=" + rounds);
+  h.pool.refill();
+  ok("a full big pool mints nothing more", h.inflight === 0);
+
+  // Oldest-first, so the bottom of a big pool cannot rot unused.
+  {
+    const first = h.pool.ready[0].token;
+    const last = h.pool.ready[h.pool.ready.length - 1].token;
+    const got = h.pool.take();
+    ok("a take serves the oldest token", got === first && got !== last);
+  }
+  ok("spending is counted", h.pool.spent === 1);
+
+  // Every token handed out still has the whole safety margin left.
+  {
+    const hh = poolHarness(4);
+    hh.pool.arm();
+    await hh.settleAll();
+    hh.advance(hh.k.TTL - 1);
+    const t = hh.pool.take();
+    ok("the oldest servable token still has the safety margin left", t !== null);
+    hh.advance(2);
+    ok("one millisecond past the window it is gone", hh.pool.take() === null);
+  }
+
+  // The slider is read live rather than captured at load.
+  {
+    const live = { _tokenPoolSize: 2 };
+    let now = 1e6;
+    let inflight = [];
+    let count = 0;
+    const built = buildPool({
+      Date: { now: () => now },
+      Settings: live,
+      mint: () => new Promise(res => { count++; inflight.push(res); })
+    });
+    built.TokenPool.arm();
+    ok("the pool starts at the configured size", count === 2, "count=" + count);
+    inflight.forEach(r => r("t"));
+    inflight = [];
+    await new Promise(r => setImmediate(r));
+    built.TokenPool.refill();
+    ok("no more are minted at that size", count === 2);
+    live._tokenPoolSize = 6;
+    built.TokenPool.refill();
+    ok("raising the slider tops the pool up on the next tick", count === 6, "count=" + count);
+    live._tokenPoolSize = 1;
+    built.TokenPool.refill();
+    ok("lowering it mints nothing new", count === 6, "count=" + count);
+  }
+
+  // Out-of-range and missing settings fall back rather than breaking.
+  {
+    const mk = v => buildPool({
+      Date: { now: () => 1e6 },
+      Settings: { _tokenPoolSize: v },
+      mint: () => new Promise(() => {})
+    }).TokenPool.target;
+    ok("a size of zero is clamped up to one", mk(0) === 1);
+    ok("a size over the cap is clamped down", mk(9999) === h.k.POOL_MAX, "got=" + mk(9999));
+    ok("a missing size falls back to the default", mk(undefined) === 8, "got=" + mk(undefined));
+    ok("a junk size falls back to the default", mk("many") === 8, "got=" + mk("many"));
+    ok("NaN falls back to the default", mk(NaN) === 8, "got=" + mk(NaN));
+  }
 }
 
 // ── 5 and 6. the two bot modules ───────────────────────────────────────────

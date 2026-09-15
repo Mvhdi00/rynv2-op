@@ -5,7 +5,7 @@ Changes to **`Ryn_Type_2.user.js`**, worked against the shipped game bundle in
 `drivers/game-drivers.json`.
 
 ```sh
-node tools/test-ryn-type2.js     # 96 behaviour tests
+node tools/test-ryn-type2.js     # 116 behaviour tests
 node --check Ryn_Type_2.user.js
 ```
 
@@ -42,23 +42,48 @@ SPAWN BOT feel slow was in front of it.
 
 A Cloudflare Turnstile token is valid for 300 seconds and may be redeemed once.
 A token minted while nothing is happening is therefore worth exactly the same
-as one minted on the press — so the pool mints two ahead of time and hands them
-out single-use.
+as one minted on the press — so the pool solves them ahead of time and hands
+them out single-use.
 
 Nothing about the verification changes: same widget, same sitekey, same proof
 of work, same server-side validation. Only the timing moves.
 
 - **Single use.** `take()` removes the token from the pool. It is never copied
   and never handed to two sockets.
-- **Fresh.** Anything older than 120s is discarded rather than offered — less
-  than half Cloudflare's own window, so a pooled token is never near expiry.
+- **Inside Cloudflare's window, by construction.** The pool lifetime is not a
+  number someone picked — it is `TURNSTILE_CF_LIFETIME_MS - TURNSTILE_SAFETY_MS`,
+  300s minus a 60s margin. There is no way to configure a pool lifetime that
+  outlives the token, and the oldest token the pool will ever serve still has
+  the whole margin left when it reaches the server.
+- **Oldest first.** Everything in the pool has passed the prune, so the oldest
+  is exactly as good as the newest while having the least time left to sit.
+  Serving newest-first was fine for a pool of two and quietly wasteful at forty,
+  where the bottom of the stack aged out and was re-minted without ever being
+  used.
+- **A few at a time.** The pool size is a slider (**Bots → Spawn**, 1–40,
+  default 8), but at most four challenges ever render at once. Filling forty by
+  starting forty together would put forty iframes on the page and forty requests
+  at Cloudflare in one go; the keeper comes back every 2.5s for the rest, and
+  nothing ever waits on a full pool — an empty one just mints inline the way it
+  did before.
 - **Not speculative.** The pool mints nothing until there is a sign a bot is
   about to be asked for: opening the Bots page, adding a row, pressing the
-  hotkey. Interest expires after five minutes and the keeper goes quiet again.
+  hotkey, or **Fill now**. Interest expires after fifteen minutes and the keeper
+  goes quiet again. A page that never spawns a bot never mints a token.
 - **Recoverable.** A socket that opens and closes without ever producing
   `io-init` is what a declined token looks like from the client. That gets
   exactly one retry with the pool bypassed, so a pooled token can never leave a
   bot silently unconnected.
+
+The **Bots → Spawn** panel shows how many are ready, how many are solving, how
+many have been spent, and whether the keeper is idle.
+
+| knob | where | default |
+|---|---|---|
+| tokens kept ready | slider, 1–40 | 8 |
+| challenges rendering at once | fixed | 4 |
+| pool lifetime | derived from Cloudflare's 300s | 240s |
+| keeper stays warm for | fixed | 15 min |
 
 The weapon patch move is a correctness fix as well as a speed one: `newUpgrade`
 is driven by the server's `"U"` frame, and the first of those can arrive in the
