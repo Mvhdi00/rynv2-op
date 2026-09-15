@@ -4,7 +4,7 @@
 // @description     ! have fun — Type 2 teaches auto place, preplace and replace the primary-knockback spike chain from Novastorm, plus LRC AI: automatic synced lyrics, translated to English and cached per song
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/d0mMvHYF/ryn5.webp
-// @version         2.2
+// @version         2.3
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -10038,7 +10038,7 @@ window.grbtp = 35;
   //   · the far approach, for lining up from outside.
   //
   // chicken's `p` (volcanic spike) has no equivalent on this map, so the floor
-  // is its 96 throughout. RPE_KB_TRAVEL is 214 — the distance a knockback
+  // is its 96 throughout. RPE_KB_TRAVEL is 308 — the distance a knockback
   // carries someone, not a stand-off — so the 72 is kept as written.
   // ==========================================================================
   // chicken's `getDistance(player, e) <= 250` on the victim. RYN exposes the
@@ -11444,7 +11444,31 @@ window.grbtp = 35;
   //
   // Two ticks, which is what the engine already gives its own hard claim in
   // ModuleHandler._notePlacement, and covers a round trip up to ~222ms.
-  const LUNA_BAN_GRACE_TICKS = 2;
+  //
+  // ── Measured, not assumed ─────────────────────────────────────────────────
+  // Two ticks is the floor, not the answer. The window has to be at least the
+  // round trip, because that is how long the add packet for a *successful*
+  // build takes to come back, and the client already measures it. At 250ms the
+  // fixed window judges a build that worked while its confirmation is still in
+  // flight, reads the empty ground as a refusal, and locks the slot out for
+  // LUNA_BAN_TICKS — which is precisely the slot replace exists to rebuild.
+  //
+  // Oracle avoids this without measuring anything, and the shape of how is
+  // worth noting: it marks the ground when it sends, drops the mark the moment
+  // a real object appears there, and otherwise lets it expire on a long timer.
+  // That is round-trip-independent because it never judges at a deadline at
+  // all. RYN does judge at a deadline — which is what lets it distinguish a
+  // refusal from a build still in flight, and so ban far sooner than Oracle's
+  // 30 ticks when the server really did say no — so the deadline is the thing
+  // that has to know about latency.
+  //
+  // One extra tick on top of the measured trip, because the trip is measured to
+  // the ping handler rather than to the object-add path, and because a ban is
+  // the expensive mistake here: sitting out one more tick costs a placement,
+  // banning a live slot costs the exchange.
+  function lunaBanGraceTicks(client) {
+    return Math.max(2, rpePingTicks(client) + 1);
+  }
 
   // How many builds the trapped fallback below is allowed to queue in one
   // tick. Every free angle would be five packets each and would empty the
@@ -12278,17 +12302,21 @@ window.grbtp = 35;
       // flight, and reading empty ground under it as a refusal is how a build
       // that worked gets its own slot banned.
       {
+        // Resolved once for the tick: the window is the measured round trip
+        // plus one, so a build whose confirmation is still in flight is never
+        // read as refused. See lunaBanGraceTicks.
+        const grace = lunaBanGraceTicks(this.client);
         const waiting = [];
         for (const placed of this._placedSlots) {
           const age = this._tick - placed.tick;
-          if (age < LUNA_BAN_GRACE_TICKS) {
+          if (age < grace) {
             waiting.push(placed);
             continue;
           }
           // Past the window the evidence is stale — the placer sat out a few
           // ticks and the ground has moved on — so the send is dropped
           // unjudged rather than banning somewhere on old information.
-          if (age > LUNA_BAN_GRACE_TICKS + 2) continue;
+          if (age > grace + 2) continue;
           if (!this._pointFree(placed.id, placed.x, placed.y, placed.scale, ObjectManager2, null)) continue;
           this._bannedSlots.push({
             id: placed.id,
@@ -12661,7 +12689,8 @@ window.grbtp = 35;
   //   legality         one circle test per object at `blocker ?? scale`,
   //                    plus the river band unless the item is the platform
   //   knockback        a velocity impulse of 1.5 along object -> player,
-  //                    which under a 0.993/ms decay travels 1.5/(1-0.993)
+  //                    carried by the game's own step/decay loop (see
+  //                    RPE_KB_TRAVEL)
   //   tick             1000 / serverUpdateRate(9) = 111.11ms
   //   refusal cost     a build the server refuses leaves the item held, and a
   //                    held item halves movement speed and suspends the weapon
@@ -12674,7 +12703,48 @@ window.grbtp = 35;
   const RPE_TICK_MS = 1e3 / 9;
   const RPE_DECEL = .993;
   const RPE_KB_IMPULSE = 1.5;
-  const RPE_KB_TRAVEL = RPE_KB_IMPULSE / (1 - RPE_DECEL);
+  // ── How far a knockback actually carries ──────────────────────────────────
+  // This was `RPE_KB_IMPULSE / (1 - RPE_DECEL)` = 214.3, and that is a unit
+  // error rather than an approximation: it sums a per-millisecond decay against
+  // a per-millisecond step, and the game does neither.
+  //
+  // The game's player update, in order, is
+  //
+  //     x += xVel * f            (substepped; the total across a tick is xVel*f)
+  //     xVel *= pow(playerDecel, f)
+  //
+  // with `f` the tick delta. Velocity does not decay *during* a tick — it is
+  // applied whole and decayed once at the end — so the distance an impulse v
+  // carries is the geometric series
+  //
+  //     v*f + v*f*d^f + v*f*d^2f + ... = v * f / (1 - d^f)
+  //
+  // At f = 111.11ms (Config.serverUpdateRate 9) and d = 0.993, d^f = 0.458171
+  // and the factor is 205.07 per unit of impulse. For the spike's own
+  // `T = 1.5 * (weightM || 1)` that is 307.6 units, not 214.3 — the old
+  // constant was short by 30%.
+  //
+  // Checked two ways beyond the algebra: a direct step-by-step simulation of
+  // the loop above agrees to 0.1 units (tools/verify-placement-5.js), and
+  // Falcon computes the same sum iteratively for its own brake logic —
+  // `for (var i = e; i >= .5;) e += i *= Math.pow(.993, serverUpdateSpeed)` —
+  // which is this series unrolled.
+  //
+  // Every consumer already treats it as the far end of a segment rather than as
+  // a landing spot (SpikeOpportunity tests `restX,restY -> chainX,chainY` with
+  // lineInRect, and PlacementPlanner._pairDelta now does the same), so a longer
+  // and correct reach widens what the chain can see without moving any point
+  // estimate onto new ground.
+  //
+  // Deliberately *not* propagated to the weapon knockback table
+  // (DataHandler `knockback: 111 * (0.3 + knock)`, i.e. one tick of travel).
+  // That number is load-bearing in EnemyManager, Spike KB, Trap KB and the
+  // anti-insta damage prediction, all tuned against it across three clients,
+  // and the victim of a weapon hit is usually holding a direction that the
+  // free-glide model does not account for. Correcting it is a separate change
+  // that needs measurement in game, not arithmetic.
+  const RPE_KB_DECAY_PER_TICK = Math.pow(RPE_DECEL, RPE_TICK_MS);
+  const RPE_KB_TRAVEL = RPE_KB_IMPULSE * RPE_TICK_MS / (1 - RPE_KB_DECAY_PER_TICK);
   const RPE_PLACE_PACKETS = 5;
   const RPE_BATCH_PACKETS = 2;
   const RPE_MAX_BLOCK_RADIUS = 300;
@@ -14384,10 +14454,25 @@ window.grbtp = 35;
         const spike = a.profile.isTrap ? b : a;
         // The push from the spike carries them onto the trap. Travel comes
         // from the game's own impulse and decay, not a guessed constant.
+        //
+        // Tested along the whole push, not at the end of it. A knockback is a
+        // glide: the victim leaves the spike at 1.5 units/ms and slides until
+        // the decay stops them, so they cross every point between here and
+        // RPE_KB_TRAVEL and stop at the first thing in the way. Asking only
+        // whether a trap sits within one footprint of the far end answered a
+        // different question — "is the trap exactly where they run out of
+        // speed" — and that is a thin annulus about 85 units wide at 307 units
+        // out. A trap anywhere else on the line, which is most of the line,
+        // scored nothing for a pairing it completes perfectly well.
+        //
+        // The segment test is also what stops the exact value of
+        // RPE_KB_TRAVEL from being load-bearing: an over-estimate now costs a
+        // little reach past where they actually stop, instead of aiming the
+        // whole test at empty ground.
         const push = Math.atan2(frame.targetPos.y - spike.y, frame.targetPos.x - spike.x);
         const landX = frame.targetPos.x + RPE_KB_TRAVEL * Math.cos(push);
         const landY = frame.targetPos.y + RPE_KB_TRAVEL * Math.sin(push);
-        if (hyp(landX - trap.x, landY - trap.y) < trap.profile.footR + frame.targetScale) {
+        if (GeometrySolver.segmentDistance(trap.x, trap.y, frame.targetPos.x, frame.targetPos.y, landX, landY) < trap.profile.footR + frame.targetScale) {
           delta += w.synergyTrapSpike;
         } else if (gap < trap.profile.footR + spike.profile.touchR) {
           // Or the trap holds them where the spike can reach: the game pins a

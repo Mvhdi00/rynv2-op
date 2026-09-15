@@ -9,7 +9,8 @@ const suites = [
   ['1', 'game-file baselines, spatial grid, trap state, send timing, break forecast'],
   ['2', 'aperture geometry vs the game rule, ring resolution, auto place offer order'],
   ['3', 'tick flush scheduler, blocker sweep'],
-  ['4', 'attrition across a reload cycle, break edge detector, forecast tracking']
+  ['4', 'attrition across a reload cycle, break edge detector, forecast tracking'],
+  ['5', 'knockback glide vs the game loop, trap-spike pairing, refusal window, reference cross-check']
 ];
 let failed = 0;
 for (const [n, what] of suites) {

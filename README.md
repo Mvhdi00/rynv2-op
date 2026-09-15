@@ -257,11 +257,69 @@ state-change early-out, because the edge it watches is on the *enemy's* reload
 counter, which that signature has no term for) and read by the engine's
 `_imminentBreak`, which folds it into `attrition` and `_breakPressure`.
 
+## v2.3 — the Oracle / Falcon pass
+
+Both references were read for technique and cross-checked against the game
+bundle. Three changes came out of it; two things they do were deliberately not
+copied.
+
+### Taken (because the game agrees)
+
+**`RPE_KB_TRAVEL` was a unit error, not an approximation.** It was
+`impulse / (1 - 0.993)` = 214.3, which sums a per-millisecond decay against a
+per-millisecond step. The game does neither: it applies velocity whole and
+decays once per tick (`x += xVel*f; xVel *= pow(playerDecel, f)`), so the
+distance is the geometric series `v*f / (1 - d^f)` = **307.6** units for the
+spike's `T = 1.5`. The old constant was short by 30%. Confirmed three ways: the
+algebra, a step-by-step simulation of the loop, and Falcon's own
+`deceleration()` helper, which unrolls the identical series for its brake logic.
+
+**The trap/spike pairing is tested along the push, not at the end of it.**
+`_pairDelta` asked whether a trap sat within one footprint of the point where
+the knockback runs out — a ~85-unit-wide annulus 307 units away. A knockback is
+a glide: they cross every point on that line and stop at the first thing in the
+way. It is a segment test now, which also stops the exact value of
+`RPE_KB_TRAVEL` from being load-bearing.
+
+**The refusal window follows the measured round trip.** `LUNA_BAN_GRACE_TICKS`
+was a fixed 2 ticks (~222ms). Past that, a *successful* build whose add packet
+is still in flight reads as empty ground, gets its own slot banned for 18 ticks,
+and that slot is exactly the one replace exists to rebuild. Now
+`max(2, pingTicks + 1)`. Oracle sidesteps this by never judging at a deadline
+(it marks on send, clears when a real object appears, expires at 30 ticks) —
+round-trip-independent, but it also cannot ban a genuinely refused slot for
+3.3s. RYN keeps the deadline and teaches it about latency instead.
+
+### Not taken (because the game disagrees, or RYN already does it better)
+
+- **Oracle's `predictEnemyTraps`** reads like hidden-trap inference and isn't:
+  `addEnemyTrap` fires on *every* build it sends, so it is a pending-occupancy
+  list under a misleading name. RYN's `_placedSlots`/`_bannedSlots` plus the
+  engine's `PlacementLedger` already do this, keyed on ground and with a
+  refusal test.
+- **Oracle's trapped-enemy test is `distance <= 50`** — the same 50-vs-45 error
+  v2.2 fixed. The game pins at `playerScale + scale*colDiv` = 45. Two references
+  agreeing on a number does not make it the game's number.
+- **Oracle's `isItemLimit`** reads `group.sandboxLimit || 99` outside sandbox,
+  capping spikes at 99 instead of 15.
+- **Falcon's markers** live exactly one tick (`markers.push(...)`,
+  `nextTick(() => markers.shift())`) — intra-tick dedup only, which RYN covers
+  more precisely with ledger claims and `memory.sentThisTick`.
+- **Falcon's 30-angle ring** (`Math.PI/15 * i`) is coarser than RYN's default of
+  200. Noted as evidence that ring resolution is not what separates these
+  clients, which is what RYN's own notes already argued.
+- **The weapon knockback table** (`111 * (0.3 + knock)`, one tick of travel) is
+  short by the same 1.85x factor, but it is load-bearing in EnemyManager,
+  Spike KB, Trap KB and the anti-insta damage prediction, all tuned against it
+  across three clients — and a weapon's victim is usually holding a direction
+  the free-glide model ignores. That one needs measurement in game, not
+  arithmetic, so it was left alone and flagged.
+
 ## Verification
 
 ```sh
 node --check Ryn_Type_2.user.js
-node tools/verify-placement.js
+node tools/verify-placement.js   # 106 assertions across 5 suites
 ```
 
 Notable results:
