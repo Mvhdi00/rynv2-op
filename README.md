@@ -559,3 +559,58 @@ pass added have been removed.
   `calculateTotalDamage` already solves the potential with five terms including
   knockback-into-spike and the spike ring. Only the per-source *kind* (`canEMP`)
   was missing, and that is what was added.
+
+## Kill animations — 20 styles on the existing corpse system
+
+`CorpseHandler` already was the right architecture: ten pooled slots built once
+on the first death, spawn driven by the client's existing `killedSomeone`
+event, and one draw call inside the game's own render pass — no separate RAF
+loop, no DOM, no per-corpse timer. The 20 styles extend it; none of it was
+rebuilt.
+
+**Style 0 is "Current" and stays on the original code path**, so the shipped
+corpse is not a reimplementation of itself.
+
+### Three rules that keep 20 styles costing what one did
+
+- **Everything is a function of age.** No style integrates frame to frame, so
+  none holds particle arrays, velocities or timers. A particle's position is
+  `f(seed, index, t)` — recomputed from three numbers each frame, identical at
+  30 fps and 240, and impossible to leak.
+- **Nothing allocates.** No object literal, array or closure is created inside a
+  draw. The pooled slot carries a style index and an integer seed; `kaRnd` turns
+  those into scatter without storing it.
+- **Counts are fixed and small.** The heaviest style draws twelve primitives,
+  and ten slots is the pool cap — so the worst case the client can reach is ten
+  by twelve, whatever the fight is doing.
+
+### Measured
+
+Driving the shipped table against a counting mock canvas, every style across
+every frame of its life:
+
+| | |
+|---|---|
+| styles | 20 + Current, no duplicate ids |
+| lifetimes | 500–1400 ms |
+| canvas ops/frame | 10.9 (Execution) to 49.8 (Reverse Explosion) |
+| save/restore | balanced on every style, every frame |
+| exceptions | none |
+| **10 corpses × 600 frames** | **0.016 ms/frame of JS** — 0.1% of a 16.7 ms budget |
+
+Each style is wrapped in one `save`/`restore` at the dispatch site, so a style
+cannot leak an alpha, a `lineWidth` or a transform into the frame whatever it
+does inside.
+
+### Selector
+
+One `<select id="_killAnimation">` in the existing **Visuals → Death Corpses**
+block, using the menu's own `ryn-select` class and `attachSelects()`. No new
+panel and no new UI framework. The option list is built from
+`KILL_ANIM_STYLES` at attach time rather than written into the markup, so the
+table stays the single place a style is named.
+
+The style is resolved **once, at spawn**, and stored on the slot — which is what
+makes Random one animation per kill rather than a different one per frame, and
+why changing the setting mid-fight leaves bodies already on the ground alone. An
+unknown id falls back to Current, both on load and at pick time.
