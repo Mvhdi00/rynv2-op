@@ -5,7 +5,7 @@ Changes to **`Ryn_Type_2.user.js`**, worked against the shipped game bundle in
 `drivers/game-drivers.json`.
 
 ```sh
-node tools/test-ryn-type2.js     # 147 behaviour tests
+node tools/test-ryn-type2.js     # 157 behaviour tests
 node --check Ryn_Type_2.user.js
 ```
 
@@ -60,16 +60,24 @@ of work, same server-side validation. Only the timing moves.
   Serving newest-first was fine for a pool of two and quietly wasteful at forty,
   where the bottom of the stack aged out and was re-minted without ever being
   used.
-- **A few at a time.** Forty are kept ready, but at most four challenges ever
-  render at once. Filling forty by starting forty together would put forty
-  iframes on the page and forty requests at Cloudflare in one go; the keeper
-  comes back every 2.5s for the rest, so a cold pool reaches forty in ten ticks
-  (~25s). Nothing ever waits on a full pool — an empty one just mints inline the
-  way it did before.
+- **One challenge at a time, two while you stand still.** A Turnstile challenge
+  is a cross-origin iframe that lays out, composites and runs proof of work, and
+  several of them side by side is a frame-rate cost you can feel — the page is
+  trying to render a game at the same time. So the default is one. Standing
+  still is the exception: nothing needs the frame budget at that moment, so a
+  second runs alongside and the pool catches up while you are not doing
+  anything.
+
+  "Standing still" is `myPlayer.speed` — the distance covered in the last server
+  tick, which the rest of this client already reads the same way — under 8, for
+  four seconds. An unreadable speed counts as moving and takes the quieter rate.
+
+  Nothing ever waits on a full pool; an empty one just mints inline the way it
+  did before.
 - **Runs while you are in the game, and only then.** Two gates, both live: the
   pool waits for Cloudflare's own script to appear (the userscript runs at
-  `document-start`, and without that check the keeper would fire four
-  challenges every 2.5s that could only reject), and it waits for the main
+  `document-start`, and without that check the keeper would fire challenges
+  every 2.5s that could only reject), and it waits for the main
   player to be in the game. A tab parked on the name box, or left on the death
   screen, mints nothing at all. From the moment you are playing it fills and
   stays full, so any bot you ask for is instant.
@@ -86,13 +94,13 @@ of work, same server-side validation. Only the timing moves.
   always returns. A written-off challenge that answers late is still delivered;
   only the accounting was reclaimed.
 - **Never competes with a spawn.** A spawn that found the pool empty used to
-  start its own challenge alongside the four the pool already had running —
-  five widgets stacked up the edge of the screen, and when Cloudflare wanted an
-  interaction there was no telling which of the five to answer. A spawn now
-  joins the queue for work already in progress and is served **ahead** of the
-  pool's own shelf, and the pool keeps minting for a waiter even when it is
-  otherwise full. If nothing is in flight it falls straight through to minting
-  its own, exactly as before.
+  start its own challenge alongside the ones the pool already had running —
+  several widgets stacked up the edge of the screen, and when Cloudflare wanted
+  an interaction there was no telling which of them to answer. A spawn now joins
+  the queue for work already in progress and is served **ahead** of the pool's
+  own shelf. Several spawns at once queue behind each other rather than each
+  starting a challenge, because the rate limit applies to them too; they only
+  fall through to minting their own when nothing can be started at all.
 - **Recoverable.** A socket that opens and closes without ever producing
   `io-init` is what a declined token looks like from the client. That gets
   exactly one retry with the pool bypassed, so a pooled token can never leave a
@@ -101,20 +109,35 @@ of work, same server-side validation. Only the timing moves.
 | | |
 |---|---|
 | tokens kept ready | 40 — the fleet cap, so a full pool is a full fleet |
-| challenges rendering at once | 4 |
+| challenges at once | 1 moving, 2 standing still |
 | pool lifetime | derived: Cloudflare's 300s − 60s margin = 240s |
 | keeper interval | 2.5s |
+| standing still means | `myPlayer.speed` ≤ 8 for 4s |
+| cold fill to forty | ~100s moving, ~53s standing still |
 | a challenge is written off after | 30s |
 | a spawn waits for one in flight for | 5s, then mints its own |
 | runs when | Turnstile loaded **and** `myPlayer.inGame` |
 
-**Bots → Spawn** shows ready, solving, spawns waiting, spent, expired unused and
-timed out, and says *paused until you are in the game* when it is not running.
+**Bots → Spawn** shows ready, solving, the rate it is running at, spawns
+waiting, spent, expired unused and timed out, and says *paused until you are in
+the game* when it is not running.
 **Fill now** skips the wait for the next keeper tick after a burst of spawns has
 drained the pool.
 
 *Timed out* moving is the wedge recovery doing its job, not something stuck. A
 number that keeps climbing means Cloudflare is not answering.
+
+### Why a slow fill is the right trade
+
+A cold pool takes about a minute and a half to reach forty while you are
+moving, against the twenty-five seconds four-at-a-time would have taken. That
+is the trade, and it is the right way round: a pool that is a minute behind
+costs nothing once it is full, and dropped frames cost something every second.
+
+It also keeps up once full even at the slower rate. Forty tokens expiring at
+240s is one to replace every 6 seconds; one challenge per 2.5s keeper tick is
+capacity for one every 2.5s. The rate limit only lengthens the initial fill —
+it never stops the pool holding its level.
 
 ### The standing cost, and what the gate buys
 

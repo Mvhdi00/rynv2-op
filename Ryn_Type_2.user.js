@@ -261,13 +261,27 @@ window.grbtp = 35;
   // How many are kept ready, always. Forty is the fleet cap, so a full pool is
   // a full fleet spawned back to back with nothing waiting on verification.
   const TURNSTILE_POOL_TARGET = 40;
-  // Widgets rendering at once. Filling forty by starting forty challenges
-  // together would put forty iframes on the page and forty requests at
-  // Cloudflare in one go; the pool fills a few at a time instead and the keeper
-  // comes back every couple of seconds for the rest. Nothing waits on a full
-  // pool — an empty one just mints inline, the way it did before any of this
-  // existed.
-  const TURNSTILE_MAX_CONCURRENT = 4;
+  // Challenges rendering at once.
+  //
+  // A Turnstile challenge is a cross-origin iframe that lays out, composites
+  // and runs proof of work, and several of them side by side is a frame-rate
+  // cost you can feel — the page is trying to render a game at the same time.
+  // So the default is one. The pool takes longer to fill and the game stays
+  // smooth, which is the right way round: a pool that is a minute behind costs
+  // nothing once it is full, and dropped frames cost something every second.
+  //
+  // Standing still is the exception. Nothing about the game needs the frame
+  // budget at that moment, so a second challenge can run alongside and the
+  // pool catches up while you are not doing anything.
+  const TURNSTILE_CONCURRENT_MOVING = 1;
+  const TURNSTILE_CONCURRENT_STILL = 2;
+  // Entity.speed is the distance covered in the last server tick, and the rest
+  // of this client already calls anything under about this "not moving".
+  const TURNSTILE_STILL_SPEED = 8;
+  // How long still before the second slot opens. Longer than the keeper's own
+  // interval, so it takes two consecutive quiet ticks rather than catching the
+  // one frame between two steps of a fight.
+  const TURNSTILE_STILL_MS = 4e3;
   const TURNSTILE_KEEPER_MS = 2500;
   // A challenge that has been running this long is written off. Its own
   // timeout is 20s, so this only fires for one that never settled at all —
@@ -307,6 +321,38 @@ window.grbtp = 35;
     // What the panel reports: minting is on, both gates open.
     get running() {
       return this._ready() && this._inGame();
+    }
+    // When the player was first seen standing still. Zero means they are
+    // moving, so the second slot is closed.
+    _stillSince=0;
+    _concurrency=TURNSTILE_CONCURRENT_MOVING;
+    // Sampled once per top-up, and only there. The panel reads the result
+    // rather than taking its own sample, because this advances the stillness
+    // clock — a reading that moved with whether the menu happened to be open
+    // would be a different rate depending on where you were looking.
+    _sampleConcurrency(now) {
+      let speed = Infinity;
+      try {
+        const mp = client && client.myPlayer;
+        if (mp && typeof mp.speed === "number") {
+          speed = mp.speed;
+        }
+      } catch (_) {}
+      // Written as `!(speed <= x)` so an unreadable speed — Infinity, NaN —
+      // counts as moving and takes the quieter rate.
+      if (!(speed <= TURNSTILE_STILL_SPEED)) {
+        this._stillSince = 0;
+        this._concurrency = TURNSTILE_CONCURRENT_MOVING;
+        return this._concurrency;
+      }
+      if (this._stillSince === 0) {
+        this._stillSince = now;
+      }
+      this._concurrency = now - this._stillSince >= TURNSTILE_STILL_MS ? TURNSTILE_CONCURRENT_STILL : TURNSTILE_CONCURRENT_MOVING;
+      return this._concurrency;
+    }
+    get concurrency() {
+      return this._concurrency;
     }
     // Is the Turnstile script actually on the page yet. Without this the keeper
     // would start four challenges every 2.5s from the moment the userscript
@@ -385,11 +431,22 @@ window.grbtp = 35;
         born: Date.now()
       });
     }
-    // Nothing left running and nothing on the shelf: anyone waiting is waiting
-    // for something that is not coming, so let them fall through to minting
-    // their own rather than sitting out the full timeout.
+    // Nothing left running and nothing on the shelf. Before giving up on the
+    // waiters, try to start something for them: at one challenge at a time a
+    // queue of spawns is served one after another, and waking them all the
+    // moment the first token lands would send the rest off to mint their own
+    // — which is the pile of simultaneous challenges the concurrency limit
+    // exists to prevent.
+    //
+    // Only when nothing can be started — the gates are shut, or the rate is
+    // already spent — do they fall through, rather than sitting out the full
+    // timeout for something that is not coming.
     _wakeIfDry() {
       if (this.waiters.length === 0 || this.inflight.length > 0 || this.ready.length > 0) {
+        return;
+      }
+      this.refill();
+      if (this.inflight.length > 0) {
         return;
       }
       while (this.waiters.length > 0) {
@@ -454,7 +511,7 @@ window.grbtp = 35;
     }
     // Top the pool up. Counts what is already in flight, so a burst of spawns
     // does not start a widget per press on top of the ones already rendering,
-    // and never starts more than TURNSTILE_MAX_CONCURRENT at a time.
+    // and never starts more than `concurrency` allows at a time.
     refill() {
       const now = Date.now();
       this._prune(now);
@@ -465,7 +522,7 @@ window.grbtp = 35;
       // Anyone waiting is demand on top of the shelf, so the pool keeps
       // minting for them even when it is otherwise full.
       const short = TURNSTILE_POOL_TARGET + this.waiters.length - this.ready.length - this.inflight.length;
-      const want = Math.min(short, TURNSTILE_MAX_CONCURRENT - this.inflight.length);
+      const want = Math.min(short, this._sampleConcurrency(now) - this.inflight.length);
       for (let i = 0; i < want; i++) {
         const slot = {
           at: now
@@ -27140,6 +27197,7 @@ window.grbtp = 35;
       let stalled = 0;
       let waiting = 0;
       let running = false;
+      let concurrency = 1;
       try {
         ready = TokenPool.size;
         minting = TokenPool.minting;
@@ -27149,6 +27207,7 @@ window.grbtp = 35;
         stalled = TokenPool.stalled;
         waiting = TokenPool.waiting;
         running = TokenPool.running;
+        concurrency = TokenPool.concurrency;
       } catch (_) {
         return;
       }
@@ -27158,6 +27217,11 @@ window.grbtp = 35;
       }
       if (minting > 0) {
         bits.push(minting + " solving");
+      }
+      // Which of the two rates it is running at, so a slow fill is legible as
+      // the frame-rate guard doing its job rather than as something wrong.
+      if (running) {
+        bits.push(concurrency > 1 ? "2 at a time while you stand still" : "1 at a time while you move");
       }
       if (waiting > 0) {
         bits.push(waiting + " spawn waiting");

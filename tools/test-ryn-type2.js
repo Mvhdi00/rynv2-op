@@ -92,7 +92,9 @@ function buildPool(env) {
     const client = env.client;
     ${poolSrc}
     return { TokenPool: TokenPool, TTL: TURNSTILE_TTL_MS, CF: TURNSTILE_CF_LIFETIME_MS,
-             SAFETY: TURNSTILE_SAFETY_MS, MAXC: TURNSTILE_MAX_CONCURRENT,
+             SAFETY: TURNSTILE_SAFETY_MS,
+             MOVING: TURNSTILE_CONCURRENT_MOVING, STILL: TURNSTILE_CONCURRENT_STILL,
+             STILL_SPEED: TURNSTILE_STILL_SPEED, STILL_MS: TURNSTILE_STILL_MS,
              TARGET: TURNSTILE_POOL_TARGET, KEEPER: TURNSTILE_KEEPER_MS,
              MINT_TIMEOUT: TURNSTILE_MINT_TIMEOUT_MS, WAIT: TURNSTILE_WAIT_MS };
   `;
@@ -309,8 +311,12 @@ function poolHarness(opts) {
   // The two gates the pool checks before starting anything: Cloudflare's own
   // script being on the page, and the main player being in the game. Both open
   // by default; the gate tests close them.
+  //
+  // `speed` is what the frame-rate guard reads — distance covered last server
+  // tick. Zero (standing still) by default, so the pool settles to its faster
+  // rate after a couple of ticks; the guard's own tests move the player.
   const win = { turnstile: o.noTurnstile ? undefined : { render: () => {} }, top: null };
-  const cl = { myPlayer: { inGame: o.outOfGame ? false : true } };
+  const cl = { myPlayer: { inGame: o.outOfGame ? false : true, speed: o.speed === undefined ? 0 : o.speed } };
   const built = buildPool({
     Date: { now: () => now },
     window: win,
@@ -325,8 +331,12 @@ function poolHarness(opts) {
     advance: ms => { now += ms; },
     get minted() { return minted; },
     get inflight() { return inflight.length; },
-    // One keeper tick: top up, then let whatever it started resolve.
+    // One keeper tick: advance the clock by the keeper's own interval, top up,
+    // then let whatever it started resolve. The clock has to move, because the
+    // frame-rate guard decides its rate from how long the player has been
+    // standing still.
     tick: async () => {
+      now += built.KEEPER;
       built.TokenPool.refill();
       const batch = inflight;
       inflight = [];
@@ -378,7 +388,46 @@ async function testPool() {
     ok("nothing is minted before the Turnstile script loads", h.minted === 0);
     h.win.turnstile = { render: () => {} };
     h.pool.refill();
-    ok("minting starts as soon as it is there", h.minted === h.k.MAXC, "minted=" + h.minted);
+    ok("minting starts as soon as it is there", h.minted > 0, "minted=" + h.minted);
+  }
+
+  // ── the frame-rate guard ──────────────────────────────────────────────────
+  //
+  // A Turnstile challenge is a cross-origin iframe doing proof of work, and
+  // several at once costs the game frames. One while the player is moving,
+  // two once they have been standing still for a while.
+  {
+    const h = poolHarness({ speed: 40 });          // running
+    h.pool.refill();
+    ok("one challenge at a time while moving", h.pool.minting === h.k.MOVING, "minting=" + h.pool.minting);
+    for (let i = 0; i < 10; i++) { h.advance(h.k.KEEPER); h.pool.refill(); }
+    ok("still one after ten ticks of moving", h.pool.minting === h.k.MOVING, "minting=" + h.pool.minting);
+    ok("the panel reports the moving rate", h.pool.concurrency === h.k.MOVING);
+
+    h.client.myPlayer.speed = 0;                   // stopped
+    h.advance(h.k.KEEPER);
+    h.pool.refill();
+    ok("stopping does not open the second slot immediately", h.pool.concurrency === h.k.MOVING);
+    h.advance(h.k.STILL_MS);
+    h.pool.refill();
+    ok("standing still for long enough opens it", h.pool.concurrency === h.k.STILL);
+    ok("and a second challenge starts", h.pool.minting === h.k.STILL, "minting=" + h.pool.minting);
+
+    h.client.myPlayer.speed = 40;                  // moving again
+    h.advance(h.k.KEEPER);
+    h.pool.refill();
+    ok("moving again closes it", h.pool.concurrency === h.k.MOVING);
+
+    // Right on the threshold, and an unreadable speed.
+    h.client.myPlayer.speed = h.k.STILL_SPEED;
+    h.pool.refill();                      // starts the stillness clock
+    h.advance(h.k.STILL_MS);
+    h.pool.refill();
+    ok("the threshold itself counts as still", h.pool.concurrency === h.k.STILL);
+    h.client.myPlayer.speed = NaN;
+    h.advance(h.k.STILL_MS);
+    h.pool.refill();
+    ok("an unreadable speed takes the quieter rate", h.pool.concurrency === h.k.MOVING);
   }
 
   // And nothing is started until the main player is actually in the game. A
@@ -412,13 +461,13 @@ async function testPool() {
   let h = poolHarness();
   h.pool.refill();
   ok("the pool fills once you are in the game", h.minted > 0);
-  ok("it does not start forty challenges at once", h.inflight === h.k.MAXC, "inflight=" + h.inflight);
+  ok("it does not start forty challenges at once", h.inflight === h.pool.concurrency && h.inflight <= h.k.STILL, "inflight=" + h.inflight);
   h.pool.refill();
-  ok("a refill does not double-mint what is already in flight", h.minted === h.k.MAXC, "minted=" + h.minted);
+  ok("a refill does not double-mint what is already in flight", h.minted === h.pool.concurrency, "minted=" + h.minted);
 
   const rounds = await h.fill();
   ok("it fills to the full forty", h.pool.size === h.k.TARGET, "size=" + h.pool.size);
-  ok("in the expected number of keeper ticks", rounds === Math.ceil(h.k.TARGET / h.k.MAXC), "rounds=" + rounds);
+  ok("in no more ticks than the faster rate allows", rounds <= h.k.TARGET, "rounds=" + rounds);
   h.pool.refill();
   ok("a full pool mints nothing more", h.inflight === 0);
 
@@ -466,10 +515,11 @@ async function testPool() {
   {
     const hh = poolHarness();
     hh.pool.refill();
+    const before = hh.minted;
     await hh.failAll();
     ok("a failed mint leaves the pool empty", hh.pool.size === 0);
     hh.pool.refill();
-    ok("a failed mint releases its slot so the keeper retries", hh.minted === hh.k.MAXC * 2, "minted=" + hh.minted);
+    ok("a failed mint releases its slot so the keeper retries", hh.minted > before, "minted=" + hh.minted);
   }
 
   // The target is a constant now, not a setting.
@@ -485,20 +535,21 @@ async function testPool() {
   {
     const hh = poolHarness();
     hh.pool.refill();
-    ok("four challenges are running", hh.pool.minting === hh.k.MAXC, "minting=" + hh.pool.minting);
+    const rate = hh.pool.concurrency;
+    ok("every concurrency slot is running", hh.pool.minting === rate, "minting=" + hh.pool.minting);
     // None of them ever settle.
     for (let i = 0; i < 10; i++) hh.pool.refill();
-    ok("a wedged pool starts nothing new", hh.minted === hh.k.MAXC, "minted=" + hh.minted);
+    ok("a wedged pool starts nothing new", hh.minted === rate, "minted=" + hh.minted);
     ok("and has nothing to show for it", hh.pool.size === 0);
 
     hh.advance(hh.k.MINT_TIMEOUT - 1);
     hh.pool.refill();
-    ok("a challenge inside its deadline is left alone", hh.pool.minting === hh.k.MAXC, "minting=" + hh.pool.minting);
+    ok("a challenge inside its deadline is not written off", hh.pool.stalled === 0, "stalled=" + hh.pool.stalled);
 
     hh.advance(2);
     hh.pool.refill();
-    ok("past the deadline the stuck ones are written off", hh.pool.stalled === hh.k.MAXC, "stalled=" + hh.pool.stalled);
-    ok("and the pool starts minting again", hh.minted === hh.k.MAXC * 2, "minted=" + hh.minted);
+    ok("past the deadline the stuck ones are written off", hh.pool.stalled >= rate, "stalled=" + hh.pool.stalled);
+    ok("and the pool starts minting again", hh.minted > rate, "minted=" + hh.minted);
     await hh.fill();
     ok("a pool that wedged recovers to full", hh.pool.size === hh.k.TARGET, "size=" + hh.pool.size);
   }
@@ -509,9 +560,10 @@ async function testPool() {
     hh.pool.refill();
     hh.advance(hh.k.MINT_TIMEOUT + 1);
     hh.pool.refill();
-    ok("the slow ones were written off", hh.pool.stalled === hh.k.MAXC);
+    ok("the slow ones were written off", hh.pool.stalled > 0, "stalled=" + hh.pool.stalled);
+    const started = hh.minted;
     await hh.settleAll();
-    ok("a late token is kept rather than thrown away", hh.pool.size >= hh.k.MAXC, "size=" + hh.pool.size);
+    ok("every late token is kept rather than thrown away", hh.pool.size === started, "size=" + hh.pool.size + " started=" + started);
   }
 
   // Spending the whole pool, repeatedly, never stops it coming back.
@@ -534,7 +586,8 @@ async function testPool() {
   {
     const hh = poolHarness();
     hh.pool.refill();
-    ok("the pool is busy and empty", hh.pool.minting === hh.k.MAXC && hh.pool.size === 0);
+    const busy = hh.pool.minting;
+    ok("the pool is busy and empty", busy > 0 && hh.pool.size === 0);
     const before = hh.minted;
     const spawn = hh.pool.waitFor(5000);
     ok("a waiting spawn starts no challenge of its own", hh.minted === before, "minted=" + hh.minted);
@@ -543,7 +596,7 @@ async function testPool() {
     const got = await spawn;
     ok("the spawn is handed the first token out", typeof got === "string" && got.length > 0);
     ok("it counts as spent", hh.pool.spent === 1);
-    ok("the rest went to the shelf", hh.pool.size === hh.k.MAXC - 1, "size=" + hh.pool.size);
+    ok("the rest went to the shelf", hh.pool.size === busy - 1, "size=" + hh.pool.size);
   }
 
   // Several spawns at once queue rather than each starting a challenge.
@@ -553,10 +606,12 @@ async function testPool() {
     const before = hh.minted;
     const spawns = [ hh.pool.waitFor(5000), hh.pool.waitFor(5000), hh.pool.waitFor(5000) ];
     ok("three waiting spawns start no challenges of their own", hh.minted === before, "minted=" + hh.minted);
-    await hh.settleAll();
+    // Served one after another, because the rate limit still applies to them.
+    for (let i = 0; i < 6 && hh.pool.waiting > 0; i++) await hh.settleAll();
     const got = await Promise.all(spawns);
-    ok("all three are served", got.every(t => typeof t === "string"));
+    ok("all three are served rather than sent off to mint their own", got.every(t => typeof t === "string"), JSON.stringify(got));
     ok("with three different tokens", new Set(got).size === 3);
+    ok("and no more challenges than tokens", hh.minted === 3, "minted=" + hh.minted);
   }
 
   // A waiter must not sit out the full timeout when nothing is coming.
