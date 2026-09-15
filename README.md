@@ -177,3 +177,104 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# Ryn Type 2 — v2.2 placement & prediction pass
+
+`Ryn_Type_2.user.js` is the Type 2 line, descended from the mix above. v2.2 is
+a latency and prediction pass over the existing engine: no new engine, no
+second scheduler, no duplicate packet manager, no duplicate collision system.
+Eight changes, each traced to a measured cause.
+
+Everything below is checked by `node tools/verify-placement.js`, which extracts
+the real functions out of the userscript by brace matching and exercises them —
+80 assertions, including 288,000 samples of the aperture solver against a
+transcription of the game's own `checkItemLocation`.
+
+## What was actually slow
+
+| # | Cause | Effect |
+|---|---|---|
+| 1 | The whole module pipeline was scheduled on `setTimeout(cb, 1)` from the player-update frame | 1–30ms added to **every** decision, **every** tick, before a packet is sent — timers are clamped and serviced after rendering, and this client draws a canvas on 21 connections |
+| 2 | Preplace/retrap repeats anchored at `TICK − pong/2` | Every repeat arrived ~half a round trip *into* the next server tick instead of at the top of it — 35–60ms late at the stated 70–120ms ping |
+| 3 | `attrition()` read only fully-reloaded actors | A melee weapon is on cooldown 2 ticks in 3, so the retrap candidate for the trap being broken existed on **33% of ticks** and was re-derived from nothing on the rest |
+| 4 | Trap state asked as `distance < trap.scale` (50) | The game pins at `playerScale + scale*colDiv` = **45**. Targets in the 45–50 band were treated as pinned while the server had them free |
+| 5 | `blockersAround` added the blocker item's 300 radius to every sweep | 13×13 cells instead of 7×7, per connection per tick, to catch an item capped at 3 per player that is usually not on the board |
+| 6 | `SpatialHashGrid2D.query` allocated a `Set` per call | The hottest function in the client; thousands of short-lived Sets a second, collected during the busiest frames |
+| 7 | Spike Sync 2 bailed on `moveTo !== "disable"` | Auto Push sets `moveTo` for the whole shove — so the shove that walks a victim onto a spike suppressed the contact swing on the tick they arrived |
+| 8 | Luna's break-edge detector (`_getPrePlaceObject`) was ported and never called | The earliest warning of an opening slot the client can produce was computed by nothing |
+
+## What changed
+
+**Tick dispatch** — `_rynImmediate` (a `MessagePort` task) replaces the 1ms
+timer. Ordering is not weakened but strengthened: `_scheduleTickFlush` re-posts
+itself while frames are still arriving (`packetSeq`), so it runs on the first
+turn with nothing left to apply instead of guessing that a millisecond is
+enough. The timer stays as the backstop; the `"H"` early-fire is unchanged.
+
+**Send timing** — `_retrapOffsets` anchors at `TICK − pong`. Derivation: the
+frame we are reading is `pong/2` old, the next server tick is `TICK − pong/2`
+away, and the send needs another `pong/2` to arrive. Both references land on
+the same number empirically (Luna fires at `111 − pingTime` and repeats at
+`111 − minPingTime`); the jitter shot is taken from them for the same reason.
+Repeats are now **cancelled** by the deletion packet they were guessing at, and
+capped per tick across every claim — fewer packets, not more.
+
+**Break forecast** — `assess()` gains `byPotential`, so a deadline exists on the
+ticks between swings. Units are swings, so it carries no reload penalty (a
+count of remaining swings does not change with cooldown phase). `attrition()`
+reads the full sweep instead of only the loaded half, with the loaded reading
+kept as a floor, so nothing it used to report is reported later. The retrap on
+the trap holding the target is exempt from the *steal* confidence bar — that bar
+was written for taking an enemy's building, where being early costs a slot.
+Result: **33% → 100%** of ticks inside the window carry the candidate.
+
+**Trap state** — `rpeTrapHolding()` prefers the client's own swept answer
+(`isTrapped`/`trappedIn`, with the ownership test) and falls back to the game's
+exact `playerScale + collisionScale`. Used by both auto place and the engine, so
+the two cannot disagree about who is pinned.
+
+**Offer order** — auto place's qualifying arc is now three tiers: named picks,
+then builds whose footprint actually *reaches* the target, then the rest. The
+boundary is the game's contact radius exactly (`enemyScale + item.scale` — 84 for
+basic spikes), unpadded. This is the branch that decides a trapped fight, where
+spike branch 3 qualifies the whole ring and order alone picks the build.
+
+**Sweeps** — blockers are registered on `ObjectManager` as they are placed, so
+`blockersAround` uses the radius that describes a spike (49 cells, not 169). The
+attrition sweep drops 120 units of slack the grid already covers. `query()`
+dedups with a stamp instead of a `Set`, per nesting depth so a nested query
+cannot corrupt an outer walk.
+
+**Spike Sync 2** — the contact burst is evaluated first, ahead of both follow-ups
+and ahead of the `moveTo` gate, which now guards only Velocity Tick's own
+two-tick plan. `moduleActive` and `shouldIgnoreModule` remain hard gates. No
+Auto Punch, no Auto Push, no manual punch in the path.
+
+**Break edge** — `_getPrePlaceObject` is called from `postTick` (before the
+state-change early-out, because the edge it watches is on the *enemy's* reload
+counter, which that signature has no term for) and read by the engine's
+`_imminentBreak`, which folds it into `attrition` and `_breakPressure`.
+
+## Verification
+
+```sh
+node --check Ryn_Type_2.user.js
+node tools/verify-placement.js
+```
+
+Notable results:
+
+- The analytic aperture solver agrees with a transcription of the game's
+  `checkItemLocation` on **288,000 ring samples over 400 generated boards**,
+  including the river band and the blocker's 300 radius.
+- Ring geometry: 144 and 200 share exactly 8 samples (the ones 45° apart);
+  every one of the 144 intervals is subdivided, 96 gaining one sample and 48
+  gaining two; neighbour spacing at the spike ring is 2.48u against 3.45u, a
+  28% cut in worst-case aim error. Both rates remain selectable.
+- Timing: at 70/90/120ms ping the single shot fires at 41.1 / 21.1 / 4.0ms into
+  the window (the last is the floor — past a round trip of one tick, the correct
+  action is to send now).
+- Trap state: 44u trapped, 45.0u trapped, 45.1u free, 47u free — the last is the
+  case the old 50u test got wrong.
