@@ -281,6 +281,32 @@ plus the ownership test and a four-tick hold. The hold matters: without it the
 gate flickers open on a tick the collision reads clear and fires exactly the
 swing it exists to prevent. No new detector, no distance proxy.
 
+## Who spends the reload
+
+There is one primary reload and three modules that want it. The order is now:
+
+| situation | who swings |
+|---|---|
+| enemy in **our trap**, not on a spike | **nobody** — reload kept |
+| enemy in our trap **and on a spike** | **Spike Sync 2** |
+| enemy free, on a spike | Spike Sync 2 first, KB Spike after it is spent |
+| enemy free, knockback would put them on a spike | KB Spike |
+
+`VelocityTick.ownsContact(enemy)` is what makes that hold real. Spike Sync
+Hammer and Spike Sync both run **before** `velocityTick` in
+`ModuleHandler.modules` and both spend a reload, and their existing stand-aside
+went through `autoPush.ownsTarget` — which answers false whenever the shove is
+not running. With Auto Push off they took the reload first and the contact
+swing never happened. They now honour both of Spike Sync 2's claims, as does
+KB Spike (which can reach a tick `velocityTick` bailed on, since Velocity Tick
+refuses while `moveTo` is set and KB Spike does not).
+
+`ownsContact` is read-only and mirrors `pushState()`: it is answerable before
+`velocityTick` has run, and it never holds for a burst that cannot happen — the
+weapon and the reach are tested, because those are the refusals that do not fix
+themselves while a contact sits open. Reload is deliberately not tested; that
+one does fix itself, and neither `syncPending` nor `ownsTarget` tests it either.
+
 ## Spike Sync 2 — fires on contact, no Auto Push requirement
 
 It used to run only off `autoPush.pushState()`, which made it a sub-feature of

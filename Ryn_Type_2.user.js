@@ -17202,12 +17202,18 @@ window.grbtp = 35;
         }
         return;
       }
-      // Spike Sync 2 owns the swing at a player being walked onto a spike. This
-      // module would spend the same reload a tick or two earlier, on a spike it
-      // is placing now instead of the one they are about to be pinned against —
-      // and there is only one reload between the two. It stands aside for that
-      // player alone; any other target is still its own.
-      if (Settings_default._spikeSync2 && ModuleHandler.staticModules.autoPush.ownsTarget(nearest)) {
+      // Spike Sync 2 owns the swing at a player on a spike. This module would
+      // spend the same reload a tick or two earlier, on a spike it is placing
+      // now instead of the one they are already against — and there is only one
+      // reload between the two. It stands aside for that player alone; any
+      // other target is still its own.
+      //
+      // Two claims now, because Spike Sync 2 has two ways of arming. The shove
+      // path is `ownsTarget`, unchanged. The contact path is `ownsContact`, and
+      // it is the one that matters with Auto Push off: without it this module
+      // takes the reload first and the contact swing never happens, which is
+      // the behaviour the contact trigger was added to produce.
+      if (Settings_default._spikeSync2 && (ModuleHandler.staticModules.autoPush.ownsTarget(nearest) || ModuleHandler.staticModules.velocityTick.ownsContact(nearest))) {
         return;
       }
       if (!EnemyManager2.shouldIgnoreModule() && nearest !== null && EnemyManager2.canSpikeSync && placementAngles !== null && isPolearm && primaryReloaded) {
@@ -17254,8 +17260,9 @@ window.grbtp = 35;
       }
       const nearestSyncEnemy = EnemyManager2.nearestSyncEnemy;
       // Same hold as Spike Sync's, for the same reason: one reload, and the
-      // swing on the spike they are being walked onto is the better half of it.
-      if (Settings_default._spikeSync2 && ModuleHandler.staticModules.autoPush.ownsTarget(nearestSyncEnemy)) {
+      // swing on the spike they are already against is the better half of it.
+      // Both of Spike Sync 2's claims, so the hold survives Auto Push being off.
+      if (Settings_default._spikeSync2 && (ModuleHandler.staticModules.autoPush.ownsTarget(nearestSyncEnemy) || ModuleHandler.staticModules.velocityTick.ownsContact(nearestSyncEnemy))) {
         this.targetEnemy = null;
         this.useTurret = false;
         return;
@@ -21860,6 +21867,43 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
+    // Spike Sync 2's claim on a contact, asked by the modules that run before
+    // this one.
+    //
+    // Same job as `autoPush.ownsTarget` and the same reason for existing: Spike
+    // Sync Hammer and Spike Sync both sit ahead of this module in
+    // ModuleHandler.modules, both spend a reload, and neither can ask this
+    // module's postTick because it has not run yet. So the question is answered
+    // from state that is already computed — EnemyManager's contact reading and
+    // this module's own one-shot flags — exactly as pushState() is.
+    //
+    // It matters now in a way it did not before. Those two modules stood aside
+    // for Spike Sync 2 through `autoPush.ownsTarget`, which answers false
+    // whenever the shove is not running: with Auto Push off they would take the
+    // reload first and the contact swing this feature exists for never
+    // happened. That is the whole point of the contact trigger, so the hold has
+    // to follow it off the shove.
+    //
+    // Read only, and never held for a burst that cannot happen: the weapon and
+    // the reach are the two refusals that do not fix themselves while a contact
+    // sits open, and they are tested here so a module ahead is not suppressed
+    // for nothing. Reload is deliberately not tested — that one does fix
+    // itself, and neither `syncPending` nor `ownsTarget` tests it either.
+    ownsContact(enemy) {
+      if (!Settings_default._spikeSync2) return false;
+      if (enemy === null || enemy === void 0) return false;
+      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      if (EnemyManager2.enemySpikeCollider !== enemy) return false;
+      // Already spent on this contact: a new touch, or a touch on a different
+      // spike, is a new event and is claimable again.
+      const spike = EnemyManager2.enemySpikeColliderObject;
+      const key = enemy.id + ":" + (spike && spike.id !== void 0 ? spike.id : "s");
+      if (this._contactKey === key && this._contactSpent) return false;
+      const primary = myPlayer.getItemByType(0);
+      if (primary === null || primary === void 0) return false;
+      if (!ModuleHandler.staticModules.spikeKB.isValidPrimary(primary)) return false;
+      return myPlayer.collidingSimple(enemy, DataHandler_default.getWeapon(primary).range + enemy.hitScale);
+    }
     // This module had none, so its two-tick bursts and now Spike Sync 2's
     // contact one-shot survived a death and a respawn into a world where the
     // victim and the spike no longer exist. ModuleHandler.reset only calls it
@@ -22878,7 +22922,12 @@ window.grbtp = 35;
       if (EnemyManager2.enemyTrappedByMe(target)) {
         return;
       }
-      if (Settings_default._spikeSync2 && ModuleHandler.staticModules.autoPush.ownsTarget(target)) {
+      // Both of Spike Sync 2's claims. The shove path is the original; the
+      // contact path matters on a tick where Velocity Tick bailed for a reason
+      // this module does not share — it refuses while `moveTo` is set, this one
+      // does not — and would otherwise spend on a knockback the reload that the
+      // contact swing is waiting for.
+      if (Settings_default._spikeSync2 && (ModuleHandler.staticModules.autoPush.ownsTarget(target) || ModuleHandler.staticModules.velocityTick.ownsContact(target))) {
         return;
       }
       // Oracle's `dist <= 35 * 1.8 + range`, which is RYN's hitScale + range.
