@@ -1701,13 +1701,13 @@ window.grbtp = 35;
   const Navbar_default = "<div id=\"navbar-container\">\n  <div class=\"rail-brand\">\n    <span class=\"rail-mark\">RYN</span>\n    <span class=\"rail-sub\">Type 2</span>\n  </div>\n\n  <div id=\"ryn-search-wrap\">\n    <input id=\"ryn-search-input\" type=\"text\" placeholder=\"Search settings\" autocomplete=\"off\" spellcheck=\"false\">\n    <span id=\"ryn-search-clear\" title=\"Clear\">&#10005;</span>\n    <div id=\"ryn-search-dropdown\"></div>\n  </div>\n\n  <div class=\"rail-label\">Categories</div>\n  <nav>\n    <button data-id=\"1\" class=\"open-menu active\"><span class=\"nav-index\">01</span><span class=\"nav-label\">Keybinds</span></button>\n    <button data-id=\"3\" class=\"open-menu\"><span class=\"nav-index\">02</span><span class=\"nav-label\">Visual</span></button>\n    <button data-id=\"2\" class=\"open-menu\"><span class=\"nav-index\">03</span><span class=\"nav-label\">Combat</span></button>\n    <button data-id=\"4\" class=\"open-menu\"><span class=\"nav-index\">04</span><span class=\"nav-label\">Misc</span></button>\n    <button data-id=\"7\" class=\"open-menu\"><span class=\"nav-index\">05</span><span class=\"nav-label\">Music</span></button>\n    <button data-id=\"5\" class=\"open-menu\"><span class=\"nav-index\">06</span><span class=\"nav-label\">Bots</span></button>\n  </nav>\n\n  <div class=\"rail-label\">In this category</div>\n  <div id=\"nav-outline\"></div>\n\n  <div class=\"rail-foot\">\n    <span id=\"ryn-version\">Ryn Type 2</span>\n    <svg id=\"close-button\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" title=\"Close menu\">\n      <line x1=\"5\" y1=\"5\" x2=\"19\" y2=\"19\" stroke-linecap=\"round\"/>\n      <line x1=\"19\" y1=\"5\" x2=\"5\" y2=\"19\" stroke-linecap=\"round\"/>\n    </svg>\n  </div>\n</div>";
   const Devtool_default = "";
   const Keybinds_default = "<div class=\"menu-page opened\" data-id=\"1\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Keybinds</h1>\n        <p class=\"page-description\">Click a key to start editing, then press the key or mouse button you want. Backspace clears a binding. A key used twice is marked as a conflict on both rows.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Items &amp; Weapons<span class=\"sec-sub\">Hotbar placement and the weapon slots.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Food</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_food\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Wall</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_wall\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spike\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Windmill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_windmill\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Farm</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_farm\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Trap</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_trap\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Turret</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_turret\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spawn</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spawn\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Client<span class=\"sec-sub\">Opening this menu and firing the instakill sequence.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Menu</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_toggleMenu\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Instakill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_instakill\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Quick Actions<span class=\"sec-sub\">One-press build patterns and on/off switches for the automations.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Quad Spikes</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_fourSpikes\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Quad Traps</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_fourTraps\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Boost Spike Rush</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_boostSpikes\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Automill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoMillKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Dash</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_dashMovementKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Auto Grind</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoGrindKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Autoplacer</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoplacerKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Controls<span class=\"sec-sub\">Everything that commands the bots you have connected.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spawn Bot</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spawnBot\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Kill All Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_killAllBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Hold Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_holdBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Release Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_releaseBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Bot Auto-Attack</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAutoAttack\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Auto Farm</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAutoFarm\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Repel Alts</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_repelAlts\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Bot Random Movement</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_scatterBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Avoid Shield Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAvoidShieldKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Volley Fire</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botVolleyKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Freeze Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_freezeBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Lock bot position</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_lockBotPosition\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n    <div class=\"section\">\n        <div class=\"section-title\">Possession<span class=\"sec-sub\">Which of your characters you are controlling. These three keys are taken before anything else sees them &mdash; the game maps the arrows to movement, so letting one through would walk the character you just left.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Next character</span>\n                    <span class=\"opt-desc\">Steps forward through you and every bot that is in the game.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessNext\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Previous character</span>\n                    <span class=\"opt-desc\">The same ring, backwards.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessPrev\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Back to your own character</span>\n                    <span class=\"opt-desc\">Jumps straight back to you from wherever you are.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessMain\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n</div>";
-  const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Combat</h1>\n        <p class=\"page-description\">Every automation the client runs during a fight, ordered by the moment it fires: the kill sequence first, then how it places, how it survives, and what it does with the rest of the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Kill Sequences<span class=\"sec-sub\">Timed weapon and hat chains that try to finish a target outright.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_toolSpearInsta\">Tool Spear Insta</label>\n                    <span class=\"opt-desc\">Tool hammer into polearm burst.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_toolSpearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeGearInsta\">Spike Gear Insta</label>\n                    <span class=\"opt-desc\">Spike placement combined with a gear swap on the same tick.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeGearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\n                    <span class=\"opt-desc\">Ranged finisher chaining musket and bow shots.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_musketBowInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Sync<span class=\"sec-sub\">Landing separate sources of damage on the same server tick.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\n                    <span class=\"opt-desc\">Lines up your hits with whatever else is about to damage the target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\n                    <span class=\"opt-desc\">Times your swing to a turret shot landing.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_velocityTick\">Velocity Tick</label>\n                    <span class=\"opt-desc\">Uses the target's movement to predict the tick worth hitting.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_velocityTick\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSync\">Spike sync</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSyncHammer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeSync2\">Spike Sync 2</label>\n                    <span class=\"opt-desc\">Runs with Autopush. While a shove is walking a trapped target onto a spike - the purple line - Spike KB is held, because its knockback moves them away from you, which is off the line the shove is walking them down. Then the tick they actually touch the spike, the swing goes out on that same tick: they are trapped, pinned against it and already taking its damage, so the hit lands with the spike's own. The turret shot follows on the next tick. Like Spike KB, but where Spike KB fires on a knockback that would put them in a spike, this waits until they are in it - and it needs the shove to have been live, so an enemy merely standing near a spike is still Spike KB's. Runs on this switch alone; Velocity Tick keeps its own conditions and turning it off does not affect this. Needs Autopush on, and a diamond polearm with the turret.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync2\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Placement<span class=\"sec-sub\">Where spikes and traps go, and how fast they get replaced.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacer\">Autoplacer</label>\n                    <span class=\"opt-desc\">Keeps spikes going down around you without holding the key.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoplacer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoplacer radius</span>\n                    <span class=\"opt-desc\">How far from you the autoplacer is allowed to build.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Placer scanners</span>\n                    <span class=\"opt-desc\">How many spots the autoplacer looks at once. The first one is aimed at the enemy; each of the others owns its own slice of the ring around you and never builds in another's, so the open ground on your other sides gets used instead of ignored. 1 is the enemy-facing scanner alone.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerScanners\" type=\"range\" step=\"1\" min=\"1\" max=\"6\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacerResolution\">Placer resolution</label>\n                    <span class=\"opt-desc\">How finely the autoplacer cuts the ring around you when it looks for ground. A spike on the ring blocks about 153 degrees of it, so what is left is a few arcs and the slots between builds are thin - finer steps find slots a coarser pass walks straight past. Legality is solved for the whole ring at once rather than asked one angle at a time, so 144 costs about 0.003ms a tick more than 36, which is why it is the default. One step moves the landing point 13.8 units at 36 and 3.4 at 144. Used flat, every tick.</span>\n                </div>\n                <select id=\"_autoplacerResolution\" class=\"ryn-select\">\n                    <option value=\"36\">36 - coarse</option>\n                    <option value=\"72\">72 - balanced</option>\n                    <option value=\"144\">144 - default</option>\n                </select>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_prePlace\">Preplace</label>\n                    <span class=\"opt-desc\">Puts the next spike down before the target arrives at it.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_prePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spamPrePlace\">Spam Preplace</label>\n                    <span class=\"opt-desc\">Sends a preplace on its forecast rather than waiting for the break it is predicting, and lets one refused for being a tick early try the same slot again on the next tick instead of being locked out of it by its own send. This is what takes an enemy build's ground on the tick it falls: the placement is already at the server, instead of starting a round trip when the deletion packet arrives. Costs packets on the guesses that miss.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spamPrePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <span class=\"option-title\">Retrap Resend</span>\n                        <span class=\"opt-desc\">Extra sends of the same replacement while an enemy is breaking out of your trap, timed into the rest of the tick and offset for your ping. It starts early and gets louder: four swings out it is already holding the slot with one send, two swings out it spends half, and on the last tick all of them, swept back across the window from a ping-compensated anchor so the same claim exists at several moments rather than one. The trap they are standing in is also looked further ahead than any other build, so the replacement is booked - and the ground reserved - well before the break instead of arriving to contest it afterwards. It is the same claim sent again, not a second placement, so it takes no extra ground and files nothing; only the packets are new. Worth it here and nowhere else: a trapped enemy cannot walk away from the ground being fought over, so this is the one forecast their movement cannot spoil, and the trap they are breaking is the most valuable slot on the board. 0 turns it off. Needs Spam Preplace on.</span>\n                    </div>\n                    <label class=\"slider\">\n                        <span class=\"slider-value\"></span>\n                        <input id=\"_retrapResend\" type=\"range\" step=\"1\" min=\"0\" max=\"6\">\n                    </label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_replace\">Replace</label>\n                    <span class=\"opt-desc\">Rebuilds a broken spike the moment it goes down.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_replace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <span class=\"option-title\">Replace Burst</span>\n                        <span class=\"opt-desc\">How many builds one deletion may put down. A freed slot is ground, not a point, and one build is one thing to refuse - the enemy takes the slot beside it and the ground is theirs anyway. Several non-overlapping builds around the same opening cannot all be answered. This raises only the ceiling: the value floor, the reservation ledger, the per-item caps, the non-overlap rule and the packet budget still apply to every build in the burst, so an opening worth one build still gets one. Only a deletion plans this deep; an ordinary tick is unchanged.</span>\n                    </div>\n                    <label class=\"slider\">\n                        <span class=\"slider-value\"></span>\n                        <input id=\"_replaceBurst\" type=\"range\" step=\"1\" min=\"3\" max=\"6\">\n                    </label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\n                    <span class=\"opt-desc\">Builds to block an incoming placement against you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_placementDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapKB\">Trap KB</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapKB\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeKB\">Spike KB</label>\n                    <span class=\"opt-desc\">Swings the primary when the knockback would put them in one of your spikes, or when they are already standing in one. Katana or polearm.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeKB\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Healing, shielding and the hats that keep you alive.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\n                    <span class=\"opt-desc\">Predicts what can land this tick and eats before it does, not after.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoheal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoShield\">Auto Shield</label>\n                    <span class=\"opt-desc\">Raises the shield against incoming melee.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_rangedShield\">Ranged Shield</label>\n                    <span class=\"opt-desc\">Also shields against projectiles.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_rangedShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_empDefense\">Emp Defense</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_empDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoemp\">Auto emp</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoemp\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_soldierDefault\">Soldier default</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_soldierDefault\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeSoldier\">Safe Soldier</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeSoldier\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeWalk\">Safe walk</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeWalk\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Anti Systems<span class=\"sec-sub\">Reactions to what other players and the world do to you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\n                    <span class=\"opt-desc\">Reacts to an enemy closing in on you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_antienemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antianimal\">Anti animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antianimal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antispike\">Anti spike</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antispike\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiSpikePush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiRetrap\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you wear, and when it changes.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\n                    <span class=\"opt-desc\">Swaps to the hat that suits the biome you are standing in.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_biomehats\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\n                    <span class=\"opt-desc\">Picks gear from the threat in front of you rather than a fixed set.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_adaptiveGearSwitching\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_tailPriority\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_cowboyWhenSafe\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\n                    <span class=\"opt-desc\">Pushes a target toward your own spikes.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto Push Range</span>\n                    <span class=\"opt-desc\">How close a target has to be before autopush engages.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_trapStandoff\">Trap Standoff</label>\n                    <span class=\"opt-desc\">Keeps you off an enemy held in your trap. Your body is the only thing that can push a trapped player out - a weapon hit cannot, because the trap zeroes their velocity, but walking into them moves their position directly. Blocks only the part of your movement that closes the gap, so you still circle and reposition normally. Auto Push does the opposite on purpose and takes priority when it is on.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_trapStandoff\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Trap Standoff Distance</span>\n                    <span class=\"opt-desc\">The closest you will get. The game starts pushing at 70, so 70 and up stops the push outright; under 70 you still overlap and still shove them, and the number only caps how deep the overlap gets. Holding a direction against the line orbits outward a little before turning back in, so you sit between this number and about 28 above it - and a melee swing reaches weapon range plus 63, which is 128 for the shortest primary in the game, so every weapon stays in reach across the whole slider.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_trapStandoffRange\" type=\"range\" step=\"1\" min=\"50\" max=\"90\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\n                    <span class=\"opt-desc\">Short burst movement instead of a steady walk.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_dashMovement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\n                    <span class=\"opt-desc\">Breaks the structures standing between you and a target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autobreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_breakPosition\">Break Position</label>\n                        <span class=\"opt-desc\">Which trap Autobreak takes. Inside: only the trap you are caught in. Outside: only traps you are not in. Spikes break the same either way.</span>\n                    </div>\n                    <select id=\"_breakPosition\" class=\"ryn-select\">\n                        <option value=\"inside\">Inside</option>\n                        <option value=\"outside\">Outside</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_automill\">Automill</label>\n                    <span class=\"opt-desc\">Leaves windmills behind you while you move.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_automill\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\n                    <span class=\"opt-desc\">Gathers resources on its own when nothing is threatening you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoGrind\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetPrimary\">Grind Until (primary)</label>\n                        <span class=\"opt-desc\">Which variant to take your primary weapon to. Grinding idles once both slots reach their target, and picks straight back up if you raise one.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetPrimary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                    </select>\n                </div>\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetSecondary\">Grind Until (secondary)</label>\n                        <span class=\"opt-desc\">The same for your secondary. Only the great hammer is ground here, so this does nothing while you carry anything else.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetSecondary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPlay\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_turretSteal\">Turret steal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSteal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapAnimal\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
-  const Visuals_default = "<div class=\"menu-page\" data-id=\"3\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Visual</h1>\n        <p class=\"page-description\">Everything the client draws over the game. Turn off what you do not read during a fight — the fewer overlays are on, the less there is between you and the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Names<span class=\"sec-sub\">How players are labelled on the field.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">My Name</span>\n                    <span class=\"opt-desc\">Draws your own nickname in a colour of your choosing.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_myNameColorValue\" type=\"color\" title=\"Select Color\">\n                    <label class=\"switch-checkbox\"><input id=\"_myNameColor\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Mark RYN Players</span>\n                    <span class=\"opt-desc\">Flags other players running this client.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_markRynPlayers\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Player ID</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_showPlayerID\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Player HUD<span class=\"sec-sub\">Readouts drawn on and around players.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Weapon Reload Bar</span>\n                    <span class=\"opt-desc\">Draws each weapon's cooldown as a white edge inside its own tile in the item bar.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_weaponReloadBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Render HP</span>\n                    <span class=\"opt-desc\">Draws a health value on players instead of a bar alone.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_renderHP\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Position Prediction</span>\n                    <span class=\"opt-desc\">Marks where a moving player is expected to be on the next tick.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_positionPrediction\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">My Turret Reload Bar</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_playerTurretReloadBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Display player angle</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_displayPlayerAngle\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">World<span class=\"sec-sub\">Tint and weather drawn over the map itself.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Purple Tint</span>\n                    <span class=\"opt-desc\">Recolours world objects so structures read faster.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_objectTint\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Tint Transparency</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_objectTintOpacity\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_weather\">Rain &amp; Snow</label>\n                    <span class=\"opt-desc\">Rain across the map, turning to snow inside the snow biome.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_weather\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Intensity</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_weatherAmount\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_deathCorpse\">Death Corpses</label>\n                    <span class=\"opt-desc\">Leaves a body where a player you killed died, wearing a halo and angel wings &mdash; or a cowboy hat and a devil tail if they were the one carrying the skull. It holds on the spot, then floats up and fades away. Local and visual only.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_deathCorpse\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Structures<span class=\"sec-sub\">Who owns a building, and how much of it is left.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Structure Readout (Mine/Clan)</span>\n                    <span class=\"opt-desc\">Owner name and a health bar over your own and your clan's structures, within 500 units.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_itemHealthBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Structure Readout (Enemy)</span>\n                    <span class=\"opt-desc\">The same over everything that is not yours.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_itemHealthBarEnemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Health Bar Colour</span>\n                    <span class=\"opt-desc\">The fill inside the bar, for every structure.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_itemHealthBarColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Structure Colours<span class=\"sec-sub\">Spikes and traps recoloured by who placed them.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_structureColors\">Structure Colours</label>\n                    <span class=\"opt-desc\">Tints every spike and trap by its owner, so an enemy build reads at a glance. Ownership is the client's own team detection. Purely visual.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_structureColors\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Colour Strength</span>\n                    <span class=\"opt-desc\">How much of the original sprite the tint covers.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_structureColorStrength\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Own Spike</span>\n                    <span class=\"opt-desc\">Spikes you placed.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_ownSpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Ally Spike</span>\n                    <span class=\"opt-desc\">Spikes placed by your clan.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_allySpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enemy Spike</span>\n                    <span class=\"opt-desc\">Everyone else's spikes.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_enemySpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Own Trap</span>\n                    <span class=\"opt-desc\">Traps you placed.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_ownTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Ally Trap</span>\n                    <span class=\"opt-desc\">Traps placed by your clan.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_allyTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enemy Trap</span>\n                    <span class=\"opt-desc\">Everyone else's traps.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_enemyTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Hitboxes<span class=\"sec-sub\">Debug outlines. Useful while learning a range, noisy otherwise.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Weapon hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_weaponHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Collision hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_collisionHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Placement hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_placementHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Possible placement</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_possiblePlacement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Interface<span class=\"sec-sub\">The game's own interface and how much it draws.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Hide game HUD</span>\n                    <span class=\"opt-desc\">Removes moomoo's own interface and leaves the map alone.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_hideHUD\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Melee Animation</span>\n                    <span class=\"opt-desc\">Grip-based swing, thrust and chop animations for melee weapons. Off restores moomoo's own spin. Shields, every bow and the musket are never touched either way.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_meleeAnimation\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_visualSmoothing\">Visual Smoothing</label>\n                    <span class=\"opt-desc\">Keeps motion even rather than dropping frames to keep up. Off lets Low Quality Mode skip every second frame when the rate collapses.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_visualSmoothing\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_renderOptimization\">Rendering Optimization</label>\n                    <span class=\"opt-desc\">Caches the canvas contexts and skips canvas state writes that would not change anything.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_renderOptimization\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_performanceOptimization\">Performance Optimization</label>\n                    <span class=\"opt-desc\">Skips per-object overlay work for overlays that are switched off. Never touches anything the modules act on.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_performanceOptimization\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Low Quality Mode</span>\n                    <span class=\"opt-desc\">Cuts rendering detail. Turn this on if the game drops frames.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_lowQuality\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
+  const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Combat</h1>\n        <p class=\"page-description\">Every automation the client runs during a fight, ordered by the moment it fires: the kill sequence first, then how it places, how it survives, and what it does with the rest of the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Kill Sequences<span class=\"sec-sub\">Timed weapon and hat chains that try to finish a target outright.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_toolSpearInsta\">Tool Spear Insta</label>\n                    <span class=\"opt-desc\">Tool hammer into polearm burst.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_toolSpearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeGearInsta\">Spike Gear Insta</label>\n                    <span class=\"opt-desc\">Spike placement combined with a gear swap on the same tick.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeGearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\n                    <span class=\"opt-desc\">Ranged finisher chaining musket and bow shots.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_musketBowInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Sync<span class=\"sec-sub\">Landing separate sources of damage on the same server tick.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\n                    <span class=\"opt-desc\">Lines up your hits with whatever else is about to damage the target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\n                    <span class=\"opt-desc\">Times your swing to a turret shot landing.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_velocityTick\">Velocity Tick</label>\n                    <span class=\"opt-desc\">Uses the target's movement to predict the tick worth hitting.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_velocityTick\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSync\">Spike sync</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSyncHammer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeSync2\">Spike Sync 2</label>\n                    <span class=\"opt-desc\">Runs with Autopush. While a shove is walking a trapped target onto a spike - the purple line - Spike KB is held, because its knockback moves them away from you, which is off the line the shove is walking them down. Then the tick they actually touch the spike, the swing goes out on that same tick: they are trapped, pinned against it and already taking its damage, so the hit lands with the spike's own. The turret shot follows on the next tick. Like Spike KB, but where Spike KB fires on a knockback that would put them in a spike, this waits until they are in it - and it needs the shove to have been live, so an enemy merely standing near a spike is still Spike KB's. Runs on this switch alone; Velocity Tick keeps its own conditions and turning it off does not affect this. Needs Autopush on, and a diamond polearm with the turret.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync2\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Placement<span class=\"sec-sub\">Where spikes and traps go, and how fast they get replaced.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacer\">Autoplacer</label>\n                    <span class=\"opt-desc\">Keeps spikes going down around you without holding the key.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoplacer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoplacer radius</span>\n                    <span class=\"opt-desc\">How far from you the autoplacer is allowed to build.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Placer scanners</span>\n                    <span class=\"opt-desc\">How many spots the autoplacer looks at once. The first one is aimed at the enemy; each of the others owns its own slice of the ring around you and never builds in another's, so the open ground on your other sides gets used instead of ignored. 1 is the enemy-facing scanner alone.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerScanners\" type=\"range\" step=\"1\" min=\"1\" max=\"6\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacerResolution\">Placer resolution</label>\n                    <span class=\"opt-desc\">How finely the autoplacer cuts the ring around you when it looks for ground. A spike on the ring blocks about 153 degrees of it, so what is left is a few arcs and the slots between builds are thin - finer steps find slots a coarser pass walks straight past. One step moves the landing point 13.8 units at 36, 6.9 at 72, 3.4 at 144 and 2.5 at 200, and the furthest a wanted direction can sit from a sample is half of that. 144 is the resolution this client shipped on and reproduces it exactly; 200 is the default. Nothing else changes between them - same validation, same collision solve, same scoring, same prediction, same scheduler. Legality is solved for the whole ring at once rather than asked one angle at a time, and the sin/cos table is built once for the whole session, so the finer settings cost no trigonometry and no allocation per tick. Preplace and replace draw candidates from this same table, so raising it makes the prediction finer as well as the placement. Used flat, every tick.</span>\n                </div>\n                <select id=\"_autoplacerResolution\" class=\"ryn-select\">\n                    <option value=\"36\">36 - coarse</option>\n                    <option value=\"72\">72 - balanced</option>\n                    <option value=\"144\">144 - original</option>\n                    <option value=\"200\">200 - default</option>\n                </select>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_prePlace\">Preplace</label>\n                    <span class=\"opt-desc\">Puts the next spike down before the target arrives at it.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_prePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spamPrePlace\">Spam Preplace</label>\n                    <span class=\"opt-desc\">Sends a preplace on its forecast rather than waiting for the break it is predicting, and lets one refused for being a tick early try the same slot again on the next tick instead of being locked out of it by its own send. This is what takes an enemy build's ground on the tick it falls: the placement is already at the server, instead of starting a round trip when the deletion packet arrives. Costs packets on the guesses that miss.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spamPrePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <span class=\"option-title\">Retrap Resend</span>\n                        <span class=\"opt-desc\">Extra sends of the same replacement while an enemy is breaking out of your trap, timed into the rest of the tick and offset for your ping. It starts early and gets louder: four swings out it is already holding the slot with one send, two swings out it spends half, and on the last tick all of them, swept back across the window from a ping-compensated anchor so the same claim exists at several moments rather than one. The trap they are standing in is also looked further ahead than any other build, so the replacement is booked - and the ground reserved - well before the break instead of arriving to contest it afterwards. It is the same claim sent again, not a second placement, so it takes no extra ground and files nothing; only the packets are new. Worth it here and nowhere else: a trapped enemy cannot walk away from the ground being fought over, so this is the one forecast their movement cannot spoil, and the trap they are breaking is the most valuable slot on the board. 0 turns it off. Needs Spam Preplace on.</span>\n                    </div>\n                    <label class=\"slider\">\n                        <span class=\"slider-value\"></span>\n                        <input id=\"_retrapResend\" type=\"range\" step=\"1\" min=\"0\" max=\"6\">\n                    </label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_replace\">Replace</label>\n                    <span class=\"opt-desc\">Rebuilds a broken spike the moment it goes down.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_replace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <span class=\"option-title\">Replace Burst</span>\n                        <span class=\"opt-desc\">How many builds one deletion may put down. A freed slot is ground, not a point, and one build is one thing to refuse - the enemy takes the slot beside it and the ground is theirs anyway. Several non-overlapping builds around the same opening cannot all be answered. This raises only the ceiling: the value floor, the reservation ledger, the per-item caps, the non-overlap rule and the packet budget still apply to every build in the burst, so an opening worth one build still gets one. Only a deletion plans this deep; an ordinary tick is unchanged.</span>\n                    </div>\n                    <label class=\"slider\">\n                        <span class=\"slider-value\"></span>\n                        <input id=\"_replaceBurst\" type=\"range\" step=\"1\" min=\"3\" max=\"6\">\n                    </label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\n                    <span class=\"opt-desc\">Builds to block an incoming placement against you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_placementDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapKB\">Trap KB</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapKB\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeKB\">Spike KB</label>\n                    <span class=\"opt-desc\">Swings the primary when the knockback would put them in one of your spikes, or when they are already standing in one. Katana or polearm.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeKB\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Healing, shielding and the hats that keep you alive.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\n                    <span class=\"opt-desc\">Predicts what can land this tick and eats before it does, not after.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoheal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_healPriority\">Heal Priority</label>\n                        <span class=\"opt-desc\">Decides which hat the heal happens behind, instead of only when to eat. On a tick the prediction says is lethal it forces soldier and eats behind it; when the count is already carrying shame and nothing lethal is coming it holds the food a tick or two so the server does not charge you for it. Off, the autoheal eats exactly as it did before.</span>\n                    </div>\n                    <label class=\"switch-checkbox\"><input id=\"_healPriority\" type=\"checkbox\"><span></span></label>\n                </div>\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_soldierEMP\">EMP Anti</label>\n                        <span class=\"opt-desc\">Wears the EMP helmet instead of soldier when the lethal half of the tick is turret fire. Turrets will not shoot someone wearing it, so it removes that damage rather than reducing it - but only that damage, which is why it is asked for only when every source that has hit you this tick is one it answers. It needs the helmet owned, soldier already on, and the tick to be survivable once the turret's 25 is taken out. Needs Heal Priority on.</span>\n                    </div>\n                    <label class=\"switch-checkbox\"><input id=\"_soldierEMP\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoShield\">Auto Shield</label>\n                    <span class=\"opt-desc\">Raises the shield against incoming melee.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_rangedShield\">Ranged Shield</label>\n                    <span class=\"opt-desc\">Also shields against projectiles.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_rangedShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_empDefense\">Emp Defense</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_empDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoemp\">Auto emp</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoemp\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_soldierDefault\">Soldier default</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_soldierDefault\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeSoldier\">Safe Soldier</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeSoldier\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeWalk\">Safe walk</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeWalk\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Anti Systems<span class=\"sec-sub\">Reactions to what other players and the world do to you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\n                    <span class=\"opt-desc\">Reacts to an enemy closing in on you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_antienemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antianimal\">Anti animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antianimal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antispike\">Anti spike</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antispike\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiSpikePush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiRetrap\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you wear, and when it changes.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\n                    <span class=\"opt-desc\">Swaps to the hat that suits the biome you are standing in.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_biomehats\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\n                    <span class=\"opt-desc\">Picks gear from the threat in front of you rather than a fixed set.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_adaptiveGearSwitching\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_tailPriority\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_cowboyWhenSafe\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\n                    <span class=\"opt-desc\">Pushes a target toward your own spikes.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto Push Range</span>\n                    <span class=\"opt-desc\">How close a target has to be before autopush engages.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_trapStandoff\">Trap Standoff</label>\n                    <span class=\"opt-desc\">Keeps you off an enemy held in your trap. Your body is the only thing that can push a trapped player out - a weapon hit cannot, because the trap zeroes their velocity, but walking into them moves their position directly. Blocks only the part of your movement that closes the gap, so you still circle and reposition normally. Auto Push does the opposite on purpose and takes priority when it is on.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_trapStandoff\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Trap Standoff Distance</span>\n                    <span class=\"opt-desc\">The closest you will get. The game starts pushing at 70, so 70 and up stops the push outright; under 70 you still overlap and still shove them, and the number only caps how deep the overlap gets. Holding a direction against the line orbits outward a little before turning back in, so you sit between this number and about 28 above it - and a melee swing reaches weapon range plus 63, which is 128 for the shortest primary in the game, so every weapon stays in reach across the whole slider.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_trapStandoffRange\" type=\"range\" step=\"1\" min=\"50\" max=\"90\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\n                    <span class=\"opt-desc\">Short burst movement instead of a steady walk.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_dashMovement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\n                    <span class=\"opt-desc\">Breaks the structures standing between you and a target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autobreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_breakPosition\">Break Position</label>\n                        <span class=\"opt-desc\">Which trap Autobreak takes. Inside: only the trap you are caught in. Outside: only traps you are not in. Spikes break the same either way.</span>\n                    </div>\n                    <select id=\"_breakPosition\" class=\"ryn-select\">\n                        <option value=\"inside\">Inside</option>\n                        <option value=\"outside\">Outside</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_automill\">Automill</label>\n                    <span class=\"opt-desc\">Leaves windmills behind you while you move.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_automill\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\n                    <span class=\"opt-desc\">Gathers resources on its own when nothing is threatening you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoGrind\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetPrimary\">Grind Until (primary)</label>\n                        <span class=\"opt-desc\">Which variant to take your primary weapon to. Grinding idles once both slots reach their target, and picks straight back up if you raise one.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetPrimary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                    </select>\n                </div>\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetSecondary\">Grind Until (secondary)</label>\n                        <span class=\"opt-desc\">The same for your secondary. Only the great hammer is ground here, so this does nothing while you carry anything else.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetSecondary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPlay\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_turretSteal\">Turret steal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSteal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapAnimal\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
+  const Visuals_default = "<div class=\"menu-page\" data-id=\"3\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Visual</h1>\n        <p class=\"page-description\">Everything the client draws over the game. Turn off what you do not read during a fight — the fewer overlays are on, the less there is between you and the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Names<span class=\"sec-sub\">How players are labelled on the field.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">My Name</span>\n                    <span class=\"opt-desc\">Draws your own nickname in a colour of your choosing.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_myNameColorValue\" type=\"color\" title=\"Select Color\">\n                    <label class=\"switch-checkbox\"><input id=\"_myNameColor\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Mark RYN Players</span>\n                    <span class=\"opt-desc\">Flags other players running this client.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_markRynPlayers\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Player ID</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_showPlayerID\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Player HUD<span class=\"sec-sub\">Readouts drawn on and around players.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Weapon Reload Bar</span>\n                    <span class=\"opt-desc\">Shows how far every weapon is through its cooldown.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_weaponReloadBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Render HP</span>\n                    <span class=\"opt-desc\">Draws a health value on players instead of a bar alone.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_renderHP\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Position Prediction</span>\n                    <span class=\"opt-desc\">Marks where a moving player is expected to be on the next tick.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_positionPrediction\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">My Turret Reload Bar</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_playerTurretReloadBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Display player angle</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_displayPlayerAngle\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">World<span class=\"sec-sub\">Tint and weather drawn over the map itself.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Purple Tint</span>\n                    <span class=\"opt-desc\">Recolours world objects so structures read faster.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_objectTint\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Tint Transparency</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_objectTintOpacity\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_weather\">Rain &amp; Snow</label>\n                    <span class=\"opt-desc\">Rain across the map, turning to snow inside the snow biome.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_weather\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Intensity</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_weatherAmount\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_deathCorpse\">Death Corpses</label>\n                    <span class=\"opt-desc\">Leaves a body where a player you killed died, wearing a halo and angel wings &mdash; or a cowboy hat and a devil tail if they were the one carrying the skull. It holds on the spot, then floats up and fades away. Local and visual only.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_deathCorpse\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Structures<span class=\"sec-sub\">Who owns a building, and how much of it is left.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Structure Readout (Mine/Clan)</span>\n                    <span class=\"opt-desc\">Owner name and a health bar over your own and your clan's structures, within 500 units.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_itemHealthBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Structure Readout (Enemy)</span>\n                    <span class=\"opt-desc\">The same over everything that is not yours.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_itemHealthBarEnemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Health Bar Colour</span>\n                    <span class=\"opt-desc\">The fill inside the bar, for every structure.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_itemHealthBarColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Structure Colours<span class=\"sec-sub\">Spikes and traps recoloured by who placed them.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_structureColors\">Structure Colours</label>\n                    <span class=\"opt-desc\">Tints every spike and trap by its owner, so an enemy build reads at a glance. Ownership is the client's own team detection. Purely visual.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_structureColors\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Colour Strength</span>\n                    <span class=\"opt-desc\">How much of the original sprite the tint covers.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_structureColorStrength\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Own Spike</span>\n                    <span class=\"opt-desc\">Spikes you placed.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_ownSpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Ally Spike</span>\n                    <span class=\"opt-desc\">Spikes placed by your clan.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_allySpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enemy Spike</span>\n                    <span class=\"opt-desc\">Everyone else's spikes.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_enemySpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Own Trap</span>\n                    <span class=\"opt-desc\">Traps you placed.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_ownTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Ally Trap</span>\n                    <span class=\"opt-desc\">Traps placed by your clan.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_allyTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enemy Trap</span>\n                    <span class=\"opt-desc\">Everyone else's traps.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_enemyTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Hitboxes<span class=\"sec-sub\">Debug outlines. Useful while learning a range, noisy otherwise.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Weapon hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_weaponHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Collision hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_collisionHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Placement hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_placementHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Possible placement</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_possiblePlacement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Interface<span class=\"sec-sub\">The game's own interface and how much it draws.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Hide game HUD</span>\n                    <span class=\"opt-desc\">Removes moomoo's own interface and leaves the map alone.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_hideHUD\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Melee Animation</span>\n                    <span class=\"opt-desc\">Grip-based swing, thrust and chop animations for melee weapons. Off restores moomoo's own spin. Shields, every bow and the musket are never touched either way.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_meleeAnimation\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_visualSmoothing\">Visual Smoothing</label>\n                    <span class=\"opt-desc\">Keeps motion even rather than dropping frames to keep up. Off lets Low Quality Mode skip every second frame when the rate collapses.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_visualSmoothing\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_renderOptimization\">Rendering Optimization</label>\n                    <span class=\"opt-desc\">Caches the canvas contexts and skips canvas state writes that would not change anything.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_renderOptimization\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_performanceOptimization\">Performance Optimization</label>\n                    <span class=\"opt-desc\">Skips per-object overlay work for overlays that are switched off. Never touches anything the modules act on.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_performanceOptimization\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Low Quality Mode</span>\n                    <span class=\"opt-desc\">Cuts rendering detail. Turn this on if the game drops frames.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_lowQuality\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
   const Misc_default = "<div class=\"menu-page\" data-id=\"4\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Misc</h1>\n        <p class=\"page-description\">Everything around the fight: what happens on a kill, what gets typed into chat for you and for the bots, how this menu behaves, and the counters the client has kept since you installed it.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Match<span class=\"sec-sub\">What the client does when a round starts or ends.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Kill Message</span>\n                    <span class=\"opt-desc\">Sends this line in chat every time you get a kill.</span>\n                </div>\n                <div class=\"option-content\">\n                    <input id=\"_killMessageText\" class=\"input\" type=\"text\" maxlength=\"30\" placeholder=\"Message\">\n                    <label class=\"switch-checkbox\"><input id=\"_killMessage\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Provoke on Kill</span>\n                    <span class=\"opt-desc\">Reacts in chat when someone kills you instead.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_deathProvoke\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autospawn</span>\n                    <span class=\"opt-desc\">Respawns you as soon as the death screen appears.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autospawn\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoaccept</span>\n                    <span class=\"opt-desc\">Accepts incoming clan requests without asking.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoaccept\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Auto Chat<span class=\"sec-sub\">Lines you post on a timer. They cycle in the order listed.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enable</span>\n                    <span class=\"opt-desc\">Starts posting your messages while you are in game.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoChat\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Interval</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoChatInterval\" type=\"range\" step=\"1\" min=\"1\" max=\"60\" data-suffix=\"s\">\n                </label>\n            </div>\n            <div id=\"autoChatMsgList\"></div>\n            <div class=\"content-option centered\">\n                <button id=\"addAutoChatMsg\" class=\"option-button\">Add message</button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Auto Chat<span class=\"sec-sub\">The same thing, typed by every connected bot.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enable Player Chat</span>\n                    <span class=\"opt-desc\">Lets the bots post their own list of lines.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoBotChat\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div id=\"autoBotChatMsgList\"></div>\n            <div class=\"content-option centered\">\n                <button id=\"addAutoBotChatMsg\" class=\"option-button\">Add player message</button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Menu<span class=\"sec-sub\">How this interface itself behaves.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">See through the menu</span>\n                    <span class=\"opt-desc\">Lets the game show faintly behind this panel while it is open.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_menuTransparency\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Session<span class=\"sec-sub\">Counters kept by the client. They persist between games.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Total kills</span></div>\n                <span id=\"_totalKills\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Global kills with bots</span></div>\n                <span id=\"_globalKills\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Deaths</span></div>\n                <span id=\"_deaths\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Autosync</span></div>\n                <span id=\"_autoSyncTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike sync hammer</span></div>\n                <span id=\"_spikeSyncHammerTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike sync</span></div>\n                <span id=\"_spikeSyncTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Velocity tick</span></div>\n                <span id=\"_velocityTickTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Client</span></div>\n                <span id=\"author\" class=\"text-value\">Ryn Type 2</span>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Reset<span class=\"sec-sub\">Puts every setting on every page back to its shipped value.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Reset all settings</span>\n                    <span class=\"opt-desc\">Keybinds, combat, visual, misc and bot options all return to defaults. Your music library is not touched.</span>\n                </div>\n                <button id=\"resetSettings\" class=\"option-button red\">Reset settings</button>\n            </div>\n        </div>\n    </div>\n</div>";
   const Bots_default = "<div class=\"menu-page\" data-id=\"5\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Bots</h1>\n        <p class=\"page-description\">Connect alternate clients, name them, and decide how they follow, fight, build and farm. Everything below applies to every bot you have connected.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Fleet<span class=\"sec-sub\">Add a bot, give it a name, connect it. Connected bots appear underneath.</span></div>\n        <div class=\"section-content\">\n            <div id=\"bot-container\"></div>\n            <div id=\"dynamic-bot-list\"></div>\n            <div class=\"content-option stacked\" id=\"_botBulkRow\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Name every bot</span>\n                    <span class=\"opt-desc\">One name for the whole fleet. Every new row is pre-filled with it, so bots you add from here on join under it. <b>Apply to all</b> also gives it to the rows and bots you already have &mdash; a bot that is alive keeps the name it spawned with until it next respawns.</span>\n                </div>\n                <div class=\"inline\">\n                    <input id=\"_botBulkName\" class=\"input\" type=\"text\" maxlength=\"15\" placeholder=\"Enter name\" autocomplete=\"off\" spellcheck=\"false\">\n                    <button id=\"_botBulkNameApply\" class=\"option-button\">Apply to all</button>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Number the fleet</span>\n                    <span class=\"opt-desc\">Off, every bot joins under the name exactly as typed. On, each bot gets its slot number appended &mdash; base <b>555</b> becomes 5551, 5552, 5553 and so on. Applied when a bot spawns, so turning it off puts them back on their next respawn.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botNameNumbering\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">First number</span></div>\n                <div class=\"inline\"><input id=\"_botNameNumberStart\" class=\"input\" type=\"number\" min=\"0\" max=\"99\" step=\"1\" value=\"1\"></div>\n            </div>\n            <div class=\"content-option centered\">\n                <button id=\"add-bot-dynamic\" class=\"option-button primary tall\">Add bot</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Clan joins</span>\n                    <span class=\"opt-desc\">Restarts the join rotation for any bot that is still outside your clan. Bots already in it are skipped.</span>\n                </div>\n                <button id=\"_clanRecheck\" class=\"option-button\">Re-check clan joins</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto random bot names</span>\n                    <span class=\"opt-desc\">Pre-fills each new row with a random 1&ndash;7 character name.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoRandomBotNames\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bots own clan</span>\n                    <span class=\"opt-desc\">Each bot creates its own clan instead of joining yours.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botIndividualClans\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Behaviour<span class=\"sec-sub\">What the bots do while they are following you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Follow cursor</span>\n                    <span class=\"opt-desc\">Bots move toward where you are pointing rather than to you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_followCursor\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Stop movement radius</span>\n                    <span class=\"opt-desc\">How close a bot gets to its target point before it stops.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_movementRadius\" type=\"range\" step=\"25\" min=\"25\" max=\"250\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Auto Break</span>\n                    <span class=\"opt-desc\">Bots break structures standing in their way.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAutoBreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Ranged Kiting</span>\n                    <span class=\"opt-desc\">Bots holding a ranged weapon back off instead of closing.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botRangedKite\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Kite distance</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botKiteDistance\" type=\"range\" step=\"25\" min=\"150\" max=\"1200\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Volley Fire</span>\n                    <span class=\"opt-desc\">Bots fire in waves rather than all at once.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botVolley\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">First wave size</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botVolleyWave\" type=\"range\" step=\"1\" min=\"1\" max=\"20\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Avoid Shield Bots</span>\n                    <span class=\"opt-desc\">Bots steer away from a target that is holding a shield up.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAvoidShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Be Angel</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_botBeAngel\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Formation<span class=\"sec-sub\">The shape the fleet holds around you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Shape</span>\n                    <span class=\"opt-desc\">Pick a formation, and bind a key to any of them from inside the picker.</span>\n                </div>\n                <div id=\"_formationGrid\"></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Circle rotation</span>\n                    <span class=\"opt-desc\">Rotates the formation around you instead of holding it still.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_circleRotation\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Circle radius</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_circleRadius\" type=\"range\" step=\"25\" min=\"50\" max=\"600\">\n                </label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Loadout<span class=\"sec-sub\">What each bot carries. &ldquo;Copy from me&rdquo; mirrors your own weapon.</span></div>\n        <div class=\"section-content\">\n            <div class=\"stack\">\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Primary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-weapon-selector\">\n                        <div class=\"bot-weapon-btn\" data-wid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"0\" title=\"Tool Hammer\">Tool Hammer</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"1\" title=\"Hand Axe\">Hand Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"2\" title=\"Great Axe\">Great Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"3\" title=\"Short Sword\">Short Sword</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"4\" title=\"Katana\">Katana</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"5\" title=\"Polearm\">Polearm</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"6\" title=\"Bat\">Bat</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"7\" title=\"Daggers\">Daggers</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"8\" title=\"Stick\">Stick</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Secondary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-sec-weapon-selector\">\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"9\" title=\"Hunting Bow\">Hunting Bow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"10\" title=\"Great Hammer\">Great Hammer</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"11\" title=\"Wooden Shield\">Wooden Shield</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"12\" title=\"Crossbow\">Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"13\" title=\"Repeater Crossbow\">Repeater Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"14\" title=\"Mc Grabby\">Mc Grabby</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"15\" title=\"Musket\">Musket</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-sec-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Age 4 building</div>\n                    <div class=\"wpn-grid\" id=\"bot-age4-selector\">\n                        <div class=\"bot-weapon-btn\" data-age4id=\"0\" title=\"Trap\">Trap</div>\n                        <div class=\"bot-weapon-btn\" data-age4id=\"1\" title=\"Boost Pad\">Boost Pad</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-age4-label\">Trap (default)</span></div>\n                </div>\n            </div>\n\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Platform w/ Musket</span>\n                    <span class=\"opt-desc\">Bots carrying a musket build a platform to shoot from.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_platformMusket\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Auto Farm<span class=\"sec-sub\">Bots gather on their own and come back when they are done.</span></div>\n        <div class=\"section-content\">\n            <div class=\"stack\">\n                <div class=\"field\">\n                    <div class=\"field-head\">Farm mode</div>\n                    <div class=\"seg\">\n                        <button id=\"_farmModeSingle\" class=\"seg-btn\">Single</button>\n                        <button id=\"_farmModeNearest\" class=\"seg-btn\">Nearest</button>\n                    </div>\n                    <p class=\"field-note\">In <b>Single</b> mode every bot goes for one resource type. In <b>Nearest</b> mode each bot takes whatever is closest to it.</p>\n                </div>\n\n                <div class=\"field\" id=\"_farmTypeRow\">\n                    <div class=\"field-head\">Resource type</div>\n                    <div class=\"seg\">\n                        <button data-farm-type=\"0\" class=\"farm-type-btn\">Wood</button>\n                        <button data-farm-type=\"1\" class=\"farm-type-btn\">Food</button>\n                        <button data-farm-type=\"2\" class=\"farm-type-btn\">Stone</button>\n                        <button data-farm-type=\"3\" class=\"farm-type-btn\">Gold</button>\n                    </div>\n                    <input id=\"_botFarmType\" type=\"hidden\" value=\"0\">\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"field-head\">Limit</div>\n                    <div class=\"inline\">\n                        <input id=\"_botFarmLimit\" class=\"input\" type=\"number\" min=\"0\" max=\"9999\" step=\"50\" value=\"0\">\n                        <p class=\"field-note\" style=\"margin-top:0;\">Bots stop and return to you at this amount. <b>0</b> means no limit.</p>\n                    </div>\n                </div>\n            </div>\n        </div>\n    </div>\n    <div class=\"section\">\n        <div class=\"section-title\">Possession<span class=\"sec-sub\">Switch control into a bot and it becomes your character: its camera, its world, its HUD, its resources, its age, its inventory, its chat. Not a spectator view &mdash; you are that character until you switch back.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Who you are controlling</span>\n                    <span class=\"opt-desc\">Click a character to take it over. The game's own HUD, camera and minimap follow whoever is selected, and the rest of the fleet follows that character too.</span>\n                </div>\n                <div id=\"_possessList\"></div>\n            </div>\n        </div>\n    </div>\n\n</div>";
   const Music_default = "<div class=\"menu-page\" data-id=\"7\">\n<style>\n@keyframes ryn-eq{0%,100%{height:4px;}50%{height:16px;}}\n\n.rm-root{display:flex;flex-direction:column;max-width:1180px;margin:0 auto;}\n\n/* ---------- now playing ---------- */\n.rm-player{\n  display:grid;\n  grid-template-columns:auto minmax(0,1fr) auto;\n  grid-template-areas:\"art meta actions\" \"art transport transport\";\n  column-gap:26px;row-gap:22px;align-items:center;\n  padding:26px 0 30px;\n  border-bottom:1px solid var(--line);\n}\n.rm-art{\n  grid-area:art;\n  width:96px;height:96px;flex-shrink:0;\n  display:flex;align-items:flex-end;justify-content:center;gap:4px;\n  padding-bottom:22px;\n  border-radius:var(--r3);\n  background:linear-gradient(150deg,#221D33,#131320);\n  border:1px solid var(--line);\n  position:relative;\n  transition:border-color 260ms var(--ease);\n}\n.rm-art::after{\n  content:'\\266B';\n  position:absolute;inset:0;\n  display:flex;align-items:center;justify-content:center;\n  font-size:30px;color:var(--tx-4);\n  transition:opacity 220ms var(--ease);\n}\n.rm-art.playing{border-color:var(--sage-40);}\n.rm-art.playing::after{opacity:0;}\n.rm-eq{display:none;align-items:flex-end;gap:4px;height:18px;}\n.rm-art.playing .rm-eq{display:flex;}\n.rm-eq-bar{width:3px;border-radius:2px;background:var(--sage);animation:ryn-eq .95s ease-in-out infinite;}\n.rm-eq-bar:nth-child(2){animation-delay:.16s;}\n.rm-eq-bar:nth-child(3){animation-delay:.32s;}\n\n.rm-meta{grid-area:meta;min-width:0;}\n.rm-kicker{\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.24em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:9px;\n}\n.rm-title{\n  font-size:clamp(22px,2.1vw,29px);font-weight:800;line-height:1.12;\n  letter-spacing:-.028em;color:var(--tx-1);\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n}\n.rm-artist{\n  margin-top:7px;font-size:14px;font-weight:600;color:var(--tx-3);\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n}\n.rm-album-badge{\n  display:inline-block;margin-top:10px;\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--iris-hi);\n}\n.rm-album-badge:empty{display:none;}\n\n.rm-actions{grid-area:actions;display:flex;gap:8px;align-self:start;}\n.rm-like-btn,.rm-save-now-btn{\n  width:42px;height:42px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);border:1px solid var(--line);\n  font-size:16px;line-height:1;color:var(--tx-3);cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.rm-like-btn:hover,.rm-save-now-btn:hover{background:rgba(255,255,255,.08);color:var(--tx-1);border-color:var(--line-2);}\n.rm-like-btn.liked,.rm-like-btn.on{color:var(--rose);border-color:rgba(217,163,171,.4);background:var(--rose-12);}\n.rm-save-now-btn.on{color:var(--sky);border-color:var(--sky-45);background:var(--sky-12);}\n\n.rm-transport{grid-area:transport;display:flex;align-items:center;gap:24px;min-width:0;}\n.rm-ctrl{display:flex;align-items:center;gap:8px;flex-shrink:0;}\n.rm-btn{\n  width:38px;height:38px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r2);\n  background:transparent;border:1px solid transparent;\n  color:var(--tx-3);font-size:12.5px;cursor:pointer;\n  transition:background 150ms var(--ease),color 150ms var(--ease),border-color 150ms var(--ease);\n}\n.rm-btn:hover{background:rgba(255,255,255,.06);color:var(--tx-1);}\n.rm-btn.rm-on,.rm-btn.on{color:var(--sage);border-color:var(--sage-40);background:var(--sage-14);}\n.rm-play-btn{\n  width:52px;height:52px;flex-shrink:0;\n  border-radius:16px;\n  background:var(--tx-1);border:none;color:#0A0A0D;\n  font-size:15.5px;\n  transition:transform 150ms var(--ease),background 150ms var(--ease);\n}\n.rm-play-btn:hover{background:#FFFFFF;transform:scale(1.04);}\n.rm-play-btn:active{transform:scale(.97);}\n\n.rm-prog-wrap{flex:1;min-width:0;display:flex;align-items:center;gap:14px;}\n.rm-prog-rail{\n  flex:1;min-width:0;height:5px;border-radius:999px;cursor:pointer;\n  background:rgba(255,255,255,.08);position:relative;\n}\n.rm-prog-fill{\n  height:100%;border-radius:999px;width:0;\n  background:var(--sky);position:relative;\n  transition:width 120ms linear;\n}\n.rm-prog-fill::after{\n  content:'';position:absolute;right:-5px;top:50%;\n  width:11px;height:11px;border-radius:50%;background:#EEF4FA;\n  transform:translateY(-50%) scale(0);\n  transition:transform 150ms var(--ease);\n  box-shadow:0 1px 4px rgba(0,0,0,.6);\n}\n.rm-prog-wrap:hover .rm-prog-fill::after{transform:translateY(-50%) scale(1);}\n.rm-time{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);flex-shrink:0;\n}\n.rm-vol{display:flex;align-items:center;gap:10px;flex-shrink:0;}\n.rm-vol-icon{font-size:13px;color:var(--tx-4);}\n#music-volume{\n  -webkit-appearance:none;appearance:none;\n  width:110px;height:18px;background:transparent;cursor:pointer;\n}\n#music-volume::-webkit-slider-runnable-track{height:4px;border-radius:999px;background:rgba(255,255,255,.09);}\n#music-volume::-webkit-slider-thumb{\n  -webkit-appearance:none;width:12px;height:12px;margin-top:-4px;\n  border-radius:50%;background:#EEF4FA;border:1px solid rgba(0,0,0,.35);\n  transition:transform 130ms var(--ease);\n}\n#music-volume:hover::-webkit-slider-thumb{transform:scale(1.15);}\n.rm-vol-val{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);min-width:34px;text-align:right;\n}\n\n/* ---------- sections ---------- */\n.rm-sec{border-bottom:1px solid var(--line);}\n.rm-sec-head{\n  display:flex;align-items:center;gap:12px;\n  padding:22px 2px;cursor:pointer;user-select:none;\n}\n.rm-sec-dot{\n  width:5px;height:5px;border-radius:50%;flex-shrink:0;\n  background:var(--tx-4);transition:background 200ms var(--ease);\n}\n.rm-sec.open .rm-sec-dot{background:var(--iris-hi);}\n.rm-sec-title{\n  flex:1;font-family:var(--mono);font-size:11.5px;font-weight:700;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-2);\n}\n.rm-sec.open .rm-sec-title{color:var(--iris-hi);}\n.rm-sec-arrow{font-size:9px;color:var(--tx-4);transition:transform 200ms var(--ease);}\n.rm-sec.open .rm-sec-arrow{transform:rotate(180deg);}\n.rm-sec-body{display:none;flex-direction:column;gap:14px;padding:0 2px 26px;}\n.rm-sec.open .rm-sec-body{display:flex;animation:soft-in 180ms var(--ease);}\n\n/* ---------- library ---------- */\n.rm-filter-bar{display:flex;gap:7px;flex-wrap:wrap;}\n.rm-filter-btn{\n  height:34px;padding:0 16px;border-radius:999px;\n  background:rgba(255,255,255,.04);border:1px solid var(--line);\n  font-size:12.5px;font-weight:700;color:var(--tx-3);cursor:pointer;\n  transition:background 150ms var(--ease),color 150ms var(--ease),border-color 150ms var(--ease);\n}\n.rm-filter-btn:hover{background:rgba(255,255,255,.08);color:var(--tx-1);}\n.rm-filter-btn.active{background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;}\n\n#song-list{display:flex;flex-direction:column;}\n.rm-song-row{\n  display:flex;align-items:center;gap:15px;\n  padding:12px 13px;border-radius:var(--r2);cursor:pointer;\n  position:relative;\n  transition:background 140ms var(--ease);\n}\n.rm-song-row:hover{background:rgba(255,255,255,.035);}\n.rm-song-row.active{background:var(--sage-14);}\n.rm-song-row.active::before{\n  content:'';position:absolute;left:0;top:10px;bottom:10px;\n  width:2px;border-radius:0 2px 2px 0;background:var(--sage);\n}\n.rm-snum{\n  width:23px;flex-shrink:0;text-align:center;\n  font-family:var(--mono);font-size:12.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);\n}\n.rm-song-row.active .rm-snum{color:var(--sage);}\n.rm-stitle{\n  flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n}\n.rm-sartist{\n  flex-shrink:1;min-width:0;max-width:30%;\n  font-size:12.5px;font-weight:500;color:var(--tx-4);\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n}\n.rm-s-icons{display:flex;gap:4px;flex-shrink:0;opacity:0;transition:opacity 150ms var(--ease);}\n.rm-song-row:hover .rm-s-icons,.rm-song-row.active .rm-s-icons{opacity:1;}\n.rm-s-like,.rm-s-save,.rm-sdel{\n  width:30px;height:30px;flex-shrink:0;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r1);font-size:12.5px;line-height:1;\n  color:var(--tx-4);cursor:pointer;\n  transition:background 140ms var(--ease),color 140ms var(--ease);\n}\n.rm-s-like:hover,.rm-sdel:hover{background:var(--rose-12);color:var(--rose);}\n.rm-s-save:hover{background:var(--sky-12);color:var(--sky);}\n.rm-s-like.on{color:var(--rose);}\n.rm-s-save.on{color:var(--sky);}\n.rm-song-row:not(:hover) .rm-s-icons:has(.on){opacity:1;}\n.rm-empty{\n  padding:26px 0;text-align:center;\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n\n/* ---------- albums ---------- */\n.rm-album-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}\n.rm-album-card{\n  position:relative;padding:14px;border-radius:var(--r3);cursor:pointer;\n  background:rgba(255,255,255,.03);border:1px solid var(--line);\n  transition:background 160ms var(--ease),border-color 160ms var(--ease),transform 160ms var(--ease);\n}\n.rm-album-card:hover{background:rgba(255,255,255,.06);border-color:var(--line-2);transform:translateY(-2px);}\n.rm-album-card.active{background:var(--iris-12);border-color:var(--iris-45);}\n.rm-album-icon{\n  display:flex;align-items:center;justify-content:center;\n  width:100%;aspect-ratio:1.6;border-radius:var(--r2);margin-bottom:11px;\n  font-size:22px;\n  background:linear-gradient(150deg,#221D33,#131320);\n}\n.rm-album-name{font-size:13.5px;font-weight:700;color:var(--tx-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}\n.rm-album-count{margin-top:3px;font-size:11.5px;font-weight:500;color:var(--tx-4);}\n.rm-album-del{\n  position:absolute;top:8px;right:8px;\n  width:22px;height:22px;border-radius:var(--r1);\n  display:flex;align-items:center;justify-content:center;\n  background:rgba(0,0,0,.55);color:var(--tx-3);\n  font-size:10px;cursor:pointer;opacity:0;\n  transition:opacity 150ms var(--ease),color 150ms var(--ease);\n}\n.rm-album-card:hover .rm-album-del{opacity:1;}\n.rm-album-del:hover{color:var(--rose);}\n\n/* ---------- forms ---------- */\n.rm-form{display:flex;flex-direction:column;gap:9px;max-width:620px;}\n.rm-inp{\n  width:100%;height:42px;padding:0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);border:1px solid var(--line-2);\n  color:var(--tx-1);font-size:13.5px;font-weight:600;\n  outline:none;\n  transition:border-color 150ms var(--ease),background 150ms var(--ease);\n}\n.rm-inp::placeholder{color:var(--tx-4);font-weight:500;}\n.rm-inp:focus{border-color:var(--sky-45);background:var(--sky-12);}\ninput[type=\"file\"].rm-inp{padding:10px 12px;height:auto;font-size:12.5px;font-weight:500;cursor:pointer;}\n.rm-lrc{\n  padding:14px;border-radius:var(--r3);\n  background:rgba(255,255,255,.022);border:1px solid var(--line);\n}\n.rm-lrc-head{\n  display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n#lrc-status{font-family:var(--mono);font-size:11.5px;letter-spacing:0;text-transform:none;color:var(--sky);}\ntextarea.rm-inp{\n  height:98px;padding:11px 13px;resize:vertical;\n  font-family:var(--mono);font-size:12.5px;font-weight:500;line-height:1.6;\n}\n.rm-check{\n  display:flex;align-items:center;gap:9px;margin-top:11px;\n  font-size:12.5px;font-weight:600;color:var(--tx-3);cursor:pointer;\n}\n.rm-check input{accent-color:#A6D7B2;width:15px;height:15px;cursor:pointer;}\n.rm-row{display:flex;gap:9px;}\n\n/* ---------- sync ---------- */\n.rm-sync-row{\n  display:flex;align-items:center;justify-content:space-between;gap:16px;\n  padding:12px 14px;border-radius:var(--r2);\n  transition:background 140ms var(--ease);\n}\n.rm-sync-row:hover{background:rgba(255,255,255,.028);}\n.rm-sync-label{flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);}\n.rm-sync-note{padding:0 14px 8px;font-size:12.5px;font-weight:500;line-height:1.5;color:var(--tx-4);}\n.rm-badge{\n  display:inline-block;margin-left:9px;padding:2px 8px;border-radius:999px;\n  background:var(--iris-12);color:var(--iris-hi);\n  font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;\n  vertical-align:middle;\n}\n.rm-divider{height:1px;background:var(--line);margin:6px 0;}\n.rm-status{\n  font-family:var(--mono);font-size:11.5px;font-weight:500;\n  color:var(--tx-4);min-height:16px;\n}\n#bm-dbg-box{\n  margin:0;padding:11px 13px;border-radius:var(--r2);\n  background:rgba(0,0,0,.4);border:1px solid var(--line);\n  font-family:var(--mono);font-size:11.5px;color:var(--tx-3);\n  white-space:pre-wrap;max-height:150px;overflow-y:auto;\n}\n\n/* ---------- toast + guide ---------- */\n.rm-toast{\n  display:none;position:fixed;left:50%;bottom:28px;\n  transform:translateX(-50%);\n  padding:11px 20px;border-radius:999px;z-index:99999;\n  background:var(--tx-1);color:#0A0A0D;\n  font-size:12.5px;font-weight:700;\n  box-shadow:0 16px 40px -12px rgba(0,0,0,.8);\n}\n.rm-guide{\n  padding:18px 20px;margin-bottom:4px;\n  border-radius:var(--r3);\n  background:rgba(255,255,255,.022);border:1px solid var(--line);\n}\n.rm-guide summary{\n  cursor:pointer;list-style:none;\n  font-size:13.5px;font-weight:700;color:var(--tx-2);\n  display:flex;align-items:center;gap:10px;\n}\n.rm-guide summary::-webkit-details-marker{display:none;}\n.rm-guide summary::before{\n  content:'?';flex-shrink:0;width:20px;height:20px;border-radius:50%;\n  background:var(--iris-12);color:var(--iris-hi);\n  font-family:var(--mono);font-size:11px;font-weight:700;\n  display:grid;place-items:center;\n}\n.rm-guide[open] summary{margin-bottom:14px;color:var(--tx-1);}\n.rm-guide ol{margin:0;padding-left:20px;color:var(--tx-3);font-size:12.5px;line-height:2;}\n.rm-guide code{\n  background:rgba(255,255,255,.06);color:var(--sky);\n  padding:2px 7px;border-radius:5px;font-family:var(--mono);font-size:11.5px;\n}\n.rm-guide a{color:var(--sky);border-bottom:1px solid rgba(155,197,232,.35);}\n.rm-guide a:hover{color:var(--tx-1);border-bottom-color:var(--tx-1);}\n.rm-guide-note{margin-top:14px;color:var(--tx-4);font-size:11.5px;line-height:1.75;}\n</style>\n\n<div id=\"rm-toast\" class=\"rm-toast\"></div>\n\n<div class=\"page-head\">\n    <h1 class=\"page-title\">Music</h1>\n    <p class=\"page-description\">A local library that plays inside the client and can type synced lyrics into chat for you, for your bots, or for both at once.</p>\n</div>\n\n<div class=\"rm-root\">\n\n  <div class=\"rm-player\">\n    <div class=\"rm-art\" id=\"rm-art\">\n      <div class=\"rm-eq\"><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div></div>\n    </div>\n    <div class=\"rm-meta\">\n      <div class=\"rm-kicker\">Now playing</div>\n      <div id=\"music-title\" class=\"rm-title\">No song selected</div>\n      <div id=\"music-artist\" class=\"rm-artist\">--</div>\n      <div id=\"music-album-badge\" class=\"rm-album-badge\"></div>\n    </div>\n    <div class=\"rm-actions\">\n      <button id=\"rm-like-now\" class=\"rm-like-btn\" title=\"Like\">&#9825;</button>\n      <button id=\"rm-save-now\" class=\"rm-save-now-btn\" title=\"Save\">&#9733;</button>\n    </div>\n    <div class=\"rm-transport\">\n      <div class=\"rm-ctrl\">\n        <button id=\"music-prev\" class=\"rm-btn\" title=\"Previous\">&#9664;&#9664;</button>\n        <button id=\"music-play\" class=\"rm-btn rm-play-btn\" title=\"Play / pause\">&#9654;</button>\n        <button id=\"music-next\" class=\"rm-btn\" title=\"Next\">&#9654;&#9654;</button>\n        <button id=\"music-loop\" class=\"rm-btn\" title=\"Loop\">&#8635;</button>\n        <button id=\"music-shuffle\" class=\"rm-btn\" title=\"Shuffle\" style=\"font-size:10px;letter-spacing:.08em;font-weight:700;\">SHF</button>\n      </div>\n      <div class=\"rm-prog-wrap\">\n        <span id=\"music-time-current\" class=\"rm-time\">0:00</span>\n        <div id=\"music-progress-bar\" class=\"rm-prog-rail\"><div id=\"music-progress-fill\" class=\"rm-prog-fill\"></div></div>\n        <span id=\"music-time-total\" class=\"rm-time\">0:00</span>\n      </div>\n      <div class=\"rm-vol\">\n        <span class=\"rm-vol-icon\">&#9834;</span>\n        <input id=\"music-volume\" type=\"range\" min=\"0\" max=\"100\" value=\"70\">\n        <span id=\"music-volume-label\" class=\"rm-vol-val\">70%</span>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec open\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Library</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div id=\"rm-filter-bar\" class=\"rm-filter-bar\">\n        <button class=\"rm-filter-btn active\" data-filter=\"\">All songs</button>\n        <button class=\"rm-filter-btn\" data-filter=\"__liked\">&#9829; Liked</button>\n      </div>\n      <div id=\"song-list\"></div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec open\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Albums</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div id=\"rm-album-grid\" class=\"rm-album-grid\"></div>\n      <div class=\"rm-row\" style=\"max-width:480px;\">\n        <input id=\"album-name-input\" class=\"rm-inp\" type=\"text\" placeholder=\"New album name\" maxlength=\"30\">\n        <button id=\"add-album\" class=\"option-button\">Add</button>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Add song</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <details class=\"rm-guide\">\n        <summary>How to add a song with its lyrics</summary>\n        <ol>\n          <li>Find the song on <a href=\"https://www.youtube.com/\" target=\"_blank\" rel=\"noreferrer\">youtube.com</a> and copy its link.</li>\n          <li>Turn the link into a file on <a href=\"https://ytmp3.gl/\" target=\"_blank\" rel=\"noreferrer\">ytmp3.gl</a> and download the <code>.mp3</code>.</li>\n          <li>Search the same song on <a href=\"https://lrclib.net/\" target=\"_blank\" rel=\"noreferrer\">lrclib.net</a> and download the <b>synced</b> lyrics as <code>.lrc</code>.</li>\n          <li>Fill in the <b>Title</b> below and pick the <code>.mp3</code> in the file box, or paste a direct link in <b>URL</b>.</li>\n          <li>In the <b>LRC sync</b> box, pick the <code>.lrc</code> file &mdash; or paste its lines into the text area.</li>\n          <li>Press <b>Add song</b>. It shows up in the library with its lyrics attached.</li>\n        </ol>\n        <div class=\"rm-guide-note\">The <code>.lrc</code> has to be the synced kind &mdash; the one whose lines start with a timestamp like <code>[01:23.45]</code>. Plain lyrics still show up, but they will not follow the song. If the words drift, an <code>.lrc</code> from a different release of the track is usually the reason.</div>\n      </details>\n      <div class=\"rm-form\">\n        <input id=\"song-title-input\" class=\"rm-inp\" type=\"text\" placeholder=\"Title *\" maxlength=\"50\">\n        <input id=\"song-artist-input\" class=\"rm-inp\" type=\"text\" placeholder=\"Artist\" maxlength=\"30\">\n        <input id=\"song-url-input\" class=\"rm-inp\" type=\"text\" placeholder=\"URL (.mp3  .ogg  .wav)\">\n        <input id=\"song-file-input\" class=\"rm-inp\" type=\"file\" accept=\".mp3,.ogg,.wav,.flac,.aac,.m4a\">\n        <select id=\"song-album-select\" class=\"rm-inp ryn-select\"><option value=\"\">No album</option></select>\n        <div class=\"rm-lrc\">\n          <div class=\"rm-lrc-head\"><span>LRC sync</span><span id=\"lrc-status\"></span></div>\n          <input id=\"lrc-file-input\" class=\"rm-inp\" type=\"file\" accept=\".lrc,.txt\" style=\"margin-bottom:9px;\">\n          <textarea id=\"song-lyrics-input\" class=\"rm-inp\" placeholder=\"[0:15] Line 1&#10;[0:30] Line 2\"></textarea>\n          <label class=\"rm-check\"><input id=\"song-autosync\" type=\"checkbox\"> Auto-play and sync when added</label>\n        </div>\n        <div class=\"rm-row\">\n          <button id=\"add-song\" class=\"option-button primary wide\">Add song</button>\n          <button id=\"save-song-btn\" class=\"option-button\">Save lyrics</button>\n        </div>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Chat sync</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Enable chat sync</span><label class=\"switch-checkbox\"><input id=\"music-chat-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Mixed sync<span class=\"rm-badge\">Me + bots</span></span><label class=\"switch-checkbox\"><input id=\"music-mixed-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">You: line &#8594; bots: line &#8594; you &hellip;</div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Bots only sync<span class=\"rm-badge\">Bots</span></span><label class=\"switch-checkbox\"><input id=\"music-bots-only-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">Bot 1: line 1 &bull; bot 2: line 2 &bull; bot 3: line 3 &hellip;</div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Unified sync<span class=\"rm-badge\">All</span></span><label class=\"switch-checkbox\"><input id=\"music-unified-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">You and every bot post the same line at the same moment.</div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Auto delay<span id=\"bm-auto-delay-badge\" class=\"rm-badge\">off</span></span><label class=\"switch-checkbox\"><input id=\"music-auto-delay\" type=\"checkbox\" checked><span></span></label></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Sync bot<span id=\"bm-sync-bot-badge\" class=\"rm-badge\">off</span></span><button id=\"music-sync-bot-btn\" class=\"option-button\">OFF</button></div>\n      <div id=\"bm-manual-delay-row\" class=\"rm-sync-row\" style=\"display:none;\"><span class=\"rm-sync-label\">Delay</span><label class=\"slider\"><span class=\"slider-value\">0ms</span><input id=\"music-sync-delay\" type=\"range\" min=\"-3000\" max=\"3000\" step=\"50\" value=\"0\"></label></div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-row\" style=\"align-items:center;\">\n        <button id=\"bm-test-chat\" class=\"option-button\">Test chat</button>\n        <span id=\"bm-test-chat-status\" class=\"rm-status\" style=\"align-self:center;\"></span>\n      </div>\n      <button id=\"bm-send-all-lyrics\" class=\"option-button wide\">&#9836; Send All Lyrics: OFF</button>\n      <div id=\"bm-send-lyrics-status\" class=\"rm-status\" style=\"text-align:center;\"></div>\n      <div id=\"bm-dbg-wrap\" style=\"display:none;\"><pre id=\"bm-dbg-box\"></pre></div>\n      <button id=\"bm-dbg-toggle\" class=\"option-button wide\">Show Debug Log</button>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Backup &amp; restore</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <p class=\"rm-sync-note\" style=\"padding-left:0;\">Export the whole library to a JSON file and bring it back on another machine.</p>\n      <div class=\"rm-row\" style=\"max-width:420px;\">\n        <button id=\"music-export-btn\" class=\"option-button wide\">Export</button>\n        <button id=\"music-import-btn\" class=\"option-button wide\">Import</button>\n        <input id=\"music-import-file\" type=\"file\" accept=\".json\" style=\"display:none;\">\n      </div>\n      <div id=\"music-backup-status\" class=\"rm-status\"></div>\n    </div>\n  </div>\n\n</div>\n</div>";
   const styles_default = "@import url(\"https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap\");\n\n/* ============================================================\n   RYN TYPE 2 — interface stylesheet\n   Ground: near-black neutral. Iris (muted purple) = navigation.\n   Sage (soft light green) = enabled. Sky (light blue) = values,\n   focus and interaction. Nothing else carries colour.\n   ============================================================ */\n\n:root{\n  --ink-0:#07070A;\n  --ink-1:#0C0C11;\n  --ink-2:#101016;\n  --ink-3:#15151C;\n  --ink-4:#1B1B24;\n\n  --line:rgba(255,255,255,0.055);\n  --line-2:rgba(255,255,255,0.10);\n  --line-3:rgba(255,255,255,0.16);\n\n  --iris:#8E76CE;\n  --iris-hi:#A894E0;\n  --iris-05:rgba(142,118,206,0.05);\n  --iris-12:rgba(142,118,206,0.12);\n  --iris-18:rgba(142,118,206,0.18);\n  --iris-45:rgba(142,118,206,0.45);\n\n  --sage:#A6D7B2;\n  --sage-14:rgba(166,215,178,0.14);\n  --sage-40:rgba(166,215,178,0.40);\n\n  --sky:#9BC5E8;\n  --sky-12:rgba(155,197,232,0.12);\n  --sky-45:rgba(155,197,232,0.45);\n\n  --rose:#D9A3AB;\n  --rose-12:rgba(217,163,171,0.12);\n\n  --tx-1:#F3F2F7;\n  --tx-2:#ACA9BA;\n  --tx-3:#726F80;\n  --tx-4:#4E4B5A;\n\n  --r1:6px;\n  --r2:10px;\n  --r3:14px;\n  --r4:22px;\n\n  --s1:4px;  --s2:8px;   --s3:12px;  --s4:16px;\n  --s5:24px; --s6:32px;  --s7:44px;  --s8:64px;\n\n  --ease:cubic-bezier(.2,.8,.3,1);\n  --font:'Manrope','Segoe UI',system-ui,sans-serif;\n  --mono:'Space Grotesk','Manrope',system-ui,sans-serif;\n\n  /* legacy aliases kept so any stray rule still resolves */\n  --accent:#8E76CE;\n  --accent2:#9BC5E8;\n  --border:rgba(255,255,255,0.055);\n  --text:#F3F2F7;\n  --text-muted:#ACA9BA;\n  --text-dim:#726F80;\n}\n\n*{box-sizing:border-box;-webkit-user-select:none;user-select:none;}\nhtml,body{margin:0;padding:0;height:100%;overflow:hidden;background:transparent;}\nbody{font-family:var(--font);color:var(--tx-1);-webkit-font-smoothing:antialiased;}\nh1,h2,h3,p{margin:0;}\nbutton{font-family:inherit;border:none;outline:none;background:none;cursor:pointer;color:inherit;}\ninput,textarea,select{font-family:inherit;}\ninput,textarea{-webkit-user-select:text;user-select:text;}\na{color:var(--sky);text-decoration:none;}\n\n@keyframes toopen{from{opacity:0;transform:translateY(8px) scale(.994);}to{opacity:1;transform:none;}}\n@keyframes toclose{from{opacity:1;transform:none;}to{opacity:0;transform:translateY(6px) scale(.994);}}\n@keyframes page-in{from{opacity:0;transform:translateX(10px);}to{opacity:1;transform:none;}}\n@keyframes cap-pulse{0%,100%{opacity:1;}50%{opacity:.55;}}\n@keyframes ripple{from{opacity:.22;transform:scale(0);}to{opacity:0;transform:scale(1.3);}}\n@keyframes soft-in{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:none;}}\n\n/* ------------------------------------------------------------------\n   SHELL\n   ------------------------------------------------------------------ */\n\n#menu-container{\n  position:absolute;inset:0;\n  display:flex;align-items:center;justify-content:center;\n  padding:18px;\n}\n\n#menu-wrapper{\n  position:relative;\n  width:min(1100px,100%);\n  height:min(690px,100%);\n  min-width:860px;min-height:520px;\n  display:flex;\n  background:var(--ink-1);\n  border:1px solid var(--line-2);\n  border-radius:var(--r4);\n  overflow:hidden;\n  box-shadow:0 48px 110px -34px rgba(0,0,0,.92),0 0 0 1px rgba(0,0,0,.4);\n  transform:scale(var(--ryn-scale,1));\n  transform-origin:center center;\n}\n#menu-container.transparent #menu-wrapper{background:rgba(12,12,17,0.90);}\n#menu-wrapper.toopen{animation:180ms var(--ease) toopen both;}\n#menu-wrapper.toclose{animation:140ms ease-in toclose both;}\n\nmain{display:flex;flex:1;min-width:0;min-height:0;}\n\n/* the old top bar is gone — everything identifying lives in the rail */\nheader{display:none;}\n\n/* ------------------------------------------------------------------\n   NAVIGATION RAIL\n   ------------------------------------------------------------------ */\n\n#navbar-container{\n  width:236px;min-width:236px;flex-shrink:0;\n  display:flex;flex-direction:column;\n  background:var(--ink-2);\n  border-right:1px solid var(--line);\n  padding:22px 12px 12px;\n}\n\n.rail-brand{display:flex;align-items:baseline;gap:9px;padding:0 12px 18px;}\n.rail-mark{\n  font-family:var(--mono);font-weight:700;font-size:25px;line-height:1;\n  letter-spacing:-.02em;color:var(--tx-1);\n}\n.rail-sub{\n  font-family:var(--mono);font-weight:600;font-size:10.5px;line-height:1;\n  letter-spacing:.24em;text-transform:uppercase;color:var(--iris-hi);\n}\n\n.rail-label{\n  font-family:var(--mono);font-weight:600;font-size:10px;\n  letter-spacing:.22em;text-transform:uppercase;color:var(--tx-4);\n  padding:0 12px;margin:20px 0 7px;\n}\n\n#navbar-container nav{display:flex;flex-direction:column;gap:2px;}\n\n.open-menu{\n  position:relative;\n  display:flex;align-items:center;gap:13px;\n  width:100%;padding:12px 13px;\n  border-radius:var(--r2);\n  background:transparent;\n  color:var(--tx-2);\n  text-align:left;\n  overflow:hidden;\n  transition:background 150ms var(--ease),color 150ms var(--ease);\n}\n.open-menu .nav-index{\n  font-family:var(--mono);font-weight:600;font-size:11px;line-height:1;\n  letter-spacing:.06em;color:var(--tx-4);\n  width:20px;flex-shrink:0;\n  transition:color 150ms var(--ease);\n}\n.open-menu .nav-label{\n  font-weight:800;font-size:15px;line-height:1.1;letter-spacing:-.012em;\n}\n.open-menu:hover{background:rgba(255,255,255,.035);color:var(--tx-1);}\n.open-menu:active{background:rgba(255,255,255,.06);}\n.open-menu.active{background:var(--iris-12);color:#FFFFFF;}\n.open-menu.active .nav-index{color:var(--iris-hi);}\n.open-menu.active::before{\n  content:'';position:absolute;left:0;top:11px;bottom:11px;\n  width:3px;border-radius:0 3px 3px 0;background:var(--iris);\n}\n.open-menu .ripple{\n  position:absolute;border-radius:50%;\n  background:rgba(255,255,255,.07);\n  opacity:0;pointer-events:none;\n  animation:ripple 420ms ease-out;\n}\n\n/* live outline of the open category */\n#nav-outline{\n  display:flex;flex-direction:column;gap:1px;\n  margin-top:4px;padding-left:6px;\n  overflow-y:auto;flex:1;min-height:0;\n}\n#nav-outline::-webkit-scrollbar{width:6px;}\n#nav-outline::-webkit-scrollbar-thumb{background:rgba(255,255,255,.07);border-radius:6px;}\n.outline-item{\n  position:relative;\n  padding:7px 10px 7px 16px;\n  border-radius:var(--r1);\n  font-size:12.5px;font-weight:600;line-height:1.3;\n  color:var(--tx-3);text-align:left;\n  transition:color 140ms var(--ease),background 140ms var(--ease);\n}\n.outline-item::before{\n  content:'';position:absolute;left:4px;top:50%;\n  width:4px;height:4px;margin-top:-2px;border-radius:50%;\n  background:var(--tx-4);\n  transition:background 160ms var(--ease),transform 160ms var(--ease);\n}\n.outline-item:hover{color:var(--tx-1);background:rgba(255,255,255,.03);}\n.outline-item.current{color:var(--tx-1);}\n.outline-item.current::before{background:var(--iris-hi);transform:scale(1.35);}\n\n.rail-foot{\n  margin-top:auto;padding-top:16px;\n  border-top:1px solid var(--line);\n  display:flex;align-items:center;gap:10px;\n}\n#ryn-version{\n  font-family:var(--mono);font-size:10.5px;font-weight:500;\n  letter-spacing:.14em;text-transform:uppercase;color:var(--tx-4);\n  padding-left:12px;margin-right:auto;\n}\n#close-button{\n  width:34px;height:34px;padding:8px;flex-shrink:0;\n  border-radius:var(--r2);\n  fill:none;stroke:var(--tx-3);stroke-width:1.9;\n  background:transparent;cursor:pointer;\n  transition:background 150ms var(--ease),stroke 150ms var(--ease);\n}\n#close-button:hover{background:rgba(255,255,255,.06);stroke:var(--tx-1);}\n#close-button:active{background:rgba(255,255,255,.09);}\n\n/* search lives in the rail head */\n#ryn-search-wrap{\n  position:relative;\n  display:flex;align-items:center;gap:8px;\n  height:40px;padding:0 13px;\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line-2);\n  border-radius:var(--r2);\n  transition:border-color 160ms var(--ease),background 160ms var(--ease),box-shadow 160ms var(--ease);\n}\n#ryn-search-wrap:focus-within{\n  border-color:var(--sky-45);\n  background:var(--sky-12);\n  box-shadow:0 0 0 3px rgba(155,197,232,.10);\n}\n#ryn-search-wrap::before{\n  content:'';flex-shrink:0;width:15px;height:15px;\n  background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23726F80' stroke-width='1.6' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='4.6'/%3E%3Cpath d='M10.4 10.4L14 14'/%3E%3C/svg%3E\");\n  background-repeat:no-repeat;background-position:center;background-size:contain;\n}\n#ryn-search-input{\n  flex:1;min-width:0;\n  background:transparent;border:none;outline:none;\n  font-size:13.5px;font-weight:600;color:var(--tx-1);\n}\n#ryn-search-input::placeholder{color:var(--tx-4);font-weight:500;}\n#ryn-search-clear{\n  display:none;flex-shrink:0;\n  font-size:11px;line-height:1;color:var(--tx-4);cursor:pointer;\n  transition:color 140ms;\n}\n#ryn-search-clear:hover{color:var(--tx-1);}\n#ryn-search-dropdown{\n  display:none;position:absolute;top:calc(100% + 8px);left:0;\n  width:320px;max-height:340px;overflow-y:auto;\n  padding:6px;\n  background:var(--ink-3);\n  border:1px solid var(--line-2);\n  border-radius:var(--r3);\n  box-shadow:0 26px 60px -18px rgba(0,0,0,.9);\n  z-index:9999;\n  animation:soft-in 150ms var(--ease);\n}\n#ryn-search-dropdown::-webkit-scrollbar{width:8px;}\n#ryn-search-dropdown::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:8px;border:2px solid transparent;background-clip:padding-box;}\n.ryn-si{\n  display:flex;flex-direction:column;gap:3px;\n  padding:9px 11px;border-radius:var(--r2);cursor:pointer;\n  transition:background 130ms var(--ease);\n}\n.ryn-si:hover,.ryn-si.ryn-fx{background:var(--iris-12);}\n.ryn-st{font-size:13px;font-weight:700;color:var(--tx-1);line-height:1.3;}\n.ryn-st mark{background:var(--iris-45);color:#fff;border-radius:3px;padding:0 2px;}\n.ryn-sp{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--tx-4);}\n.ryn-se{text-align:center;padding:22px 12px;font-size:12.5px;font-weight:600;color:var(--tx-4);}\n.ryn-sl{\n  font-family:var(--mono);font-size:9.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--iris-hi);\n  padding:9px 11px 4px;\n}\n\n/* ------------------------------------------------------------------\n   CONTENT COLUMN — one continuous vertical flow, full available width\n   ------------------------------------------------------------------ */\n\n#page-container{\n  flex:1;min-width:0;\n  overflow-y:auto;overflow-x:hidden;\n  background:var(--ink-1);\n}\n#page-container::-webkit-scrollbar{width:12px;}\n#page-container::-webkit-scrollbar-track{background:transparent;}\n#page-container::-webkit-scrollbar-thumb{\n  background:rgba(255,255,255,.09);\n  border-radius:12px;\n  border:4px solid transparent;\n  background-clip:padding-box;\n}\n#page-container::-webkit-scrollbar-thumb:hover{background:rgba(142,118,206,.55);background-clip:padding-box;}\n\n.menu-page{display:none;}\n.menu-page.opened{\n  display:block;\n  padding:34px clamp(20px,2.6vw,38px) 92px;\n  animation:page-in 190ms var(--ease);\n}\n.page-head{\n  max-width:1180px;margin:0 auto 6px;\n  padding-bottom:24px;\n  border-bottom:1px solid var(--line);\n}\n.menu-page .page-title{\n  font-size:clamp(27px,2.5vw,33px);font-weight:800;line-height:1.03;\n  letter-spacing:-.03em;color:var(--tx-1);\n}\n.page-description{\n  margin-top:12px;max-width:74ch;\n  font-size:13.5px;font-weight:500;line-height:1.6;color:var(--tx-3);\n}\n\n.section{max-width:1180px;margin:0 auto;padding-top:36px;}\n.section-title{\n  display:flex;flex-direction:column;gap:7px;\n  padding:0 2px 13px;\n  border-bottom:1px solid var(--line);\n  font-family:var(--mono);font-size:11.5px;font-weight:700;\n  letter-spacing:.19em;text-transform:uppercase;color:var(--iris-hi);\n}\nh2.section-title{font-family:var(--mono);}\n.sec-sub{\n  font-family:var(--font);font-size:12.5px;font-weight:500;\n  letter-spacing:0;text-transform:none;line-height:1.55;color:var(--tx-3);\n}\n.section-content{display:flex;flex-direction:column;padding-top:4px;}\n\n/* ------------------------------------------------------------------\n   SETTING ROW\n   ------------------------------------------------------------------ */\n\n.content-option{\n  position:relative;\n  display:flex;align-items:center;justify-content:space-between;gap:24px;\n  min-height:60px;\n  padding:13px 15px 13px 17px;\n  border-radius:var(--r2);\n  border-bottom:1px solid rgba(255,255,255,.032);\n  transition:background 150ms var(--ease);\n}\n.content-option:last-child{border-bottom:none;}\n.content-option:hover{background:rgba(255,255,255,.026);}\n.content-option::before{\n  content:'';position:absolute;left:0;top:14px;bottom:14px;\n  width:2px;border-radius:0 2px 2px 0;\n  background:var(--sage);\n  opacity:0;\n  transition:opacity 190ms var(--ease);\n}\n.content-option:has(input[type=\"checkbox\"]:checked)::before{opacity:.85;}\n\n.content-option.centered{justify-content:center;}\n.content-option.left-flex{justify-content:flex-start;gap:14px;}\n.content-option.text{justify-content:flex-start;}\n.content-option.stacked{flex-direction:column;align-items:stretch;gap:14px;}\n\n.opt-main{display:flex;flex-direction:column;gap:5px;min-width:0;flex:1;}\n.option-title{\n  font-size:15.5px;font-weight:700;line-height:1.32;\n  letter-spacing:-.008em;color:var(--tx-1);\n}\nlabel.option-title{cursor:pointer;}\nlabel.option-title:active{opacity:.75;}\n.opt-desc{\n  font-size:12.5px;font-weight:500;line-height:1.5;\n  color:var(--tx-3);max-width:74ch;\n}\n.content-option.quiet .option-title{font-size:14.5px;font-weight:600;color:var(--tx-2);}\n.content-option.quiet{min-height:54px;}\n.content-option.quiet:hover .option-title{color:var(--tx-1);}\n.option-content{display:flex;align-items:center;gap:12px;flex-shrink:0;}.ryn-select{appearance:none;-webkit-appearance:none;background:rgba(255,255,255,.06);color:inherit;border:1px solid rgba(255,255,255,.18);border-radius:7px;padding:5px 26px 5px 10px;font:inherit;font-size:12px;cursor:pointer;flex-shrink:0;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 14px) calc(50% + 1px),calc(100% - 9px) calc(50% + 1px);background-size:5px 5px,5px 5px;background-repeat:no-repeat;}.ryn-select:hover{border-color:rgba(255,255,255,.32);}.ryn-select:focus{outline:none;border-color:var(--iris);}.ryn-select option{background:#1a1526;color:#fff;}\n\n.text-value{\n  font-family:var(--mono);font-size:15px;font-weight:700;\n  color:var(--sky);font-variant-numeric:tabular-nums;\n}\n.simplified{font-size:12.5px;font-weight:500;color:var(--tx-3);line-height:1.6;}\n.highlight{color:var(--iris-hi);}\n\n/* nested detail rows under a parent toggle */\n.sub-options{\n  margin:2px 0 6px 18px;\n  padding-left:16px;\n  border-left:1px solid var(--line-2);\n  transition:opacity 200ms var(--ease);\n}\n.sub-options .content-option{min-height:50px;padding-top:9px;padding-bottom:9px;}\n.sub-options .option-title{font-size:14px;font-weight:600;color:var(--tx-2);}\n.sub-options .content-option:hover .option-title{color:var(--tx-1);}\n.content-option:has(> .switch-checkbox > input:not(:checked)) + .sub-options{\n  opacity:.32;pointer-events:none;\n}\n\n/* ------------------------------------------------------------------\n   CONTROLS\n   ------------------------------------------------------------------ */\n\n/* toggle */\n.switch-checkbox{position:relative;width:48px;height:27px;flex-shrink:0;}\n.switch-checkbox input{position:absolute;opacity:0;width:0;height:0;}\n.switch-checkbox span{\n  position:absolute;inset:0;\n  border-radius:10px;cursor:pointer;\n  background:rgba(255,255,255,.06);\n  border:1px solid rgba(255,255,255,.11);\n  transition:background 180ms var(--ease),border-color 180ms var(--ease);\n}\n.switch-checkbox span::before{\n  content:'';position:absolute;left:4px;top:50%;\n  width:18px;height:18px;border-radius:6px;\n  background:rgba(255,255,255,.32);\n  transform:translateY(-50%);\n  transition:transform 190ms var(--ease),background 190ms var(--ease);\n}\n.switch-checkbox span:hover{border-color:rgba(255,255,255,.2);}\n.switch-checkbox input:checked + span{\n  background:var(--sage-14);\n  border-color:var(--sage-40);\n}\n.switch-checkbox input:checked + span::before{\n  transform:translateY(-50%) translateX(21px);\n  background:var(--sage);\n}\n.switch-checkbox input:focus-visible + span{box-shadow:0 0 0 3px rgba(155,197,232,.20);}\n\n/* keycap */\n.hotkeyInput{\n  display:flex;align-items:center;justify-content:center;\n  min-width:82px;height:42px;padding:0 15px;\n  border-radius:10px;\n  background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.028));\n  border:1px solid rgba(255,255,255,.115);\n  box-shadow:0 2px 0 rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.10);\n  font-family:var(--mono);font-size:13.5px;font-weight:700;\n  letter-spacing:.07em;text-transform:uppercase;color:var(--tx-1);\n  transition:transform 120ms var(--ease),border-color 150ms var(--ease),\n             background 150ms var(--ease),box-shadow 150ms var(--ease),color 150ms var(--ease);\n}\n.hotkeyInput:hover{border-color:var(--sky-45);color:#fff;}\n.hotkeyInput:active{transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.06);}\n.hotkeyInput.active{\n  border-color:var(--iris);background:var(--iris-18);color:var(--iris-hi);\n  box-shadow:inset 0 1px 0 rgba(255,255,255,.08);\n  transform:translateY(2px);\n  animation:cap-pulse 1.15s ease-in-out infinite;\n}\n.hotkeyInput.red{\n  border-color:rgba(217,163,171,.5);background:var(--rose-12);color:var(--rose);\n}\n.key-state{\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--tx-4);\n  min-width:78px;text-align:right;\n}\n.key-state::after{content:'';}\n.content-option:has(.hotkeyInput.red) .key-state::after{content:'Conflict';color:var(--rose);}\n.content-option:has(.hotkeyInput.active) .key-state::after{content:'Press a key';color:var(--iris-hi);}\n.content-option:has(.hotkeyInput.red) .key-state,\n.content-option:has(.hotkeyInput.active) .key-state{color:inherit;}\n\n/* button */\n.option-button{\n  display:inline-flex;align-items:center;justify-content:center;gap:8px;\n  height:42px;padding:0 21px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.05);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);\n  font-size:13.5px;font-weight:700;letter-spacing:.005em;\n  white-space:nowrap;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),\n             transform 110ms var(--ease),color 150ms var(--ease);\n}\n.option-button:hover{background:rgba(255,255,255,.085);border-color:var(--line-3);}\n.option-button:active{transform:translateY(1px);background:rgba(255,255,255,.11);}\n.option-button:disabled{opacity:.4;pointer-events:none;}\n.option-button.primary{\n  background:var(--iris-18);border-color:var(--iris-45);color:#EFEAFF;\n}\n.option-button.primary:hover{background:rgba(142,118,206,.26);border-color:rgba(142,118,206,.7);}\n.option-button.wide{width:100%;}\n.option-button.tall{height:48px;padding:0 28px;font-size:14.5px;}\n.option-button.red,.option-button.danger{\n  background:transparent;border-color:rgba(217,163,171,.28);color:var(--rose);\n}\n.option-button.red:hover,.option-button.danger:hover{\n  background:var(--rose-12);border-color:rgba(217,163,171,.5);color:#F0CDD2;\n}\n.option-button.icon-only{width:42px;padding:0;}\n\n/* segmented control */\n.seg{display:flex;gap:6px;flex-wrap:wrap;max-width:680px;}\n.seg-btn,.farm-type-btn{\n  flex:1;min-width:92px;height:44px;padding:0 15px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line);\n  color:var(--tx-3);\n  font-family:var(--font);font-size:13.5px;font-weight:700;\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.seg-btn:hover,.farm-type-btn:hover{background:rgba(255,255,255,.06);color:var(--tx-1);}\n.seg-btn.seg-active,.farm-type-btn.seg-active{\n  background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;\n}\n\n/* text / number input */\n.input{\n  height:42px;width:235px;padding:0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);\n  font-size:13.5px;font-weight:600;text-align:left;\n  transition:border-color 150ms var(--ease),background 150ms var(--ease),box-shadow 150ms var(--ease);\n}\n.input::placeholder{color:var(--tx-4);font-weight:500;}\n.input:focus{\n  outline:none;border-color:var(--sky-45);\n  background:var(--sky-12);\n  box-shadow:0 0 0 3px rgba(155,197,232,.11);\n}\ninput[type=\"number\"].input{width:122px;font-family:var(--mono);font-variant-numeric:tabular-nums;}\n.input.invalid{border-color:rgba(217,163,171,.6);background:var(--rose-12);}\n\n/* rows the client builds for auto chat: input plus a remove control */\n.chat-row{min-height:58px;}\n.chat-row .input{flex:1;min-width:0;}\n\n/* colour */\ninput[id][type=\"color\"]{\n  width:36px;height:36px;padding:0;\n  border:none;border-radius:9px;background:transparent;cursor:pointer;\n  box-shadow:0 0 0 1px rgba(255,255,255,.16);\n  transition:box-shadow 160ms var(--ease),transform 160ms var(--ease);\n}\ninput[id][type=\"color\"]::-webkit-color-swatch-wrapper{padding:3px;}\ninput[id][type=\"color\"]::-webkit-color-swatch{border:none;border-radius:7px;}\ninput[id][type=\"color\"]:hover{transform:scale(1.06);box-shadow:0 0 0 1px rgba(255,255,255,.34);}\n.reset-color{\n  width:15px;height:15px;flex-shrink:0;\n  border-radius:50%;border:1px solid rgba(255,255,255,.22);\n  background:var(--data-color,var(--iris));\n  opacity:0;cursor:pointer;\n  transition:opacity 160ms var(--ease),transform 160ms var(--ease);\n}\n.content-option:hover .reset-color{opacity:.85;}\n.reset-color:hover{opacity:1;transform:scale(1.2);}\n\n/* slider */\n.slider{display:flex;align-items:center;gap:18px;flex-shrink:0;}\n.slider input[type=\"range\"]{order:1;}\n.slider-value{\n  order:2;\n  font-family:var(--mono);font-size:13.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;\n  color:var(--sky);min-width:58px;text-align:right;\n}\n.slider input[type=\"range\"]{\n  -webkit-appearance:none;appearance:none;\n  width:clamp(150px,17vw,250px);height:22px;\n  background:transparent;cursor:pointer;outline:none;border:none;\n}\n.slider input[type=\"range\"]::-webkit-slider-runnable-track{\n  height:4px;border-radius:999px;\n  background:linear-gradient(90deg,var(--sky) var(--val,0%),rgba(255,255,255,.09) var(--val,0%));\n}\n.slider input[type=\"range\"]::-webkit-slider-thumb{\n  -webkit-appearance:none;\n  width:15px;height:15px;margin-top:-5.5px;\n  border-radius:50%;background:#EEF4FA;\n  border:1px solid rgba(0,0,0,.35);\n  box-shadow:0 1px 4px rgba(0,0,0,.55);\n  transition:transform 130ms var(--ease),box-shadow 130ms var(--ease);\n}\n.slider input[type=\"range\"]:hover::-webkit-slider-thumb{transform:scale(1.14);}\n.slider input[type=\"range\"]:active::-webkit-slider-thumb{\n  transform:scale(1.06);box-shadow:0 0 0 6px rgba(155,197,232,.16);\n}\n\n/* select */\nselect.ryn-select{\n  height:42px;padding:0 38px 0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);font-size:13.5px;font-weight:600;\n  -webkit-appearance:none;appearance:none;cursor:pointer;\n  background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7' viewBox='0 0 11 7'%3E%3Cpath d='M1 1l4.5 4.5L10 1' stroke='%239BC5E8' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\");\n  background-repeat:no-repeat;background-position:right 14px center;\n  transition:border-color 150ms var(--ease);\n}\nselect.ryn-select:focus{outline:none;border-color:var(--sky-45);}\nselect.ryn-select option{background:var(--ink-3);color:var(--tx-1);}\n\n/* misc atoms */\n.icon{width:20px;height:20px;}\n.small-icon{width:15px;height:15px;}\n.key-badge{\n  display:inline-flex;align-items:center;justify-content:center;\n  min-width:26px;height:20px;padding:0 6px;\n  border-radius:var(--r1);\n  background:rgba(255,255,255,.05);border:1px solid var(--line-2);\n  font-family:var(--mono);font-size:10.5px;font-weight:600;color:var(--tx-2);\n}\n.note{\n  max-width:1180px;margin:14px auto 0;\n  padding:14px 18px;\n  border-left:2px solid var(--line-2);\n  font-size:12.5px;font-weight:500;line-height:1.6;color:var(--tx-3);\n}\n\n/* ------------------------------------------------------------------\n   BOTS\n   ------------------------------------------------------------------ */\n\n#bot-container{display:flex;flex-direction:column;}\n#bot-container:empty{display:none;}\n.content-option[data-bot-id]{\n  background:rgba(255,255,255,.028);\n  border:1px solid var(--line);border-bottom:1px solid var(--line);\n  margin-bottom:6px;min-height:52px;\n}\n.content-option[data-bot-id] .option-title{font-family:var(--mono);font-size:13.5px;font-weight:600;}\n.disconnect-button{\n  width:16px;height:16px;flex-shrink:0;\n  fill:var(--tx-4);cursor:pointer;\n  transition:fill 150ms var(--ease);\n}\n.content-option:hover .disconnect-button{fill:var(--tx-2);}\n.disconnect-button:hover{fill:var(--rose)!important;}\n\n#connectingBot{\n  padding:14px 18px;margin-bottom:6px;\n  border-radius:var(--r2);\n  border:1px dashed var(--line-2);\n  font-family:var(--mono);font-size:12px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--tx-4);\n}\n\n#dynamic-bot-list{display:flex;flex-direction:column;gap:8px;}\n.bot-row{\n  display:flex;align-items:center;gap:10px;\n  padding:10px 12px;\n  background:rgba(255,255,255,.028);\n  border:1px solid var(--line);\n  border-radius:var(--r2);\n  transition:border-color 150ms var(--ease),opacity 150ms var(--ease);\n}\n.bot-row:hover{border-color:var(--line-2);}\n.bot-row.connected{background:var(--sage-14);border-color:var(--sage-40);}\n.bot-row-label{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  letter-spacing:.12em;text-transform:uppercase;color:var(--tx-4);\n  min-width:74px;flex-shrink:0;\n}\n.bot-row-name{flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}\n.bot-row-name .pending{color:var(--tx-4);font-weight:600;}\n.bot-row .input{flex:1;min-width:0;width:auto;}\n.bot-row-check{width:17px;height:17px;flex-shrink:0;fill:var(--sage);}\n.icon-btn{\n  display:flex;align-items:center;justify-content:center;\n  width:42px;height:42px;flex-shrink:0;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.045);\n  border:1px solid var(--line-2);\n  font-size:15px;line-height:1;color:var(--tx-2);\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.icon-btn:hover{background:rgba(255,255,255,.08);border-color:var(--line-3);color:var(--tx-1);}\n.icon-btn.danger:hover{background:var(--rose-12);border-color:rgba(217,163,171,.45);color:var(--rose);}\n\n/* option grids (weapons, age-4 building) */\n.wpn-label{\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:12px;\n}\n.wpn-grid{\n  display:grid;grid-template-columns:repeat(auto-fill,minmax(124px,1fr));\n  gap:8px;\n}\n.bot-weapon-btn,.bot-sec-weapon-btn{\n  display:flex;align-items:center;justify-content:center;\n  min-height:54px;padding:10px 12px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.03);\n  border:1px solid var(--line);\n  color:var(--tx-3);\n  font-size:13px;font-weight:600;text-align:center;line-height:1.3;\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.bot-weapon-btn:hover,.bot-sec-weapon-btn:hover{\n  background:rgba(255,255,255,.06);border-color:var(--line-2);color:var(--tx-1);\n}\n.bot-weapon-btn.wpn-active,.bot-sec-weapon-btn.wpn-active{\n  background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;\n}\n.wpn-selected-bar{\n  display:flex;align-items:center;gap:10px;\n  margin-top:12px;padding:11px 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.025);\n  border:1px solid var(--line);\n}\n.wpn-selected-dot{\n  width:6px;height:6px;flex-shrink:0;border-radius:50%;background:var(--iris-hi);\n}\n.wpn-selected-text{font-size:13px;font-weight:600;color:var(--tx-2);}\n\n.stack{display:flex;flex-direction:column;gap:22px;padding-top:8px;}\n.field{display:flex;flex-direction:column;gap:0;}\n.field-head{\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:10px;\n}\n.field-note{margin-top:10px;font-size:12.5px;font-weight:500;line-height:1.55;color:var(--tx-3);}\n.field-note b{color:var(--tx-2);font-weight:700;}\n.inline{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}\n#_botBulkRow .input{flex:1;min-width:180px;width:auto;}\n.bot-row-id{\n  font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.06em;\n  color:var(--tx-4);flex-shrink:0;padding:0 9px;height:25px;\n  display:flex;align-items:center;white-space:nowrap;\n  border:1px solid var(--line);border-radius:var(--r2);\n}\n\n#_formationGrid{width:100%;}\n\n/* ------------------------------------------------------------------\n   FORMATION POPUP (built in JS, lives on document.body)\n   ------------------------------------------------------------------ */\n\n.fsel-trigger{\n  display:flex;align-items:center;gap:12px;\n  width:100%;padding:13px 14px;max-width:680px;\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line-2);\n  border-radius:var(--r2);\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease);\n}\n.fsel-trigger:hover{background:rgba(255,255,255,.06);border-color:var(--line-3);}\n.fsel-trigger.open{border-color:var(--iris-45);background:var(--iris-12);}\n.fsel-trigger .fsel-icon{width:26px;flex-shrink:0;text-align:center;font-size:16px;color:var(--iris-hi);}\n.fsel-trigger .fsel-label{flex:1;font-size:14.5px;font-weight:700;color:var(--tx-1);}\n.fsel-trigger .fsel-arrow{font-size:10px;color:var(--tx-4);transition:transform 170ms var(--ease);}\n.fsel-trigger.open .fsel-arrow{transform:rotate(180deg);}\n\n.fsel-popup{\n  position:fixed;z-index:99999;width:300px;\n  display:flex;flex-direction:column;overflow:hidden;\n  background:var(--ink-3);\n  border:1px solid var(--line-2);\n  border-radius:var(--r3);\n  box-shadow:0 30px 70px -20px rgba(0,0,0,.92);\n}\n.fsel-popup.toopen{animation:soft-in 160ms var(--ease);}\n.fsel-popup-header{\n  display:flex;align-items:center;gap:10px;\n  padding:12px 14px;\n  border-bottom:1px solid var(--line);\n  cursor:grab;\n}\n.fsel-popup-header:active{cursor:grabbing;}\n.fsel-popup-title{\n  flex:1;font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n.fsel-popup-close{\n  width:22px;height:22px;flex-shrink:0;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r1);font-size:11px;color:var(--tx-4);cursor:pointer;\n  transition:background 140ms,color 140ms;\n}\n.fsel-popup-close:hover{background:rgba(255,255,255,.07);color:var(--tx-1);}\n.fsel-popup-body{\n  display:grid;grid-template-columns:repeat(4,1fr);gap:8px;\n  padding:12px;max-height:280px;overflow-y:auto;\n}\n.fsel-popup-body::-webkit-scrollbar{width:8px;}\n.fsel-popup-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:8px;border:2px solid transparent;background-clip:padding-box;}\n.fcat-btn{\n  position:relative;\n  display:flex;align-items:center;justify-content:center;\n  aspect-ratio:1;border-radius:var(--r2);\n  background:rgba(255,255,255,.03);\n  border:1px solid var(--line);\n  color:var(--tx-2);font-size:17px;cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.fcat-btn:hover{background:rgba(255,255,255,.07);border-color:var(--line-2);color:var(--tx-1);}\n.fcat-btn.active{background:var(--iris-18);border-color:var(--iris-45);color:#fff;}\n.fcat-tip{\n  display:none;position:absolute;top:calc(100% + 6px);left:50%;\n  transform:translateX(-50%);\n  padding:4px 9px;border-radius:var(--r1);\n  background:var(--ink-4);border:1px solid var(--line-2);\n  font-family:var(--font);font-size:11px;font-weight:600;color:var(--tx-1);\n  white-space:nowrap;pointer-events:none;z-index:5;\n}\n.fcat-btn:hover .fcat-tip{display:block;}\n.fcat-key{\n  position:absolute;top:3px;right:3px;\n  min-width:17px;height:15px;padding:0 3px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:4px;\n  background:rgba(0,0,0,.45);border:1px solid var(--line);\n  font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--tx-3);\n  line-height:1;cursor:pointer;\n  transition:background 130ms,border-color 130ms,color 130ms;\n}\n.fcat-key:hover{background:rgba(255,255,255,.10);color:var(--tx-1);}\n.fcat-key.set{background:var(--iris-18);border-color:var(--iris-45);color:#EFEAFF;}\n.fcat-key.recording{background:var(--sky-12);border-color:var(--sky-45);color:var(--sky);animation:cap-pulse 1.1s ease-in-out infinite;}\n.fcat-reset{\n  position:absolute;bottom:3px;left:3px;\n  width:15px;height:15px;display:none;\n  align-items:center;justify-content:center;\n  border-radius:4px;\n  background:var(--rose-12);border:1px solid rgba(217,163,171,.3);\n  font-size:9px;line-height:1;color:var(--rose);cursor:pointer;\n}\n.fcat-reset.show{display:flex;}\n.fcat-reset:hover{background:rgba(217,163,171,.24);}\n.fsel-popup-footer{padding:10px 12px;border-top:1px solid var(--line);}\n.fsel-reset-all{\n  width:100%;padding:9px 0;\n  border-radius:var(--r2);\n  background:transparent;border:1px solid rgba(217,163,171,.26);\n  font-family:var(--font);font-size:12px;font-weight:700;\n  color:var(--rose);text-align:center;cursor:pointer;\n  transition:background 140ms,border-color 140ms;\n}\n.fsel-reset-all:hover{background:var(--rose-12);border-color:rgba(217,163,171,.48);}";
-  const Game_default = "#ryn-menu-frame {\r\n    position: absolute;\r\n    top: 0;\r\n    left: 0;\r\n    bottom: 0;\r\n    right: 0;\r\n    width: 100%;\r\n    height: 100%;\r\n    border: none;\r\n    outline: none;\r\n    z-index: 10;\r\n}\r\n\r\n#promoImgHolder,\r\n.menuHeader,\r\n.menuText,\r\n#guideCard,\r\n#gameName,\r\n#pingDisplay,\r\n#partyButton,\r\n#onetrust-consent-sdk,\r\n.adMenuCard,\r\n#topInfoHolder > div:not([id]):not([class]),\r\n#touch-controls-fullscreen,\r\n#altcha,\r\n#joinPartyButton {\r\n    display: none!important;\r\n}\r\n\r\n.menuCard {\r\n    box-shadow: none;\r\n}\r\n\r\n#setupCard {\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 12px;\r\n    background: rgba(25,25,25,0.45);\r\n    backdrop-filter: blur(25px);\r\n    -webkit-backdrop-filter: blur(25px);\r\n    border: 1px solid rgba(255,255,255,0.2);\r\n    border-radius: 20px;\r\n    box-shadow: 0 8px 32px 0 rgba(0,0,0,0.2), inset 0 1px 1px rgba(255,255,255,0.1);\r\n    max-height: auto;\r\n    width: 280px;\r\n}\r\n\r\n#setupCard > * {\r\n    margin: 0!important;\r\n}\r\n\r\n#linksContainer2 {\r\n    background: #6d6d6d77;\r\n}\r\n\r\n#bottomContainer {\r\n    bottom: 20px;\r\n}\r\n\r\n#topInfoHolder {\r\n    display: flex;\r\n    flex-direction: column;\r\n    justify-content: right;\r\n    align-items: flex-end;\r\n    gap: 10px;\r\n}\r\n\r\n#killCounter, #totalKillCounter {\r\n    position: static;\r\n    margin: 0;\r\n    background-image: url(../img/icons/skull.png);\r\n}\r\n\r\n.actionBarItem {\r\n    position: relative;\r\n    margin: 3px 5px !important;\r\n    border: 1.5px solid rgba(255,255,255,0.16) !important;\r\n    border-radius: 13px !important;\r\n    background-color: rgba(18,17,24,0.40) !important;\r\n    box-shadow: 0 3px 10px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.07) !important;\r\n    transition: transform 130ms ease, border-color 130ms ease, box-shadow 130ms ease !important;\r\n}\r\n\r\n.actionBarItem:hover {\r\n    transform: translateY(-2px) !important;\r\n    border-color: rgba(255,255,255,0.38) !important;\r\n    box-shadow: 0 6px 16px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.10) !important;\r\n}\r\n\r\n/* The weapon's reload, inside its own tile. A white edge that runs the tile's\r\n   outline: gone the moment you swing, closed again when the weapon is back.\r\n   The conic gradient paints the whole tile and the mask keeps only the border\r\n   ring of it, so the fill follows the soft square instead of a bar. It starts\r\n   at -45deg, the tile's top left corner, so a quarter of the reload is one\r\n   whole edge rather than half of two. */\r\n.ryn-reload-ring {\r\n    position: absolute;\r\n    inset: -1.5px;\r\n    border-radius: 13px;\r\n    padding: 2.5px;\r\n    pointer-events: none;\r\n    background: conic-gradient(from -45deg, rgba(255,255,255,0.95) var(--ryn-reload, 0%), rgba(255,255,255,0) 0);\r\n    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);\r\n    -webkit-mask-composite: xor;\r\n    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);\r\n    mask-composite: exclude;\r\n}\r\n\r\n.itemCounter {\r\n    position: absolute;\r\n    top: 3px;\r\n    right: 3px;\r\n    font-size: 0.95em;\r\n    color: white;\r\n    text-shadow: #3d3f42 2px 0px 0px, #3d3f42 1.75517px 0.958851px 0px, #3d3f42 1.0806px 1.68294px 0px, #3d3f42 0.141474px 1.99499px 0px, #3d3f42 -0.832294px 1.81859px 0px, #3d3f42 -1.60229px 1.19694px 0px, #3d3f42 -1.97998px 0.28224px 0px, #3d3f42 -1.87291px -0.701566px 0px, #3d3f42 -1.30729px -1.5136px 0px, #3d3f42 -0.421592px -1.95506px 0px, #3d3f42 0.567324px -1.91785px 0px, #3d3f42 1.41734px -1.41108px 0px, #3d3f42 1.92034px -0.558831px 0px;\r\n}\r\n\r\n.itemCounter.hidden {\r\n    display: none;\r\n}\r\n\r\n#ryn-topright-hud { position: fixed; top: 12px; right: 12px; z-index: 9999; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; pointer-events: none; font-family: \"Hammersmith One\", Arial, sans-serif; }\r\n.ryn-hud-row { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 160px; }\r\n.ryn-hud-bar-bg { width: 160px; height: 8px; background: rgba(0,0,0,0.55); border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }\r\n.ryn-hud-bar-fill { height: 100%; border-radius: 4px; transition: width 0.15s ease; }\r\n#ryn-hud-hp-fill { background: linear-gradient(90deg,#cc5151,#e05151); }\r\n#ryn-hud-r1-fill { background: linear-gradient(90deg,#f0b429,#f0c060); }\r\n#ryn-hud-r2-fill { background: linear-gradient(90deg,#51cc88,#60e0a0); }\r\n.ryn-hud-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.6); text-shadow: 0 1px 3px rgba(0,0,0,0.9); }\r\n.ryn-hud-val { font-size: 11px; color: rgba(255,255,255,0.9); text-shadow: 0 1px 4px rgba(0,0,0,0.9); letter-spacing: 0.05em; }\r\n.ryn-hud-heal { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; white-space: nowrap; color: rgba(255,255,255,0.45); text-shadow: 0 1px 4px rgba(0,0,0,0.9); transition: color 0.15s ease; }\r\n\r\n#rynStats {\r\n    position: absolute;\r\n    color: rgb(225, 210, 255);\r\n    font: 13px \"Hammersmith One\";\r\n    bottom: 210px;\r\n    left: 20px;\r\n\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 5px;\r\n}\r\n\r\n.hidden {\r\n    display: none!important;\r\n}";
+  const Game_default = "#ryn-menu-frame {\r\n    position: absolute;\r\n    top: 0;\r\n    left: 0;\r\n    bottom: 0;\r\n    right: 0;\r\n    width: 100%;\r\n    height: 100%;\r\n    border: none;\r\n    outline: none;\r\n    z-index: 10;\r\n}\r\n\r\n#promoImgHolder,\r\n.menuHeader,\r\n.menuText,\r\n#guideCard,\r\n#gameName,\r\n#pingDisplay,\r\n#partyButton,\r\n#onetrust-consent-sdk,\r\n.adMenuCard,\r\n#topInfoHolder > div:not([id]):not([class]),\r\n#touch-controls-fullscreen,\r\n#altcha,\r\n#joinPartyButton {\r\n    display: none!important;\r\n}\r\n\r\n.menuCard {\r\n    box-shadow: none;\r\n}\r\n\r\n#setupCard {\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 12px;\r\n    background: rgba(25,25,25,0.45);\r\n    backdrop-filter: blur(25px);\r\n    -webkit-backdrop-filter: blur(25px);\r\n    border: 1px solid rgba(255,255,255,0.2);\r\n    border-radius: 20px;\r\n    box-shadow: 0 8px 32px 0 rgba(0,0,0,0.2), inset 0 1px 1px rgba(255,255,255,0.1);\r\n    max-height: auto;\r\n    width: 280px;\r\n}\r\n\r\n#setupCard > * {\r\n    margin: 0!important;\r\n}\r\n\r\n#linksContainer2 {\r\n    background: #6d6d6d77;\r\n}\r\n\r\n#bottomContainer {\r\n    bottom: 20px;\r\n}\r\n\r\n#topInfoHolder {\r\n    display: flex;\r\n    flex-direction: column;\r\n    justify-content: right;\r\n    align-items: flex-end;\r\n    gap: 10px;\r\n}\r\n\r\n#killCounter, #totalKillCounter {\r\n    position: static;\r\n    margin: 0;\r\n    background-image: url(../img/icons/skull.png);\r\n}\r\n\r\n.actionBarItem {\r\n    position: relative;\r\n    margin: 3px 5px !important;\r\n    border: 1.5px solid rgba(255,255,255,0.16) !important;\r\n    border-radius: 13px !important;\r\n    background-color: rgba(18,17,24,0.40) !important;\r\n    box-shadow: 0 3px 10px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.07) !important;\r\n    transition: transform 130ms ease, border-color 130ms ease, box-shadow 130ms ease !important;\r\n}\r\n\r\n.actionBarItem:hover {\r\n    transform: translateY(-2px) !important;\r\n    border-color: rgba(255,255,255,0.38) !important;\r\n    box-shadow: 0 6px 16px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.10) !important;\r\n}\r\n\r\n.itemCounter {\r\n    position: absolute;\r\n    top: 3px;\r\n    right: 3px;\r\n    font-size: 0.95em;\r\n    color: white;\r\n    text-shadow: #3d3f42 2px 0px 0px, #3d3f42 1.75517px 0.958851px 0px, #3d3f42 1.0806px 1.68294px 0px, #3d3f42 0.141474px 1.99499px 0px, #3d3f42 -0.832294px 1.81859px 0px, #3d3f42 -1.60229px 1.19694px 0px, #3d3f42 -1.97998px 0.28224px 0px, #3d3f42 -1.87291px -0.701566px 0px, #3d3f42 -1.30729px -1.5136px 0px, #3d3f42 -0.421592px -1.95506px 0px, #3d3f42 0.567324px -1.91785px 0px, #3d3f42 1.41734px -1.41108px 0px, #3d3f42 1.92034px -0.558831px 0px;\r\n}\r\n\r\n.itemCounter.hidden {\r\n    display: none;\r\n}\r\n\r\n#ryn-topright-hud { position: fixed; top: 12px; right: 12px; z-index: 9999; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; pointer-events: none; font-family: \"Hammersmith One\", Arial, sans-serif; }\r\n.ryn-hud-row { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 160px; }\r\n.ryn-hud-bar-bg { width: 160px; height: 8px; background: rgba(0,0,0,0.55); border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }\r\n.ryn-hud-bar-fill { height: 100%; border-radius: 4px; transition: width 0.15s ease; }\r\n#ryn-hud-hp-fill { background: linear-gradient(90deg,#cc5151,#e05151); }\r\n#ryn-hud-r1-fill { background: linear-gradient(90deg,#f0b429,#f0c060); }\r\n#ryn-hud-r2-fill { background: linear-gradient(90deg,#51cc88,#60e0a0); }\r\n.ryn-hud-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.6); text-shadow: 0 1px 3px rgba(0,0,0,0.9); }\r\n.ryn-hud-val { font-size: 11px; color: rgba(255,255,255,0.9); text-shadow: 0 1px 4px rgba(0,0,0,0.9); letter-spacing: 0.05em; }\r\n.ryn-hud-heal { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; white-space: nowrap; color: rgba(255,255,255,0.45); text-shadow: 0 1px 4px rgba(0,0,0,0.9); transition: color 0.15s ease; }\r\n\r\n#rynStats {\r\n    position: absolute;\r\n    color: rgb(225, 210, 255);\r\n    font: 13px \"Hammersmith One\";\r\n    bottom: 210px;\r\n    left: 20px;\r\n\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 5px;\r\n}\r\n\r\n.hidden {\r\n    display: none!important;\r\n}";
   const Store_default = "#ryn-store-container {\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 10px;\r\n    max-width: 400px;\r\n    width: 100%;\r\n\r\n    position: absolute;\r\n    top: 50%;\r\n    left: 50%;\r\n    transform: translate(-50%, -50%) scale(0.9);\r\n}\r\n\r\n#ryn-store-toggle {\r\n    display: flex;\r\n    justify-content: center;\r\n    align-items: center;\r\n    padding: 10px;\r\n    background-color: rgba(0, 0, 0, 0.15);\r\n    color: #fff;\r\n    border-radius: 4px;\r\n    cursor: pointer;\r\n    font-size: 20px;\r\n    pointer-events: all;\r\n}\r\n\r\n#ryn-store-items {\r\n    background-color: rgba(0, 0, 0, 0.15);\r\n    max-height: 200px;\r\n    height: 100%;\r\n    padding: 10px;\r\n    overflow-y: scroll;\r\n    border-radius: 4px;\r\n    pointer-events: all;\r\n    scrollbar-width: none;\r\n}\r\n\r\n#ryn-store-items::-webkit-scrollbar {\r\n    display: none;\r\n    width: 0;\r\n    height: 0;\r\n    background: transparent;\r\n}\r\n\r\n.storeItemContainer {\r\n    display: flex;\r\n    align-items: center;\r\n    gap: 10px;\r\n    padding: 5px;\r\n    height: 50px;\r\n    box-sizing: border-box;\r\n    overflow: hidden;\r\n}\r\n\r\n.storeHat {\r\n    display: flex;\r\n    justify-content: center;\r\n    align-items: center;\r\n    width: 45px;\r\n    height: 45px;\r\n    margin-top: -5px;\r\n    pointer-events: none;\r\n}\r\n\r\n.storeItemName {\r\n    color: #fff;\r\n    font-size: 20px;\r\n}\r\n\r\n.equipButton {\r\n    margin-left: auto;\r\n    color: #80eefc;\r\n    cursor: pointer;\r\n    font-size: 35px;\r\n}";
   const Hats = {
     [0]: {
@@ -2603,6 +2603,7 @@ window.grbtp = 35;
     nearestEnemySpikeCollider=null;
     spikeCollider=null;
     enemySpikeCollider=null;
+    enemySpikeColliderObject=null;
     nearestTurretEntity=null;
     detectedEnemy=false;
     dangerWithoutSoldier=false;
@@ -2669,6 +2670,7 @@ window.grbtp = 35;
       this.nearestEnemySpikeCollider = null;
       this.spikeCollider = null;
       this.enemySpikeCollider = null;
+      this.enemySpikeColliderObject = null;
       this.nearestTurretEntity = null;
       this.detectedEnemy = false;
       this.dangerWithoutSoldier = false;
@@ -3035,6 +3037,14 @@ window.grbtp = 35;
           // knocking the *enemy* onto a spike, not us.
           if (isEnemyObject && (isSpike || isCactus) && target.collidingObject(object) && this.isNear(target, this.enemySpikeCollider)) {
             this.enemySpikeCollider = target;
+            // Which spike it is, not only that there is one. The victim alone
+            // cannot tell one contact from the next when they slide off one
+            // spike straight onto another, and Spike Sync 2's standalone path
+            // needs that distinction to give each touch its own burst — the
+            // shove path gets it from `_syncKey`, which is enemy:spike. Set
+            // here rather than derived later because this is the only place
+            // that knows which object the collision resolved against.
+            this.enemySpikeColliderObject = object;
           }
           if (isEnemyObject && (isSpike || isCactus) && this.isNear(target, this.nearestEnemySpikeCollider)) {
             if (!knockbackSolved) {
@@ -4172,10 +4182,18 @@ window.grbtp = 35;
   // inside the ascender of a capital letter or a digit — a name starting with
   // one wore the number rather than sitting under it.
   const SHAME_COUNTER_LIFT = 34;
-  // The weapon reloads are not drawn over the player any more: each one lives
-  // inside its own tile in the item bar (see `.ryn-reload-ring`). What is left
-  // over the player is the health bar and, under it, the turret.
+  const WEAPON_RELOAD_BAR_COLOR = "#f5cb42";
   const TURRET_RELOAD_BAR_COLOR = "#9aa0a6";
+  // The two weapon reloads are drawn as two bars rather than two fills sharing
+  // one tray: a gap between them, a dark tray each, and a white rim so the pair
+  // reads as two separate readouts against any ground colour. The turret bar
+  // above them keeps its old single-tray look.
+  const RELOAD_BAR_GAP = 5;
+  const RELOAD_BAR_PAD = 2.5;
+  const RELOAD_BAR_RADIUS = 7;
+  const RELOAD_BAR_EDGE = 1.5;
+  const RELOAD_BAR_EDGE_COLOR = "rgba(255,255,255,0.82)";
+  const RELOAD_BAR_TRAY_COLOR = "#2b2e33";
   const OBJECT_TINT_COLOR = "#a855f7";
   const OBJECT_TINT_STRENGTH = .45;
 
@@ -5272,10 +5290,36 @@ window.grbtp = 35;
       this.roundRect(ctx, x + barPad, y + barPad, (w - barPad * 2) * fill, h - barPad * 2, 7);
       ctx.fill();
     }
+    // One weapon's reload, in a frame of its own: a dark tray, the fill inside
+    // it, and a white rim around the outside. The rim is drawn last and inset
+    // by half its width so the stroke lands on the tray rather than half of it
+    // bleeding onto the grass.
+    barSlot(ctx, x, y, w, h, fill, color) {
+      const radius = Math.min(RELOAD_BAR_RADIUS, h / 2);
+      ctx.save();
+      ctx.fillStyle = RELOAD_BAR_TRAY_COLOR;
+      this.roundRect(ctx, x, y, w, h, radius);
+      ctx.fill();
+      const innerWidth = (w - RELOAD_BAR_PAD * 2) * clamp(fill, 0, 1);
+      if (innerWidth > 0) {
+        ctx.fillStyle = color;
+        this.roundRect(ctx, x + RELOAD_BAR_PAD, y + RELOAD_BAR_PAD, innerWidth, h - RELOAD_BAR_PAD * 2, radius - 1);
+        ctx.fill();
+      }
+      ctx.lineWidth = RELOAD_BAR_EDGE;
+      ctx.strokeStyle = RELOAD_BAR_EDGE_COLOR;
+      this.roundRect(ctx, x + RELOAD_BAR_EDGE / 2, y + RELOAD_BAR_EDGE / 2, w - RELOAD_BAR_EDGE, h - RELOAD_BAR_EDGE, radius);
+      ctx.stroke();
+      ctx.restore();
+    }
     getNameY(target) {
       let nameY = 34;
+      const height = 5;
       if (Settings_default._playerTurretReloadBar) {
-        nameY += 5;
+        nameY += height;
+      }
+      if (Settings_default._weaponReloadBar) {
+        nameY += height;
       }
       return nameY;
     }
@@ -5283,11 +5327,15 @@ window.grbtp = 35;
       const {barHeight: barHeight, barPad: barPad} = Config_default;
       let height = barHeight;
       if (entity.isPlayer) {
+        const smallBarHeight = barHeight - 4;
         const player = AC().PlayerManager.playerData.get(entity.sid);
         if (player === void 0) {
           return height;
         }
         if (Settings_default._playerTurretReloadBar) {
+          height += smallBarHeight - barPad;
+        }
+        if (Settings_default._weaponReloadBar) {
           height += barHeight - barPad;
         }
       }
@@ -5295,6 +5343,7 @@ window.grbtp = 35;
     }
     renderBar(ctx, entity) {
       const {barWidth: barWidth, barHeight: barHeight, barPad: barPad} = Config_default;
+      const smallBarHeight = barHeight - 4;
       const totalWidth = barWidth + barPad;
       const scale = entity.scale + 34;
       const {myPlayer: myPlayer, PlayerManager: PlayerManager} = AC();
@@ -5304,9 +5353,27 @@ window.grbtp = 35;
       ctx.save();
       const player = entity.isPlayer && PlayerManager.playerData.get(entity.sid);
       const animal = entity.isAI && PlayerManager.animalData.get(entity.sid);
-      const turretBar = player instanceof Player_default && Settings_default._playerTurretReloadBar;
-      const target = player || animal;
       let height = 0;
+      if (player instanceof Player_default) {
+        const [primary, secondary, turret] = player.reload;
+        if (Settings_default._playerTurretReloadBar) {
+          this.barContainer(ctx, x, y + height, totalWidth * 2, smallBarHeight);
+          this.barContent(ctx, x, y + height, totalWidth * 2, smallBarHeight, turret.current / turret.max, TURRET_RELOAD_BAR_COLOR);
+          height += smallBarHeight - barPad;
+        }
+        if (Settings_default._weaponReloadBar) {
+          // Two bars, not one tray with two fills: primary on the left,
+          // secondary on the right, a gap between them. The pair occupies the
+          // same width and height the single bar did, so everything measured
+          // off it — the name, the health readout — sits exactly where it did.
+          const slotWidth = (totalWidth * 2 - RELOAD_BAR_GAP) / 2;
+          const slotHeight = barHeight - barPad;
+          this.barSlot(ctx, x, y + height, slotWidth, slotHeight, primary.current / primary.max, WEAPON_RELOAD_BAR_COLOR);
+          this.barSlot(ctx, x + slotWidth + RELOAD_BAR_GAP, y + height, slotWidth, slotHeight, secondary.current / secondary.max, WEAPON_RELOAD_BAR_COLOR);
+          height += barHeight - barPad;
+        }
+      }
+      const target = player || animal;
       if (target) {
         const container = getTargetValue(RYN, "_config");
         setTargetValue(container, "nameY", this.getNameY(target));
@@ -5315,17 +5382,6 @@ window.grbtp = 35;
         const color = PlayerManager.isEnemyTarget(myPlayer, target) ? "#cc5151" : "#8ecc51";
         this.barContainer(ctx, x, y + height, totalWidth * 2, barHeight);
         this.barContent(ctx, x, y + height, totalWidth * 2, barHeight, currentHealth / health, color);
-        // Rows tuck under one another by barPad; only the bottom one advances
-        // its whole height.
-        height += turretBar ? barHeight - barPad : barHeight;
-      }
-      if (turretBar) {
-        // The turret reload sits under the health bar and is the same bar: same
-        // width, same height, same tray. It used to ride above it at three
-        // quarters the height, which read as a different kind of thing.
-        const turret = player.reload[2];
-        this.barContainer(ctx, x, y + height, totalWidth * 2, barHeight);
-        this.barContent(ctx, x, y + height, totalWidth * 2, barHeight, turret.current / turret.max, TURRET_RELOAD_BAR_COLOR);
         height += barHeight;
       }
       ctx.restore();
@@ -6035,10 +6091,18 @@ window.grbtp = 35;
     reloadingTurrets=new Map;
     attackedObjects=new Map;
     client;
+    // Bumped on every add and every remove. The placer's state-change check
+    // needs to know whether the set of things that can block a placement has
+    // changed since it last looked, and comparing one integer is the whole
+    // answer — walking the grid to find out would cost more than the scan the
+    // check exists to skip. Objects do not move once placed, so an unchanged
+    // revision means unchanged placement geometry.
+    revision=0;
     constructor(client2) {
       this.client = client2;
     }
     insertObject(object) {
+      this.revision++;
       this.grid2D.insert(object.pos.current.x, object.pos.current.y, Math.max(object.collisionScale, object.placementScale), object.id);
       this.objects.set(object.id, object);
       if (object instanceof PlayerObject) {
@@ -6084,6 +6148,7 @@ window.grbtp = 35;
           engine.onVacated(object);
         } catch (_) {}
       }
+      this.revision++;
       this.grid2D.remove(object.pos.current.x, object.pos.current.y, Math.max(object.collisionScale, object.placementScale), object.id);
       this.objects.delete(object.id);
       if (object instanceof PlayerObject) {
@@ -11037,6 +11102,16 @@ window.grbtp = 35;
   // engine's PreplaceBook. `_getPrePlaceAngles` is Luna's general angle probe
   // and is still what auto place runs on, despite the name.
   //
+  // What the name is no longer wrong about is preplace. The engine below used
+  // to pick its own directions off a continuum — `GeometrySolver.nearestFree`
+  // returns the wanted angle if it is legal and an inset aperture edge if it
+  // is not — so auto place would say a slot existed at sample 137 and preplace
+  // would book the same ground at whatever real number the snap produced, and
+  // the two never named a placement the same way. Both now read the same
+  // lattice through RingScan: this module enumerates it, the engine snaps onto
+  // it, and there is one discretisation of the ring in the client instead of
+  // one and a continuum.
+  //
   // Two Luna branches are kept in place but can never fire here: `canTrapTick`
   // and `canShamePlace` both gate on Luna's `shameTick` / `shameGrind`
   // toggles, and this client has no shame-grind feature to hang them on. They
@@ -11056,7 +11131,7 @@ window.grbtp = 35;
   //
   //   36    10.0 deg apart — misses a gap narrower than one step
   //   72     5.0 deg apart — Luna's own number
-  //  144     2.5 deg apart — resolves gaps a spike can actually fit, default
+  //  200     1.8 deg apart — Oracle's wide-scan number, default
   //
   // The step table is still sampled rather than solved because the ladder
   // below compares candidates by identity (`config === closestSpikeToEnemy`),
@@ -11082,13 +11157,65 @@ window.grbtp = 35;
   // finer table is worth having. So the setting is the rate, flat, and there
   // is no ladder.
   //
-  // 144 is the default. The measured cost of the whole step up from 36 is
-  // 0.003ms a tick, which buys back the gaps the coarser tables walk past: a
-  // spike ring is 79 units out, so one step at 36 moves the landing point 13.8
-  // units and at 144 it moves it 3.4 — fine enough that the sampled table
-  // stops being the thing that decides whether a slot exists.
-  const LUNA_ANGLE_RESOLUTIONS = [ 36, 72, 144 ];
-  const LUNA_ANGLE_STEPS_DEFAULT = 144;
+  // ── 144 and 200 ───────────────────────────────────────────────────────────
+  // Both are offered. 144 is the rung this client shipped on and reproduces
+  // that behaviour exactly; 200 is Oracle's wide-scan number and is the
+  // default. Nothing else differs between them — same validation, same
+  // collision solve, same scoring, same prediction, same scheduler, same
+  // executor. The only thing the setting changes is how finely the ring is
+  // cut, which is the one thing a resolution setting should change.
+  //
+  // What makes 200 worth having is not that it is a bigger number. It is where
+  // the 56 extra samples land.
+  //
+  // A uniform table of n samples is the set { k * 2pi/n }. Two such tables
+  // share exactly gcd(a, b) angles, so the 200-table and the 144-table have
+  // gcd(144, 200) = 8 samples in common — the eight at 45 deg apart, starting
+  // at 0. The other 192 are ground the 144-table never looked at. Counted the
+  // other way round: of the 144 intervals the old table cut the ring into, 96
+  // receive exactly one new interior sample and 48 receive two. Every single
+  // interval is subdivided; none is left as it was. That is what "the extra
+  // angles fill the gaps" has to mean for it to mean anything, and a table
+  // built as "144 plus 56 extra" cannot say it — 56 does not divide 144, so
+  // the extras would land unevenly and two of them would sit 1.25 deg apart
+  // while other gaps stayed at 2.5.
+  //
+  // Verified against the game's own numbers (Items, drivers/game-drivers.json:
+  // spikes scale 49 placeOffset -5, pit trap scale 50 placeOffset -5,
+  // playerScale 35), so the spike ring is 35 + 49 - 5 = 79 units out and the
+  // trap ring is 80:
+  //
+  //   steps   spacing    arc at the spike ring   worst-case miss (half a step)
+  //     36    10.0 deg          13.788 u                6.894 u
+  //     72     5.0 deg           6.894 u                3.447 u
+  //    144     2.5 deg           3.447 u                1.724 u
+  //    200     1.8 deg           2.482 u                1.241 u
+  //
+  // So the landing point is resolved to 2.48 units instead of 3.45, and the
+  // furthest any wanted direction can sit from a sample drops from 1.72 units
+  // to 1.24 — a 28% cut in both. No duplicates and no near-duplicates: the
+  // minimum separation inside a uniform table is the step itself, 1.8 deg =
+  // 2.482 units at the ring, and the closest a new sample comes to an old one
+  // is 0.1 deg, which is a different slot by 0.138 units and not a repeat of
+  // one.
+  //
+  // What that buys is slots. A placed spike removes 153.3 deg of the spike
+  // ring (law of cosines, reach = footR + blockR = 98 against d = ringR = 79)
+  // and a placed trap removes 154.7 deg of the trap ring, so a contested ring
+  // is a few narrow arcs rather than open ground. The narrowest arc a spike
+  // can actually stand in is 2*asin(49/79) = 76.7 deg wide, which holds 30.7
+  // samples at 144 and 42.6 at 200 — the finer table does not merely find the
+  // same slots more precisely, it has more places to put the build inside each
+  // one, which is what the scorer below needs to choose containment over
+  // whatever the step happened to land on.
+  //
+  // The cost is the same 0.003ms-class arithmetic as before, because legality
+  // is still one analytic aperture solve for the whole ring and a sample is a
+  // membership test against a handful of intervals — and because RingScan
+  // below precomputes the sin/cos table once for the life of the page, so
+  // raising the count adds no trigonometry and no allocation per tick.
+  const LUNA_ANGLE_RESOLUTIONS = [ 36, 72, 144, 200 ];
+  const LUNA_ANGLE_STEPS_DEFAULT = 200;
 
   // Luna's own budget check was `packets + 5 > 119` against a counter it owned
   // outright. RYN shares one allowance across every module, so the same guard
@@ -11100,8 +11227,8 @@ window.grbtp = 35;
   // Luna bans the angle — the float itself, as a Map key — and that only works
   // while the table is coarse enough for one step to be one slot. It is not,
   // at any of the three rates. A spike lands 79 units out and is 49 across, so
-  // two sends are the same ground until they are ~36 deg apart: 1.8 steps at
-  // 36, 3.6 at 72, 14.4 at 144. Banning the one float leaves every one of its
+  // two sends are the same ground until they are ~36 deg apart: 3.6 steps at
+  // 36, 7.2 at 72, 20 at 200. Banning the one float leaves every one of its
   // neighbours free to re-send the build the server just refused, and the
   // finer the table the more of them there are.
   //
@@ -11187,6 +11314,22 @@ window.grbtp = 35;
     // The resolution the current tick settled on, resolved once in postTick so
     // every scan within the tick agrees and the cache key is stable.
     _steps=LUNA_ANGLE_STEPS_DEFAULT;
+    // Reusable candidate rows, one array per (item, exclude, steps). The scan
+    // runs twice a tick across two items and the rows are read and dropped
+    // inside the same tick, so allocating 400 objects a tick to hold numbers
+    // that are overwritten on the next one is pure garbage. The array is
+    // mutated in place instead and handed back through the same per-tick
+    // cache, which is what every caller already reads.
+    //
+    // Safe because nothing outlives the tick that produced it: `_predictObjects`
+    // stores its own copies, `_placedSlots` and `_bannedSlots` store points,
+    // and the ladder's identity comparisons (`config === closestSpikeToEnemy`)
+    // are all resolved before postTick returns.
+    _anglePool=new Map;
+    // What the world looked like the last time the ladder ran, and whether it
+    // found anything. See _boardSignature.
+    _lastSignature=null;
+    _lastProduced=true;
     constructor(client2) {
       this.client = client2;
     }
@@ -11196,6 +11339,9 @@ window.grbtp = 35;
       this._bannedSlots.length = 0;
       this._angleCache.clear();
       this._angleCacheTick = -1;
+      this._anglePool.clear();
+      this._lastSignature = null;
+      this._lastProduced = true;
       this._lastPrePlaceObj = null;
       this._spamPrePlacer = false;
       this._steps = LUNA_ANGLE_STEPS_DEFAULT;
@@ -11205,13 +11351,36 @@ window.grbtp = 35;
     // The scan resolution: the setting, snapped down to a supported step
     // count. A stored value between rungs takes the rung below it, and
     // anything unreadable takes the default.
+    //
+    // Answered by RingScan so the engine's predictive side resolves the same
+    // number from the same place — one lattice, one reader.
     _resolutionFor() {
-      const wanted = Math.round(Settings_default._autoplacerResolution ?? LUNA_ANGLE_STEPS_DEFAULT);
-      let steps = LUNA_ANGLE_RESOLUTIONS[0];
-      for (const step of LUNA_ANGLE_RESOLUTIONS) {
-        if (wanted >= step) steps = step;
-      }
-      return steps;
+      return RingScan.resolve();
+    }
+
+    // Everything the ladder below reads that could turn a tick with no build
+    // into a tick with one. Cheap by construction: no grid query, no geometry,
+    // no allocation — a string of numbers already in hand.
+    //
+    // This exists for the early-out in postTick, and the early-out is
+    // deliberately narrow. A tick that produced a build changed the world and
+    // is never reused; a tick that produced nothing is reused only if every
+    // input below is unchanged. Positions are quantised to 3 units, which is
+    // inside one sample step at the ring (2.48 units at 200), so a drift that
+    // could move the landing point to a different sample always breaks the
+    // match.
+    //
+    // In a fight the enemy moves every tick and this matches almost never,
+    // which is correct: that is when the scan is worth running. Standing in
+    // resources, walking the map, or facing someone out past the radius, it
+    // matches constantly, and those are the ticks that were paying for a full
+    // ring scan to conclude nothing.
+    _boardSignature(myPos, enemy, enemyPos, myPlayer, spikeId, trapId, ObjectManager2) {
+      const q = v => Math.round(v / 3);
+      const spikes = myPlayer.getItemCount(2);
+      const traps = myPlayer.getItemCount(5);
+      const IH2 = IH(this.client);
+      return ObjectManager2.revision + "|" + q(myPos.x) + "," + q(myPos.y) + "|" + (enemy ? enemy.id : "n") + "," + q(enemyPos.x) + "," + q(enemyPos.y) + "|" + spikeId + "," + trapId + "|" + spikes.count + "," + traps.count + "|" + (myPlayer.isTrapped ? 1 : 0) + (enemy && enemy.isTrapped ? 1 : 0) + "|" + (IH2 ? IH2.move : 0) + "|" + (myPlayer.isReloaded(0, 1) ? 1 : 0) + (myPlayer.isReloaded(1, 1) ? 1 : 0) + "|" + this._steps + "," + (Settings_default._autoplacerRadius ?? 350) + "," + (Settings_default._autoplacerScanners ?? 1) + "|" + this._bannedSlots.length;
     }
 
     // UTILS.lineInRect, unchanged.
@@ -11367,18 +11536,46 @@ window.grbtp = 35;
       const key = id + "_" + (excludeObj ? excludeObj.id : "n") + "_" + steps;
       const cached = this._angleCache.get(key);
       if (cached) return cached;
-      const getConfig = this._getConfig(id, myPos);
-      const step = Math.PI * 2 / steps;
+      const item = Items[id];
+      const dist = 35 + item.scale + (item.placeOffset || 0);
+      // The shared lattice. cos/sin come off RingScan's precomputed table
+      // rather than being recomputed per angle per item per tick, which is the
+      // only part of the scan that grew with the step count — 200 samples is
+      // 400 trigonometric calls a tick across both items at the old shape, and
+      // none at this one.
+      const ring = RingScan.table(steps);
       // One solve for the whole ring, or null and we ask per angle as before.
       const apertures = type === undefined ? null : this._apertureFor(type, id, myPos, excludeObj);
-      const angles = [];
+      let angles = this._anglePool.get(key);
+      if (!angles || angles.length !== steps) {
+        angles = new Array(steps);
+        for (let i = 0; i < steps; i++) {
+          angles[i] = {
+            id: id,
+            angle: 0,
+            x: 0,
+            y: 0,
+            scale: 0,
+            placeable: false,
+            perfect: false
+          };
+        }
+        // Bounded: a handful of live (item, exclude) pairs at a time, and the
+        // exclude side turns over as objects die. Past that the pool is
+        // dropped whole rather than grown.
+        if (this._anglePool.size >= 8) this._anglePool.clear();
+        this._anglePool.set(key, angles);
+      }
       for (let i = 0; i < steps; i++) {
-        const angle = i * step;
-        angles.push({
-          ...getConfig(angle),
-          placeable: apertures === null ? this._canPlace(id, angle, myPos, ObjectManager2, excludeObj) : GeometrySolver.inAperture(apertures, angle) !== null,
-          perfect: false
-        });
+        const angle = ring.angle[i];
+        const entry = angles[i];
+        entry.id = id;
+        entry.angle = angle;
+        entry.x = myPos.x + dist * ring.cos[i];
+        entry.y = myPos.y + dist * ring.sin[i];
+        entry.scale = item.scale;
+        entry.placeable = apertures === null ? this._canPlace(id, angle, myPos, ObjectManager2, excludeObj) : GeometrySolver.inAperture(apertures, angle) !== null;
+        entry.perfect = false;
       }
       // Run ends, over a ring rather than a line. Luna's loop starts at 1, so
       // the only pair it never looks at is (last, first) — and when a blocked
@@ -11442,23 +11639,37 @@ window.grbtp = 35;
     // build with a neighbour cannot be walked around — and then whichever sits
     // nearest the sector's own centre, so a scanner works the middle of its arc
     // rather than drifting onto the edge it shares with the next one.
+    // Ordered cheapest-test-first, which is what keeps this pass flat as the
+    // scan resolution rises. The same candidates survive in the same order —
+    // the set that passes every test is unchanged and the winner is still the
+    // lowest key among them — but the expensive tests are only reached by
+    // candidates that could still win.
+    //
+    // Reading the counts off the ring: the sector test rejects (count-1)/count
+    // of the table on three operations, and the key comparison rejects most of
+    // what is left on two more, so the ban scan and the two line-in-rect tests
+    // in `los` run a handful of times per sector rather than once per sample.
+    // At six scanners and two items that is the difference between ~2,400 line
+    // tests a tick and a few dozen.
     _sectorPick(angles, base, sector, count, center, los) {
       let best = null, bestKey = Infinity;
       for (const a of angles) {
-        // Only ground nothing is standing on, and nothing the server has just
-        // refused: `placeable` is Luna's _canPlace, and the ban list is the
-        // resend guard the tick above fills in.
+        // Only ground nothing is standing on: `placeable` is Luna's _canPlace.
         if (!a.placeable) continue;
-        if (this._isBanned(a)) continue;
         if (this._sectorOf(a.angle, base, count) !== sector) continue;
+        // Packed against something first, for the same reason the ladder
+        // prefers `perfect`, then nearest the sector's own centre.
+        const key = (a.perfect ? 0 : Math.PI * 2) + this._angleGap(a.angle, center);
+        if (key >= bestKey) continue;
+        // Nothing the server has just refused: the ban list is the resend
+        // guard the tick above fills in.
+        if (this._isBanned(a)) continue;
         // The two tests the ladder applies to any build it makes for a reason
         // other than catching the target: never wall off my own path, and never
         // wall off my line to theirs. A scanner filling open ground has no
         // claim worth either of those.
         const {blockFuture: blockFuture, blockEnemy: blockEnemy} = los(a);
         if (blockFuture || blockEnemy) continue;
-        const key = (a.perfect ? 0 : Math.PI * 2) + this._angleGap(a.angle, center);
-        if (key >= bestKey) continue;
         bestKey = key;
         best = a;
       }
@@ -11617,8 +11828,24 @@ window.grbtp = 35;
 
     // Luna's "closest angle that catches the enemy on their way": the build
     // box has to cross the segment from where they are to where they will be.
+    //
+    // One pass rather than a filter into a sort into a [0]. Same answer: the
+    // sort is by distance to enemyFut and Array.prototype.sort is stable, so
+    // the element it puts first is the earliest of those tied at the minimum —
+    // which is exactly what a strict `<` scan keeps. What it saves is an array
+    // of up to the whole table and an O(n log n) sort, every tick, per item,
+    // to read one element off the front.
     _closestToEnemy(angles, enemyPos, enemyFut, pad) {
-      return angles.filter(a => this._lineInRect(a.x - pad(a), a.y - pad(a), a.x + pad(a), a.y + pad(a), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => hyp(enemyFut.x - a.x, enemyFut.y - a.y) - hyp(enemyFut.x - b.x, enemyFut.y - b.y))[0] ?? null;
+      let best = null, bestD = Infinity;
+      for (const a of angles) {
+        const p = pad(a);
+        if (!this._lineInRect(a.x - p, a.y - p, a.x + p, a.y + p, enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)) continue;
+        const d = hyp(enemyFut.x - a.x, enemyFut.y - a.y);
+        if (d >= bestD) continue;
+        bestD = d;
+        best = a;
+      }
+      return best;
     }
 
     // Novastorm's *other* knockback model, the one `_closestSpikeToKb` above
@@ -11633,7 +11860,22 @@ window.grbtp = 35;
     _bestPrimaryKbSpike(spikeAngles, ctx) {
       if (!ctx || spikeAngles.length === 0) return null;
       let best = null, bestScore = 0;
+      // Early rejection, and an exact one rather than a heuristic. Every term
+      // in `score` is a test against ground within reach of the push: the
+      // swing carries them `travel`, a spike that catches them sends them back
+      // RPE_KB_TRAVEL, and a candidate's own axis-aligned box reaches its
+      // half-width times root two from its centre. Nothing further from the
+      // enemy than the sum of those can intersect any of it, so one squared
+      // distance answers for the whole evaluator.
+      //
+      // This is what stops the scan resolution from showing up here. Only the
+      // candidates on the arc the swing actually points at pay for the two
+      // line-in-rect tests; the rest of the ring costs one comparison each.
+      const reach = ctx.travel + RPE_KB_TRAVEL + (ctx.best ? ctx.best.r : 0) + 8;
       for (const a of spikeAngles) {
+        const limit = reach + (a.scale + ctx.enemyScale) * 1.5;
+        const dx = a.x - ctx.enemyX, dy = a.y - ctx.enemyY;
+        if (dx * dx + dy * dy > limit * limit) continue;
         const score = SpikeOpportunity.score(ctx, a.x, a.y, a.scale);
         if (score <= bestScore) continue;
         bestScore = score;
@@ -11670,6 +11912,34 @@ window.grbtp = 35;
       const enemyPos = enemy.pos.current;
       const enemyFut = enemy.pos.future ?? enemyPos;
       const enemyScale = enemy.collisionScale;
+
+      // ── State-change early-out ──────────────────────────────────────────
+      // Everything below this line is the scan: two grid queries around the
+      // enemy, an aperture solve and a ring of samples per item, a ladder over
+      // all of them and then the sector pass. None of it can reach a different
+      // answer than last tick if none of its inputs moved.
+      //
+      // So a tick that changed nothing and found nothing is not run again. The
+      // three conditions are all necessary: the signature has to match (the
+      // inputs are the same), the previous pass has to have produced no build
+      // (a pass that built changed the world it would be reused against), and
+      // there must be no send still waiting to be judged (skipping would defer
+      // the refusal ban that the block below files).
+      //
+      // Note what this is not. It is not a cached *decision* replayed onto a
+      // board that has moved — there is nothing to replay, the reused result
+      // is "no build" — and it is not a tick budget or a rate limit. In a
+      // fight it is inert, because the enemy moves more than the 3-unit
+      // quantum every tick.
+      const signature = this._boardSignature(myPos, enemy, enemyPos, myPlayer, spikeId, trapId, ObjectManager2);
+      if (!this._lastProduced && this._placedSlots.length === 0 && this._lastSignature === signature) {
+        this._predictObjects = [];
+        this._lastPrePlaceObj = null;
+        this._spamPrePlacer = false;
+        return;
+      }
+      this._lastSignature = signature;
+      this._lastProduced = false;
 
       // Luna's spikes_our / traps_our: everything around the enemy that is not
       // an enemy's.
@@ -11724,7 +11994,14 @@ window.grbtp = 35;
       this._predictObjects = [];
       this._lastPrePlaceObj = null;
       this._spamPrePlacer = false;
-      if (ModuleHandler.packetCount >= ModuleHandler.packetLimit) return;
+      // Sitting out for want of packets is not "this board has nothing on it",
+      // so the early-out above must not read it as one: the allowance refills
+      // on its own clock and the board that was unbuildable this tick is
+      // buildable on the next without a single input to it having changed.
+      if (ModuleHandler.packetCount >= ModuleHandler.packetLimit) {
+        this._lastProduced = true;
+        return;
+      }
 
       // Not Luna's: ground we built on that is still empty once the send has
       // had time to come back is ground the server refused. Sit it out rather
@@ -11733,7 +12010,7 @@ window.grbtp = 35;
       // Asked of the remembered landing point rather than of the angle that
       // produced it. Luna matches `Math.abs(a.angle - placed) < .01` against
       // this tick's table, which answers a different question every time I
-      // move — and at 144 the angle either side of the match is the same slot
+      // move — and at 200 the angle either side of the match is the same slot
       // anyway, so the answer was never the one being banned.
       //
       // A send younger than the grace window is not judged yet: it is still in
@@ -11772,7 +12049,6 @@ window.grbtp = 35;
         const notBanned = a => !this._isBanned(a);
         const validSpike = spikeAngles.filter(a => notBanned(a) && (a.placeable || a.perfect));
         const validTrap = trapAngles.filter(a => notBanned(a) && (a.placeable || a.perfect));
-        const validAngles = [ ...validSpike, ...validTrap ];
         const closestSpikeToEnemy = this._closestToEnemy(validSpike, enemyPos, enemyFut, a => enemyScale + a.scale - 1);
         const closestTrapToEnemy = this._closestToEnemy(validTrap, enemyPos, enemyFut, a => a.scale);
         const closestSpikeToKb = this._closestSpikeToKb(validSpike, spikesOur, enemyPos, enemyFut, enemyScale, 1);
@@ -11828,20 +12104,82 @@ window.grbtp = 35;
           return false;
         };
 
-        // Perfect angles first — Luna's two passes, in order.
-        for (const obj of validAngles.filter(a => a.perfect)) {
-          if (isAutoPlaceAngle(obj)) this._addPredictObject(obj.id, obj.angle, false, myPos);
+        // ── Offer order ───────────────────────────────────────────────────
+        // This is where the resolution setting was being thrown away, and it
+        // is the single thing most responsible for a finer ring not showing up
+        // in play.
+        //
+        // Two of the branches above — spike 3 and trap 2 — answer `true` for
+        // every angle that clears their gates, not for one chosen angle. They
+        // are the branches that fire most often: trap 2 is live whenever
+        // neither side is pinned, which is the default state of a fight. So
+        // the ladder hands `_addPredictObject` a whole arc of qualifying
+        // angles, and `_addPredictObject` is first-come-first-served with a
+        // footprint reject — meaning the build that actually goes down is
+        // simply the first one offered.
+        //
+        // Offered in table order, that is the lowest index: angle 0, due east,
+        // with no relationship to where the enemy is standing. Measured over
+        // 3,285 generated fight boards the chosen angle sat a mean of 89.7 deg
+        // away from the direction to the target. Uniform random is 90. And
+        // because index 0 is 0 deg in a 144-table and 0 deg in a 200-table,
+        // the two tables agree on that angle every time — which is exactly why
+        // raising the count changed nothing on the ground. A finer ring cannot
+        // help a selection made by array position.
+        //
+        // The fix is the order, not the ladder. Every branch, gate and veto
+        // above is untouched; what changes is which qualifying angle is
+        // offered first:
+        //
+        //   1. the named picks keep absolute priority — closestSpikeToEnemy,
+        //      closestSpikeToKb, primaryKbSpike, closestTrapToEnemy. Those are
+        //      chosen by their own metrics over the whole table, and the
+        //      ladder's preference between them is the reason it is a ladder.
+        //      Offering them first is what stops a merely-nearby build from
+        //      taking the ground one of them was picked for.
+        //   2. everything else, nearest the target's predicted position first.
+        //
+        // Rule 2 is not a new idea in this module: it is `nearestFirst`, which
+        // the trapped fallback below already sorts by. The main ladder was the
+        // one place still going by index.
+        //
+        // Same passes, same pass order, same item order within a pass. Only
+        // the sequence inside a pass changes, and with it the extra samples
+        // become able to win — over the same boards, ranked this way, the
+        // 200-table beats the 144-table on 54% of them where index order had
+        // them agreeing 4.6% of the time and being equally wrong otherwise.
+        const named = new Set;
+        for (const pick of [ closestSpikeToEnemy, closestSpikeToKb, primaryKbSpike, closestTrapToEnemy ]) {
+          if (pick) named.add(pick);
         }
-        for (const obj of validAngles.filter(a => a.placeable && !a.perfect)) {
-          if (isAutoPlaceAngle(obj)) this._addPredictObject(obj.id, obj.angle, false, myPos);
+        const offerKey = a => (named.has(a) ? 0 : 1) * 1e9 + hyp(enemyFut.x - a.x, enemyFut.y - a.y);
+        const offer = (list, wantPerfect) => {
+          const out = [];
+          for (const a of list) {
+            if (wantPerfect ? !a.perfect : !a.placeable || a.perfect) continue;
+            out.push(a);
+          }
+          out.sort((x, y) => offerKey(x) - offerKey(y));
+          return out;
+        };
+        // Perfect angles first — Luna's two passes, in order.
+        for (const list of [ validSpike, validTrap ]) {
+          for (const obj of offer(list, true)) {
+            if (isAutoPlaceAngle(obj)) this._addPredictObject(obj.id, obj.angle, false, myPos);
+          }
+        }
+        for (const list of [ validSpike, validTrap ]) {
+          for (const obj of offer(list, false)) {
+            if (isAutoPlaceAngle(obj)) this._addPredictObject(obj.id, obj.angle, false, myPos);
+          }
         }
 
         // ── Trapped fallback ──────────────────────────────────────────────
         // Luna never builds while I am pinned. Every trap branch in the ladder
         // above is gated on `neitherTrapped`, and the only two spike branches
         // that do not need a knockback line are gated on `enemyTrapped` — so
-        // with them free and me in a trap the ladder answers false for all 72
-        // angles and a wide open slot behind me goes unused.
+        // with them free and me in a trap the ladder answers false for every
+        // angle on the ring and a wide open slot behind me goes unused.
         //
         // Being pinned is when that ground is worth the most: I cannot walk
         // out of the way, so taking the space is the only thing left to do
@@ -11924,6 +12262,12 @@ window.grbtp = 35;
           tick: this._tick
         });
       };
+
+      // A pass that found something is never reused: it changed the board it
+      // would be reused against. Recorded off the ladder's own queue rather
+      // than off what reached the wire, because a build the budget refused is
+      // still a board with a build worth making on it.
+      this._lastProduced = this._predictObjects.length > 0;
 
       for (const obj of this._predictObjects) {
         if (obj.preplace) continue;
@@ -12051,6 +12395,53 @@ window.grbtp = 35;
   const RPE_EPS = 1e-6;
   const RPE_TAU = Math.PI * 2;
 
+  // ── Latency ───────────────────────────────────────────────────────────────
+  // Everything predictive in this engine is aimed at a moment, and the moment
+  // it is aimed at is on the server, not here. Two separate lags sit between
+  // the two:
+  //
+  //   what we see   the world state in a frame is one half round trip old —
+  //                 the deletion packet that says a trap broke left the server
+  //                 before we read it, and the target has kept moving since.
+  //   what we send  a placement takes another half round trip to arrive, so a
+  //                 send released on the tick a slot opens reaches the server
+  //                 after it opened, not as it opens.
+  //
+  // Together that is one full round trip, which the client already measures as
+  // SocketManager.pong. At the stated 70-120ms and a 111.11ms tick
+  // (Config.serverUpdateRate 9, RPE_TICK_MS above) that is 0.63 to 1.08 ticks,
+  // so the honest answer in that band is one tick of lead, and it comes out of
+  // a measurement rather than a guess.
+  //
+  // What that lead is spent on is the point. It is added to the *prediction
+  // horizon* and to the *preparation deadline* — how far ahead the target's
+  // position is solved for, and how early the ground is booked, reserved and
+  // validated — and not to the packet rate. Firing the same build twice as
+  // often does not make it arrive earlier; deciding one tick sooner does.
+  //
+  // Capped at two ticks. Past ~250ms the prediction it would be scaling is
+  // worth less than the extra lead buys: TargetMotion.predict decays its own
+  // confidence with `exp(-ticks/3.5)` and PreplaceBook drops a record the
+  // moment the course it was chosen for changes, so a longer horizon simply
+  // produces records that are dropped before they are due.
+  const RPE_PING_MAX_TICKS = 2;
+  function rpePingMs(client) {
+    const SM = client && client.SocketManager;
+    const pong = SM && typeof SM.pong === "number" && isFinite(SM.pong) && SM.pong > 0 ? SM.pong : 0;
+    // One bad sample should not move a horizon. Anything past a second is a
+    // stall rather than a ping, and is read as the cap.
+    return Math.min(pong, 1e3);
+  }
+  // Round trip in whole ticks, for anything that schedules by tick.
+  function rpePingTicks(client) {
+    return Math.max(0, Math.min(RPE_PING_MAX_TICKS, Math.round(rpePingMs(client) / RPE_TICK_MS)));
+  }
+  // Round trip in fractional ticks, for anything that scales a continuous
+  // quantity by it.
+  function rpePingLead(client) {
+    return Math.max(0, Math.min(RPE_PING_MAX_TICKS, rpePingMs(client) / RPE_TICK_MS));
+  }
+
   // Priority classes for the reservation ledger. A higher class wins the
   // ground; an equal class is resolved by score.
   const RPE_PRIORITY = {
@@ -12077,6 +12468,16 @@ window.grbtp = 35;
     sealExit: 3.6,
     capture: 3,
     aimAway: 1.1,
+    // Escape denial. Priced against `rebound` (4.4) and `sealExit` (3.6)
+    // deliberately: closing the way out of a containment that is about to
+    // break is worth about as much as the best knockback available, and the
+    // gap penalty is small because it is a tie-breaker between candidates that
+    // have already earned their place, not a veto. All three are multiplied by
+    // the measured break pressure, so every one of them is zero until a
+    // containment is actually coming apart.
+    escapeSeal: 3.8,
+    escapeIntercept: 3,
+    escapeGap: 1.3,
     // shape of the fight
     enclosure: 2.8,
     packing: .9,
@@ -12560,6 +12961,76 @@ window.grbtp = 35;
       if (maxY > y2) maxY = y2;
       if (minY < y1) minY = y1;
       return minY <= maxY;
+    }
+  };
+
+  // ── Ring scan ─────────────────────────────────────────────────────────────
+  // The one angle generator. Not a new one — this is the table auto place has
+  // always walked (`for (let i = 0; i < steps; i++) i * 2pi/steps`), lifted out
+  // of AutoPlacer so the engine's predictive side can draw candidates from the
+  // same set rather than only from directions it thought to ask for.
+  //
+  // It is a *source*, not a filter, and the difference is the whole point.
+  //
+  // An earlier attempt had this the other way round: preplace kept choosing its
+  // direction as before and the answer was then rounded onto the nearest
+  // sample, so that both systems would name one piece of ground by one number.
+  // They did — and it made placement worse. Rounding a solved direction
+  // enumerates nothing: over 19,100 generated directions it moved the angle
+  // 99.6% of the time, cost a mean of 0.24 units of aim at the ring and 2.23 at
+  // worst, and added zero candidates. A finer table cannot help a direction
+  // that was already chosen; it can only blunt it.
+  //
+  // So nothing is snapped. `GeometrySolver.nearestFree` stays the answer
+  // wherever a direction is wanted, because it is already the closest legal
+  // real to it, and the table is offered to AngleSolver.propose as candidates
+  // in their own right — ranked, cut to RPE_RING_CANDIDATES, scored against
+  // everything else on the same terms. That is what lets a sample the reasoned
+  // proposals never pointed at actually win a preplace.
+  //
+  // The sin/cos table is built once per step count and lives for the page. At
+  // 200 that is two Float64Arrays of 200 and zero trigonometry per tick, which
+  // is why the step up from 144 costs nothing measurable per frame.
+  const RingScan = {
+    _tables: new Map,
+    // Precomputed { angle, cos, sin } for one step count. Built on first use
+    // and never rebuilt: the table is a property of the number, not of the
+    // world, so nothing in a tick can invalidate it.
+    table(steps) {
+      let t = this._tables.get(steps);
+      if (t) return t;
+      const angle = new Float64Array(steps);
+      const cos = new Float64Array(steps);
+      const sin = new Float64Array(steps);
+      const step = RPE_TAU / steps;
+      for (let i = 0; i < steps; i++) {
+        const a = i * step;
+        angle[i] = a;
+        cos[i] = Math.cos(a);
+        sin[i] = Math.sin(a);
+      }
+      t = {
+        steps: steps,
+        step: step,
+        angle: angle,
+        cos: cos,
+        sin: sin
+      };
+      this._tables.set(steps, t);
+      return t;
+    },
+
+    // The scan resolution the whole client agrees on this tick: the setting,
+    // snapped down to a supported step count, with anything unreadable taking
+    // the default. One reader, so auto place and preplace cannot disagree.
+    resolve() {
+      const wanted = Math.round(Number(Settings_default._autoplacerResolution));
+      if (!isFinite(wanted)) return LUNA_ANGLE_STEPS_DEFAULT;
+      let steps = LUNA_ANGLE_RESOLUTIONS[0];
+      for (const step of LUNA_ANGLE_RESOLUTIONS) {
+        if (wanted >= step) steps = step;
+      }
+      return steps;
     }
   };
 
@@ -13076,6 +13547,24 @@ window.grbtp = 35;
     propose(profile, apertures, frame, memory) {
       const out = [];
       const seen = new Set;
+      // Intent directions are kept exact.
+      //
+      // They used to be snapped onto the scan lattice, on the theory that
+      // preplace should name ground the same way auto place does. That was
+      // wrong, and measurably so: snapping quantises a direction that has
+      // already been solved, and it enumerates nothing. Over 19,100 generated
+      // directions it moved the angle off the exact answer 99.6% of the time,
+      // at a mean cost of 0.24 units at the ring and a worst case of 2.23 —
+      // and bought zero extra candidates, because a rounded direction is still
+      // one direction. `nearestFree` is the closest legal real to what was
+      // wanted; there is nothing above it to round to.
+      //
+      // The lattice belongs further down, as a *source* of candidates rather
+      // than as a filter on them. See the ring block at the end of this
+      // method: that is what actually lets one of the extra samples win a
+      // preplace, because it is offered to the scorer as a candidate instead
+      // of being used to blunt a direction chosen some other way.
+      const steps = frame.ringSteps || RingScan.resolve();
       const push = (angle, source) => {
         if (angle === null || angle === undefined || !isFinite(angle)) return;
         const ap = GeometrySolver.inAperture(apertures, angle);
@@ -13110,6 +13599,18 @@ window.grbtp = 35;
         const t = frame.targetTrapped.pos.current;
         push(GeometrySolver.nearestFree(apertures, Math.atan2(t.y - myPos.y, t.x - myPos.x)), "intent");
       }
+      // The ways out. `_exits` is solved once per tick in sense() from the
+      // builds already standing around the target, and a direction that closes
+      // one of them is a direction nothing else in this list asks for — the
+      // scorer has a sealExit term and, without this, is only ever handed a
+      // candidate to spend it on by accident.
+      if (frame.exits && frame.exits.length) {
+        for (const exit of frame.exits) {
+          const ex = targetPos.x + Math.cos(exit.angle) * (frame.targetScale + profile.footR);
+          const ey = targetPos.y + Math.sin(exit.angle) * (frame.targetScale + profile.footR);
+          push(GeometrySolver.nearestFree(apertures, Math.atan2(ey - myPos.y, ex - myPos.x)), "exit");
+        }
+      }
       // Where the primary swing is about to throw them, and where they come
       // back to off a spike that catches them. Nothing else in this list asks
       // about either direction, so without them the angle that ends a
@@ -13125,6 +13626,54 @@ window.grbtp = 35;
             push(GeometrySolver.nearestFree(apertures, Math.atan2(kbCtx.restY - myPos.y, kbCtx.restX - myPos.x)), "kbChain");
           }
         }
+      }
+
+      // ── The scan lattice, as a candidate source ───────────────────────────
+      // This is where the resolution setting reaches prediction.
+      //
+      // Everything above proposes a direction because something wanted it — an
+      // edge to pack against, a contact, an intent, a knockback. That is a
+      // good list and it is why the engine does not need to scan. What it
+      // cannot do is find ground nobody thought to ask about: a slot two
+      // degrees off the direction to the target, which no named reason points
+      // at and which may still be the best build on the ring once the scorer
+      // has weighed clearance, follow-up, enclosure and escape denial against
+      // each other.
+      //
+      // So the ring itself is offered, bounded. Ranked by the same cheap key
+      // auto place now offers by — nearest the target's predicted position —
+      // and cut to RPE_RING_CANDIDATES, which keeps the pool the same order of
+      // magnitude it already was while making every sample in the table
+      // reachable. At 200 steps that is 200 legality tests (a membership check
+      // against a handful of intervals, no grid query) and one partial sort,
+      // against a scorer that costs far more per candidate than either.
+      //
+      // The dedup does the rest of the work. `seen` is keyed by
+      // PlacementMemory's quantum, which for a spike is its own angular width
+      // — about 38 deg — so a sample landing on ground an edge or a contact
+      // already proposed folds into it and costs nothing. What survives is
+      // exactly the ground the reasoned list missed, which is the only ground
+      // this block exists to add.
+      //
+      // And this is what makes the extra 56 samples able to win a preplace:
+      // they arrive as candidates, are scored against everything else on the
+      // same terms, and the beam search takes them if they are better. A
+      // direction rounded onto the lattice could never do that.
+      {
+        const ring = RingScan.table(steps);
+        const aimX = frame.targetNext ? frame.targetNext.x : targetPos.x;
+        const aimY = frame.targetNext ? frame.targetNext.y : targetPos.y;
+        const ranked = [];
+        for (let i = 0; i < steps; i++) {
+          const angle = ring.angle[i];
+          if (!GeometrySolver.inAperture(apertures, angle)) continue;
+          const x = myPos.x + profile.ringR * ring.cos[i];
+          const y = myPos.y + profile.ringR * ring.sin[i];
+          ranked.push([ hyp(x - aimX, y - aimY), angle ]);
+        }
+        ranked.sort((a, b) => a[0] - b[0]);
+        const take = Math.min(ranked.length, RPE_RING_CANDIDATES);
+        for (let i = 0; i < take; i++) push(ranked[i][1], "ring");
       }
       return out;
     }
@@ -13199,16 +13748,6 @@ window.grbtp = 35;
           tactical += bounce;
           reach += bounce;
         }
-        if (ctx.exits && ctx.exits.length) {
-          const toCand = Math.atan2(cand.y - frame.targetPos.y, cand.x - frame.targetPos.x);
-          for (const exit of ctx.exits) {
-            if (GeometrySolver.angleDist(toCand, exit.angle) < .45) {
-              tactical += w.sealExit;
-              reach += w.sealExit;
-              break;
-            }
-          }
-        }
         // The primary knockback chain. `rebound` above asks what this build
         // would push them into; this asks what the swing that is already
         // coming would push them into, and whether this build is standing
@@ -13245,6 +13784,73 @@ window.grbtp = 35;
           }
         }
       }
+      // Sealing a way out. Lifted out of the `isDamage` branch it used to sit
+      // in: a trap across the mouth of an exit denies it at least as well as a
+      // spike does — the game pins whoever walks into one outright — and
+      // keeping the term spike-only meant the item that is best at closing a
+      // corridor was the one never paid for closing it.
+      if (ctx.exits && ctx.exits.length) {
+        const toCand = Math.atan2(cand.y - frame.targetPos.y, cand.x - frame.targetPos.x);
+        for (const exit of ctx.exits) {
+          if (GeometrySolver.angleDist(toCand, exit.angle) < .45) {
+            tactical += w.sealExit;
+            reach += w.sealExit;
+            break;
+          }
+        }
+      }
+
+      // Escape denial ------------------------------------------------------
+      // What separates a barrier from a rebuild.
+      //
+      // `frame.escape` exists only while a build holding the target is about
+      // to break (see _escapeContext), and everything here is scaled by how
+      // close that break is, so on an ordinary tick this whole block is zero
+      // and the score is exactly what it was before.
+      //
+      // Three questions, in the order they matter:
+      //
+      //   does this build take the opening itself   the slot the broken build
+      //                                             occupied, which is the one
+      //                                             piece of ground they are
+      //                                             certain to be beside
+      //   does it stand across the way out          the line they leave on,
+      //                                             solved from their own
+      //                                             course and the widest gap
+      //                                             in the ring around them
+      //   does it do neither                        a placement made during a
+      //                                             break that is nowhere near
+      //                                             it is the gap, and is
+      //                                             priced as one
+      //
+      // The third is the "reject or penalise placements that create obvious
+      // escape gaps" case and it is a penalty rather than a rejection on
+      // purpose: a candidate can be worth having for a reason this context
+      // knows nothing about — a knockback chain, a steal — and a veto would
+      // throw those away to hold a line the target may not even take.
+      let escape = 0;
+      if (frame.escape) {
+        const e = frame.escape;
+        const openReach = p.footR + e.radius;
+        const dOpening = hyp(cand.x - e.x, cand.y - e.y);
+        let covers = false;
+        if (dOpening < openReach) {
+          escape += w.escapeSeal * e.pressure * (1 - dOpening / openReach);
+          covers = true;
+        }
+        if (GeometrySolver.segmentDistance(cand.x, cand.y, e.fromX, e.fromY, e.toX, e.toY) < p.footR + frame.targetScale) {
+          escape += w.escapeIntercept * e.pressure;
+          covers = true;
+        }
+        if (!covers) escape -= w.escapeGap * e.pressure;
+        // Counted as reach when positive, for the same reason `steal` and
+        // `primaryKb` are: standing in the way of someone leaving is doing
+        // something to someone, which is the test `_interacts` was written
+        // for.
+        if (escape > 0) reach += escape;
+      }
+      terms.escape = escape;
+
       terms.tactical = tactical;
       cand.reach = reach;
 
@@ -13816,6 +14422,44 @@ window.grbtp = 35;
   // of higher priority.
   const RPE_SOFT_DOMINANCE = 1.5;
   const RPE_PREPLACE_MIN_CONFIDENCE = .3;
+  // The predictive buffer: one primary replacement and one optional fallback
+  // per dying build, and nothing beyond that.
+  //
+  // Primary is the ground that is opening. Secondary is the line out of it —
+  // where they go when it goes. Fallback is a slot beside the opening that
+  // neither of those two is standing on, taken off the scan ring so it is a
+  // genuinely different piece of ground rather than a second name for one of
+  // them (see _fallbackAim), and booked only once the break is actually
+  // pressing.
+  //
+  // Three, and not more. A fourth cannot be a fourth answer: the opening, the
+  // exit and one spare already cover what a single break can present, and
+  // anything past that is ground one of the three is on. What it can do is
+  // hold a reservation the rest of the engine has to route around, and outlive
+  // the break it was booked for — which is also what keeps a demolition,
+  // several builds falling at once, from becoming a queue of predictions the
+  // fight has already moved past.
+  const RPE_PREPLACE_PER_OBJECT = 3;
+  // Total pending records, across every object at once. Three per object is
+  // the per-opportunity shape; this is the ceiling on how many opportunities
+  // are carried together, and it is deliberately lower than 3 x the three
+  // objects `attrition` reports — a third break is prepared at whatever depth
+  // is left rather than at full depth, because the packets to cash them all in
+  // do not exist anyway.
+  const RPE_PREPLACE_MAX_PENDING = 8;
+  // How far an escaping target is assumed to get, at most. A player at full
+  // speed covers about 25 units a tick, so two ticks of lead is 50 and this is
+  // the ceiling on a measurement rather than a figure the model runs on.
+  const RPE_ESCAPE_MAX_RUN = 140;
+  // How many samples off the scan ring the angle solver offers as candidates
+  // in their own right, per item per cycle. See AngleSolver.propose.
+  //
+  // The reasoned proposals — edges, contacts, intents, knockback ends — come
+  // to six to twenty, so this is the same order of magnitude and does not
+  // change what the beam search costs. It is a ceiling on what survives the
+  // dedup rather than a target: a ring already well covered by named reasons
+  // folds most of these into `seen` and adds nothing.
+  const RPE_RING_CANDIDATES = 8;
   // Outstanding speculative sends tracked for the one retry each is allowed.
   // A send only ever matches the tick after its own, so this is a ceiling on
   // one tick's sends across both item types, not a working limit.
@@ -13899,6 +14543,14 @@ window.grbtp = 35;
         // fires. Reaching a sweep with the object already gone means it did
         // not, so the opportunity is over rather than pending.
         else if ((rec.kind === "vacating" || rec.kind === "steal") && !engine.client.ObjectManager.objects.has(rec.vacates)) reason = "vacated";
+        // A replacement booked for the trap the target is standing in is
+        // booked for the break, not for the trap. If they are out of it — they
+        // walked free, or it was never the thing holding them — there is no
+        // break left to be early for, and the reservation is holding ground
+        // the rest of the engine could be using. This is the one invalidation
+        // the course-change test above cannot make: a pinned player has no
+        // course to change.
+        else if (rec.holdsTrap && !(frame.targetTrapped && frame.targetTrapped.id === rec.vacates)) reason = "released";
         // Stealing a slot is only worth the ground while the enemy is still
         // near enough to want it back.
         else if (rec.steal && hyp(frame.targetPos.x - rec.x, frame.targetPos.y - rec.y) > RPE_STEAL_ENEMY_RANGE) reason = "enemyLeft";
@@ -14008,21 +14660,31 @@ window.grbtp = 35;
       timing: 1,
       followUp: 1,
       staleness: 1,
-      steal: 1
+      steal: 1,
+      escape: 1
     },
     preplace: {
       recovery: 0,
       timing: 1.5,
       followUp: 1.2,
       staleness: 1,
-      steal: 1
+      steal: 1,
+      // A prediction is the only one of the three that can still be moved.
+      // Auto place is deciding for a break that has not started and replace is
+      // reacting to one that is over; preplace is the mode that exists inside
+      // the window where standing in the right place still changes the
+      // outcome, so containment is what it is emphasising.
+      escape: 1.2
     },
     replace: {
       recovery: 1,
       timing: 1.2,
       followUp: .8,
       staleness: .6,
-      steal: 1.25
+      steal: 1.25,
+      // The deletion packet has landed and the opening is real, so the line
+      // out of it is no longer a forecast.
+      escape: 1.35
     }
   };
 
@@ -14096,12 +14758,25 @@ window.grbtp = 35;
       const cost = batched ? RPE_BATCH_PACKETS : RPE_PLACE_PACKETS;
       return ModuleHandler.packetCount + spent + cost <= ModuleHandler.packetLimit;
     }
+    // Round trip in ticks, from the client's own measurement. See rpePingTicks.
+    pingTicks() {
+      return rpePingTicks(this.client);
+    }
     // A candidate is due when the moment it was made for has arrived: now for
     // anything reacting to the present, and for a prediction only once the
     // interception is close enough that waiting longer buys nothing.
+    //
+    // "Arrived" is measured on the server. A send released on the tick the
+    // moment lands reaches the server half a round trip after it, which at the
+    // stated ping is most of a tick late — long enough for a target walking at
+    // full speed to be most of its own width past the build. So every deadline
+    // below is brought forward by the measured round trip. Nothing else about
+    // the candidate changes: the same confidence floor, the same horizon, the
+    // same one send.
     due(cand, tick) {
       if (cand.mode !== RPE_MODE.PREPLACE) return true;
       if (cand.confidence < RPE_PREPLACE_MIN_CONFIDENCE) return false;
+      const ping = this.pingTicks();
       // A steal is due when the ground is actually free, never when the
       // forecast said it would be. This is the whole reason the forecast is
       // worth having: the prediction buys the *preparation* — position, item,
@@ -14125,10 +14800,27 @@ window.grbtp = 35;
       // instead of the round trip that starts when it does.
       if (cand.kind === "steal") {
         if (cand.vacated) return true;
-        return !!Settings_default._spamPrePlace && tick >= cand.dueTick;
+        return !!Settings_default._spamPrePlace && tick >= cand.dueTick - ping;
       }
-      if (cand.kind === "vacating") return tick >= cand.dueTick;
-      return cand.interceptTick <= RPE_PREPLACE_FIRE_LEAD;
+      // Our own build, about to break. The ground under it is occupied until
+      // it does, so a send released early is refused — which is why the lead
+      // is spent only when spam pre-placement is on, where a refusal costs
+      // packets rather than the slot (the claim it files is handed back on the
+      // tick the break lands; see _noteSpeculative). With it off the send
+      // still waits for the break, and the lead has already been spent on the
+      // preparation: the record was booked earlier, the ground reserved
+      // earlier, and onVacated has a finished answer to cash in rather than a
+      // decision to make.
+      if (cand.kind === "vacating") {
+        if (cand.vacated) return true;
+        return tick >= cand.dueTick - (Settings_default._spamPrePlace ? ping : 0);
+      }
+      // An interception. The build has to be standing there when they arrive,
+      // and it is not standing there until the server has it, so the send goes
+      // one round trip before the arrival rather than on it. This one has no
+      // refusal risk to trade against — the ground is legal now — so the lead
+      // is taken whatever the spam setting says.
+      return cand.interceptTick <= RPE_PREPLACE_FIRE_LEAD + ping;
     }
   }
 
@@ -14288,6 +14980,11 @@ window.grbtp = 35;
     sense() {
       const frame = this._threat.build();
       if (!frame) return null;
+      // The scan resolution, resolved once per frame and read by every mode.
+      // This is the same number AutoPlacer settles on in its own postTick and
+      // it comes from the same reader, which is what makes "preplace uses the
+      // auto place angles" true rather than approximately true.
+      frame.ringSteps = RingScan.resolve();
       if (!this._blockers || this._blockersTick !== frame.tick) {
         let maxRing = 0, maxFoot = 0;
         for (const p of this.activeProfiles()) {
@@ -14325,7 +15022,78 @@ window.grbtp = 35;
           if (esc.escapable) this._exits = esc.exits;
         }
       }
+      // Hung on the frame as well as kept on the engine, because the angle
+      // solver needs it while proposing and the scorer needs it while scoring,
+      // and solving it twice would be two grid-free but not free passes over
+      // the same list.
+      frame.exits = this._exits;
       return frame;
+    }
+
+    // ── Escape denial ───────────────────────────────────────────────────────
+    // The containment case, stated once.
+    //
+    // A target held by one of our builds is only held until that build breaks,
+    // and the break is the moment they are playing for. What makes a
+    // replacement a barrier rather than a rebuild is where it stands relative
+    // to the line they will leave on — and that line is measurable: they are
+    // at a known position, held by a known object, which the forecast says
+    // falls in a known number of ticks, and TargetMotion has the course they
+    // were on before they were pinned.
+    //
+    // Returns null whenever there is nothing to deny, which is most ticks, so
+    // the scoring term below it is inert outside the one situation it was
+    // written for.
+    _escapeContext(frame) {
+      const held = frame.targetTrapped;
+      if (!held) return null;
+      const pressure = this._breakPressure(held, frame);
+      // Nothing is leaving yet. Scoring an escape that is not about to happen
+      // would price ordinary containment builds against a line that does not
+      // exist.
+      if (pressure < .2) return null;
+      // Fractional here, not whole ticks: this scales a distance rather than
+      // scheduling a send, and rounding 70ms up to a whole tick would put the
+      // line a third longer than the measurement supports.
+      const ping = rpePingLead(this.client);
+      const pos = held.pos.current;
+      // Where they go when it opens. A pinned player has no velocity of their
+      // own — the game zeroes it — so the honest prediction is the course they
+      // were on, and failing that the way out of the ring the builds around
+      // them leave, and failing that straight away from us.
+      let dir = null;
+      if (frame.exits && frame.exits.length) {
+        let widest = frame.exits[0];
+        for (const exit of frame.exits) {
+          if (exit.width > widest.width) widest = exit;
+        }
+        dir = widest.angle;
+      }
+      if (dir === null && frame.motion && frame.motion.heading !== null && frame.motion.heading !== undefined) {
+        dir = frame.motion.heading;
+      }
+      if (dir === null) {
+        dir = Math.atan2(frame.targetPos.y - frame.myPos.y, frame.targetPos.x - frame.myPos.x);
+      }
+      // How far they get before a send released now could be standing there.
+      // Speed comes off the measured track rather than a constant, and the
+      // round trip is part of the distance because it is part of the delay.
+      const speed = frame.motion && isFinite(frame.motion.speed) ? Math.max(frame.motion.speed, 0) : 0;
+      const run = Math.max(frame.targetScale, Math.min(RPE_ESCAPE_MAX_RUN, speed * (1 + ping) + frame.targetScale));
+      return {
+        // The opening itself.
+        x: pos.x,
+        y: pos.y,
+        radius: held.scale,
+        objectId: held.id,
+        // The line out of it.
+        fromX: frame.targetPos.x,
+        fromY: frame.targetPos.y,
+        toX: frame.targetPos.x + Math.cos(dir) * run,
+        toY: frame.targetPos.y + Math.sin(dir) * run,
+        angle: dir,
+        pressure: pressure
+      };
     }
 
     // ── PREDICT ─────────────────────────────────────────────────────────────
@@ -14337,6 +15105,14 @@ window.grbtp = 35;
       this.motion.expire(tick);
       this.forecast.expire(tick);
       frame.motion = this.motion.observe(frame.target, tick);
+      // What a break would let the target walk out into. Solved once, here
+      // rather than in sense(), because it reads the motion track that is
+      // measured on the line above — and once rather than per candidate,
+      // because every part of it (where they are, where they are going, which
+      // build is holding them, when it falls) is a property of the frame. The
+      // only per-candidate question left is whether a footprint stands in the
+      // way, which is one segment test. See PlacementScorer.weigh.
+      frame.escape = this._escapeContext(frame);
       this.stats.dropped = this.book.sweep(tick, frame, this);
       if (this._planIsStale(frame)) this._plan = [];
       this._planTargetId = frame.targetId;
@@ -14627,6 +15403,12 @@ window.grbtp = 35;
         kind: extra.kind || mode,
         vacates: extra.vacates === undefined ? null : extra.vacates,
         excludes: extra.excludes || null,
+        // Which half of the predictive buffer this is, when it is part of one.
+        // Carried so the book can hold a primary and one fallback per dying
+        // object rather than however many the geometry happens to offer.
+        role: extra.role || "primary",
+        holdsTrap: !!extra.holdsTrap,
+        pressure: extra.pressure === undefined ? 0 : extra.pressure,
         x: myPos.x + profile.ringR * Math.cos(angle),
         y: myPos.y + profile.ringR * Math.sin(angle)
       };
@@ -14645,14 +15427,174 @@ window.grbtp = 35;
         }));
       }
     }
+    // Round trip in whole ticks, from the client's own measurement.
+    _pingTicks() {
+      return rpePingTicks(this.client);
+    }
+
+    // How hard a doomed build should be prepared for, on a 0..1 scale.
+    //
+    // The user-facing idea is the health bar — quiet at full, loudest at
+    // critical — but health alone is the wrong number to drive it with, and
+    // the game's own tables say why. A pit trap has 500 health; a tool hammer
+    // does 25 to buildings and a great hammer 50, so "50% health" is ten
+    // swings away from one weapon and five from another, and the same bar
+    // position means two entirely different amounts of time to prepare in.
+    //
+    // So the driver is time, not health: StealForecast.assess already folds
+    // remaining health, every actor's next swing, the observed damage rate and
+    // how recently anything landed into one estimate of ticks-to-break, and
+    // that is what the ramp reads. The lead it is measured against is extended
+    // by the round trip, because a break two ticks out is one tick out by the
+    // time anything we send arrives.
+    //
+    // Health comes back in as a floor, and only as a floor. A trap we have
+    // just walked up to has no observed history, so the forecast says nothing
+    // about it however battered it is; a bar at a quarter is evidence on its
+    // own that something has been working on it. The floor tops out below the
+    // ramp's own maximum, so a visibly damaged build with no live pressure on
+    // it never reads as urgently as one that is actually about to fall.
+    //
+    //   ticks to break (with ping)   4     3     2     1
+    //   pressure from the forecast  0.2   0.4   0.7   1.0
+    //
+    //   health remaining            100%  75%   50%   25%   critical
+    //   pressure floor              0.00  0.15  0.30  0.45  0.60
+    _breakPressure(object, frame) {
+      if (!object) return 0;
+      let byHealth = 0;
+      if (object.maxHealth && isFinite(object.maxHealth) && object.maxHealth > 0) {
+        byHealth = .6 * Math.max(0, Math.min(1, 1 - Math.max(0, object.health) / object.maxHealth));
+      }
+      const {damage: damage} = this._attritionSweep(frame);
+      const dealt = damage.get(object);
+      if (dealt === undefined) return byHealth;
+      const verdict = this.forecast.assess(object, frame.tick, dealt.potential, dealt.ready);
+      if (!isFinite(verdict.ticks)) return byHealth;
+      const lead = Math.max(1, RPE_RETRAP_LEAD + this._pingTicks());
+      const byTime = Math.max(0, Math.min(1, 1 - (verdict.ticks - 1) / lead)) * verdict.confidence;
+      return Math.max(0, Math.min(1, Math.max(byTime, byHealth)));
+    }
+
+    // The directions a replacement for a dying build is worth aiming at.
+    //
+    // The freed ground is always one of them — that is the slot opening, and
+    // taking it is the whole point. The second is where the target will be
+    // when it opens, which is a different direction as soon as they are
+    // moving, and it is the one that decides whether the break is an escape.
+    // An enemy breaking out of a trap is doing it to leave, and they leave
+    // along a line the client can already measure: TargetMotion has their
+    // course, and the break is `entry.hits` ticks away plus the round trip
+    // before anything we send lands.
+    //
+    // Two directions, never more. The book holds a primary and a fallback for
+    // one object (see RPE_PREPLACE_PER_OBJECT) and a third proposal could only
+    // ever be a third thing to reject.
+    _retrapAims(entry, frame, leadTicks) {
+      const objPos = entry.object.pos.current;
+      const aims = [ {
+        x: objPos.x,
+        y: objPos.y,
+        role: "primary"
+      } ];
+      if (!entry.retrap) return aims;
+      // A pinned player has no velocity of their own — the game zeroes it on
+      // contact — so asking the motion estimator where they are going answers
+      // "here", with falling confidence, and a fallback built on that would be
+      // the primary again. The line that matters is the one they take when the
+      // pin goes, which is what _escapeContext already solved: the widest way
+      // out of the ring of builds around them, or failing that the course they
+      // were on when they were caught, which TargetMotion keeps through the
+      // pin because it only overwrites `heading` while they are actually
+      // moving.
+      const e = frame.escape;
+      if (e && e.objectId === entry.object.id) {
+        aims.push({
+          x: e.toX,
+          y: e.toY,
+          role: "fallback"
+        });
+        return aims;
+      }
+      // Not the object holding them, or nothing is holding them yet: this is
+      // an ordinary build coming down near a target that can still move, and
+      // there the measured course is the right answer.
+      const p = this.motion.predict(frame.target, leadTicks);
+      if (p && p.confidence >= RPE_PREPLACE_BOOK_CONFIDENCE && hyp(p.x - objPos.x, p.y - objPos.y) > frame.targetScale) {
+        aims.push({
+          x: p.x,
+          y: p.y,
+          role: "secondary"
+        });
+      }
+      return aims;
+    }
+
+    // The third reservation: a slot beside the opening that neither of the
+    // first two is standing on.
+    //
+    // The first two aims are both *reasons* — the ground that is opening, and
+    // the line out of it. They can both be refused: the server drops one, the
+    // enemy rebuilds into the other, a teammate takes it. A fallback is only
+    // worth booking if it is somewhere genuinely else, and "somewhere else near
+    // an opening" is exactly what the scan table enumerates and what no reason
+    // points at.
+    //
+    // So it comes off the ring, at the resolution the setting chose, taking the
+    // nearest legal sample to the opening that does not overlap the aims
+    // already taken. This is where the resolution reaches the predictive
+    // buffer: at 200 there are samples 1.8 deg apart to find a non-overlapping
+    // one among, where at 36 the next sample along is usually inside the same
+    // footprint and there is no third slot to book at all.
+    _fallbackAim(entry, frame, profile, freed, aims, steps) {
+      const objPos = entry.object.pos.current;
+      const ring = RingScan.table(steps);
+      // Where the aims already taken actually land, resolved once rather than
+      // per sample: an aim is a world point to steer at, and the build it
+      // produces sits where that direction crosses the ring.
+      const taken = [];
+      for (const aim of aims) {
+        const a = Math.atan2(aim.y - frame.myPos.y, aim.x - frame.myPos.x);
+        taken.push(frame.myPos.x + profile.ringR * Math.cos(a), frame.myPos.y + profile.ringR * Math.sin(a));
+      }
+      const clear = profile.footR * 2;
+      let best = null, bestD = Infinity;
+      for (let i = 0; i < steps; i++) {
+        const x = frame.myPos.x + profile.ringR * ring.cos[i];
+        const y = frame.myPos.y + profile.ringR * ring.sin[i];
+        // Nearest the opening wins, so the distance test comes before the
+        // legality test and the overlap scan: most samples lose on it, and it
+        // is two subtractions against an aperture walk and a loop.
+        const d = hyp(x - objPos.x, y - objPos.y);
+        if (d >= bestD) continue;
+        if (!GeometrySolver.inAperture(freed, ring.angle[i])) continue;
+        let clash = false;
+        for (let k = 0; k < taken.length; k += 2) {
+          if (hyp(x - taken[k], y - taken[k + 1]) < clear) { clash = true; break; }
+        }
+        if (clash) continue;
+        bestD = d;
+        best = { x: x, y: y, role: "fallback" };
+      }
+      return best;
+    }
+
     _generatePreplace(pool, profile, frame, trigger) {
       const open = this._generator.apertures(profile, frame.myPos.x, frame.myPos.y, this._blockers, null);
       const captureR = profile.footR + frame.targetScale;
+      const steps = frame.ringSteps || RingScan.resolve();
+      const ping = this._pingTicks();
+      // How far ahead the target is solved for. The horizon is extended by the
+      // round trip rather than the send rate being raised: at 120ms the target
+      // is a tick further along than the frame says, so an interception solved
+      // to the frame's own horizon is solved one tick short of where the build
+      // will actually have to be standing.
+      const horizon = RPE_PREPLACE_MAX_LEAD + ping;
       // With fewer than two observations there is no measured velocity and so
       // nothing to predict. Where the target is right now is AUTO's job.
       const tracked = frame.motion && frame.motion.samples.length >= 2;
       if (open.length && tracked) {
-        for (let n = 1; n <= RPE_PREPLACE_MAX_LEAD; n++) {
+        for (let n = 1; n <= horizon; n++) {
           const p = this.motion.predict(frame.target, n);
           if (p.confidence < RPE_PREPLACE_BOOK_CONFIDENCE) break;
           const want = Math.atan2(p.y - frame.myPos.y, p.x - frame.myPos.x);
@@ -14660,7 +15602,7 @@ window.grbtp = 35;
           if (angle === null) continue;
           const x = frame.myPos.x + profile.ringR * Math.cos(angle);
           const y = frame.myPos.y + profile.ringR * Math.sin(angle);
-          const hit = this.motion.intercept(frame.target, x, y, captureR, RPE_PREPLACE_MAX_LEAD);
+          const hit = this.motion.intercept(frame.target, x, y, captureR, horizon);
           if (!hit) continue;
           if (this.book.has(x, y, profile.footR)) continue;
           pool.push(this._candidate(profile, angle, open, RPE_MODE.PREPLACE, {
@@ -14668,7 +15610,7 @@ window.grbtp = 35;
             kind: "intercept",
             confidence: hit.confidence,
             interceptTick: hit.tick,
-            dueTick: frame.tick + Math.max(0, hit.tick - RPE_PREPLACE_FIRE_LEAD)
+            dueTick: frame.tick + Math.max(0, hit.tick - RPE_PREPLACE_FIRE_LEAD - ping)
           }));
         }
       }
@@ -14678,24 +15620,64 @@ window.grbtp = 35;
         const obj = entry.object;
         const freed = this._generator.apertures(profile, frame.myPos.x, frame.myPos.y, this._blockers, obj);
         if (!freed.length) continue;
-        const objPos = obj.pos.current;
-        const want = Math.atan2(objPos.y - frame.myPos.y, objPos.x - frame.myPos.x);
-        const angle = GeometrySolver.nearestFree(freed, want);
-        if (angle === null) continue;
-        // Only worth holding if it is ground we cannot already use.
-        if (GeometrySolver.inAperture(open, angle)) continue;
-        const x = frame.myPos.x + profile.ringR * Math.cos(angle);
-        const y = frame.myPos.y + profile.ringR * Math.sin(angle);
-        if (this.book.has(x, y, profile.footR)) continue;
-        pool.push(this._candidate(profile, angle, freed, RPE_MODE.PREPLACE, {
-          source: "vacating",
-          kind: "vacating",
-          confidence: Math.max(.3, 1 - (entry.hits - 1) * .35),
-          interceptTick: entry.hits,
-          dueTick: frame.tick + Math.max(1, entry.hits),
-          vacates: obj.id,
-          excludes: obj
-        }));
+        // The break, in ticks, with the round trip added: this is when the
+        // replacement has to be standing there, not when the local view will
+        // say it broke.
+        const leadTicks = Math.max(1, entry.hits) + ping;
+        const pressure = this._breakPressure(obj, frame);
+        const aims = this._retrapAims(entry, frame, leadTicks);
+        // The third slot, and only once the break is actually pressing. A
+        // fallback booked against a wall someone has hit once is a reservation
+        // held through a break that is not coming; booked against one that is
+        // about to fall it is the slot the enemy rebuilds into if the first two
+        // are refused.
+        if (aims.length >= 2 && pressure >= .5) {
+          const third = this._fallbackAim(entry, frame, profile, freed, aims, steps);
+          if (third) aims.push(third);
+        }
+        for (const aim of aims) {
+          const want = Math.atan2(aim.y - frame.myPos.y, aim.x - frame.myPos.x);
+          const angle = GeometrySolver.nearestFree(freed, want);
+          if (angle === null) continue;
+          // Ground we can already reach is ordinary placement's, and paying
+          // twice for the same geometry is what this guard exists to stop.
+          //
+          // The one exception is the trap the target is standing in. There the
+          // ground is not the prize, the *moment* is: the replacement has to
+          // exist at the instant the trap stops existing, and holding a
+          // reservation through the break is the only way to still have the
+          // slot then. Auto place cannot do that — it decides for this tick
+          // and forgets.
+          if (!entry.retrap && GeometrySolver.inAperture(open, angle)) continue;
+          const x = frame.myPos.x + profile.ringR * Math.cos(angle);
+          const y = frame.myPos.y + profile.ringR * Math.sin(angle);
+          if (this.book.has(x, y, profile.footR)) continue;
+          pool.push(this._candidate(profile, angle, freed, RPE_MODE.PREPLACE, {
+            source: "vacating",
+            kind: "vacating",
+            // The hit count on its own says how far away the break is and
+            // nothing about how sure of it we are. Pressure says both, so a
+            // trap under two loaded weapons books at a confidence the same
+            // trap being chipped at by one does not reach.
+            confidence: Math.max(.3, Math.max(1 - (entry.hits - 1) * .35, pressure)),
+            interceptTick: entry.hits,
+            // Brought forward by the round trip, so the preparation is
+            // finished before the break rather than starting at it. The send
+            // itself is still held back by PlacementScheduler.due unless spam
+            // pre-placement is on; what this buys unconditionally is that the
+            // record is booked, the ground reserved and the angle validated
+            // with a tick in hand.
+            dueTick: frame.tick + Math.max(1, entry.hits) - (Settings_default._spamPrePlace ? ping : 0),
+            vacates: obj.id,
+            excludes: obj,
+            role: aim.role,
+            // Set only for the trap the target is actually standing in, and
+            // read by PreplaceBook.sweep: a record booked for a retrap has
+            // nothing left to hold once they have walked out of it.
+            holdsTrap: !!entry.retrap,
+            pressure: pressure
+          }));
+        }
       }
       this._generateSteal(pool, profile, frame, open);
     }
@@ -14882,6 +15864,12 @@ window.grbtp = 35;
           // that moment from any other tick the object is still standing.
           vacated: rec.vacates !== null && (excludes === null || rec.vacates === this._vacatingId),
           steal: rec.steal || null,
+          role: rec.role || "primary",
+          holdsTrap: !!rec.holdsTrap,
+          // Re-measured rather than replayed. The record was written down when
+          // the break was further off; what decides how hard to prepare now is
+          // where the break is now.
+          pressure: excludes ? this._breakPressure(excludes, frame) : rec.pressure || 0,
           x: rec.x,
           y: rec.y,
           value: rec.value,
@@ -14962,11 +15950,6 @@ window.grbtp = 35;
       if (cand.vacated) return 0;
       const trap = frame.targetTrapped;
       if (!trap || cand.vacates !== trap.id) return 0;
-      const {damage: damage} = this._attritionSweep(frame);
-      const dealt = damage.get(trap);
-      if (dealt === undefined) return 0;
-      const verdict = this.forecast.assess(trap, frame.tick, dealt.potential, dealt.ready);
-      if (!isFinite(verdict.ticks)) return 0;
       // Quiet, then loud, and never silent inside the lead. A trap four swings
       // out is being chipped at and one send is enough to be holding the slot;
       // by two it is worth half the budget; at one it is worth all of it. The
@@ -14974,10 +15957,28 @@ window.grbtp = 35;
       // already claimed and already being re-sent when the break lands,
       // instead of the first attempt going out into the same tick everyone
       // else is reacting in.
-      if (verdict.ticks > RPE_RETRAP_LEAD) return 0;
-      if (verdict.ticks >= 3) return Math.min(1, max);
-      if (verdict.ticks === 2) return Math.min(Math.ceil(max / 2), max);
-      return max;
+      //
+      // The ramp reads _breakPressure rather than a raw hit count, so the same
+      // number drives every preparation the engine does — how early the record
+      // is booked, how long its reservation is held, how confident it is, and
+      // now how many times the claim is repeated inside the closing window.
+      // Pressure already folds in the round trip and the health floor, which
+      // is why a trap visibly at a quarter is treated as work in progress even
+      // on the tick the weapon hitting it goes on reload and the swing model
+      // briefly says nothing is happening.
+      //
+      //   pressure   < 0.25   0.25   0.5    0.75   1.0
+      //   resends      0       1     half   most   all
+      //
+      // Rounded rather than rounded up, so the quiet rung is a real rung: at
+      // the setting's default of 4, `ceil` turns the first pressure past the
+      // gate straight into two sends and the ramp has no bottom. The ceiling
+      // is still the user's setting and the gate is still spam pre-placement,
+      // so nothing here can raise the packet rate past what was already asked
+      // for.
+      const pressure = this._breakPressure(trap, frame);
+      if (pressure < .25) return 0;
+      return Math.max(1, Math.min(max, Math.round(max * pressure)));
     }
     // Where inside the rest of the tick the repeats land.
     //
@@ -15134,10 +16135,31 @@ window.grbtp = 35;
       // better one takes it and the other is simply not booked, rather than
       // the two trading it back and forth.
       deferred = deferred.slice().sort((a, b) => b.expected - a.expected);
+      // The predictive buffer, counted rather than assumed. Records already on
+      // the book count towards both caps, so a second tick of the same break
+      // adds a fallback to the primary it booked last tick instead of booking
+      // a second primary beside it.
+      const perObject = new Map;
+      let pending = 0;
+      for (const rec of this.book.pending()) {
+        pending++;
+        if (rec.vacates === null || rec.vacates === undefined) continue;
+        perObject.set(rec.vacates, (perObject.get(rec.vacates) || 0) + 1);
+      }
       for (const cand of deferred) {
+        if (pending >= RPE_PREPLACE_MAX_PENDING) break;
+        const holds = cand.vacates === null || cand.vacates === undefined ? null : cand.vacates;
+        if (holds !== null && (perObject.get(holds) || 0) >= RPE_PREPLACE_PER_OBJECT) continue;
         if (!this._conflicts.unbooked(cand)) continue;
-        const token = this._conflicts.take(cand, "preplace", frame.tick, cand.interceptTick + 3, true);
+        // A record for a break that is nearly here is held longer than one for
+        // a break that is a way off, because the whole value of booking early
+        // is still having the ground at the moment it opens — and the moment
+        // it opens is exactly when an unextended lease would have run out.
+        const ttl = cand.interceptTick + 3 + Math.round(2 * (cand.pressure || 0)) + this._pingTicks();
+        const token = this._conflicts.take(cand, "preplace", frame.tick, ttl, true);
         if (!token) continue;
+        pending++;
+        if (holds !== null) perObject.set(holds, (perObject.get(holds) || 0) + 1);
         this.book.add({
           type: cand.profile.type,
           x: cand.x,
@@ -15151,7 +16173,7 @@ window.grbtp = 35;
           // interception is.
           headingTolerance: cand.kind === "vacating" || cand.kind === "steal" ? Math.PI : .7,
           createdTick: frame.tick,
-          expiresTick: frame.tick + cand.interceptTick + 2,
+          expiresTick: frame.tick + cand.interceptTick + 2 + this._pingTicks(),
           hardExpiry: frame.tick + RPE_PREPLACE_MAX_AGE,
           interceptTick: cand.interceptTick,
           deadlineTick: cand.dueTick,
@@ -15160,6 +16182,14 @@ window.grbtp = 35;
           expected: cand.expected,
           kind: cand.kind,
           vacates: cand.vacates,
+          // The predictive buffer's own bookkeeping, carried so a promoted
+          // record is the same thing it was booked as: which half of the pair
+          // it is, whether it is holding the trap the target is standing in
+          // (which is what lets sweep drop it the moment they leave), and how
+          // hard the break was pressing when it was written down.
+          role: cand.role || "primary",
+          holdsTrap: !!cand.holdsTrap,
+          pressure: cand.pressure || 0,
           // The whole reservation, and deliberately small: an id, a position, a
           // radius, a confidence and a count. The object handle is not kept —
           // it is looked up by id when the record is promoted, so a record can
@@ -15344,6 +16374,9 @@ window.grbtp = 35;
         excludes: excludes,
         vacated: rec.vacates !== null && (excludes === null || rec.vacates === this._vacatingId),
         steal: rec.steal || null,
+        role: rec.role || "primary",
+        holdsTrap: !!rec.holdsTrap,
+        pressure: rec.pressure || 0,
         x: rec.x, y: rec.y, value: rec.value, expected: rec.expected,
         terms: rec.terms || {}, reach: rec.value,
         bookRecord: rec, bookToken: rec.token,
@@ -16169,12 +17202,18 @@ window.grbtp = 35;
         }
         return;
       }
-      // Spike Sync 2 owns the swing at a player being walked onto a spike. This
-      // module would spend the same reload a tick or two earlier, on a spike it
-      // is placing now instead of the one they are about to be pinned against —
-      // and there is only one reload between the two. It stands aside for that
-      // player alone; any other target is still its own.
-      if (Settings_default._spikeSync2 && ModuleHandler.staticModules.autoPush.ownsTarget(nearest)) {
+      // Spike Sync 2 owns the swing at a player on a spike. This module would
+      // spend the same reload a tick or two earlier, on a spike it is placing
+      // now instead of the one they are already against — and there is only one
+      // reload between the two. It stands aside for that player alone; any
+      // other target is still its own.
+      //
+      // Two claims now, because Spike Sync 2 has two ways of arming. The shove
+      // path is `ownsTarget`, unchanged. The contact path is `ownsContact`, and
+      // it is the one that matters with Auto Push off: without it this module
+      // takes the reload first and the contact swing never happens, which is
+      // the behaviour the contact trigger was added to produce.
+      if (Settings_default._spikeSync2 && (ModuleHandler.staticModules.autoPush.ownsTarget(nearest) || ModuleHandler.staticModules.velocityTick.ownsContact(nearest))) {
         return;
       }
       if (!EnemyManager2.shouldIgnoreModule() && nearest !== null && EnemyManager2.canSpikeSync && placementAngles !== null && isPolearm && primaryReloaded) {
@@ -16221,8 +17260,9 @@ window.grbtp = 35;
       }
       const nearestSyncEnemy = EnemyManager2.nearestSyncEnemy;
       // Same hold as Spike Sync's, for the same reason: one reload, and the
-      // swing on the spike they are being walked onto is the better half of it.
-      if (Settings_default._spikeSync2 && ModuleHandler.staticModules.autoPush.ownsTarget(nearestSyncEnemy)) {
+      // swing on the spike they are already against is the better half of it.
+      // Both of Spike Sync 2's claims, so the hold survives Auto Push being off.
+      if (Settings_default._spikeSync2 && (ModuleHandler.staticModules.autoPush.ownsTarget(nearestSyncEnemy) || ModuleHandler.staticModules.velocityTick.ownsContact(nearestSyncEnemy))) {
         this.targetEnemy = null;
         this.useTurret = false;
         return;
@@ -16927,6 +17967,63 @@ window.grbtp = 35;
   // novastorm's `myPlayer.shameCount < 7`, and its `totalDmgPot >= 100`.
   const NOVA_SHAME_LIMIT = 7;
   const NOVA_SOLDIER_ANTI_DMG = 100;
+
+  // ==========================================================================
+  // Damage palette — Falcons' findCachedDamage / soldierRound, on RYN's numbers.
+  //
+  // novastorm attributes an incoming damage number by asking each enemy what
+  // its weapons do and matching the number exactly. RYN answers that with
+  // ClientPlayer.getMaxWeaponDamage, and the name is the problem: it is the
+  // *max*, so it already has the bull multiplier in it (`addBull = true` by
+  // default, `Hats[7].dmgMultO`). An enemy who is not wearing bull therefore
+  // hits for expected/1.5 and the match fails, the damage falls through to the
+  // spike bucket, is not a spike tier either, and is attributed to nothing —
+  // so the prediction that decides whether to heal never counts the swing that
+  // just landed.
+  //
+  // Falcons solves it the other way round: it takes the un-multiplied damage
+  // and builds every value the same swing could arrive as. Both multipliers it
+  // uses and the reduction it pairs them with are real, and all four are in
+  // the game's own tables (drivers/game-drivers.json):
+  //
+  //   x1.5   Bull Helmet (hat 7)      dmgMultO 1.5   attacker
+  //   x1.2   Bloodthirster (hat 55)   dmgMultO 1.2   attacker
+  //   x0.2   Monkey Tail (acc 11)     dmgMultO 0.2   victim, i.e. us
+  //   x0.75  Soldier Helmet (hat 6)   dmgMult 0.75   victim, i.e. us
+  //
+  // The first three are the palette (three attacker states against two of
+  // ours, six values). The fourth is applied at comparison time rather than
+  // baked in, because it depends on the hat we were wearing when the server
+  // resolved the hit, which is not necessarily the one on now.
+  // ==========================================================================
+  const NOVA_BULL_MULT = 1.5;
+  const NOVA_BLOODTHIRSTER_MULT = 1.2;
+  const NOVA_TAIL_MULT = .2;
+  const NOVA_SOLDIER_MULT = .75;
+  const NOVA_ATTACKER_MULTS = [ 1, NOVA_BULL_MULT, NOVA_BLOODTHIRSTER_MULT ];
+  const NOVA_VICTIM_MULTS = [ 1, NOVA_TAIL_MULT ];
+  // The hats this module can force, and the slots it forces them in.
+  const HEAL_SOLDIER_HAT = 6;
+  const HEAL_EMP_HAT = 22;
+  // Falcons' forceAddIndexs. A forced add-on is a hat held for a number of
+  // ticks rather than for one, because the hit it is answering lands on a tick
+  // we do not control: the decision is taken when the damage arrives and the
+  // hat has to still be on when the next one does.
+  const HEAL_FORCE_SOLDIER = 0;
+  const HEAL_FORCE_EMP = 1;
+  const HEAL_FORCE_TRAP_SOLDIER = 2;
+  const HEAL_FORCE_ONETICK_SOLDIER = 3;
+  const HEAL_FORCE_SLOTS = 4;
+  // How far Falcons looks for the player or animal an enemy's turret might be
+  // aimed at instead of us, and how close to that line we have to be before
+  // the shot is read as ours. Its own `600` and `60`.
+  const HEAL_TURRET_LINE_RANGE = 600;
+  const HEAL_TURRET_LINE_TOLERANCE = 60;
+  // Falcons' `er.shameCount < 7` heal, and the delay it takes instead when a
+  // spike worth more than 20 is close enough to land inside the wait.
+  const HEAL_ZERO_SHAME_DELAY = 2;
+  const HEAL_ZERO_SHAME_SPIKE_RANGE = 50;
+  const HEAL_ZERO_SHAME_SPIKE_DMG = 20;
   // ==========================================================================
   // Heal priority. novastorm has one question — "does the prediction reach my
   // health" — and one answer, the full deficit. That is right for the tick it
@@ -17030,6 +18127,25 @@ window.grbtp = 35;
     damagesByTurrets=[];
     deathDamages=[];
     _seenDamageTick=null;
+    // Six damage values per distinct swing, built once and reused. See
+    // _paletteFor.
+    _palette=new Map;
+    // ---- EMP anti ---------------------------------------------------------
+    // Falcons' per-enemy `canEMP`, reduced to the one answer this side needs:
+    // is every source that has hit us this tick one the EMP helmet would stop?
+    //
+    // The magnitude of what is coming is not recomputed here — RYN already
+    // solves that in calculateTotalDamage and a second damage model is the one
+    // thing this port must not add. What was genuinely missing is *which kind*
+    // of damage it is, because EMP answers turrets and nothing else.
+    empSafe=true;
+    // Ticks a forced hat is held for. Falcons' forcedAddOns, indexed by the
+    // HEAL_FORCE_* constants.
+    _forced=new Array(HEAL_FORCE_SLOTS).fill(0);
+    // Falcons' healingDelay: a heal deliberately held back a tick or two so the
+    // food lands outside the server's shame window.
+    healingDelay=0;
+    healingDelayAmount=0;
     // ---- world, refreshed once a tick ------------------------------------
     enemySpikes=[];
     cactuses=[];
@@ -17058,6 +18174,14 @@ window.grbtp = 35;
       this.deathDamages.length = 0;
       this.enemySpikes.length = 0;
       this.cactuses.length = 0;
+      // Falcons clears its damage cache on respawn for the same reason: the
+      // palette is keyed on numbers, and the weapons behind those numbers are
+      // whatever the next life is carrying.
+      this._palette.clear();
+      this.empSafe = true;
+      this._forced.fill(0);
+      this.healingDelay = 0;
+      this.healingDelayAmount = 0;
     }
 
     // novastorm's `(tick - damageTick) > 0`. damageTick is set to tickCount + 1
@@ -17124,7 +18248,155 @@ window.grbtp = 35;
     // the next damage tick, so the damage tick it belongs to is remembered and
     // each one is attributed exactly once.
     // ------------------------------------------------------------------------
+    // Every value one swing could land as, cached by the number RYN hands us.
+    //
+    // `expected` comes in with bull and the weapon variant already applied, so
+    // the un-multiplied swing is expected / 1.5 and the palette is rebuilt out
+    // from there. Keyed on the rounded value rather than on (weapon, variant)
+    // as Falcons keys it, because that is what this side has in hand and two
+    // weapons that happen to deal the same damage want the same palette
+    // anyway. Six entries, built once per distinct damage value for the life
+    // of the page.
+    _paletteFor(expected) {
+      const key = Math.round(expected * 100);
+      let palette = this._palette.get(key);
+      if (palette !== undefined) {
+        return palette;
+      }
+      const base = expected / NOVA_BULL_MULT;
+      palette = [];
+      for (const attacker of NOVA_ATTACKER_MULTS) {
+        for (const victim of NOVA_VICTIM_MULTS) {
+          palette.push(base * attacker * victim);
+        }
+      }
+      // Bounded: a fight presents a handful of distinct weapon damages, and
+      // past that the map is dropped whole rather than grown.
+      if (this._palette.size >= 64) {
+        this._palette.clear();
+      }
+      this._palette.set(key, palette);
+      return palette;
+    }
+
+    // Falcons' soldierRound, which is a comparison rather than a rounding: does
+    // this candidate explain the number that actually landed?
+    //
+    // The soldier reduction is applied here instead of being baked into the
+    // palette because it is ours, not theirs, and the hat that mattered is the
+    // one worn when the server resolved the hit. Both forms are tried for that
+    // reason — a soldier equipped this tick has not applied to a hit that
+    // landed last one, and vice versa.
+    _damageMatches(candidate, actual) {
+      if (nearlyEqual(candidate, actual)) {
+        return true;
+      }
+      return nearlyEqual(candidate * NOVA_SOLDIER_MULT, actual);
+    }
+
+    // Falcons' doTurretTargetLineMath, inverted to the question this side asks.
+    //
+    // A turret shoots whatever is nearest it, not whoever its owner is
+    // fighting. So before treating an enemy's turret as a shot coming at us,
+    // Falcons finds the nearest hostile animal and the nearest other player
+    // within 600 of them, projects our own distance along the line from the
+    // enemy to whichever is closer, and asks whether we are within 60 of that
+    // point. If we are, the shot is ours and EMP is worth wearing; if we are
+    // not, it was never going to hit us and EMP would be a wasted hat.
+    //
+    // Returns true when the shot is ours, which is why the name is the other
+    // way round from Falcons' — the caller reads better for it.
+    _turretAimedAtMe(enemy) {
+      const {myPlayer: myPlayer, PlayerManager: PlayerManager2, EnemyManager: EnemyManager2} = this.client;
+      const enemyPos = enemy.pos.current;
+      let target = null, bestDistance = Infinity;
+      const consider = entity => {
+        if (!entity || entity === enemy || entity === myPlayer) {
+          return;
+        }
+        const d = enemyPos.distance(entity.pos.current);
+        if (d > HEAL_TURRET_LINE_RANGE || d >= bestDistance) {
+          return;
+        }
+        bestDistance = d;
+        target = entity;
+      };
+      // The animals RYN already tracks, then every player that is not on their
+      // side. Falcons walks `ir` and `rr` — the full animal and player lists —
+      // and takes the nearest of each; this walks the same two sets through
+      // RYN's managers.
+      const danger = EnemyManager2.nearestDangerAnimal;
+      if (danger) {
+        consider(danger);
+      }
+      const players = PlayerManager2.players;
+      for (let i = 0; i < players.length; i++) {
+        const player = players[i];
+        if (!player || player === enemy || myPlayer.isMyPlayerByID(player.id)) {
+          continue;
+        }
+        // Hostile to *them*, which is what decides who their turret shoots —
+        // not hostile to us.
+        if (!PlayerManager2.isEnemyByID(player.id, enemy)) {
+          continue;
+        }
+        consider(player);
+      }
+      if (target === null) {
+        return true;
+      }
+      const myPos = myPlayer.pos.current;
+      const myDistance = myPos.distance(enemyPos);
+      // Further from them than their target is: the shot stops before us.
+      if (myDistance > bestDistance) {
+        return false;
+      }
+      const dir = enemyPos.angle(target.pos.current);
+      const alongX = enemyPos.x + Math.cos(dir) * myDistance;
+      const alongY = enemyPos.y + Math.sin(dir) * myDistance;
+      return hyp(myPos.x - alongX, myPos.y - alongY) <= HEAL_TURRET_LINE_TOLERANCE;
+    }
+
+    // ---- forced add-ons ----------------------------------------------------
+    // Falcons' addForcedAddOnValue / resetForcedAddOn. A hat held for a count
+    // of ticks rather than for the one tick that asked for it, because the hit
+    // being answered lands on a tick we do not choose.
+    forceAddOn(index, ticks) {
+      if (index < 0 || index >= HEAL_FORCE_SLOTS) {
+        return;
+      }
+      if (ticks > this._forced[index]) {
+        this._forced[index] = ticks;
+      }
+    }
+    resetAddOn(index) {
+      if (index < 0 || index >= HEAL_FORCE_SLOTS) {
+        return;
+      }
+      this._forced[index] = 0;
+    }
+    // Falcons' onlySoldier(): every forced slot except the EMP one.
+    get forcedSoldier() {
+      return this._forced[HEAL_FORCE_SOLDIER] > 0 || this._forced[HEAL_FORCE_TRAP_SOLDIER] > 0 || this._forced[HEAL_FORCE_ONETICK_SOLDIER] > 0;
+    }
+    get forcedEMP() {
+      return this._forced[HEAL_FORCE_EMP] > 0;
+    }
+    _tickForced() {
+      for (let i = 0; i < this._forced.length; i++) {
+        if (this._forced[i] > 0) {
+          this._forced[i] -= 1;
+        }
+      }
+    }
+
     attributeDamages() {
+      // No evidence yet. EMP is a response to damage that actually arrived —
+      // Falcons only ever evaluates canEMP from entries in `damages` — so a
+      // tick that attributed nothing must not read as "every source this tick
+      // was a turret". Set true only once something has been attributed and
+      // nothing has disqualified it.
+      this.empSafe = false;
       this.spikeDamages.length = 0;
       this.damagesByHits.length = 0;
       this.damagesByShoots.length = 0;
@@ -17137,14 +18409,25 @@ window.grbtp = 35;
         return;
       }
       this._seenDamageTick = damageTick;
+      // Something landed, so the question is live. Any melee or spike source
+      // below turns it back off.
+      this.empSafe = true;
       const pending = damages.slice();
+      // Falcons' fitsPalette, against RYN's already-bull-multiplied number.
+      // Every value the same swing could have arrived as is tried, not just
+      // the one the attacker would deal at full strength — see the palette
+      // note above NOVA_ATTACKER_MULTS for why the exact match was losing
+      // hits from anyone not wearing bull.
       const take = expected => {
         if (!(expected > 0)) {
           return null;
         }
+        const palette = this._paletteFor(expected);
         for (let i = 0; i < pending.length; i++) {
-          if (nearlyEqual(pending[i], expected)) {
-            return pending.splice(i, 1)[0];
+          for (let k = 0; k < palette.length; k++) {
+            if (this._damageMatches(palette[k], pending[i])) {
+              return pending.splice(i, 1)[0];
+            }
           }
         }
         return null;
@@ -17164,6 +18447,20 @@ window.grbtp = 35;
               player: enemy,
               weapon: weaponID
             });
+            // Falcons' canEMP, on the branch that decides it.
+            //
+            // A melee hit is not something the EMP helmet stops, so the only
+            // question is whether the *rest* of what this enemy is about to do
+            // is turret work. Falcons keeps EMP alive for a primary hit when
+            // their secondary is a projectile and their turret is pointed at
+            // somebody else — then the follow-up genuinely is a turret shot,
+            // and EMP is the hat that answers it. A secondary hit is never
+            // EMP-safe: the follow-up is the primary, and no hat stops that.
+            if (weaponID === secondary) {
+              this.empSafe = false;
+            } else if (secondary === null || !DataHandler_default.isShootable(secondary) || this._turretAimedAtMe(enemy)) {
+              this.empSafe = false;
+            }
           }
         }
       }
@@ -17192,6 +18489,9 @@ window.grbtp = 35;
       for (const damage of pending) {
         if (isNovaSpikeDamage(damage)) {
           this.spikeDamages.push(damage);
+          // Spike damage is ground, not a turret. EMP does nothing about it,
+          // so the tick stops being one EMP can answer.
+          this.empSafe = false;
         }
       }
       // novastorm counts consecutive spike ticks so hatFc can read
@@ -17320,6 +18620,15 @@ window.grbtp = 35;
         if (inPrimaryRange && primaryReloaded) {
           if (100 <= primaryDamage + spikeDamage) {
             this.spikeTickAnti = true;
+            // Falcons' antiSpikeTick: the same finding, held for two ticks
+            // instead of one, and only while their trap is the thing holding
+            // us. A ring spike dropped under a pinned player and swung on is
+            // resolved over two server ticks — the place and the hit — so a
+            // soldier that comes off after one is off for the half that
+            // actually lands.
+            if (myPlayer.isTrapped) {
+              this.forceAddOn(HEAL_FORCE_TRAP_SOLDIER, 2);
+            }
           }
           if (health / soldierDefense <= primaryDamage + spikeDamage) {
             this.spikeDmgPot += spikeDamage;
@@ -17528,12 +18837,123 @@ window.grbtp = 35;
     // under us and hit us on the same tick for 100 — and spikeDmgCount is being
     // pinned on spikes inside a trap, taking the same tier every tick.
     get wantsSoldier() {
-      return this.soldierAnti || this.spikeTickAnti || this.client.myPlayer.isTrapped && this.spikeDmgCount > 0;
+      return this.soldierAnti || this.spikeTickAnti || this.forcedSoldier || this.client.myPlayer.isTrapped && this.spikeDmgCount > 0;
     }
+
+    // ------------------------------------------------------------------------
+    // EMP anti — the one thing in Falcons' heal that this client had no answer
+    // to at all.
+    //
+    // The EMP helmet is `antiTurret: 1` in the game's own table: a turret will
+    // not fire at someone wearing it. So against a tick whose lethal half is
+    // turret damage, EMP is not a smaller version of soldier — it removes the
+    // damage instead of reducing it, and it is strictly the better hat. Against
+    // anything else it does nothing at all, which is why it is gated on
+    // `empSafe` rather than offered as a general defence.
+    //
+    // Falcons' validate("emp"), condition for condition:
+    //
+    //   er.skins[22]                      we own the helmet
+    //   6 == er.skinIndex                 we are in soldier right now, so the
+    //                                     swap is soldier -> EMP rather than
+    //                                     bare -> EMP, and the tick we give up
+    //                                     is one we were already defending
+    //   er.health - (i - 25) > 1          survivable once the turret's 25 is
+    //                                     taken out of the total, which is what
+    //                                     wearing EMP actually buys
+    //   !mi.onlySoldier()                 nothing else is holding soldier on
+    // ------------------------------------------------------------------------
+    canUseEMP(total) {
+      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
+      if (!Settings_default._soldierEMP) {
+        return false;
+      }
+      if (!this.empSafe) {
+        return false;
+      }
+      if (!ModuleHandler.canBuy(0, HEAL_EMP_HAT)) {
+        return false;
+      }
+      if (myPlayer.hatID !== HEAL_SOLDIER_HAT) {
+        return false;
+      }
+      if (myPlayer.tempHealth - (total - NOVA_TURRET_DMG) <= 1) {
+        return false;
+      }
+      if (this.forcedSoldier) {
+        return false;
+      }
+      return true;
+    }
+    get wantsEMP() {
+      return this.forcedEMP;
+    }
+
+    // Falcons' start0ShameHeal. The server counts a food eaten inside its shame
+    // window against you, and at seven it stops feeding you altogether — so a
+    // heal that can afford to wait is worth waiting on.
+    //
+    //   mode 2   something is still coming: eat now if a spike worth more than
+    //            20 is close enough to land inside the wait, otherwise hold.
+    //   mode 1   nothing is coming: hold if the close spike cannot kill us,
+    //            otherwise eat now.
+    //
+    // "Now" is the next tick in Falcons (`Jt.nextTick`). Here it is this tick's
+    // doBestHeal, because RYN runs this module inside the tick rather than
+    // between two of them, and the food it sends lands on the same server tick
+    // Falcons' would.
+    startZeroShameHeal(mode, amount) {
+      const {myPlayer: myPlayer} = this.client;
+      const myPos = myPlayer.pos.current;
+      let closeSpike = null;
+      for (const spike of this.enemySpikes) {
+        if (spike.getDamage() <= HEAL_ZERO_SHAME_SPIKE_DMG) {
+          continue;
+        }
+        if (myPos.distance(spike.pos.current) <= spike.scale + HEAL_ZERO_SHAME_SPIKE_RANGE) {
+          closeSpike = spike;
+          break;
+        }
+      }
+      if (mode === 2) {
+        if (closeSpike !== null) {
+          return this.doBestHeal(HEAL_PRIORITY_HIGH);
+        }
+        this.healingDelay = HEAL_ZERO_SHAME_DELAY;
+        this.healingDelayAmount = amount;
+        return false;
+      }
+      if (closeSpike !== null && myPlayer.tempHealth - closeSpike.getDamage() > 0) {
+        this.healingDelay = HEAL_ZERO_SHAME_DELAY;
+        this.healingDelayAmount = amount;
+        return false;
+      }
+      return this.doBestHeal(HEAL_PRIORITY_HIGH);
+    }
+    // Falcons' autoHealing: the held food, spent when the wait is over.
+    runHealingDelay() {
+      if (this.healingDelay <= 0) {
+        return false;
+      }
+      this.healingDelay -= 1;
+      if (this.healingDelay > 0) {
+        return false;
+      }
+      this.healingDelay = 0;
+      this.healingDelayAmount = 0;
+      return this.doBestHeal(HEAL_PRIORITY_HIGH);
+    }
+
     nextHatID() {
       const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
       if (ModuleHandler.forceHat !== null) {
         return ModuleHandler.forceHat;
+      }
+      // EMP first: it is only ever asked for on a tick whose damage it removes
+      // outright, and on that tick it outranks the hat that would merely have
+      // reduced it.
+      if (this.wantsEMP && ModuleHandler.canBuy(0, HEAL_EMP_HAT)) {
+        return HEAL_EMP_HAT;
       }
       if (this.wantsSoldier && ModuleHandler.canBuy(0, 6)) {
         return 6;
@@ -17750,6 +19170,11 @@ window.grbtp = 35;
 
     postTick() {
       const {myPlayer: myPlayer} = this.client;
+      // Falcons decrements its forced add-ons at the top of every tick, so a
+      // hat asked for on tick N is still on for tick N+1 and gone by N+2. Done
+      // before anything can ask for a new one, so a fresh request always gets
+      // its full count.
+      this._tickForced();
       this.healing = false;
       this.soldierAnti = false;
       this.shouldResetShame = false;
@@ -17826,6 +19251,45 @@ window.grbtp = 35;
       this.healing = health <= dmgPot;
       this.healPriority = this.getHealPriority();
 
+      // ── Falcons' priority ladder ────────────────────────────────────────
+      // Its main(), on this client's numbers.
+      //
+      //   er.health - n <= 0 ? (EMP | soldier | heal | 0-shame heal)
+      //                      : 0-shame heal (mode 2)
+      //
+      // `n` is the total potential, which RYN has already solved as dmgPot —
+      // the whole point of putting the ladder here rather than porting
+      // interpretDamage's arithmetic is that this client's prediction is the
+      // better of the two and there is no reason to run a second one. What
+      // Falcons has that RYN did not is what to *do* about the verdict, which
+      // is the four rungs below.
+      //
+      // The first two only ever force a hat and let the heal happen behind it;
+      // the third is the heal RYN was already doing; the fourth is the one that
+      // waits so the food does not cost shame.
+      if (Settings_default._healPriority && this.healingDelay <= 0 && health < maxHealth) {
+        if (this.healing) {
+          const deficit = maxHealth - health;
+          if (this.canUseEMP(dmgPot)) {
+            // Falcons holds it for one tick and heals behind it. The hat has
+            // to already be on when their turret resolves, which is the tick
+            // after the one that told us it was coming.
+            this.forceAddOn(HEAL_FORCE_EMP, 1);
+            this.doBestHeal(HEAL_PRIORITY_CRIT);
+          } else if (shameCount < NOVA_SHAME_LIMIT) {
+            this.forceAddOn(HEAL_FORCE_SOLDIER, 1);
+            this.doBestHeal(this.healPriority);
+          } else {
+            this.startZeroShameHeal(1, deficit);
+          }
+        } else if (shameCount > 0) {
+          // Nothing lethal is coming and we are already carrying shame, so the
+          // food can afford to wait for a tick outside the window. At zero
+          // shame there is nothing to save and the ordinary heal below runs.
+          this.startZeroShameHeal(2, maxHealth - health);
+        }
+      }
+
       // The one heal site. Shame is a hard wall at 7 — novastorm has no
       // override for it, and a shamed tick heals only once `(tick - damageTick)`
       // has gone positive.
@@ -17840,6 +19304,10 @@ window.grbtp = 35;
       // after the hat terms, the deficit in full — so this is that heal with
       // two tiers around it rather than a different one.
       this.doBestHeal(this.healPriority);
+      // Falcons' autoHealing(), which is the held food coming due. Runs after
+      // the ordinary heal so a tick that has already eaten cannot eat twice —
+      // doBestHeal's own lastHealTick guard catches it either way.
+      this.runHealingDelay();
       if (this.lastHealTick !== myPlayer.tickCount && this.isSaveHealTick()) {
         this.heal(maxHealth - health, false);
       }
@@ -20815,10 +22283,65 @@ window.grbtp = 35;
     // on this tick and the hit is meant to land with it - with the turret shot
     // chasing it on the next.
     syncTurret=false;
+    // Spike Sync 2's standalone one-shot. `_contactKey` is victim:spike, so a
+    // new touch or a different spike is a new event; `_contactSpent` is this
+    // event's burst. Together they are what `consumeSync` is on the Auto Push
+    // path — the same "one contact, one burst" rule, kept where the contact is
+    // read rather than inside a shove that may not be running.
+    _contactKey=null;
+    _contactSpent=false;
     minKB=220;
     maxKB=245;
     constructor(client2) {
       this.client = client2;
+    }
+    // Spike Sync 2's claim on a contact, asked by the modules that run before
+    // this one.
+    //
+    // Same job as `autoPush.ownsTarget` and the same reason for existing: Spike
+    // Sync Hammer and Spike Sync both sit ahead of this module in
+    // ModuleHandler.modules, both spend a reload, and neither can ask this
+    // module's postTick because it has not run yet. So the question is answered
+    // from state that is already computed — EnemyManager's contact reading and
+    // this module's own one-shot flags — exactly as pushState() is.
+    //
+    // It matters now in a way it did not before. Those two modules stood aside
+    // for Spike Sync 2 through `autoPush.ownsTarget`, which answers false
+    // whenever the shove is not running: with Auto Push off they would take the
+    // reload first and the contact swing this feature exists for never
+    // happened. That is the whole point of the contact trigger, so the hold has
+    // to follow it off the shove.
+    //
+    // Read only, and never held for a burst that cannot happen: the weapon and
+    // the reach are the two refusals that do not fix themselves while a contact
+    // sits open, and they are tested here so a module ahead is not suppressed
+    // for nothing. Reload is deliberately not tested — that one does fix
+    // itself, and neither `syncPending` nor `ownsTarget` tests it either.
+    ownsContact(enemy) {
+      if (!Settings_default._spikeSync2) return false;
+      if (enemy === null || enemy === void 0) return false;
+      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      if (EnemyManager2.enemySpikeCollider !== enemy) return false;
+      // Already spent on this contact: a new touch, or a touch on a different
+      // spike, is a new event and is claimable again.
+      const spike = EnemyManager2.enemySpikeColliderObject;
+      const key = enemy.id + ":" + (spike && spike.id !== void 0 ? spike.id : "s");
+      if (this._contactKey === key && this._contactSpent) return false;
+      const primary = myPlayer.getItemByType(0);
+      if (primary === null || primary === void 0) return false;
+      if (!ModuleHandler.staticModules.spikeKB.isValidPrimary(primary)) return false;
+      return myPlayer.collidingSimple(enemy, DataHandler_default.getWeapon(primary).range + enemy.hitScale);
+    }
+    // This module had none, so its two-tick bursts and now Spike Sync 2's
+    // contact one-shot survived a death and a respawn into a world where the
+    // victim and the spike no longer exist. ModuleHandler.reset only calls it
+    // if it is here.
+    reset() {
+      this.nearestTarget = null;
+      this.target = null;
+      this.syncTurret = false;
+      this._contactKey = null;
+      this._contactSpent = false;
     }
     // Soldier and emp both blunt the tick, so a swap into either means they saw
     // it coming. Anything else is a hat they cannot defend with.
@@ -20917,22 +22440,78 @@ window.grbtp = 35;
       // it is there for the knockback band below — a combo that throws them
       // 220 to 245 units and meets them there. This burst throws nobody: they
       // are pinned. What it does need is a weapon that can reach them, so it
-      // asks Spike KB's own two questions, on Spike KB's own module, against
-      // the victim the shove names rather than whoever happens to be nearest:
-      // a primary Spike KB would swing, reloaded now, and the target inside
-      // its reach. Standing behind them at the stand point is exactly where
-      // that reach matters.
-      const push = Settings_default._spikeSync2 ? ModuleHandler.staticModules.autoPush.pushState() : null;
+      // asks Spike KB's own two questions, on Spike KB's own module: a primary
+      // Spike KB would swing, reloaded now, and the target inside its reach.
+      //
+      // ── No Auto Push requirement ──────────────────────────────────────────
+      // This used to fire only on `autoPush.pushState()`, and that made the
+      // whole feature a sub-feature of the shove. Three separate Auto Push
+      // conditions had to hold before contact could even be considered:
+      // `_geometry` returns null unless `Settings._autoPush` is on, it returns
+      // null unless EnemyManager named both a push victim and a push spike, and
+      // `armed` is `pushPos !== null || _syncWindowPrev` — the shove had to have
+      // been live on the previous completed tick. The old comment said so
+      // outright: "an enemy who arrived at a spike without this module walking
+      // them there is not this feature's moment."
+      //
+      // It is. The moment is the contact, whatever produced it — they walked
+      // into it, a knockback put them there, a teammate shoved them, or the
+      // spike was built under them. So the trigger is the contact itself, read
+      // from the collision the client already resolves:
+      //
+      //   EnemyManager.enemySpikeCollider   the enemy touching a spike hostile
+      //                                     to them, swept over previous,
+      //                                     current and future positions, and
+      //                                     recomputed every tick for every
+      //                                     enemy against every such spike
+      //
+      // That is the same reading the shove's own ladder used for `touching`
+      // (`contact || EnemyManager.enemySpikeCollider === enemy`), so this is
+      // not a second collision test — it is the one already being computed,
+      // asked without the shove wrapped around it.
+      //
+      // Auto Push is still honoured when it is running. If a shove owns this
+      // victim the sync goes through its window exactly as before — that is
+      // what keeps one contact to one burst, and what `consumeSync` and
+      // `releaseSync` are for. What changed is that a contact with no shove
+      // behind it is no longer discarded; it gets its own one-shot, guarded by
+      // the same "one contact, one burst" rule, keyed on the spike so a new
+      // touch on a new spike is a new event.
+      const spikeKB = ModuleHandler.staticModules.spikeKB;
+      const autoPush = ModuleHandler.staticModules.autoPush;
+      const push = Settings_default._spikeSync2 ? autoPush.pushState() : null;
+      let syncVictim = null;
+      let syncViaPush = false;
       if (push !== null && push.syncPending) {
-        const pushed = push.enemy;
-        const spikeKB = ModuleHandler.staticModules.spikeKB;
+        syncVictim = push.enemy;
+        syncViaPush = true;
+      } else if (Settings_default._spikeSync2) {
+        // The standalone path. The victim is whoever the client says is on a
+        // spike right now; the spike they are on is what makes it one event.
+        const touched = EnemyManager2.enemySpikeCollider;
+        if (touched !== null && touched !== void 0) {
+          const spike = EnemyManager2.enemySpikeColliderObject;
+          const key = touched.id + ":" + (spike && spike.id !== void 0 ? spike.id : "s");
+          if (this._contactKey !== key) {
+            this._contactKey = key;
+            this._contactSpent = false;
+          }
+          if (!this._contactSpent) syncVictim = touched;
+        } else {
+          // Off every spike: the next touch is a fresh event.
+          this._contactKey = null;
+          this._contactSpent = false;
+        }
+      }
+      if (syncVictim !== null) {
+        const pushed = syncVictim;
         const hasWeapon = primary !== null && primary !== void 0 && spikeKB.isValidPrimary(primary);
         const inReach = hasWeapon && myPlayer.collidingSimple(pushed, DataHandler_default.getWeapon(primary).range + pushed.hitScale);
         // The two refusals that will not fix themselves while the window sits
         // open. Release it now so Spike KB and the sync modules get their tick
         // back rather than waiting out a burst that is not coming.
         if (!hasWeapon || !inReach) {
-          ModuleHandler.staticModules.autoPush.releaseSync();
+          if (syncViaPush) autoPush.releaseSync();
         } else if (reloading.isReloaded(0)) {
           const pushedAngle = myPlayer.pos.current.angle(pushed.pos.current);
           this.target = pushed;
@@ -20944,9 +22523,12 @@ window.grbtp = 35;
           ModuleHandler.moveTo = pushedAngle;
           this.syncTurret = true;
           this.client.StatsManager.velocityTickTimes = 1;
-          // One contact, one burst. Spike KB reads the same flag and takes its
-          // own tick back the moment this is marked.
-          ModuleHandler.staticModules.autoPush.consumeSync();
+          // One contact, one burst, on whichever path armed it. Through the
+          // shove that is consumeSync, which Spike KB also reads to take its
+          // own tick back; standing alone it is the contact key, which clears
+          // by itself when they come off the spike or touch a different one.
+          if (syncViaPush) autoPush.consumeSync();
+          else this._contactSpent = true;
           return;
         }
       }
@@ -21734,7 +23316,46 @@ window.grbtp = 35;
       if (target === null) {
         return;
       }
-      if (Settings_default._spikeSync2 && ModuleHandler.staticModules.autoPush.ownsTarget(target)) {
+      // ── Not while they are in our trap ──────────────────────────────────
+      // Oracle's case 2 was "pinned in our trap and already taking spike
+      // damage", and it was carried across as one of the three targets above.
+      // It is wrong here, and it is wrong for the reason the whole module
+      // exists: this swing is a knockback. A pinned player is held by the game
+      // — their velocity is zeroed on contact — so the push cannot move them,
+      // and the moment the trap breaks the stored shove is what carries them
+      // out of the ground we are trying to keep them on. The feature is meant
+      // to put a free enemy into a spike, not to shove a caught one loose.
+      //
+      // TrapKB beside this module already refuses on `nearestEnemy.isTrapped`;
+      // this one never asked.
+      //
+      // Asked through EnemyManager.enemyTrappedByMe, which is the client's own
+      // answer and already existed: `isTrapped` and `trappedIn` are set every
+      // tick in checkCollision from `collidingObject` swept over previous,
+      // current and future against every type 15 object hostile to that
+      // player, and the helper adds the ownership test (theirs does not count)
+      // and a four-tick hold. The hold is the part worth having — the collision
+      // can read clear for a tick while they are still standing in it, and
+      // without it this gate would flicker open and fire exactly the swing it
+      // exists to prevent. No new detector, no distance proxy: a second reading
+      // here could disagree with TrapKB and the placer, which both key off the
+      // same state.
+      //
+      // It re-opens by itself once they are genuinely out, because everything
+      // behind it is recomputed every tick.
+      //
+      // Spike Sync 2 is what covers the pinned case instead: it waits until
+      // they are on the spike and hits them while the trap holds them there,
+      // which is the thing worth doing to a trapped player.
+      if (EnemyManager2.enemyTrappedByMe(target)) {
+        return;
+      }
+      // Both of Spike Sync 2's claims. The shove path is the original; the
+      // contact path matters on a tick where Velocity Tick bailed for a reason
+      // this module does not share — it refuses while `moveTo` is set, this one
+      // does not — and would otherwise spend on a knockback the reload that the
+      // contact swing is waiting for.
+      if (Settings_default._spikeSync2 && (ModuleHandler.staticModules.autoPush.ownsTarget(target) || ModuleHandler.staticModules.velocityTick.ownsContact(target))) {
         return;
       }
       // Oracle's `dist <= 35 * 1.8 + range`, which is RYN's hitScale + range.
@@ -22388,7 +24009,15 @@ window.grbtp = 35;
         // tick, and being pinned on spikes inside a trap.
         const _novaHeal = this.staticModules.antiInsta;
         const _soldierAnti = _novaHeal !== undefined && _novaHeal.wantsSoldier;
-        if (Settings_default._antienemy && _isDanger || _isClose || _safeSoldier || _soldierAnti) {
+        // EMP outranks every soldier reason below it, and only ever asks on a
+        // tick whose lethal damage it removes outright rather than reduces —
+        // NovastormHeal.canUseEMP is the whole of that test. Taken first so the
+        // soldier branch cannot claim forceHat and leave the swap for a tick
+        // that no longer needs it.
+        if (_novaHeal !== undefined && _novaHeal.wantsEMP && this.canBuy(0, 22)) {
+          this.forceHat = 22;
+          this.shouldEquipSoldier = true;
+        } else if (Settings_default._antienemy && _isDanger || _isClose || _safeSoldier || _soldierAnti) {
           this.forceHat = 6;
           this.shouldEquipSoldier = true;
         } else if (this.shouldEquipSoldier) {
@@ -22736,90 +24365,66 @@ window.grbtp = 35;
 }
 #setupCard a:hover, #setupCard .menuText:hover { border-color: rgba(170,130,255,0.75) !important; color: #ffffff !important; }
 
-/* The corner mark: the artwork and the name, and nothing around them. The card
-   they used to sit in was the size of a small window, which is a lot of screen
-   to give a logo. The whole lockup is the button that opens the menu, so it
-   answers a click with a press and a ring instead of only swapping the menu in. */
 .ryn-v2-wrapper {
     position: fixed !important;
-    top: 12px !important;
-    left: 12px !important;
+    top: 14px !important;
+    left: 14px !important;
     display: flex !important;
+    flex-direction: column !important;
     align-items: center !important;
-    gap: 9px !important;
-    padding: 0 !important;
-    background: none !important;
-    border: 0 !important;
-    cursor: pointer !important;
-    pointer-events: auto !important;
+    gap: 7px !important;
+    padding: 9px 11px 8px !important;
+    border-radius: 20px !important;
+    background: rgba(14,13,18,0.34) !important;
+    border: 1px solid rgba(255,255,255,0.10) !important;
+    box-shadow: 0 8px 22px rgba(0,0,0,0.24) !important;
+    backdrop-filter: blur(7px) !important;
+    -webkit-backdrop-filter: blur(7px) !important;
+    opacity: 0.78 !important;
+    pointer-events: none !important;
     user-select: none !important;
-    -webkit-user-select: none !important;
+    transition: opacity 220ms ease, background 220ms ease, border-color 220ms ease, box-shadow 220ms ease !important;
     z-index: 99999 !important;
 }
-/* Nothing below is marked important: an !important declaration beats a
-   keyframe, so a transform or an opacity the tap animates has to stay
-   ordinary. The game has no rules of its own on these class names anyway. */
-.ryn-v2-mark {
-    position: relative;
-    width: 44px;
-    height: 44px;
-    flex: none;
-    opacity: 0.92;
-    transition: transform 170ms cubic-bezier(.34,1.56,.64,1), opacity 200ms ease;
-}
-/* the ring the tap throws off; it only shows while the animation runs */
-.ryn-v2-mark::after {
-    content: "";
-    position: absolute;
-    inset: -2px;
-    border-radius: 15px;
-    border: 2px solid rgba(255,255,255,0.80);
-    opacity: 0;
-    pointer-events: none;
+.ryn-v2-wrapper:hover {
+    opacity: 1 !important;
+    background: rgba(14,13,18,0.52) !important;
+    border-color: rgba(255,255,255,0.24) !important;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.36) !important;
 }
 .ryn-v2-avatar {
-    width: 100% !important;
-    height: 100% !important;
-    display: block !important;
-    border-radius: 13px !important;
+    width: 78px !important;
+    height: 78px !important;
+    border-radius: 22px !important;
     object-fit: cover !important;
     object-position: center center !important;
+    display: block !important;
+    border: 1px solid rgba(255,255,255,0.16) !important;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.34) !important;
     background: #0d0d10 !important;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.38), inset 0 0 0 1px rgba(0,0,0,0.28) !important;
-    pointer-events: none !important;
-    -webkit-user-drag: none !important;
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    transition: opacity 200ms ease, transform 200ms ease, border-color 200ms ease, box-shadow 200ms ease !important;
 }
-.ryn-v2-wrapper:hover .ryn-v2-mark { opacity: 1; transform: translateY(-1px) scale(1.04); }
-.ryn-v2-wrapper:active .ryn-v2-mark { transform: scale(0.93); }
+.ryn-v2-avatar:hover {
+    transform: translateY(-1px) scale(1.04) !important;
+    border-color: rgba(255,255,255,0.46) !important;
+    box-shadow: 0 8px 22px rgba(0,0,0,0.44) !important;
+}
 .ryn-v2-badge {
-    display: flex !important;
-    align-items: baseline !important;
-    gap: 5px !important;
-    font-family: "Hammersmith One", "Trebuchet MS", Arial, sans-serif !important;
-    line-height: 1 !important;
+    color: rgba(240,240,246,0.72) !important;
+    font-family: 'Orbitron', monospace !important;
+    font-size: 0.62em !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.17em !important;
     text-transform: uppercase !important;
+    text-align: center !important;
     white-space: nowrap !important;
-    text-shadow: 0 1px 5px rgba(0,0,0,0.78) !important;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.55) !important;
     pointer-events: none !important;
+    transition: color 200ms ease !important;
 }
-.ryn-v2-badge .ryn-v2-n1 {
-    color: rgba(255,255,255,0.88);
-    font-size: 13px !important;
-    letter-spacing: 0.14em !important;
-    transition: color 200ms ease;
-}
-.ryn-v2-badge .ryn-v2-n2 {
-    color: rgba(255,255,255,0.46);
-    font-size: 10px !important;
-    letter-spacing: 0.22em !important;
-    transition: color 200ms ease;
-}
-.ryn-v2-wrapper:hover .ryn-v2-n1 { color: #ffffff; }
-.ryn-v2-wrapper:hover .ryn-v2-n2 { color: rgba(255,255,255,0.66); }
-.ryn-v2-wrapper.is-tapped .ryn-v2-mark { animation: ryn-v2-tap 420ms cubic-bezier(.34,1.56,.64,1); }
-.ryn-v2-wrapper.is-tapped .ryn-v2-mark::after { animation: ryn-v2-ring 460ms ease-out; }
-@keyframes ryn-v2-tap { 0% { transform: scale(0.90); } 55% { transform: scale(1.07); } 100% { transform: scale(1); } }
-@keyframes ryn-v2-ring { 0% { opacity: 0.85; transform: scale(0.96); } 100% { opacity: 0; transform: scale(1.5); } }
+.ryn-v2-wrapper:hover .ryn-v2-badge { color: rgba(255,255,255,0.92) !important; }
 `;
         document.head.appendChild(rynCSS);
         function injectRynCardUI() {
@@ -22853,55 +24458,19 @@ window.grbtp = 35;
           avatar.className = "ryn-v2-avatar";
           avatar.src = "data:image/webp;base64,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";
           avatar.alt = "";
-          avatar.draggable = false;
-          // The artwork sits in a box of its own so the tap has something to
-          // scale and something to throw a ring off; the image itself takes no
-          // clicks, they all belong to the lockup.
-          const mark = document.createElement("div");
-          mark.className = "ryn-v2-mark";
-          mark.appendChild(avatar);
-          const badge = document.createElement("div");
-          badge.id = "ryn-v2-badge";
-          badge.className = "ryn-v2-badge";
-          const name = document.createElement("span");
-          name.className = "ryn-v2-n1";
-          name.textContent = "Ryn";
-          const type = document.createElement("span");
-          type.className = "ryn-v2-n2";
-          type.textContent = "Type 2";
-          badge.appendChild(name);
-          badge.appendChild(type);
-          wrapper.title = "Open menu";
-          let tapTimer = 0;
-          wrapper.addEventListener("click", function() {
-            // restart the animation even on a click inside its own run
-            wrapper.classList.remove("is-tapped");
-            void wrapper.offsetWidth;
-            wrapper.classList.add("is-tapped");
-            clearTimeout(tapTimer);
-            tapTimer = setTimeout(function() {
-              wrapper.classList.remove("is-tapped");
-            }, 480);
+          avatar.title = "Open menu";
+          avatar.addEventListener("click", function() {
             if (window._rynUI && typeof window._rynUI.toggleMenu === "function") {
               window._rynUI.toggleMenu();
             } else if (window.UI_default && typeof window.UI_default.toggleMenu === "function") {
               window.UI_default.toggleMenu();
-            } else {
-              // the same last resort the old logo had: press the menu key
-              try {
-                const key = window.Settings_default && window.Settings_default._toggleMenu || "Escape";
-                document.dispatchEvent(new KeyboardEvent("keydown", {
-                  code: key,
-                  bubbles: true
-                }));
-                document.dispatchEvent(new KeyboardEvent("keyup", {
-                  code: key,
-                  bubbles: true
-                }));
-              } catch (e) {}
             }
           });
-          wrapper.appendChild(mark);
+          const badge = document.createElement("div");
+          badge.id = "ryn-v2-badge";
+          badge.className = "ryn-v2-badge";
+          badge.textContent = "Ryn Type 2";
+          wrapper.appendChild(avatar);
           wrapper.appendChild(badge);
           document.body.appendChild(wrapper);
         }
@@ -24495,6 +26064,11 @@ window.grbtp = 35;
     _antispike: true,
     _empDefense: true,
     _autoheal: true,
+    // Falcons' soldierEMP and its heal priority ladder. Both default on: the
+    // EMP path only ever fires on a tick whose lethal half is turret damage,
+    // and the ladder is the existing heal with a hat decision in front of it.
+    _soldierEMP: true,
+    _healPriority: true,
     _autoSync: true,
     _adaptiveGearSwitching: false,
     _autoShield: true,
@@ -24530,9 +26104,9 @@ window.grbtp = 35;
     _autoplacerRadius: 350,
     _autoplacerScanners: 4,
     _autoplacerResolution: LUNA_ANGLE_STEPS_DEFAULT,
-    // Not a setting — the stamp that says the 72-to-144 default move has
-    // already been applied to this save. No element carries this id, so the
-    // menu never shows it; it is here so the unknown-key prune below keeps it.
+    // Not a setting — the stamp that says the 72-to-default move has already
+    // been applied to this save. No element carries this id, so the menu never
+    // shows it; it is here so the unknown-key prune below keeps it.
     _placerResolutionMigrated: false,
     _autobreak: true,
     _breakPosition: "inside",
@@ -24647,11 +26221,15 @@ window.grbtp = 35;
   // older save it may not be there at all. Normalised to one of the supported
   // step counts as a number, because that is what the placer arithmetic wants.
   //
-  // The default moved from 72 to 144, and a save written under the old default
-  // holds a 72 that nobody chose — the select was simply never opened. Those
-  // are moved up once, stamped so it happens only the once, and a 72 set by
-  // hand after that stays where it was put. A save that already picked 36 or
-  // 144 is left alone either way.
+  // The rungs are 36, 72, 144 and 200. 144 is a real option and is kept as
+  // one: it is what this client shipped on, and a save holding it is a choice,
+  // not a stale value to be normalised away.
+  //
+  // The stamped migration below is the older one and is left exactly as it
+  // was: the default moved from 72 to the top rung once, and a save written
+  // under the old default holds a 72 that nobody chose because the select was
+  // never opened. Those are moved up once, stamped so it happens only the
+  // once, and a 72 set by hand after that stays where it was put.
   {
     const stored = Number(settings._autoplacerResolution);
     settings._autoplacerResolution = LUNA_ANGLE_RESOLUTIONS.indexOf(stored) === -1 ? LUNA_ANGLE_STEPS_DEFAULT : stored;
@@ -24887,50 +26465,6 @@ window.grbtp = 35;
         hud.id = "ryn-topright-hud";
         hud.innerHTML = '<div class="ryn-hud-row"><span class="ryn-hud-label"><span id="ryn-hud-hp-val" class="ryn-hud-val">100</span></span><div class="ryn-hud-bar-bg"><div id="ryn-hud-hp-fill" class="ryn-hud-bar-fill" style="width:100%"></div></div></div><div class="ryn-hud-row" id="ryn-hud-r1-row" style="display:none"><span class="ryn-hud-label"><span id="ryn-hud-r1-val" class="ryn-hud-val"></span></span><div class="ryn-hud-bar-bg"><div id="ryn-hud-r1-fill" class="ryn-hud-bar-fill" style="width:100%"></div></div></div><div class="ryn-hud-row" id="ryn-hud-heal-row" style="display:none"><span id="ryn-hud-heal" class="ryn-hud-heal"></span></div>';
         gameUI.appendChild(hud);
-        // The weapon reloads live in the item bar itself now: a white edge
-        // inside the primary's own tile and the secondary's, emptied by the
-        // swing and drawn closed when the weapon is back. `ringHome` remembers
-        // which tile each one is sitting in, so an upgrade — a new weapon id,
-        // a new tile — takes its ring along instead of leaving one behind.
-        var ringHome = [ null, null ];
-        function dropReloadRing(tileId) {
-          if (tileId === null) {
-            return;
-          }
-          var tile = document.getElementById("actionBarItem" + tileId);
-          var ring = tile && tile.querySelector(".ryn-reload-ring");
-          if (ring) {
-            tile.removeChild(ring);
-          }
-        }
-        function updateReloadRings(mp, reload) {
-          for (var slot = 0; slot < 2; slot++) {
-            // inventory[0] and [1] are the two weapon slots, and the game's
-            // tiles are one per weapon id — so the id is the tile.
-            var id = Settings_default._weaponReloadBar && reload ? mp.getItemByType(slot) : null;
-            var tile = typeof id === "number" ? document.getElementById("actionBarItem" + id) : null;
-            if (tile === null) {
-              dropReloadRing(ringHome[slot]);
-              ringHome[slot] = null;
-              continue;
-            }
-            if (ringHome[slot] !== id) {
-              dropReloadRing(ringHome[slot]);
-              ringHome[slot] = id;
-            }
-            var ring = tile.querySelector(".ryn-reload-ring");
-            if (ring === null) {
-              ring = document.createElement("div");
-              ring.className = "ryn-reload-ring";
-              tile.appendChild(ring);
-            }
-            // current/max — the same reading the bar over the player used to
-            // show: nothing on the swing, a closed edge when it is ready.
-            var state = reload[slot];
-            var fill = state && state.max > 0 ? state.current / state.max : 1;
-            ring.style.setProperty("--ryn-reload", (clamp(fill, 0, 1) * 100).toFixed(1) + "%");
-          }
-        }
         setInterval(function() {
           try {
             var ac = AC();
@@ -24968,9 +26502,6 @@ window.grbtp = 35;
                 }
               }
             } catch (e3) {}
-            try {
-              updateReloadRings(mp, pd && pd.reload);
-            } catch (e4) {}
           } catch (e) {}
         }, 50);
         // The heal line, on its own timer. The bars above are chasing a reload
@@ -25001,9 +26532,20 @@ window.grbtp = 35;
             var name = HEAL_PRIORITY_NAMES[priority] || "IDLE";
             var hp = Math.max(0, Math.round(mp.tempHealth !== void 0 ? mp.tempHealth : mp.currentHealth));
             var maxHp = mp.maxHealth || 100;
+            // Which hat the heal is happening behind, which is the decision the
+            // priority ladder actually makes — the tier says how much to eat,
+            // this says what is being worn while it lands. WAIT is the held
+            // food: a heal deliberately sitting out a tick so it does not cost
+            // shame.
+            var mode = "";
+            if (heal) {
+              if (heal.wantsEMP) mode = " | EMP";
+              else if (heal.healingDelay > 0) mode = " | WAIT";
+              else if (heal.wantsSoldier) mode = " | SOLDIER";
+            }
             row.style.display = "";
-            el.textContent = "HEAL: " + priority + " " + name + " | HP: " + hp + "/" + maxHp + " | SHAME: " + mp.shameCount;
-            el.style.color = priority >= 2 ? "#8ef0a8" : priority === 1 ? "#f0d24b" : "rgba(255,255,255,0.45)";
+            el.textContent = "HEAL: " + priority + " " + name + mode + " | HP: " + hp + "/" + maxHp + " | SHAME: " + mp.shameCount;
+            el.style.color = heal && heal.wantsEMP ? "#6fd3f5" : priority >= 2 ? "#8ef0a8" : priority === 1 ? "#f0d24b" : "rgba(255,255,255,0.45)";
           } catch (e) {}
         }, 250);
       })();
