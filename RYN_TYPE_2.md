@@ -5,7 +5,7 @@ Changes to **`Ryn_Type_2.user.js`**, worked against the shipped game bundle in
 `drivers/game-drivers.json`.
 
 ```sh
-node tools/test-ryn-type2.js     # 157 behaviour tests
+node tools/test-ryn-type2.js     # 170 behaviour tests
 node --check Ryn_Type_2.user.js
 ```
 
@@ -74,6 +74,33 @@ of work, same server-side validation. Only the timing moves.
 
   Nothing ever waits on a full pool; an empty one just mints inline the way it
   did before.
+- **Frames come first.** The rate above is a guess at when there is room; this
+  is the measurement. `Renderer._dtSmoothed` — the smoothed average of the last
+  eight frame times the client already keeps — is read before every top-up, and
+  if frames are running long the pool stops starting challenges until they are
+  not. Whatever a challenge costs on a given machine, it stops being paid the
+  moment it shows up in the frame time.
+
+  Judged against the machine's own baseline rather than a fixed frame rate: a
+  144Hz machine and a 40fps machine should each keep their own frames, and one
+  number would either never pause the fast one or never let the slow one mint at
+  all. The baseline is the best smoothed frame time seen lately, drifting upward
+  slowly so it follows the machine rather than pinning to one lucky frame. Below
+  17ms (60fps) the test is skipped — nothing is wrong on any machine at 60fps.
+
+  A hidden tab renders nothing, so it mints nothing.
+- **Started from idle.** Rendering a challenge means inserting a cross-origin
+  iframe, and the layout and composite that follow are the part that shows up as
+  a dropped frame. They go through `requestIdleCallback` (2s timeout backstop),
+  so the browser places them in a frame with room instead of one the game
+  needed. The concurrency slot is claimed immediately, so a deferred challenge
+  still counts against the budget.
+
+  The widget host also carries `contain: layout style`, which tells the browser
+  its layout cannot affect anything outside it — so inserting and removing it
+  does not invalidate the rest of the page. Paint containment is deliberately
+  left out: it clips to the box, and an interactive challenge that needs to draw
+  outside its own frame would be clipped into something unanswerable.
 - **Runs while you are in the game, and only then.** Two gates, both live: the
   pool waits for Cloudflare's own script to appear (the userscript runs at
   `document-start`, and without that check the keeper would fire challenges
@@ -113,16 +140,24 @@ of work, same server-side validation. Only the timing moves.
 | pool lifetime | derived: Cloudflare's 300s − 60s margin = 240s |
 | keeper interval | 2.5s |
 | standing still means | `myPlayer.speed` ≤ 8 for 4s |
+| pauses when | frame time > 1.3× the machine's own best, or tab hidden |
+| challenges start | from `requestIdleCallback` |
 | cold fill to forty | ~100s moving, ~53s standing still |
 | a challenge is written off after | 30s |
 | a spawn waits for one in flight for | 5s, then mints its own |
 | runs when | Turnstile loaded **and** `myPlayer.inGame` |
 
-**Bots → Spawn** shows ready, solving, the rate it is running at, spawns
-waiting, spent, expired unused and timed out, and says *paused until you are in
-the game* when it is not running.
-**Fill now** skips the wait for the next keeper tick after a burst of spawns has
-drained the pool.
+**Bots → Spawn** carries the readout, and it is **hidden by default**. Type
+`!tk` in the game's own chat box to toggle it — the text is intercepted on blur,
+before `Possess.chat` is reached, so nothing is encoded, nothing is sent and
+nobody else sees it. The chat box is just the one place the game reliably hands
+the keyboard over.
+
+It shows ready, solving, why it is going at the speed it is (the rate, or
+*holding off — frames are running long*), spawns waiting, spent, expired unused
+and timed out, and says *paused until you are in the game* when it is not
+running. **Fill now** skips the wait for the next keeper tick after a burst of
+spawns has drained the pool.
 
 *Timed out* moving is the wedge recovery doing its job, not something stuck. A
 number that keeps climbing means Cloudflare is not answering.

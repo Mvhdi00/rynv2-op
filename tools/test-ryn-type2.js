@@ -90,11 +90,17 @@ function buildPool(env) {
     const Date = env.Date;
     const window = env.window;
     const client = env.client;
+    const document = env.document;
+    const Renderer = env.Renderer;
+    // Deterministic stand-in for the browser's idle queue, so a test can say
+    // exactly when a deferred challenge is allowed to start.
+    const requestIdleCallback = env.requestIdleCallback;
     ${poolSrc}
     return { TokenPool: TokenPool, TTL: TURNSTILE_TTL_MS, CF: TURNSTILE_CF_LIFETIME_MS,
              SAFETY: TURNSTILE_SAFETY_MS,
              MOVING: TURNSTILE_CONCURRENT_MOVING, STILL: TURNSTILE_CONCURRENT_STILL,
              STILL_SPEED: TURNSTILE_STILL_SPEED, STILL_MS: TURNSTILE_STILL_MS,
+             FPS_SLACK: TURNSTILE_FPS_SLACK, FPS_FLOOR: TURNSTILE_FPS_FLOOR_MS,
              TARGET: TURNSTILE_POOL_TARGET, KEEPER: TURNSTILE_KEEPER_MS,
              MINT_TIMEOUT: TURNSTILE_MINT_TIMEOUT_MS, WAIT: TURNSTILE_WAIT_MS };
   `;
@@ -317,18 +323,40 @@ function poolHarness(opts) {
   // rate after a couple of ticks; the guard's own tests move the player.
   const win = { turnstile: o.noTurnstile ? undefined : { render: () => {} }, top: null };
   const cl = { myPlayer: { inGame: o.outOfGame ? false : true, speed: o.speed === undefined ? 0 : o.speed } };
+  // The frame-time signal the pool reads before spending any. 16ms is a
+  // healthy 60fps, which is the default; the frame tests move it.
+  const doc = { hidden: o.hidden === true };
+  const rend = { _dtSmoothed: o.dt === undefined ? 16 : o.dt };
+  let idleQueue = [];
   const built = buildPool({
     Date: { now: () => now },
     window: win,
     client: cl,
+    document: doc,
+    Renderer: rend,
+    requestIdleCallback: fn => { idleQueue.push(fn); },
     mint: () => new Promise((res, rej) => { minted++; inflight.push({ res: res, rej: rej }); })
   });
+  // Run every challenge the pool has queued for idle time. Challenges are
+  // started from an idle callback now, so nothing is in flight until this.
+  const flushIdle = () => {
+    const q = idleQueue;
+    idleQueue = [];
+    q.forEach(fn => fn());
+  };
   return {
     pool: built.TokenPool,
     k: built,
     win: win,
     client: cl,
+    doc: doc,
+    rend: rend,
+    flushIdle: flushIdle,
+    get idlePending() { return idleQueue.length; },
     advance: ms => { now += ms; },
+    // Top up and let the queued challenges start, which is what one keeper
+    // tick amounts to once the browser has had an idle moment.
+    pump: () => { built.TokenPool.refill(); flushIdle(); },
     get minted() { return minted; },
     get inflight() { return inflight.length; },
     // One keeper tick: advance the clock by the keeper's own interval, top up,
@@ -338,6 +366,7 @@ function poolHarness(opts) {
     tick: async () => {
       now += built.KEEPER;
       built.TokenPool.refill();
+      flushIdle();
       const batch = inflight;
       inflight = [];
       batch.forEach(p => p.res("tok" + minted + "_" + Math.random().toString(36).slice(2)));
@@ -384,11 +413,76 @@ async function testPool() {
   // challenges every 2.5s that could only reject.
   {
     const h = poolHarness({ noTurnstile: true });
-    h.pool.refill();
+    h.pump();
     ok("nothing is minted before the Turnstile script loads", h.minted === 0);
     h.win.turnstile = { render: () => {} };
-    h.pool.refill();
+    h.pump();
     ok("minting starts as soon as it is there", h.minted > 0, "minted=" + h.minted);
+  }
+
+  // ── frames come first ─────────────────────────────────────────────────────
+  //
+  // Whatever a challenge costs on a given machine, it stops being paid the
+  // moment it shows in the frame time.
+  // tick() settles whatever it starts, so a slot left in flight cannot mask
+  // the guard by filling the concurrency budget on its own.
+  {
+    const h = poolHarness({ dt: 16 });             // a healthy 60fps
+    await h.tick();
+    ok("healthy frames mint normally", h.minted > 0, "minted=" + h.minted);
+    ok("the panel reports frames as healthy", h.pool.frames === 1);
+
+    const before = h.minted;
+    h.rend._dtSmoothed = 16 * h.k.FPS_SLACK + 5;   // frames have gone long
+    for (let i = 0; i < 10; i++) await h.tick();
+    ok("a frame-rate drop stops minting", h.minted === before, "minted=" + h.minted);
+    ok("the panel reports it holding off", h.pool.frames === 0);
+
+    h.rend._dtSmoothed = 16;                       // recovered
+    await h.tick();
+    ok("recovering resumes it", h.minted > before, "minted=" + h.minted);
+  }
+
+  // The bar is the machine's own baseline, not a fixed frame rate: a machine
+  // that simply runs slower should still be able to fill its pool.
+  {
+    const h = poolHarness({ dt: 40 });             // a steady 25fps machine
+    for (let i = 0; i < 3; i++) await h.tick();
+    const steady = h.minted;
+    ok("a slower machine holding steady still mints", steady >= 3, "minted=" + steady);
+    h.rend._dtSmoothed = 40 * h.k.FPS_SLACK + 5;   // worse than its own normal
+    for (let i = 0; i < 5; i++) await h.tick();
+    ok("and stops when it drops below its own normal", h.minted === steady, "minted=" + h.minted);
+  }
+
+  // Under the floor nothing is wrong on any machine.
+  {
+    const h = poolHarness({ dt: 40 });
+    await h.tick();
+    const before = h.minted;
+    h.rend._dtSmoothed = h.k.FPS_FLOOR - 1;        // 60fps+
+    await h.tick();
+    ok("60fps always mints, whatever the baseline was", h.minted > before, "minted=" + h.minted);
+  }
+
+  // A hidden tab renders nothing, so minting there is cost for no reason.
+  {
+    const h = poolHarness({ hidden: true });
+    for (let i = 0; i < 5; i++) await h.tick();
+    ok("a hidden tab mints nothing", h.minted === 0, "minted=" + h.minted);
+    h.doc.hidden = false;
+    await h.tick();
+    ok("coming back to the tab resumes it", h.minted > 0, "minted=" + h.minted);
+  }
+
+  // Challenges are started from idle, not from the top-up itself.
+  {
+    const h = poolHarness();
+    h.pool.refill();
+    ok("the top-up defers the challenge to idle", h.idlePending > 0 && h.minted === 0, "pending=" + h.idlePending + " minted=" + h.minted);
+    ok("but the slot is claimed straight away", h.pool.minting > 0, "minting=" + h.pool.minting);
+    h.flushIdle();
+    ok("idle time is when it actually starts", h.minted > 0, "minted=" + h.minted);
   }
 
   // ── the frame-rate guard ──────────────────────────────────────────────────
@@ -398,35 +492,35 @@ async function testPool() {
   // two once they have been standing still for a while.
   {
     const h = poolHarness({ speed: 40 });          // running
-    h.pool.refill();
+    h.pump();
     ok("one challenge at a time while moving", h.pool.minting === h.k.MOVING, "minting=" + h.pool.minting);
-    for (let i = 0; i < 10; i++) { h.advance(h.k.KEEPER); h.pool.refill(); }
+    for (let i = 0; i < 10; i++) { h.advance(h.k.KEEPER); h.pump(); }
     ok("still one after ten ticks of moving", h.pool.minting === h.k.MOVING, "minting=" + h.pool.minting);
     ok("the panel reports the moving rate", h.pool.concurrency === h.k.MOVING);
 
     h.client.myPlayer.speed = 0;                   // stopped
     h.advance(h.k.KEEPER);
-    h.pool.refill();
+    h.pump();
     ok("stopping does not open the second slot immediately", h.pool.concurrency === h.k.MOVING);
     h.advance(h.k.STILL_MS);
-    h.pool.refill();
+    h.pump();
     ok("standing still for long enough opens it", h.pool.concurrency === h.k.STILL);
     ok("and a second challenge starts", h.pool.minting === h.k.STILL, "minting=" + h.pool.minting);
 
     h.client.myPlayer.speed = 40;                  // moving again
     h.advance(h.k.KEEPER);
-    h.pool.refill();
+    h.pump();
     ok("moving again closes it", h.pool.concurrency === h.k.MOVING);
 
     // Right on the threshold, and an unreadable speed.
     h.client.myPlayer.speed = h.k.STILL_SPEED;
-    h.pool.refill();                      // starts the stillness clock
+    h.pump();                             // starts the stillness clock
     h.advance(h.k.STILL_MS);
-    h.pool.refill();
+    h.pump();
     ok("the threshold itself counts as still", h.pool.concurrency === h.k.STILL);
     h.client.myPlayer.speed = NaN;
     h.advance(h.k.STILL_MS);
-    h.pool.refill();
+    h.pump();
     ok("an unreadable speed takes the quieter rate", h.pool.concurrency === h.k.MOVING);
   }
 
@@ -434,10 +528,10 @@ async function testPool() {
   // tab parked on the name box mints nothing at all.
   {
     const h = poolHarness({ outOfGame: true });
-    h.pool.refill();
+    h.pump();
     ok("nothing is minted on the menu", h.minted === 0);
     ok("the panel reports it as paused", h.pool.running === false);
-    for (let i = 0; i < 20; i++) h.pool.refill();
+    for (let i = 0; i < 20; i++) h.pump();
     ok("twenty keeper ticks on the menu still mint nothing", h.minted === 0);
 
     h.client.myPlayer.inGame = true;
@@ -450,25 +544,25 @@ async function testPool() {
     h.client.myPlayer.inGame = false;
     const before = h.minted;
     h.pool.take();
-    h.pool.refill();
+    h.pump();
     ok("a death pauses minting", h.minted === before);
     ok("but the pool it already has survives", h.pool.size === h.k.TARGET - 1, "size=" + h.pool.size);
     h.client.myPlayer.inGame = true;
-    h.pool.refill();
+    h.pump();
     ok("respawning resumes it", h.minted > before);
   }
 
   let h = poolHarness();
-  h.pool.refill();
+  h.pump();
   ok("the pool fills once you are in the game", h.minted > 0);
   ok("it does not start forty challenges at once", h.inflight === h.pool.concurrency && h.inflight <= h.k.STILL, "inflight=" + h.inflight);
-  h.pool.refill();
+  h.pump();
   ok("a refill does not double-mint what is already in flight", h.minted === h.pool.concurrency, "minted=" + h.minted);
 
   const rounds = await h.fill();
   ok("it fills to the full forty", h.pool.size === h.k.TARGET, "size=" + h.pool.size);
   ok("in no more ticks than the faster rate allows", rounds <= h.k.TARGET, "rounds=" + rounds);
-  h.pool.refill();
+  h.pump();
   ok("a full pool mints nothing more", h.inflight === 0);
 
   const a = h.pool.take();
@@ -514,11 +608,11 @@ async function testPool() {
 
   {
     const hh = poolHarness();
-    hh.pool.refill();
+    hh.pump();
     const before = hh.minted;
     await hh.failAll();
     ok("a failed mint leaves the pool empty", hh.pool.size === 0);
-    hh.pool.refill();
+    hh.pump();
     ok("a failed mint releases its slot so the keeper retries", hh.minted > before, "minted=" + hh.minted);
   }
 
@@ -534,20 +628,20 @@ async function testPool() {
   // otherwise, it computed nothing to do and never recovered.
   {
     const hh = poolHarness();
-    hh.pool.refill();
+    hh.pump();
     const rate = hh.pool.concurrency;
     ok("every concurrency slot is running", hh.pool.minting === rate, "minting=" + hh.pool.minting);
     // None of them ever settle.
-    for (let i = 0; i < 10; i++) hh.pool.refill();
+    for (let i = 0; i < 10; i++) hh.pump();
     ok("a wedged pool starts nothing new", hh.minted === rate, "minted=" + hh.minted);
     ok("and has nothing to show for it", hh.pool.size === 0);
 
     hh.advance(hh.k.MINT_TIMEOUT - 1);
-    hh.pool.refill();
+    hh.pump();
     ok("a challenge inside its deadline is not written off", hh.pool.stalled === 0, "stalled=" + hh.pool.stalled);
 
     hh.advance(2);
-    hh.pool.refill();
+    hh.pump();
     ok("past the deadline the stuck ones are written off", hh.pool.stalled >= rate, "stalled=" + hh.pool.stalled);
     ok("and the pool starts minting again", hh.minted > rate, "minted=" + hh.minted);
     await hh.fill();
@@ -557,9 +651,9 @@ async function testPool() {
   // A challenge written off and then answered anyway is still a good token.
   {
     const hh = poolHarness();
-    hh.pool.refill();
+    hh.pump();
     hh.advance(hh.k.MINT_TIMEOUT + 1);
-    hh.pool.refill();
+    hh.pump();
     ok("the slow ones were written off", hh.pool.stalled > 0, "stalled=" + hh.pool.stalled);
     const started = hh.minted;
     await hh.settleAll();
@@ -585,7 +679,7 @@ async function testPool() {
   // is served ahead of the pool's shelf.
   {
     const hh = poolHarness();
-    hh.pool.refill();
+    hh.pump();
     const busy = hh.pool.minting;
     ok("the pool is busy and empty", busy > 0 && hh.pool.size === 0);
     const before = hh.minted;
@@ -602,12 +696,14 @@ async function testPool() {
   // Several spawns at once queue rather than each starting a challenge.
   {
     const hh = poolHarness();
-    hh.pool.refill();
+    hh.pump();
     const before = hh.minted;
     const spawns = [ hh.pool.waitFor(5000), hh.pool.waitFor(5000), hh.pool.waitFor(5000) ];
     ok("three waiting spawns start no challenges of their own", hh.minted === before, "minted=" + hh.minted);
     // Served one after another, because the rate limit still applies to them.
-    for (let i = 0; i < 6 && hh.pool.waiting > 0; i++) await hh.settleAll();
+    // Each round: let the queued challenge start, then answer it. One waiter
+    // is served per round, which is the point.
+    for (let i = 0; i < 6 && hh.pool.waiting > 0; i++) { await hh.settleAll(); hh.flushIdle(); }
     const got = await Promise.all(spawns);
     ok("all three are served rather than sent off to mint their own", got.every(t => typeof t === "string"), JSON.stringify(got));
     ok("with three different tokens", new Set(got).size === 3);
@@ -617,7 +713,7 @@ async function testPool() {
   // A waiter must not sit out the full timeout when nothing is coming.
   {
     const hh = poolHarness();
-    hh.pool.refill();
+    hh.pump();
     const spawn = hh.pool.waitFor(5000);
     await hh.failAll();
     const got = await spawn;
