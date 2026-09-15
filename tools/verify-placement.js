@@ -12,11 +12,12 @@ const suites = [
   ['4', 'attrition across a reload cycle, break edge detector, forecast tracking'],
   ['5', 'knockback glide vs the game loop, trap-spike pairing, refusal window, reference cross-check']
 ];
+const healSuite = ['heal', 'auto heal: damage identity, palette, ladder, shame, packets'];
 let failed = 0;
-for (const [n, what] of suites) {
+for (const [n, what] of suites.concat([healSuite])) {
   console.log('\n### suite ' + n + ' — ' + what);
   try {
-    process.stdout.write(execFileSync(process.execPath, [path.join(__dirname, 'verify-placement-' + n + '.js')]).toString());
+    process.stdout.write(execFileSync(process.execPath, [path.join(__dirname, n === 'heal' ? 'verify-heal.js' : 'verify-placement-' + n + '.js')]).toString());
   } catch (e) {
     process.stdout.write((e.stdout || Buffer.from('')).toString());
     process.stderr.write((e.stderr || Buffer.from('')).toString());

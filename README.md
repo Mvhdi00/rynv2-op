@@ -315,11 +315,95 @@ round-trip-independent, but it also cannot ban a genuinely refused slot for
   the free-glide model ignores. That one needs measurement in game, not
   arithmetic, so it was left alone and flagged.
 
+## v3.0 — Auto Heal rebuilt on Falcons V2
+
+The old heal system is gone entirely — class, constants, settings and all
+(1,444 lines removed, 1,027 added). It predicted damage: every tick it summed
+what *could* land and healed against the sum. That reads the board, and reading
+the board is guessing.
+
+Falcon does the opposite, and that inversion is the whole feature:
+
+```
+a damage number arrives  ->  which weapon produces exactly that number?
+                         ->  whose weapon is it?
+                         ->  what else does that player still have loaded?
+                         ->  can that finish me?
+                         ->  which hat survives it, and when do I eat?
+```
+
+Every hit in moomoo is a weapon's base damage times a small set of known
+multipliers, so the observed number **identifies the weapon that produced it**.
+Everything after that is bookkeeping the client already has.
+
+Ported function for function, in Falcon's order: `interpretDamage`,
+`fitsPalette`, `findCachedDamage`, `soldierRound` / `doPreciseValues`,
+`spiekKB` / `simulateMelee`, `checkForSpikePlacements` (32 directions),
+`start0ShameHeal` (both modes), `autoHealing`, `validate`, the four forced
+add-on slots, `onlySoldier`, `checkCanOneTick`, `doTurretTargetLineMath`,
+`getBestWeapon`, `antiSpikeTick`, and the `main` ladder.
+
+### The ladder
+
+| condition | action |
+|---|---|
+| the damage so far will not kill me | hold, eat in two ticks |
+| it will, and EMP alone answers it | EMP helmet, eat next tick |
+| it will, and soldier answers it | soldier helmet, eat next tick |
+| it will, neither does, shame < 7 | eat now, take the shame |
+| it will, and shame is already high | hold |
+
+### Every constant checked against the game tables
+
+Soldier `dmgMult 0.75` · EMP `antiTurret 1` · Bull `healthRegen -5` · Turret
+gear `rate 2500` · Monkey Tail `dmgMultO 0.2` · turret projectile `dmg 25` ·
+spike tiers `20/35/45/30` · attacker multipliers `1 / 1.5 (Bull) / 1.2
+(Bloodthirster)`. `enemies.near` uses Falcon's own rule: `distance - 100 <=
+their primary's range`.
+
+### Four deliberate divergences from Falcon (tagged `PORT-DIFF` in source)
+
+1. **`soldierRound`** — Falcon's non-soldier branch calls `doPreciseValues(e)`
+   with one argument, which turns the float tolerance off. RYN rounds observed
+   damage to 2dp while a palette entry like `35 * 1.1 * 1.5` is
+   `57.75000000000001`, so exact equality would match nothing. Both branches
+   pass both arguments here.
+2. **Ranged damage** — Falcon is a bundle fork whose item table has `dmg: 25`
+   on the hunting bow. The live game does not; the projectile carries it.
+   Reading `weapon.damage` would score every bow, crossbow and musket at zero.
+3. **Result entries carry `sid`** — Falcon looks entries up with
+   `n.find(i => i.sid == e.sid)` and never sets `sid`, so the lookup always
+   misses and a spike hit is counted twice. Setting it makes the author's own
+   merge run.
+4. **`heal()` sends four packets**, not three — select / hit / **stop** /
+   restore, the shape RYN's own `place()` uses. Requested.
+
+Falcon's odder choices were kept because they change what the system decides:
+the monkey-tail multiplier applied after the sum it should scale, and the exact
+polarity of the EMP condition.
+
+### Settings
+
+`_healPriority` is gone — the ladder *is* the system now. Its menu row became
+**Sensitive Healing** (`_sensitiveHealing`), which is Falcon's own toggle: it
+adds the two threats that arrive without a damage number (spikes you are about
+to walk into; a spike an enemy could drop on you), both read off the game's own
+build ring and contact radius. `_autoheal` and `_soldierEMP` are unchanged.
+
+### Verification
+
+`node tools/verify-heal.js` — **79 assertions** against the class lifted out of
+the shipped file: damage identity for melee and ranged, the six-entry palette,
+the float snap, reload and hit windows, knockback landing, every `validate`
+branch, forced add-on timing (including the extra tick of hold RYN needs that
+Falcon does not), both shame modes, the packet budget, and all five rungs of
+the ladder.
+
 ## Verification
 
 ```sh
 node --check Ryn_Type_2.user.js
-node tools/verify-placement.js   # 106 assertions across 5 suites
+node tools/verify-placement.js   # 185 assertions across 6 suites
 ```
 
 Notable results:
