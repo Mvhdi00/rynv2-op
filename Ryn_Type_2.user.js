@@ -1719,26 +1719,26 @@ window.grbtp = 35;
   // ==========================================================================
   const KILL_STYLES = [
     { id: "current",          label: "Current",           life: 0 },
-    { id: "bloodMark",        label: "Blood Mark",        life: 900 },
-    { id: "skullReveal",      label: "Skull Reveal",      life: 1100 },
-    { id: "shatter",          label: "Shatter Kill",      life: 850 },
-    { id: "teleport",         label: "Teleport Death",    life: 620 },
-    { id: "masked",           label: "Masked Death",      life: 1050 },
-    { id: "shadow",           label: "Shadow Death",      life: 1000 },
-    { id: "angel",            label: "Angel Ascension",   life: 1250 },
-    { id: "eye",              label: "Eye of Death",      life: 1000 },
-    { id: "execution",        label: "Execution",         life: 480 },
-    { id: "targetLock",       label: "Target Lock",       life: 800 },
-    { id: "soul",             label: "Soul Extraction",   life: 1150 },
-    { id: "reverseExplosion", label: "Reverse Explosion", life: 700 },
-    { id: "burnOut",          label: "Burn Out",          life: 1100 },
-    { id: "timeBreak",        label: "Time Break",        life: 900 },
-    { id: "mirror",           label: "Mirror Death",      life: 1050 },
-    { id: "lightning",        label: "Lightning Mark",    life: 620 },
-    { id: "web",              label: "Web / Thread",      life: 1000 },
-    { id: "triangle",         label: "Triangle Collapse", life: 900 },
-    { id: "ink",              label: "Ink Death",         life: 1000 },
-    { id: "comet",            label: "Comet Death",       life: 850 },
+    { id: "bloodMark",        label: "Blood Mark",        life: 1500 },
+    { id: "skullReveal",      label: "Skull Reveal",      life: 1900 },
+    { id: "shatter",          label: "Shatter Kill",      life: 1650 },
+    { id: "teleport",         label: "Teleport Death",    life: 1400 },
+    { id: "masked",           label: "Masked Death",      life: 1850 },
+    { id: "shadow",           label: "Shadow Death",      life: 1750 },
+    { id: "angel",            label: "Angel Ascension",   life: 2400 },
+    { id: "eye",              label: "Eye of Death",      life: 1950 },
+    { id: "execution",        label: "Execution",         life: 1250 },
+    { id: "targetLock",       label: "Target Lock",       life: 1600 },
+    { id: "soul",             label: "Soul Extraction",   life: 2200 },
+    { id: "reverseExplosion", label: "Reverse Explosion", life: 1450 },
+    { id: "burnOut",          label: "Burn Out",          life: 2050 },
+    { id: "timeBreak",        label: "Time Break",        life: 1800 },
+    { id: "mirror",           label: "Mirror Death",      life: 1700 },
+    { id: "lightning",        label: "Lightning Mark",    life: 1350 },
+    { id: "web",              label: "Web / Thread",      life: 2000 },
+    { id: "triangle",         label: "Triangle Collapse", life: 1550 },
+    { id: "ink",              label: "Ink Death",         life: 2100 },
+    { id: "comet",            label: "Comet Death",       life: 1300 },
     { id: "random",           label: "Random",            life: 0 }
   ];
   // Random draws from the styles between the two entries that are not styles.
@@ -27852,7 +27852,9 @@ window.grbtp = 35;
   //   and the largest of them is twelve. The pool cap is unchanged, so the
   //   ceiling on the whole system is MAX_ACTIVE_CORPSES animations at once
   //   however many players die at the same moment: past that the oldest slot
-  //   is taken for the newest kill, exactly as it always was.
+  //   is taken for the newest kill, exactly as it always was. The cap was
+  //   already sized against the corpse's own 3100ms, which is longer than any
+  //   style here, so none of them can crowd it harder than the corpse did.
   //
   // Nothing here reads or writes game state. A style is handed a canvas, a
   // slot of primitives and a number between 0 and 1, and it draws. It cannot
@@ -27865,6 +27867,51 @@ window.grbtp = 35;
   // No shadows, no filters, no off-screen canvases, no full-screen work — the
   // most expensive thing any of them does is a clip to one circle.
   // ==========================================================================
+
+  // ==========================================================================
+  // Palettes
+  //
+  // One row per style, five colours each, indexed to match KILL_STYLES. They
+  // are the reason twenty animations read as twenty things rather than one
+  // effect in twenty shapes: every row carries genuinely different hues rather
+  // than five steps down one of them — a hot, a deep, a cool and a highlight
+  // that do not belong to the same family. Blood Mark runs crimson into rust
+  // and finishes on bone; Burn Out puts a blue flame base under its orange
+  // because that is what fire actually does; Mirror splits its silver into a
+  // pink and a green sheen, which is what makes it read as a reflection
+  // rather than a second body.
+  //
+  // Index 0 (Current) and the last index (Random) have no palette: the corpse
+  // draws through the bundle's own player renderer, and Random resolves to one
+  // of the rows below before anything is drawn.
+  //
+  // Read once per draw into named locals. Strings are interned literals, so a
+  // row costs nothing to hold and nothing to read.
+  // ==========================================================================
+  const KILL_PALETTES = [
+    null,                                                              // 0  Current
+    [ "#2a0410", "#b0121a", "#ff3b2f", "#bcd4e8", "#7a2f8f" ],          // 1  Blood Mark ...... clot, blood, arterial, cold bone, bruise
+    [ "#eee8dc", "#7cf5a8", "#2a1338", "#d9a441", "#6b6472" ],          // 2  Skull Reveal .... bone, spectre, socket, gold, ash
+    [ "#0f2b45", "#5ac8f0", "#cfeaff", "#ffffff", "#ff7de3" ],          // 3  Shatter ......... deep ice, cyan, frost, glint, prism
+    [ "#2a0a52", "#a86bff", "#ff4fd8", "#3ff0d0", "#ffffff" ],          // 4  Teleport ........ indigo, violet, magenta, teal, flash
+    [ "#e6dcc8", "#c0392b", "#e0b040", "#241f2b", "#4fae8a" ],          // 5  Masked .......... porcelain, lacquer, gold leaf, charcoal, jade
+    [ "#05040a", "#2b1050", "#c23fd0", "#8a6f5a", "#7fe8dd" ],          // 6  Shadow .......... void, deep, violet rim, warm ash, ghost
+    [ "#ffd77a", "#fffdf2", "#8fd4ff", "#ffb3c8", "#fff3cf" ],          // 7  Angel ........... gold, white, sky, rose, cream
+    [ "#f0e6ff", "#7b2ff7", "#ff9d2e", "#d02b4a", "#120b1e" ],          // 8  Eye ............. sclera, iris, amber, vein, pupil
+    [ "#ffffff", "#e01b2e", "#7f96b8", "#ffcf4d", "#0a0a10" ],          // 9  Execution ....... edge, blood, steel, spark, black
+    [ "#57e0ff", "#7dff8a", "#ffb020", "#ff3b52", "#ffffff" ],          // 10 Target Lock ..... scan, lock, warn, fire, white
+    [ "#8ad8ff", "#ffffff", "#12455e", "#c4a8ff", "#ffd98a" ],          // 11 Soul ............ aura, core, deep, lavender, thread
+    [ "#6a4fd0", "#ff5ce0", "#ff9a3c", "#ffffff", "#0d1040" ],          // 12 Reverse ......... violet, magenta, orange, flash, deep
+    [ "#ff7a2f", "#ffe08a", "#8f1b0c", "#6a6270", "#4fa8ff" ],          // 13 Burn Out ........ flame, yellow, char, smoke, blue base
+    [ "#9fe8ff", "#e8c063", "#ffffff", "#0e3a4a", "#ff5ce0" ],          // 14 Time Break ...... dial, brass, white, deep, glitch
+    [ "#dfe9f5", "#8fb8e0", "#ff9ad8", "#7dffc4", "#1c2430" ],          // 15 Mirror .......... silver, pale, sheen pink, sheen green, slate
+    [ "#ffffff", "#5ab8ff", "#a86bff", "#fff0a0", "#0b1630" ],          // 16 Lightning ....... core, electric, branch, gold flash, navy
+    [ "#ece8f5", "#9b7fd8", "#4fd8c0", "#2a2338", "#ffffff" ],          // 17 Web ............. silk, violet, teal, umber, white
+    [ "#7ef0d0", "#b8ff5c", "#4fa8ff", "#ffffff", "#101a3a" ],          // 18 Triangle ........ teal, lime, blue, white, indigo
+    [ "#0d0b16", "#1e1440", "#6a3fd0", "#2fa898", "#e8e0cc" ],          // 19 Ink ............. ink, indigo, violet sheen, teal sheen, cream
+    [ "#ffd98a", "#ffffff", "#5ce0ff", "#ff6ad5", "#1a1246" ],          // 20 Comet ........... gold, core, tail, spark, deep
+    null                                                               // 21 Random
+  ];
 
   // The body's own radius, which is what every style is drawn in proportion to.
   const KF_BODY = CORPSE_SCALE;
@@ -27880,6 +27927,9 @@ window.grbtp = 35;
   const _kfOut = t => 1 - (1 - t) * (1 - t) * (1 - t);
   // Slow then quickening, for anything falling inward.
   const _kfIn = t => t * t * t;
+  // Up and back down across a window — one number for anything that swells and
+  // subsides, which is most of the flashes below.
+  const _kfBump = t => { const u = t < .5 ? t * 2 : 2 - t * 2; return u * u * (3 - 2 * u); };
   // Deterministic per-particle noise. Integer mixing rather than Math.random,
   // because a particle's entire path has to be recomputable from the slot every
   // frame, and rather than Math.sin because this is the hottest call in the
@@ -27905,7 +27955,7 @@ window.grbtp = 35;
     ctx.fill();
   };
   const _kfRing = (ctx, x, y, r, color, alpha, lw) => {
-    if (alpha <= .004 || r <= .2) return;
+    if (alpha <= .004 || r <= .2 || lw <= 0) return;
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = color;
     ctx.lineWidth = lw;
@@ -27913,8 +27963,17 @@ window.grbtp = 35;
     ctx.arc(x, y, r, 0, KF_TAU);
     ctx.stroke();
   };
+  const _kfArc = (ctx, r, a0, a1, color, alpha, lw) => {
+    if (alpha <= .004 || r <= .2 || lw <= 0) return;
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, a0, a1);
+    ctx.stroke();
+  };
   const _kfLine = (ctx, x0, y0, x1, y1, color, alpha, lw) => {
-    if (alpha <= .004) return;
+    if (alpha <= .004 || lw <= 0) return;
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = color;
     ctx.lineWidth = lw;
@@ -27923,21 +27982,38 @@ window.grbtp = 35;
     ctx.lineTo(x1, y1);
     ctx.stroke();
   };
-  // A small triangular shard, used by everything that breaks. One path, placed
-  // and turned by the caller's transform rather than by recomputing its points.
-  const _kfShard = (ctx, x, y, rot, size, color, alpha) => {
+  // A glow, as two additive discs rather than a blur: the outer colour wide and
+  // faint, the inner one small and bright. A shadowBlur would cost more than
+  // the rest of an animation put together and this reads better, because the
+  // two discs are two different colours.
+  const _kfGlow = (ctx, x, y, r, outer, inner, alpha) => {
+    if (alpha <= .004 || r <= .2) return;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    _kfDisc(ctx, x, y, r, outer, alpha * .4);
+    _kfDisc(ctx, x, y, r * .54, inner, alpha * .9);
+    ctx.restore();
+  };
+  // A small triangular shard with a lit edge, used by everything that breaks.
+  // The fill and the edge are two colours from the style's own row, which is
+  // what keeps a break from reading as grey confetti.
+  const _kfShard = (ctx, x, y, rot, size, fill, edge, alpha) => {
     if (alpha <= .004 || size <= .3) return;
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(rot);
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = color;
+    ctx.fillStyle = fill;
     ctx.beginPath();
     ctx.moveTo(-size, -size * .62);
     ctx.lineTo(size, -size * .24);
     ctx.lineTo(size * .18, size);
     ctx.closePath();
     ctx.fill();
+    ctx.globalAlpha = alpha * .8;
+    ctx.strokeStyle = edge;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
     ctx.restore();
   };
   // The victim, through the bundle's own player renderer — the same call the
@@ -27956,368 +28032,622 @@ window.grbtp = 35;
     draw(view, ctx);
     ctx.restore();
   };
-  // "Becomes a silhouette" everywhere below: one dark disc the size of the
-  // body laid over it. A real silhouette would want a second canvas and a
-  // composite pass per kill; this reads the same at a tenth of the cost,
-  // because a moomoo player is a circle.
-  const _kfSilhouette = (ctx, alpha, color, scale) => _kfDisc(ctx, 0, 0, scale, color, alpha);
+  // A wash over the body: a fill and a rim in two different colours. This is
+  // how a body is recoloured here — crystalline, charred, inked — without a
+  // second canvas or a composite pass per kill.
+  const _kfWash = (ctx, scale, fill, rim, alpha) => {
+    _kfDisc(ctx, 0, 0, scale, fill, alpha);
+    _kfRing(ctx, 0, 0, scale, rim, alpha * .85, 2);
+  };
 
   // ---- 1. Blood Mark --------------------------------------------------------
-  // Sharp and close-range: the hit lands, the ground is marked, the body goes.
-  // The opening hold is the body's own, not the game's — nothing is paused.
+  // clot / blood / arterial / rust / bone.
+  // Impact, a mark that soaks outward, droplets that arc and land, and bone
+  // grit off the hit. The body is the last thing still on the spot.
   const _kfBloodMark = (ctx, slot, t) => {
-    const mark = _kfOut(_kfSpan(t, 0, .1));
-    const markFade = 1 - _kfSpan(t, .62, 1);
-    _kfDisc(ctx, 0, 14, 8 + 32 * mark, "#6d0d14", .5 * markFade);
-    _kfRing(ctx, 0, 14, 11 + 34 * mark, "#b0121a", .7 * markFade, 3);
-    const hit = _kfSpan(t, 0, .2);
+    const P = KILL_PALETTES[1];
+    const clot = P[0], blood = P[1], arterial = P[2], bone = P[3], bruise = P[4];
+    const open = _kfOut(_kfSpan(t, 0, .1));
+    const soak = _kfSmooth(_kfSpan(t, .28, .68));
+    const markA = 1 - _kfSpan(t, .72, 1);
+    const mr = 8 + 30 * open + 10 * soak;
+    _kfDisc(ctx, 0, 14, mr, clot, .58 * markA);
+    _kfDisc(ctx, 0, 14, mr * .58, blood, .5 * markA);
+    _kfRing(ctx, 0, 14, mr + 2, bruise, .55 * markA, 2.5);
+    // The hit: an arterial ring with a bone flash inside it, both gone fast.
+    const hit = _kfSpan(t, 0, .16);
     if (hit < 1) {
-      _kfRing(ctx, 0, 0, 18 + 72 * _kfOut(hit), "#e33b3b", (1 - hit) * .85, 5 - 4 * hit);
+      _kfRing(ctx, 0, 0, 18 + 76 * _kfOut(hit), arterial, (1 - hit) * .9, 5 - 4 * hit);
+      _kfRing(ctx, 0, 0, 10 + 52 * _kfOut(hit), bone, (1 - hit) * .55, 2);
     }
-    const streak = _kfSpan(t, 0, .28);
-    if (streak < 1) {
-      const a = (1 - streak) * .8;
-      const reach = _kfOut(streak);
-      for (let i = 0; i < 6; i++) {
-        const ang = _kfRnd(slot.seed, i) * KF_TAU;
-        const d = 22 + 52 * reach * (.6 + _kfRnd(slot.seed, i + 32) * .8);
-        const c = Math.cos(ang), s = Math.sin(ang);
-        _kfLine(ctx, c * (d - 14), s * (d - 14), c * d, s * d, "#c31a22", a, 3);
+    // Eight droplets, thrown out and falling. Each one lands where it was
+    // always going to land and stays there as a spot.
+    const fly = _kfSpan(t, 0, .34);
+    for (let i = 0; i < 8; i++) {
+      const ang = _kfRnd(slot.seed, i) * KF_TAU;
+      const reach = 34 + 46 * _kfRnd(slot.seed, i + 32);
+      const c = Math.cos(ang), s = Math.sin(ang);
+      if (fly < 1) {
+        const d = reach * _kfOut(fly);
+        const drop = 16 * fly * fly;
+        _kfLine(ctx, c * (d - 12), s * (d - 12) + drop * .6, c * d, s * d + drop, i & 1 ? blood : arterial, 1 - fly * .5, 3);
+      } else {
+        _kfDisc(ctx, c * reach, s * reach + 16, 3.2, clot, .5 * markA);
       }
     }
-    _kfBody(ctx, slot, .85 * (1 - _kfSpan(t, .16, .62)), KF_BODY, 0, 0, 0);
+    const grit = _kfSpan(t, 0, .24);
+    if (grit < 1) {
+      const d = 20 + 60 * _kfOut(grit);
+      for (let i = 0; i < 5; i++) {
+        const ang = _kfRnd(slot.seed, i + 64) * KF_TAU;
+        _kfDisc(ctx, Math.cos(ang) * d, Math.sin(ang) * d, 1.8 * (1 - grit), bone, (1 - grit) * .7);
+      }
+    }
+    _kfBody(ctx, slot, .9 * (1 - _kfSpan(t, .16, .58)), KF_BODY, 0, 0, 0);
   };
 
   // ---- 2. Skull Reveal ------------------------------------------------------
-  const _kfSkull = (ctx, x, y, r, alpha, spin) => {
-    if (alpha <= .004 || r <= .5) return;
+  // bone / spectre / socket / gold / ash.
+  // The skull rises, its sockets light, the jaw drops, and it goes out on a
+  // burst. Ash comes off the body the whole way through.
+  const _kfSkullShape = (ctx, r, alpha, bone, socket, spectre, gold, jaw, lit) => {
     ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(spin);
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = "#e8e8ef";
+    ctx.fillStyle = bone;
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, KF_TAU);
-    ctx.moveTo(-r * .52, r * .55);
-    ctx.lineTo(r * .52, r * .55);
-    ctx.lineTo(r * .34, r * 1.1);
-    ctx.lineTo(-r * .34, r * 1.1);
-    ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = "#1b1b22";
+    // The jaw hangs off its own hinge, so it can drop without the cranium.
+    ctx.save();
+    ctx.translate(0, r * .48);
+    ctx.rotate(jaw * .45);
     ctx.beginPath();
-    ctx.arc(-r * .36, -r * .1, r * .26, 0, KF_TAU);
-    ctx.moveTo(r * .62, -r * .1);
-    ctx.arc(r * .36, -r * .1, r * .26, 0, KF_TAU);
-    ctx.moveTo(0, r * .1);
-    ctx.lineTo(-r * .15, r * .44);
-    ctx.lineTo(r * .15, r * .44);
+    ctx.moveTo(-r * .5, 0);
+    ctx.lineTo(r * .5, 0);
+    ctx.lineTo(r * .32, r * .62);
+    ctx.lineTo(-r * .32, r * .62);
     ctx.closePath();
     ctx.fill();
     ctx.restore();
+    ctx.fillStyle = socket;
+    ctx.beginPath();
+    ctx.arc(-r * .36, -r * .1, r * .27, 0, KF_TAU);
+    ctx.moveTo(r * .63, -r * .1);
+    ctx.arc(r * .36, -r * .1, r * .27, 0, KF_TAU);
+    ctx.moveTo(0, r * .1);
+    ctx.lineTo(-r * .15, r * .42);
+    ctx.lineTo(r * .15, r * .42);
+    ctx.closePath();
+    ctx.fill();
+    // A gold band across the brow, and the light coming on behind the eyes.
+    _kfLine(ctx, -r * .78, -r * .52, r * .78, -r * .52, gold, alpha * .85, r * .15);
+    if (lit > .01) {
+      _kfGlow(ctx, -r * .36, -r * .1, r * .34 * lit, spectre, bone, alpha * lit);
+      _kfGlow(ctx, r * .36, -r * .1, r * .34 * lit, spectre, bone, alpha * lit);
+    }
+    ctx.restore();
   };
   const _kfSkullReveal = (ctx, slot, t) => {
-    _kfBody(ctx, slot, .65 * (1 - _kfSpan(t, .12, .58)), KF_BODY, 0, 0, 0);
-    const rise = _kfOut(_kfSpan(t, 0, .18));
-    const alpha = (1 - _kfSpan(t, .62, 1)) * .95;
-    // Deliberately small, and it turns rather than spins.
-    _kfSkull(ctx, 0, -46 - 6 * rise, 13 * rise, alpha, Math.sin(t * 6.2) * .22);
-    const burst = _kfSpan(t, .64, 1);
+    const P = KILL_PALETTES[2];
+    const bone = P[0], spectre = P[1], socket = P[2], gold = P[3], ash = P[4];
+    _kfBody(ctx, slot, .7 * (1 - _kfSpan(t, .1, .52)), KF_BODY, 0, 0, 0);
+    // Ash off the body, all the way through.
+    const ashA = 1 - _kfSpan(t, .7, 1);
+    for (let i = 0; i < 7; i++) {
+      const u = (t * 1.15 + _kfRnd(slot.seed, i)) % 1;
+      _kfDisc(ctx, (_kfRnd(slot.seed, i + 16) - .5) * 40, 10 - 46 * u, 2.2 * (1 - u), ash, ashA * (1 - u) * .55);
+    }
+    const rise = _kfOut(_kfSpan(t, .04, .26));
+    const alpha = (1 - _kfSpan(t, .72, 1)) * .95;
+    ctx.save();
+    ctx.translate(0, -46 - 8 * rise);
+    ctx.rotate(Math.sin(t * 5.4) * .2);
+    _kfSkullShape(ctx, 13 * rise, alpha, bone, socket, spectre,
+      gold, _kfSmooth(_kfSpan(t, .46, .62)), _kfSmooth(_kfSpan(t, .24, .4)));
+    ctx.restore();
+    const burst = _kfSpan(t, .72, 1);
     if (burst > 0 && burst < 1) {
-      const a = (1 - burst) * .8;
-      const d = 6 + 32 * _kfOut(burst);
+      const a = (1 - burst) * .85;
+      const d = 6 + 40 * _kfOut(burst);
       for (let i = 0; i < 8; i++) {
         const ang = i / 8 * KF_TAU + _kfRnd(slot.seed, i) * .7;
-        _kfDisc(ctx, Math.cos(ang) * d, -46 + Math.sin(ang) * d, 2.4 * (1 - burst) + .6, "#e8e8ef", a);
+        _kfDisc(ctx, Math.cos(ang) * d, -46 + Math.sin(ang) * d, 2.6 * (1 - burst) + .6, i & 1 ? spectre : bone, a);
       }
     }
   };
 
   // ---- 3. Shatter Kill ------------------------------------------------------
+  // deep ice / cyan / frost / glint / prism.
+  // Frost creeps over the body, cracks run through it, it holds one beat as
+  // glass, and then it goes — fragments turning, each catching a prism glint.
   const _kfShatter = (ctx, slot, t) => {
-    if (t < .16) {
-      // Held, and turning to glass: the body under a pale wash with three
-      // cracks opening across it.
-      const glass = _kfSpan(t, 0, .16);
+    const P = KILL_PALETTES[3];
+    const deep = P[0], cyan = P[1], frost = P[2], glint = P[3], prism = P[4];
+    if (t < .34) {
+      const ice = _kfSpan(t, 0, .22);
+      const crack = _kfSpan(t, .18, .34);
       _kfBody(ctx, slot, 1, KF_BODY, 0, 0, 0);
-      _kfSilhouette(ctx, .16 + .28 * glass, "#bfe4ff", KF_BODY);
-      for (let i = 0; i < 3; i++) {
+      _kfWash(ctx, KF_BODY, frost, cyan, .12 + .34 * ice);
+      // A cold core under the frost, so it does not read as a flat tint.
+      _kfDisc(ctx, 0, 0, KF_BODY * .55 * ice, deep, .3 * ice);
+      // Cracks run out from the middle and keep running.
+      for (let i = 0; i < 5; i++) {
         const ang = _kfRnd(slot.seed, i) * KF_TAU;
-        const c = Math.cos(ang) * KF_BODY * .9, s = Math.sin(ang) * KF_BODY * .9;
-        _kfLine(ctx, -c, -s, c, s, "#eaf7ff", glass * .9, 2);
+        const c = Math.cos(ang) * KF_BODY * crack, s = Math.sin(ang) * KF_BODY * crack;
+        _kfLine(ctx, 0, 0, c, s, glint, crack * .9, 2);
+        _kfLine(ctx, c * .55, s * .55, c * .55 - s * .3, s * .55 + c * .3, cyan, crack * .6, 1.4);
       }
+      if (crack >= 1) _kfRing(ctx, 0, 0, KF_BODY, prism, _kfBump(_kfSpan(t, .3, .34)) * .8, 3);
       return;
     }
     // Nine fragments. Not ninety: the silhouette reads as broken at nine, and
     // the count is what this costs.
-    const u = _kfSpan(t, .16, 1);
+    const u = _kfSpan(t, .34, 1);
     const a = (1 - u) * .95;
     const reach = _kfOut(u);
     for (let i = 0; i < 9; i++) {
       const ang = i / 9 * KF_TAU + _kfRnd(slot.seed, i) * .6;
-      const d = 12 + (44 + 40 * _kfRnd(slot.seed, i + 16)) * reach;
-      _kfShard(ctx, Math.cos(ang) * d, Math.sin(ang) * d, ang + u * 2.4, 13 - 5 * _kfRnd(slot.seed, i + 48), "#bfe4ff", a);
+      const d = 12 + (46 + 42 * _kfRnd(slot.seed, i + 16)) * reach;
+      const x = Math.cos(ang) * d, y = Math.sin(ang) * d;
+      _kfShard(ctx, x, y, ang + u * 2.4, 13 - 5 * _kfRnd(slot.seed, i + 48), frost, cyan, a);
+      // Every third fragment turns its face to the light on the way out.
+      if (i % 3 === 0) _kfDisc(ctx, x, y, 2.4, prism, a * _kfBump((u + _kfRnd(slot.seed, i + 80)) % 1));
     }
+    _kfDisc(ctx, 0, 0, 30 * (1 - u), deep, a * .3);
   };
 
   // ---- 4. Teleport Death ----------------------------------------------------
+  // indigo / violet / magenta / teal / flash.
+  // The portal opens under them with a counter-turning inner ring, they warp,
+  // they are pulled down into it, and it shuts on a flash and a few sparks.
   const _kfTeleport = (ctx, slot, t) => {
+    const P = KILL_PALETTES[4];
+    const indigo = P[0], violet = P[1], magenta = P[2], teal = P[3], flash = P[4];
     // The warp is a function of t, so it is the same judder however the frame
     // rate moves under it.
-    const shake = t < .34 ? Math.sin(t * 120) * 3 * (1 - t / .34) : 0;
-    const open = _kfOut(_kfSpan(t, 0, .3));
-    const close = _kfSmooth(_kfSpan(t, .66, 1));
-    const rx = 40 * open * (1 - close);
+    const shake = t < .42 ? Math.sin(t * 108) * 3.2 * (1 - t / .42) : 0;
+    const open = _kfOut(_kfSpan(t, 0, .26));
+    const close = _kfSmooth(_kfSpan(t, .74, 1));
+    const rx = 42 * open * (1 - close);
     if (rx > .5) {
       ctx.save();
       ctx.translate(0, 20);
       ctx.scale(1, .42);
-      _kfDisc(ctx, 0, 0, rx * .82, "#4a1f86", .35);
-      _kfRing(ctx, 0, 0, rx, "#a86bff", .85, 4);
+      _kfDisc(ctx, 0, 0, rx * .86, indigo, .42);
+      _kfRing(ctx, 0, 0, rx, violet, .9, 4);
+      // The inner ring turns the other way, which is what sells it as a hole
+      // rather than a decal.
+      ctx.save();
+      ctx.rotate(-t * 7);
+      for (let i = 0; i < 6; i++) {
+        const b = i / 6 * KF_TAU;
+        _kfArc(ctx, rx * .68, b, b + .55, magenta, .75, 3);
+      }
+      ctx.restore();
+      ctx.rotate(t * 5);
+      for (let i = 0; i < 3; i++) {
+        const b = i / 3 * KF_TAU;
+        _kfArc(ctx, rx * .42, b, b + .8, teal, .7, 2);
+      }
       ctx.restore();
     }
-    const pull = _kfSmooth(_kfSpan(t, .3, .66));
-    _kfBody(ctx, slot, 1 - pull, KF_BODY * (1 - .9 * pull), shake, 20 * pull, pull * 1.2);
+    const pull = _kfSmooth(_kfSpan(t, .3, .72));
+    _kfBody(ctx, slot, 1 - pull, KF_BODY * (1 - .9 * pull), shake, 20 * pull, pull * 1.4);
+    // Gone: a flash on the surface, then sparks off it.
+    const pop = _kfSpan(t, .68, .84);
+    if (pop > 0 && pop < 1) _kfGlow(ctx, 0, 18, 26 * (1 - pop), magenta, flash, 1 - pop);
+    const spark = _kfSpan(t, .7, 1);
+    if (spark > 0 && spark < 1) {
+      const d = 8 + 46 * _kfOut(spark);
+      for (let i = 0; i < 7; i++) {
+        const ang = _kfRnd(slot.seed, i) * KF_TAU;
+        _kfDisc(ctx, Math.cos(ang) * d, 18 + Math.sin(ang) * d * .5, 2.2 * (1 - spark) + .8, i & 1 ? teal : magenta, (1 - spark) * .85);
+      }
+    }
   };
 
   // ---- 5. Masked Death ------------------------------------------------------
-  const _kfMask = (ctx, r, alpha, crack) => {
+  // porcelain / lacquer / gold leaf / charcoal / jade.
+  // A mask forms over them, turns, cracks in two stages, and breaks. The jade
+  // is what was behind it.
+  const _kfMask = (ctx, r, alpha, porcelain, lacquer, gold, charcoal, crack) => {
     if (alpha <= .004 || r <= .5) return;
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = "#d8d2c4";
+    ctx.fillStyle = porcelain;
     ctx.beginPath();
     ctx.ellipse(0, 0, r * .78, r, 0, 0, KF_TAU);
     ctx.fill();
-    ctx.fillStyle = "#26222c";
+    ctx.fillStyle = charcoal;
     ctx.beginPath();
     ctx.ellipse(-r * .34, -r * .16, r * .2, r * .12, .3, 0, KF_TAU);
     ctx.ellipse(r * .34, -r * .16, r * .2, r * .12, -.3, 0, KF_TAU);
     ctx.fill();
+    // Lacquer marks down the cheeks and a gold seam across the brow.
+    _kfLine(ctx, -r * .42, r * .12, -r * .3, r * .62, lacquer, alpha * .85, r * .11);
+    _kfLine(ctx, r * .42, r * .12, r * .3, r * .62, lacquer, alpha * .85, r * .11);
+    _kfLine(ctx, -r * .6, -r * .52, r * .6, -r * .52, gold, alpha * .9, r * .1);
     if (crack > 0) {
-      _kfLine(ctx, 0, -r, -r * .3 * crack, r * .2 * crack, "#26222c", alpha * .8, 1.4);
-      _kfLine(ctx, -r * .3 * crack, r * .2 * crack, r * .12 * crack, r * .9 * crack, "#26222c", alpha * .8, 1.4);
+      _kfLine(ctx, 0, -r, -r * .3 * crack, r * .2 * crack, charcoal, alpha * .85, 1.5);
+      _kfLine(ctx, -r * .3 * crack, r * .2 * crack, r * .14 * crack, r * .95 * crack, charcoal, alpha * .85, 1.5);
+      if (crack > .5) _kfLine(ctx, r * .5 * crack, -r * .7, r * .16, r * .1 * crack, charcoal, alpha * .7, 1.2);
     }
   };
   const _kfMasked = (ctx, slot, t) => {
-    _kfBody(ctx, slot, .9 * (1 - _kfSpan(t, .4, .88)), KF_BODY, 0, 0, 0);
-    const r = 20 * _kfOut(_kfSpan(t, 0, .16));
-    const broken = _kfSpan(t, .62, 1);
+    const P = KILL_PALETTES[5];
+    const porcelain = P[0], lacquer = P[1], gold = P[2], charcoal = P[3], jade = P[4];
+    _kfBody(ctx, slot, .9 * (1 - _kfSpan(t, .46, .9)), KF_BODY, 0, 0, 0);
+    const r = 20 * _kfOut(_kfSpan(t, 0, .18));
+    const broken = _kfSpan(t, .66, 1);
     if (broken <= 0) {
       ctx.save();
       ctx.translate(0, -10);
-      ctx.rotate(Math.sin(t * 5) * .16);
-      _kfMask(ctx, r, .95, _kfSpan(t, .42, .62));
+      ctx.rotate(Math.sin(t * 4.4) * .18);
+      _kfMask(ctx, r, .95, porcelain, lacquer, gold, charcoal, _kfSpan(t, .4, .66));
       ctx.restore();
+      // A jade light behind the mask, brightest just before it goes.
+      _kfGlow(ctx, 0, -10, r * .9, jade, porcelain, _kfSpan(t, .52, .66) * .5);
       return;
     }
     const a = (1 - broken) * .9;
-    const d = 6 + 42 * _kfOut(broken);
+    const d = 6 + 46 * _kfOut(broken);
     for (let i = 0; i < 6; i++) {
       const ang = i / 6 * KF_TAU + _kfRnd(slot.seed, i) * .5;
-      _kfShard(ctx, Math.cos(ang) * d, -10 + Math.sin(ang) * d, ang + broken * 1.8, 6, "#d8d2c4", a);
+      _kfShard(ctx, Math.cos(ang) * d, -10 + Math.sin(ang) * d, ang + broken * 1.8, 7, porcelain, i & 1 ? gold : lacquer, a);
     }
+    _kfGlow(ctx, 0, -10, 22 * (1 - broken), jade, porcelain, a * .7);
   };
 
   // ---- 6. Shadow Death ------------------------------------------------------
+  // void / deep / violet rim / smoke / ghost.
+  // The dark opens underneath, reaches up for them, takes them down, and
+  // closes. A ghost light leaves as it shuts.
   const _kfShadow = (ctx, slot, t) => {
-    const open = _kfOut(_kfSpan(t, 0, .3));
-    const shut = _kfSmooth(_kfSpan(t, .62, .96));
-    _kfDisc(ctx, 0, 12, (16 + 34 * open) * (1 - shut), "#0b0a12", .62 * (1 - _kfSpan(t, .9, 1)));
-    const pull = _kfSmooth(_kfSpan(t, .12, .74));
+    const P = KILL_PALETTES[6];
+    const voidc = P[0], deep = P[1], rim = P[2], ash = P[3], ghost = P[4];
+    const open = _kfOut(_kfSpan(t, 0, .26));
+    const shut = _kfSmooth(_kfSpan(t, .66, .96));
+    const r = (16 + 36 * open) * (1 - shut);
+    const poolA = 1 - _kfSpan(t, .9, 1);
+    _kfDisc(ctx, 0, 12, r, voidc, .66 * poolA);
+    _kfDisc(ctx, 0, 12, r * .62, deep, .5 * poolA);
+    _kfRing(ctx, 0, 12, r, rim, .55 * poolA, 2.5);
+    // Tendrils come up out of it and go back down with it.
+    const reach = _kfBump(_kfSpan(t, .12, .78));
+    for (let i = 0; i < 6; i++) {
+      const ang = i / 6 * KF_TAU + _kfRnd(slot.seed, i) * .5;
+      const c = Math.cos(ang), s = Math.sin(ang);
+      const h = (22 + 16 * _kfRnd(slot.seed, i + 16)) * reach;
+      _kfLine(ctx, c * r * .7, 12 + s * r * .35, c * r * .5, 12 - h, i & 1 ? rim : ash, reach * .6 * poolA, 2.4);
+    }
+    const pull = _kfSmooth(_kfSpan(t, .16, .76));
     const alpha = 1 - pull;
     const scale = KF_BODY * (1 - .45 * pull);
     _kfBody(ctx, slot, alpha, scale, 0, 12 * pull, 0);
-    // Pulled under, not tinted: the disc over the body is the dark taking it.
+    // Pulled under, not tinted: the wash over the body is the dark taking it.
     ctx.save();
     ctx.translate(0, 12 * pull);
-    _kfSilhouette(ctx, .6 * alpha * _kfSmooth(_kfSpan(t, .05, .5)), "#05040a", scale);
+    _kfWash(ctx, scale, voidc, rim, .62 * alpha * _kfSmooth(_kfSpan(t, .05, .5)));
     ctx.restore();
+    // What is left of them, going out as the hole shuts.
+    const out = _kfSpan(t, .7, .98);
+    if (out > 0 && out < 1) _kfGlow(ctx, 0, 6 - 22 * out, 11 * (1 - out), ghost, ash, (1 - out) * .8);
   };
 
   // ---- 7. Angel Ascension ---------------------------------------------------
+  // gold / white / sky / rose / cream.
+  // Halo, wings, a short lift and a slow fade. The rise is thirty-six units
+  // over two and a half seconds: it has to stay readable as a body on the spot
+  // it died on while a fight carries on over it.
   const _kfAngel = (ctx, slot, t) => {
-    // The lift is thirty-four units over the whole animation. It has to stay
-    // readable as a body at the spot it died on while a fight carries on over
-    // it, so it rises just enough to be seen doing it.
-    const y = -34 * _kfOut(t);
-    const a = (1 - _kfSpan(t, .82, 1)) * .95;
-    const spread = _kfOut(_kfSpan(t, .04, .3)) * 34;
+    const P = KILL_PALETTES[7];
+    const gold = P[0], white = P[1], sky = P[2], rose = P[3], cream = P[4];
+    const y = -36 * _kfOut(t);
+    const a = (1 - _kfSpan(t, .84, 1)) * .95;
+    const spread = _kfOut(_kfSpan(t, .06, .34)) * 36;
+    // A column of light standing where they were, under everything else.
+    const beam = _kfBump(_kfSpan(t, .1, .9));
+    if (beam > .01) {
+      ctx.globalAlpha = a * beam * .16;
+      ctx.fillStyle = sky;
+      ctx.beginPath();
+      ctx.moveTo(-26, 26);
+      ctx.lineTo(26, 26);
+      ctx.lineTo(13, -96);
+      ctx.lineTo(-13, -96);
+      ctx.closePath();
+      ctx.fill();
+    }
     ctx.save();
     ctx.translate(0, y - 4);
-    ctx.globalAlpha = a * .8;
-    ctx.strokeStyle = "#ffe9a8";
-    ctx.lineWidth = 3;
     ctx.lineCap = "round";
     for (let s = -1; s <= 1; s += 2) {
+      // Two feathers per wing, the upper one gold and the lower one rose.
+      ctx.globalAlpha = a * .85;
+      ctx.strokeStyle = gold;
+      ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(s * 10, 8);
-      ctx.quadraticCurveTo(s * (14 + spread), -6, s * (8 + spread * .7), -26 - spread * .3);
+      ctx.quadraticCurveTo(s * (14 + spread), -6, s * (8 + spread * .7), -28 - spread * .3);
       ctx.stroke();
+      ctx.globalAlpha = a * .7;
+      ctx.strokeStyle = rose;
+      ctx.lineWidth = 2.4;
       ctx.beginPath();
       ctx.moveTo(s * 10, 10);
       ctx.quadraticCurveTo(s * (12 + spread * .8), 6, s * (6 + spread * .5), -8 - spread * .2);
       ctx.stroke();
     }
     ctx.restore();
-    _kfBody(ctx, slot, .8 * (1 - _kfSpan(t, .42, .9)), KF_BODY, 0, y, 0);
+    _kfBody(ctx, slot, .82 * (1 - _kfSpan(t, .46, .92)), KF_BODY, 0, y, 0);
+    // The halo, tilted, with a white inner edge.
     ctx.save();
-    ctx.translate(0, y - 46);
+    ctx.translate(0, y - 48);
     ctx.scale(1, .34);
-    _kfRing(ctx, 0, 0, 16, "#ffe9a8", a, 4);
+    _kfRing(ctx, 0, 0, 17, gold, a, 4.5);
+    _kfRing(ctx, 0, 0, 13, white, a * .8, 1.6);
     ctx.restore();
-    for (let i = 0; i < 6; i++) {
-      const u = (t * 1.6 + _kfRnd(slot.seed, i)) % 1;
-      _kfDisc(ctx, (_kfRnd(slot.seed, i + 24) - .5) * 34, y + 14 + 26 * u, 2.2 * (1 - u), "#fff3cf", a * (1 - u) * .8);
+    // Motes coming off the lift, cream and sky alternating.
+    for (let i = 0; i < 8; i++) {
+      const u = (t * 1.35 + _kfRnd(slot.seed, i)) % 1;
+      _kfDisc(ctx, (_kfRnd(slot.seed, i + 24) - .5) * 38, y + 16 + 30 * u, 2.4 * (1 - u), i & 1 ? sky : cream, a * (1 - u) * .8);
     }
   };
 
   // ---- 8. Eye of Death ------------------------------------------------------
+  // sclera / iris / amber / vein / pupil.
+  // It opens, the iris narrows onto them, it pulses, the body goes to
+  // silhouette, and it closes. Veins crawl across the white while it watches.
   const _kfEye = (ctx, slot, t) => {
-    const dark = _kfSmooth(_kfSpan(t, .18, .46));
-    const bodyA = 1 - _kfSpan(t, .46, .78);
+    const P = KILL_PALETTES[8];
+    const sclera = P[0], iris = P[1], amber = P[2], vein = P[3], pupil = P[4];
+    const dark = _kfSmooth(_kfSpan(t, .22, .5));
+    const bodyA = 1 - _kfSpan(t, .52, .84);
     _kfBody(ctx, slot, bodyA * (1 - dark * .55), KF_BODY, 0, 0, 0);
-    _kfSilhouette(ctx, dark * bodyA * .8, "#140f1e", KF_BODY);
-    const pulse = _kfSpan(t, .3, .5);
+    _kfWash(ctx, KF_BODY, pupil, iris, dark * bodyA * .8);
+    // The pulse it sends down, amber outside and violet in.
+    const pulse = _kfSpan(t, .34, .56);
     if (pulse > 0 && pulse < 1) {
-      _kfRing(ctx, 0, -44, 8 + 56 * _kfOut(pulse), "#b18cff", (1 - pulse) * .6, 3);
+      _kfRing(ctx, 0, -46, 8 + 62 * _kfOut(pulse), amber, (1 - pulse) * .65, 3);
+      _kfRing(ctx, 0, -46, 4 + 44 * _kfOut(pulse), iris, (1 - pulse) * .5, 2);
     }
     // One number opens and closes it: the lid is the eye's own height.
-    const lid = _kfSmooth(_kfSpan(t, .04, .28)) * (1 - _kfSmooth(_kfSpan(t, .68, .9)));
-    if (lid <= .01) return;
-    const a = 1 - _kfSpan(t, .86, 1);
+    const lid = _kfSmooth(_kfSpan(t, .05, .26)) * (1 - _kfSmooth(_kfSpan(t, .74, .94)));
+    const a = 1 - _kfSpan(t, .88, 1);
+    // Shut: the seam where it was, and the last thing on screen.
+    if (lid <= .01) {
+      _kfLine(ctx, -17, -46, 17, -46, sclera, a * .55, 1.8);
+      _kfLine(ctx, -9, -46, 9, -46, iris, a * .35, 1.2);
+      return;
+    }
     const wide = Math.min(1, lid * 1.6);
+    // The iris narrows as it focuses, and widens again as the lid comes down.
+    const focus = 1 - .45 * _kfBump(_kfSpan(t, .26, .74));
     ctx.save();
-    ctx.translate(0, -44);
+    ctx.translate(0, -46);
     ctx.globalAlpha = a;
-    ctx.fillStyle = "#f2ecff";
+    ctx.fillStyle = sclera;
     ctx.beginPath();
-    ctx.ellipse(0, 0, 17, 17 * lid, 0, 0, KF_TAU);
+    ctx.ellipse(0, 0, 18, 18 * lid, 0, 0, KF_TAU);
     ctx.fill();
-    ctx.fillStyle = "#6a2fd0";
+    // Veins, only while it is properly open.
+    for (let i = 0; i < 4; i++) {
+      const b = _kfRnd(slot.seed, i) * KF_TAU;
+      const c = Math.cos(b), s = Math.sin(b) * lid;
+      _kfLine(ctx, c * 17, s * 17, c * 9, s * 9, vein, a * lid * .7, 1.2);
+    }
+    _kfDisc(ctx, 0, 0, 8 * wide * focus, amber, a * .9);
     ctx.beginPath();
-    ctx.ellipse(0, 0, 7 * wide, 7 * lid, 0, 0, KF_TAU);
+    ctx.fillStyle = iris;
+    ctx.ellipse(0, 0, 6.6 * wide * focus, 6.6 * lid * focus, 0, 0, KF_TAU);
     ctx.fill();
-    ctx.fillStyle = "#140f1e";
     ctx.beginPath();
-    ctx.ellipse(0, 0, 3 * wide, 3.4 * lid, 0, 0, KF_TAU);
+    ctx.fillStyle = pupil;
+    ctx.ellipse(0, 0, 3.2 * wide * focus, 3.6 * lid * focus, 0, 0, KF_TAU);
     ctx.fill();
     ctx.restore();
   };
 
   // ---- 9. Execution ---------------------------------------------------------
+  // edge / blood / steel / spark / black.
+  // Two cuts, crossed, a steel afterimage that slides apart along the first of
+  // them, and a spark shower off the second. Still the fastest opening of the
+  // twenty — the first cut lands inside a fifth of a second.
   const _kfExecution = (ctx, slot, t) => {
-    // The shortest of them by a long way. It is one cut and an afterimage, and
-    // it is over before anything else would have finished opening.
-    const ang = slot.angle + .9;
-    const c = Math.cos(ang), s = Math.sin(ang);
-    const cut = _kfSpan(t, .06, .26);
+    const P = KILL_PALETTES[9];
+    const edge = P[0], blood = P[1], steel = P[2], spark = P[3], black = P[4];
+    const a1 = slot.angle + .9, a2 = slot.angle - .75;
+    const c1 = Math.cos(a1), s1 = Math.sin(a1);
+    const c2 = Math.cos(a2), s2 = Math.sin(a2);
+    // First cut.
+    const cut = _kfSpan(t, .04, .2);
     if (cut > 0) {
-      if (cut < 1) {
-        const L = 58 * _kfOut(cut);
-        _kfLine(ctx, -c * L, -s * L, c * L, s * L, "#ffffff", 1 - cut * .4, 3.5);
-      } else {
-        // Drawn out, then gone: the line lingers a beat past the cut and no
-        // longer than that.
-        _kfLine(ctx, -c * 58, -s * 58, c * 58, s * 58, "#ffffff", (1 - _kfSpan(t, .26, .5)) * .5, 2);
+      const L = 60 * _kfOut(cut);
+      const fade = cut < 1 ? 1 : 1 - _kfSpan(t, .2, .5);
+      _kfLine(ctx, -c1 * L, -s1 * L, c1 * L, s1 * L, edge, fade, cut < 1 ? 3.5 : 2);
+      _kfLine(ctx, -c1 * L * .8, -s1 * L * .8, c1 * L * .8, s1 * L * .8, blood, fade * .6, 1.4);
+    }
+    // Second cut, crossing it.
+    const cut2 = _kfSpan(t, .26, .42);
+    if (cut2 > 0) {
+      const L = 54 * _kfOut(cut2);
+      const fade = cut2 < 1 ? 1 : 1 - _kfSpan(t, .42, .68);
+      _kfLine(ctx, -c2 * L, -s2 * L, c2 * L, s2 * L, edge, fade, cut2 < 1 ? 3 : 1.8);
+      _kfLine(ctx, -c2 * L * .8, -s2 * L * .8, c2 * L * .8, s2 * L * .8, blood, fade * .6, 1.4);
+    }
+    // The afterimage slides apart across the first cut.
+    const split = _kfSpan(t, .2, .72);
+    if (split < 1) {
+      const push = 13 * _kfOut(split);
+      const ga = (1 - split) * .45;
+      _kfDisc(ctx, -s1 * push, c1 * push, KF_BODY * .92, steel, ga);
+      _kfDisc(ctx, s1 * push, -c1 * push, KF_BODY * .92, black, ga * .8);
+    }
+    // Sparks off the second cut, thrown along it.
+    const sp = _kfSpan(t, .3, .82);
+    if (sp > 0 && sp < 1) {
+      for (let i = 0; i < 7; i++) {
+        const dir = i & 1 ? 1 : -1;
+        const d = (24 + 58 * _kfRnd(slot.seed, i)) * _kfOut(sp) * dir;
+        const off = (_kfRnd(slot.seed, i + 16) - .5) * 14;
+        _kfDisc(ctx, c2 * d - s2 * off, s2 * d + c2 * off, 2 * (1 - sp) + .5, i % 3 ? spark : blood, (1 - sp) * .9);
       }
     }
-    const ghost = _kfSpan(t, .18, .58);
-    if (ghost < 1) {
-      _kfDisc(ctx, -s * 9 * ghost, c * 9 * ghost, KF_BODY, "#dfe4ff", (1 - ghost) * .4);
-    }
-    _kfBody(ctx, slot, 1 - _kfSpan(t, .12, .32), KF_BODY, 0, 0, 0);
+    // What is left on the ground once the cuts are done, and the last thing to
+    // go — so the style uses the whole of its life rather than the first half.
+    _kfDisc(ctx, 0, 16, 5 + 13 * _kfOut(_kfSpan(t, .2, .58)), blood, .42 * (1 - _kfSpan(t, .55, 1)));
+    _kfBody(ctx, slot, 1 - _kfSpan(t, .1, .3), KF_BODY, 0, 0, 0);
   };
 
   // ---- 10. Target Lock ------------------------------------------------------
+  // scan / lock / warn / fire / white.
+  // A HUD that acquires: cyan while it sweeps, green when it locks, amber on
+  // the count, red as it fires, and then the reticle comes apart.
   const _kfTargetLock = (ctx, slot, t) => {
-    const close = _kfSmooth(_kfSpan(t, 0, .45));
-    const r = 70 - 32 * close;
-    const broke = _kfSpan(t, .52, .9);
+    const P = KILL_PALETTES[10];
+    const scan = P[0], lock = P[1], warn = P[2], fire = P[3], white = P[4];
+    const close = _kfSmooth(_kfSpan(t, 0, .4));
+    const r = 74 - 34 * close;
+    const broke = _kfSpan(t, .62, 1);
+    // The colour is the state, which is what makes it read as a system rather
+    // than a circle: sweeping, locked, counting, firing.
+    const phase = t < .4 ? scan : t < .52 ? lock : t < .62 ? warn : fire;
     if (broke <= 0) {
-      _kfRing(ctx, 0, 0, r, "#57e0ff", .85, 2);
+      _kfRing(ctx, 0, 0, r, phase, .85, 2);
+      _kfRing(ctx, 0, 0, r * .42, phase, .5, 1.2);
+      // Crosshairs.
+      _kfLine(ctx, -r - 8, 0, -r * .5, 0, phase, .7, 1.5);
+      _kfLine(ctx, r * .5, 0, r + 8, 0, phase, .7, 1.5);
+      _kfLine(ctx, 0, -r - 8, 0, -r * .5, phase, .7, 1.5);
+      _kfLine(ctx, 0, r * .5, 0, r + 8, phase, .7, 1.5);
       ctx.save();
-      ctx.rotate(close * 1.1);
-      ctx.globalAlpha = .95;
-      ctx.strokeStyle = "#57e0ff";
-      ctx.lineWidth = 3;
+      ctx.rotate(close * 1.2);
       for (let i = 0; i < 4; i++) {
         const b = i / 4 * KF_TAU;
-        ctx.beginPath();
-        ctx.arc(0, 0, r + 7, b - .3, b + .3);
-        ctx.stroke();
+        _kfArc(ctx, r + 7, b - .3, b + .3, phase, .95, 3);
       }
       ctx.restore();
-      const lock = _kfSpan(t, .4, .52);
-      if (lock > 0) _kfRing(ctx, 0, 0, r + 4 + 10 * lock, "#ffffff", (1 - lock) * .8, 2);
+      // A sweep line while it is still looking, and a white flash on the lock.
+      if (t < .4) _kfLine(ctx, 0, 0, Math.cos(t * 12) * r, Math.sin(t * 12) * r, scan, .5, 1.5);
+      const flash = _kfSpan(t, .4, .52);
+      if (flash > 0 && flash < 1) _kfRing(ctx, 0, 0, r + 4 + 14 * flash, white, (1 - flash) * .85, 2);
+      // Four ticks counting in while it is armed.
+      const arm = _kfSpan(t, .46, .62);
+      if (arm > 0) {
+        for (let i = 0; i < 4; i++) {
+          if (arm * 4 <= i) break;
+          const b = i / 4 * KF_TAU + .4;
+          _kfDisc(ctx, Math.cos(b) * (r + 16), Math.sin(b) * (r + 16), 2.6, warn, .9);
+        }
+      }
     } else {
-      // The ring comes apart into the four arcs it was made of.
+      // The reticle comes apart into the four arcs it was made of.
       const a = 1 - broke;
       const out = _kfOut(broke);
-      ctx.save();
-      ctx.globalAlpha = a * .9;
-      ctx.strokeStyle = "#57e0ff";
-      ctx.lineWidth = 2;
       for (let i = 0; i < 4; i++) {
         const b = i / 4 * KF_TAU + .3 + broke * .8;
         const half = .5 - broke * .3;
-        ctx.beginPath();
-        ctx.arc(0, 0, r + 40 * out, b - half, b + half);
-        ctx.stroke();
+        _kfArc(ctx, r + 44 * out, b - half, b + half, fire, a * .9, 2);
       }
-      ctx.restore();
+      _kfGlow(ctx, 0, 0, 30 * (1 - broke), fire, white, a * .6);
     }
-    _kfBody(ctx, slot, 1 - _kfSpan(t, .42, .82), KF_BODY, 0, 0, 0);
+    _kfBody(ctx, slot, 1 - _kfSpan(t, .56, .88), KF_BODY, 0, 0, 0);
   };
 
   // ---- 11. Soul Extraction --------------------------------------------------
+  // aura / core / deep / lavender / thread.
+  // The orb pulls out of them on a gold thread, rises, turns, brightens once,
+  // and goes. The body follows it a beat later.
   const _kfSoul = (ctx, slot, t) => {
-    // The body outlives the orb by a beat, and then goes at once.
-    _kfBody(ctx, slot, .95 * (1 - _kfSpan(t, .5, .84)), KF_BODY, 0, 0, 0);
-    const y = -6 - 40 * _kfOut(_kfSpan(t, .08, .82));
-    const a = (1 - _kfSpan(t, .7, .92)) * _kfSmooth(_kfSpan(t, 0, .12));
-    const pulse = 1 + Math.sin(t * 14) * .12;
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
-    _kfDisc(ctx, 0, y, 13 * pulse, "#2a5f8a", a * .5);
-    _kfDisc(ctx, 0, y, 8 * pulse, "#8ad8ff", a * .95);
-    ctx.restore();
-    // Its rotation, at three draws.
+    const P = KILL_PALETTES[11];
+    const aura = P[0], core = P[1], deep = P[2], lavender = P[3], thread = P[4];
+    _kfBody(ctx, slot, .95 * (1 - _kfSpan(t, .58, .88)), KF_BODY, 0, 0, 0);
+    _kfWash(ctx, KF_BODY, deep, aura, _kfSmooth(_kfSpan(t, .2, .6)) * .3 * (1 - _kfSpan(t, .58, .88)));
+    const lift = _kfOut(_kfSpan(t, .1, .84));
+    const y = -6 - 44 * lift;
+    const a = (1 - _kfSpan(t, .76, .95)) * _kfSmooth(_kfSpan(t, 0, .12));
+    // The thread it is drawn out on, still attached until it is nearly gone.
+    const tether = 1 - _kfSpan(t, .58, .8);
+    if (tether > 0) {
+      ctx.globalAlpha = a * tether * .7;
+      ctx.strokeStyle = thread;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(0, 2);
+      ctx.quadraticCurveTo(7 * Math.sin(t * 6), (y + 2) * .5, 0, y);
+      ctx.stroke();
+    }
+    // One swell partway up, which is the moment it comes free.
+    const swell = 1 + .28 * _kfBump(_kfSpan(t, .4, .62)) + Math.sin(t * 13) * .09;
+    _kfGlow(ctx, 0, y, 15 * swell, aura, core, a);
+    _kfDisc(ctx, 0, y, 4.5 * swell, core, a);
+    // Its rotation, at three motes.
     for (let i = 0; i < 3; i++) {
-      const ang = t * 7 + i / 3 * KF_TAU;
-      _kfDisc(ctx, Math.cos(ang) * 14, y + Math.sin(ang) * 5, 2, "#d6f2ff", a * .8);
+      const ang = t * 6.5 + i / 3 * KF_TAU;
+      _kfDisc(ctx, Math.cos(ang) * 15, y + Math.sin(ang) * 5.5, 2.2, i ? lavender : thread, a * .85);
+    }
+    // And it lets go.
+    const gone = _kfSpan(t, .8, 1);
+    if (gone > 0 && gone < 1) {
+      const d = 6 + 34 * _kfOut(gone);
+      for (let i = 0; i < 6; i++) {
+        const ang = i / 6 * KF_TAU + _kfRnd(slot.seed, i) * .6;
+        _kfDisc(ctx, Math.cos(ang) * d, y + Math.sin(ang) * d, 2 * (1 - gone) + .7, i & 1 ? lavender : aura, (1 - gone) * .8);
+      }
     }
   };
 
   // ---- 12. Reverse Explosion ------------------------------------------------
+  // violet / magenta / orange / flash / deep.
+  // Everything falls inward instead of out, spiralling as it comes, and the
+  // flash at the middle throws one ring back the other way.
   const _kfReverse = (ctx, slot, t) => {
-    const u = _kfSpan(t, 0, .62);
+    const P = KILL_PALETTES[12];
+    const violet = P[0], magenta = P[1], orange = P[2], flash = P[3], deep = P[4];
+    const u = _kfSpan(t, 0, .66);
     // Inward and accelerating — the opposite curve to everything thrown
     // outward above, which is the whole point of it.
     const inward = 1 - _kfIn(u);
     if (u < 1) {
+      // A dark well at the middle that deepens as they arrive.
+      _kfDisc(ctx, 0, 0, 20 * (1 - inward), deep, .5 * (1 - inward));
       for (let i = 0; i < 12; i++) {
-        const ang = i / 12 * KF_TAU + _kfRnd(slot.seed, i) * .5;
-        const d = (60 + 26 * _kfRnd(slot.seed, i + 16)) * inward;
-        _kfDisc(ctx, Math.cos(ang) * d, Math.sin(ang) * d, 2.2 + 1.6 * (1 - inward), "#c9a6ff", .9);
+        // The spiral: each one turns as it falls, so it curves in rather than
+        // dropping straight down a spoke.
+        const ang = i / 12 * KF_TAU + _kfRnd(slot.seed, i) * .5 + (1 - inward) * 1.9;
+        const d = (62 + 28 * _kfRnd(slot.seed, i + 16)) * inward;
+        const c = Math.cos(ang), s = Math.sin(ang);
+        const col = i % 3 === 0 ? orange : i & 1 ? magenta : violet;
+        // A short tail behind each, pointing back the way it came.
+        _kfLine(ctx, c * (d + 11), s * (d + 11), c * d, s * d, col, .45 * (1 - inward), 2);
+        _kfDisc(ctx, c * d, s * d, 2.2 + 1.8 * (1 - inward), col, .95);
       }
     }
-    const crush = _kfSpan(t, .34, .64);
-    _kfBody(ctx, slot, 1 - crush, KF_BODY * (1 - .3 * crush), 0, 0, 0);
-    const flash = _kfSpan(t, .6, .82);
-    if (flash > 0 && flash < 1) {
-      ctx.save();
-      ctx.globalCompositeOperation = "lighter";
-      _kfDisc(ctx, 0, 0, 30 * (1 - flash), "#ffffff", 1 - flash);
-      ctx.restore();
+    const crush = _kfSpan(t, .36, .68);
+    _kfBody(ctx, slot, 1 - crush, KF_BODY * (1 - .35 * crush), 0, 0, crush * .8);
+    const fl = _kfSpan(t, .64, 1);
+    if (fl > 0 && fl < 1) {
+      _kfGlow(ctx, 0, 0, 34 * (1 - fl), magenta, flash, 1 - fl);
+      // One ring back outward, which is the only thing here that goes out.
+      _kfRing(ctx, 0, 0, 10 + 76 * _kfOut(fl), orange, (1 - fl) * .7, 4 - 3 * fl);
     }
   };
 
   // ---- 13. Burn Out ---------------------------------------------------------
+  // flame / yellow / char / smoke / blue base.
+  // It burns inward from the edge, leaves a char ring behind the flame front,
+  // throws embers, and the smoke outlives all of it. The blue at the base of
+  // the front is what makes it read as fire rather than an orange tint.
   const _kfBurnOut = (ctx, slot, t) => {
+    const P = KILL_PALETTES[13];
+    const flame = P[0], yellow = P[1], char = P[2], smoke = P[3], blue = P[4];
     // Burning inward from the edges is one shrinking circular clip over the
     // ordinary body draw. No mask canvas, no per-pixel work, no fire.
-    const burn = _kfSmooth(_kfSpan(t, .04, .7));
+    const burn = _kfSmooth(_kfSpan(t, .05, .68));
     const r = KF_BODY * (1 - burn);
+    // What the front has already eaten, left as char.
+    if (burn > .01 && burn < 1) {
+      _kfRing(ctx, 0, 0, (KF_BODY + r) * .5, char, .5 * (1 - _kfSpan(t, .68, .86)), (KF_BODY - r));
+    }
     if (r > 1) {
       ctx.save();
       ctx.beginPath();
@@ -28325,106 +28655,159 @@ window.grbtp = 35;
       ctx.clip();
       _kfBody(ctx, slot, 1, KF_BODY, 0, 0, 0);
       ctx.restore();
-      _kfRing(ctx, 0, 0, r, "#ff8a3d", .9, 3);
-      _kfRing(ctx, 0, 0, r - 2, "#ffd27a", .5, 1.5);
+      // The front: blue at the base, flame over it, yellow at the lip.
+      _kfRing(ctx, 0, 0, r + 1.5, blue, .55, 4);
+      _kfRing(ctx, 0, 0, r, flame, .95, 3);
+      _kfRing(ctx, 0, 0, r - 2, yellow, .7, 1.6);
     }
-    const a = 1 - _kfSpan(t, .74, 1);
+    const a = 1 - _kfSpan(t, .8, 1);
     const rim = KF_BODY * (1 - burn * .6);
     for (let i = 0; i < 10; i++) {
-      const u = (t * 1.35 + _kfRnd(slot.seed, i)) % 1;
+      const u = (t * 1.3 + _kfRnd(slot.seed, i)) % 1;
       const ang = _kfRnd(slot.seed, i + 16) * KF_TAU;
-      const x = Math.cos(ang) * rim * .9 + (_kfRnd(slot.seed, i + 32) - .5) * 10;
-      _kfDisc(ctx, x, Math.sin(ang) * rim * .5 - 34 * u, 2.4 * (1 - u) + .5, u < .5 ? "#ffcf6e" : "#ff7a2f", a * (1 - u) * .95);
+      const x = Math.cos(ang) * rim * .9 + (_kfRnd(slot.seed, i + 32) - .5) * 12;
+      // An ember cools as it rises: yellow, then flame, then char.
+      const col = u < .3 ? yellow : u < .68 ? flame : char;
+      _kfDisc(ctx, x, Math.sin(ang) * rim * .5 - 40 * u, 2.6 * (1 - u) + .5, col, a * (1 - u) * .95);
     }
-    // Four wisps, wide and faint enough to read as smoke without one shadow.
-    for (let i = 0; i < 4; i++) {
-      const u = (t * .9 + _kfRnd(slot.seed, i + 64)) % 1;
-      _kfDisc(ctx, (_kfRnd(slot.seed, i + 80) - .5) * 26, -16 - 40 * u, 5 + 12 * u, "#6a6270", a * (1 - u) * .22);
+    // Smoke, wide and faint, and the last thing still there.
+    for (let i = 0; i < 5; i++) {
+      const u = (t * .8 + _kfRnd(slot.seed, i + 64)) % 1;
+      _kfDisc(ctx, (_kfRnd(slot.seed, i + 80) - .5) * 30 + 9 * u, -14 - 48 * u, 5 + 15 * u, smoke, a * (1 - u) * .24);
     }
   };
 
   // ---- 14. Time Break -------------------------------------------------------
+  // dial / brass / white / deep / glitch.
+  // The dial spins up, stutters backward once, and the frame it was holding
+  // cracks and falls out of it. The magenta is the stutter.
   const _kfTimeBreak = (ctx, slot, t) => {
-    const a = 1 - _kfSpan(t, .8, 1);
+    const P = KILL_PALETTES[14];
+    const dial = P[0], brass = P[1], white = P[2], deep = P[3], glitch = P[4];
+    const a = 1 - _kfSpan(t, .84, 1);
+    // One stutter backward, partway through, before it runs on again.
+    const rewind = _kfBump(_kfSpan(t, .36, .52));
+    const spin = t * 17 - rewind * 4.2;
+    _kfDisc(ctx, 0, 0, 46, deep, a * .22);
     ctx.save();
     ctx.globalAlpha = a * .85;
-    ctx.strokeStyle = "#9fe8ff";
+    ctx.strokeStyle = dial;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(0, 0, 46, 0, KF_TAU);
-    for (let i = 0; i < 8; i++) {
-      const b = i / 8 * KF_TAU;
+    for (let i = 0; i < 12; i++) {
+      const b = i / 12 * KF_TAU;
       const c = Math.cos(b), s = Math.sin(b);
-      ctx.moveTo(c * 40, s * 40);
+      const inner = i % 3 === 0 ? 37 : 41;
+      ctx.moveTo(c * inner, s * inner);
       ctx.lineTo(c * 46, s * 46);
     }
     ctx.stroke();
-    // The hand runs sixteen turns in under a second, which is the effect.
-    ctx.rotate(t * 16);
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(0, -34);
-    ctx.stroke();
     ctx.restore();
-    if (t < .55) {
+    // Brass hands, one fast and one slow, and a magenta ghost of the fast one
+    // left behind while it stutters.
+    _kfLine(ctx, 0, 0, Math.sin(spin) * 34, -Math.cos(spin) * 34, brass, a * .95, 2.4);
+    _kfLine(ctx, 0, 0, Math.sin(spin * .31) * 22, -Math.cos(spin * .31) * 22, brass, a * .8, 3.2);
+    if (rewind > .02) {
+      const g = spin + 1.4;
+      _kfLine(ctx, 0, 0, Math.sin(g) * 34, -Math.cos(g) * 34, glitch, a * rewind * .8, 2);
+      _kfRing(ctx, 0, 0, 46, glitch, a * rewind * .6, 2);
+    }
+    _kfDisc(ctx, 0, 0, 3.4, brass, a);
+    if (t < .6) {
       // Held while the dial runs on over it.
       _kfBody(ctx, slot, 1, KF_BODY, 0, 0, 0);
-      const cr = _kfSpan(t, .4, .55);
-      for (let i = 0; i < 4; i++) {
+      const cr = _kfSpan(t, .44, .6);
+      for (let i = 0; i < 5; i++) {
         const b = _kfRnd(slot.seed, i) * KF_TAU;
-        _kfLine(ctx, 0, 0, Math.cos(b) * KF_BODY * cr, Math.sin(b) * KF_BODY * cr, "#d9f6ff", cr * .9, 2);
+        const c = Math.cos(b) * KF_BODY * cr, s = Math.sin(b) * KF_BODY * cr;
+        _kfLine(ctx, 0, 0, c, s, white, cr * .9, 2);
+        _kfLine(ctx, c * .6, s * .6, c * .6 - s * .28, s * .6 + c * .28, dial, cr * .6, 1.3);
       }
       return;
     }
-    const u = _kfSpan(t, .55, 1);
-    const d = 8 + 38 * _kfOut(u);
+    const u = _kfSpan(t, .6, 1);
+    const d = 8 + 40 * _kfOut(u);
     for (let i = 0; i < 6; i++) {
       const b = i / 6 * KF_TAU + _kfRnd(slot.seed, i) * .4;
-      _kfShard(ctx, Math.cos(b) * d, Math.sin(b) * d, b + u * 1.6, 9, "#cfeeff", (1 - u) * .9);
+      _kfShard(ctx, Math.cos(b) * d, Math.sin(b) * d, b + u * 1.6, 9, white, i & 1 ? dial : brass, (1 - u) * .9);
     }
   };
 
   // ---- 15. Mirror Death -----------------------------------------------------
+  // silver / pale / sheen pink / sheen green / slate.
+  // The reflection separates, drifts the other way, catches the light in two
+  // colours, then crazes over and falls out of its own frame.
   const _kfMirror = (ctx, slot, t) => {
-    _kfBody(ctx, slot, 1 - _kfSpan(t, .08, .46), KF_BODY, 0, 0, 0);
+    const P = KILL_PALETTES[15];
+    const silver = P[0], pale = P[1], pink = P[2], green = P[3], slate = P[4];
+    _kfBody(ctx, slot, 1 - _kfSpan(t, .1, .5), KF_BODY, 0, 0, 0);
     // The reflection sits behind the body along its own facing and drifts the
     // other way — mirrored by the transform, so it is the same one draw.
-    const drift = _kfOut(_kfSpan(t, .12, .74)) * 30;
+    const drift = _kfOut(_kfSpan(t, .14, .76)) * 32;
     const c = Math.cos(slot.angle), s = Math.sin(slot.angle);
     const mx = -c * drift, my = -s * drift;
-    const broke = _kfSpan(t, .72, 1);
+    const broke = _kfSpan(t, .76, 1);
     if (broke <= 0) {
       ctx.save();
       ctx.translate(mx, my);
       ctx.scale(-1, 1);
-      _kfBody(ctx, slot, .5, KF_BODY, 0, 0, 0);
+      _kfBody(ctx, slot, .55, KF_BODY, 0, 0, 0);
       ctx.restore();
-      const cr = _kfSpan(t, .55, .72);
-      for (let i = 0; i < 3; i++) {
+      // The sheen crossing it: pink one way, green the other, offset in time
+      // so the two never sit on the same edge.
+      const sweep = _kfSpan(t, .2, .7);
+      const sx = (sweep * 2 - 1) * KF_BODY;
+      _kfLine(ctx, mx + sx - 6, my - 30, mx + sx + 6, my + 30, pink, _kfBump(sweep) * .8, 5);
+      const sweep2 = _kfSpan(t, .34, .84);
+      const sx2 = (1 - sweep2 * 2) * KF_BODY;
+      _kfLine(ctx, mx + sx2 - 5, my - 28, mx + sx2 + 5, my + 28, green, _kfBump(sweep2) * .7, 4);
+      _kfRing(ctx, mx, my, KF_BODY, silver, .5, 1.6);
+      // Crazing, before it goes.
+      const cr = _kfSpan(t, .6, .76);
+      for (let i = 0; i < 4; i++) {
         const b = _kfRnd(slot.seed, i) * KF_TAU;
         const cc = Math.cos(b) * KF_BODY * cr, ss = Math.sin(b) * KF_BODY * cr;
-        _kfLine(ctx, mx - cc, my - ss, mx + cc, my + ss, "#e9f3ff", cr * .8, 1.6);
+        _kfLine(ctx, mx - cc, my - ss, mx + cc, my + ss, pale, cr * .85, 1.6);
       }
       return;
     }
-    const d = 10 + 36 * _kfOut(broke);
-    for (let i = 0; i < 5; i++) {
-      const b = i / 5 * KF_TAU + _kfRnd(slot.seed, i) * .5;
-      _kfShard(ctx, mx + Math.cos(b) * d, my + Math.sin(b) * d, b + broke, 8, "#cfe6ff", (1 - broke) * .65);
+    const d = 10 + 40 * _kfOut(broke);
+    for (let i = 0; i < 6; i++) {
+      const b = i / 6 * KF_TAU + _kfRnd(slot.seed, i) * .5;
+      _kfShard(ctx, mx + Math.cos(b) * d, my + Math.sin(b) * d, b + broke, 8,
+        i % 3 === 0 ? pale : silver, i & 1 ? pink : green, (1 - broke) * .75);
     }
+    _kfDisc(ctx, mx, my, 26 * (1 - broke), slate, (1 - broke) * .3);
   };
 
   // ---- 16. Lightning Mark ---------------------------------------------------
+  // core / electric / branch / gold flash / navy.
+  // It charges first — the mark draws sparks up off the ground — then the bolt
+  // lands, and what is left crawls around the mark before it dies.
   const _kfLightning = (ctx, slot, t) => {
-    const mark = 1 - _kfSpan(t, .5, .8);
+    const P = KILL_PALETTES[16];
+    const core = P[0], electric = P[1], branch = P[2], gold = P[3], navy = P[4];
+    const markA = 1 - _kfSpan(t, .62, .92);
     ctx.save();
     ctx.translate(0, 16);
     ctx.scale(1, .4);
-    _kfRing(ctx, 0, 0, 26, "#9ad8ff", .8 * mark, 3);
+    _kfDisc(ctx, 0, 0, 26, navy, .4 * markA);
+    _kfRing(ctx, 0, 0, 26, electric, .85 * markA, 3);
+    _kfRing(ctx, 0, 0, 17, branch, .6 * markA, 1.6);
     ctx.restore();
-    // The strike is on screen for a sixth of an already short animation. Two
-    // passes over one path is the whole of it — no storm, no glow filter.
-    const strike = _kfSpan(t, .04, .22);
+    // Charging: sparks drawn up off the mark before anything lands.
+    const charge = _kfSpan(t, 0, .26);
+    if (charge < 1) {
+      for (let i = 0; i < 6; i++) {
+        const u = (t * 4 + _kfRnd(slot.seed, i)) % 1;
+        const x = (_kfRnd(slot.seed, i + 16) - .5) * 48;
+        _kfDisc(ctx, x, 16 - 30 * u, 1.8 * (1 - u), electric, (1 - charge) * (1 - u) * .8);
+      }
+    }
+    // The strike. Two passes over one path — a wide electric halo and a white
+    // core — plus two violet branches off it.
+    const strike = _kfSpan(t, .26, .42);
     if (strike > 0 && strike < 1) {
       const a = 1 - strike;
       ctx.save();
@@ -28437,70 +28820,100 @@ window.grbtp = 35;
         ctx.lineTo((_kfRnd(slot.seed, i) - .5) * 44 * (1 - p), -250 + 266 * p);
       }
       ctx.globalAlpha = a * .35;
-      ctx.strokeStyle = "#9ad8ff";
-      ctx.lineWidth = 8;
+      ctx.strokeStyle = electric;
+      ctx.lineWidth = 9;
       ctx.stroke();
       ctx.globalAlpha = a;
-      ctx.strokeStyle = "#ffffff";
+      ctx.strokeStyle = core;
       ctx.lineWidth = 2.5;
       ctx.stroke();
       ctx.restore();
+      for (let i = 0; i < 2; i++) {
+        const p = .35 + i * .3;
+        const bx = (_kfRnd(slot.seed, i + 1) - .5) * 44 * (1 - p);
+        const by = -250 + 266 * p;
+        _kfLine(ctx, bx, by, bx + (_kfRnd(slot.seed, i + 40) - .5) * 70, by + 40, branch, a * .8, 1.8);
+      }
+      _kfGlow(ctx, 0, 16, 40 * (1 - strike), gold, core, a * .8);
     }
-    const dark = _kfSmooth(_kfSpan(t, .06, .2));
-    const bodyA = 1 - _kfSpan(t, .2, .46);
+    const dark = _kfSmooth(_kfSpan(t, .28, .42));
+    const bodyA = 1 - _kfSpan(t, .42, .64);
     _kfBody(ctx, slot, bodyA * (1 - dark * .6), KF_BODY, 0, 0, 0);
-    _kfSilhouette(ctx, dark * bodyA * .85, "#0e1420", KF_BODY);
+    _kfWash(ctx, KF_BODY, navy, electric, dark * bodyA * .85);
+    // Residual arcs crawling around the mark.
+    const after = _kfSpan(t, .42, .84);
+    if (after > 0 && after < 1) {
+      for (let i = 0; i < 4; i++) {
+        const b = _kfRnd(slot.seed, i + 56) * KF_TAU + after * 3;
+        const r0 = 12, r1 = 30;
+        _kfLine(ctx, Math.cos(b) * r0, 16 + Math.sin(b) * r0 * .4, Math.cos(b + .6) * r1, 16 + Math.sin(b + .6) * r1 * .4,
+          i & 1 ? branch : electric, (1 - after) * .7, 1.5);
+      }
+    }
   };
 
   // ---- 17. Web / Thread Death -----------------------------------------------
+  // silk / violet / teal / umber / white.
+  // The threads attach, go taut, pull the shape apart, and snap. What they
+  // were holding falls as motes.
   const _kfWeb = (ctx, slot, t) => {
-    const pull = _kfOut(_kfSpan(t, .06, .72));
-    const a = (1 - _kfSpan(t, .5, .92)) * .85;
+    const P = KILL_PALETTES[17];
+    const silk = P[0], violet = P[1], teal = P[2], umber = P[3], white = P[4];
+    const attach = _kfSmooth(_kfSpan(t, 0, .18));
+    const pull = _kfOut(_kfSpan(t, .18, .74));
+    const snap = _kfSpan(t, .74, .92);
+    const a = (1 - snap) * .9;
     // Ten threads, each one curve. A hundred line objects would look the same
     // and cost ten times as much, so there are ten.
     ctx.save();
     ctx.lineCap = "round";
-    ctx.strokeStyle = "#e6e6f0";
-    ctx.lineWidth = 1.4;
-    ctx.globalAlpha = a;
     for (let i = 0; i < 10; i++) {
       const ang = i / 10 * KF_TAU + _kfRnd(slot.seed, i) * .35;
-      const d = 18 + (44 + 34 * _kfRnd(slot.seed, i + 16)) * pull;
+      const d = (18 + (46 + 36 * _kfRnd(slot.seed, i + 16)) * pull) * attach;
       const c = Math.cos(ang), s = Math.sin(ang);
-      const slack = 7 * (1 - pull);
+      // Slack while they attach, taut once they pull, and thrown loose on the
+      // snap.
+      const slack = 9 * (1 - pull) + 18 * snap * (_kfRnd(slot.seed, i + 96) - .5);
+      ctx.globalAlpha = a;
+      ctx.strokeStyle = i % 3 === 0 ? violet : silk;
+      ctx.lineWidth = i % 3 === 0 ? 1.8 : 1.3;
       ctx.beginPath();
       ctx.moveTo(0, 0);
       ctx.quadraticCurveTo(c * d * .55 - s * slack, s * d * .55 + c * slack, c * d, s * d);
       ctx.stroke();
-      _kfDisc(ctx, c * d, s * d, 1.8, "#ffffff", a);
-      ctx.globalAlpha = a;
+      // A bead at the far end, teal on the threads that are doing the work.
+      _kfDisc(ctx, c * d, s * d, 2.1, i % 3 === 0 ? teal : white, a);
     }
     ctx.restore();
     // The body loses its shape as they take it: stretched along the pull and
     // thinned across it, which is one transform rather than a deformed mesh.
-    const bodyA = 1 - _kfSpan(t, .1, .56);
+    const bodyA = 1 - _kfSpan(t, .2, .68);
     if (bodyA > 0) {
       ctx.save();
-      ctx.scale(1 + pull * .35, 1 - pull * .3);
+      ctx.scale(1 + pull * .4, 1 - pull * .34);
       _kfBody(ctx, slot, bodyA, KF_BODY, 0, 0, 0);
+      _kfWash(ctx, KF_BODY, umber, violet, pull * bodyA * .28);
       ctx.restore();
     }
-    const end = _kfSpan(t, .62, 1);
+    const end = _kfSpan(t, .7, 1);
     if (end > 0) {
-      const d = 30 + 40 * end;
-      for (let i = 0; i < 5; i++) {
+      const d = 30 + 46 * end;
+      for (let i = 0; i < 6; i++) {
         const ang = _kfRnd(slot.seed, i + 48) * KF_TAU;
-        _kfDisc(ctx, Math.cos(ang) * d, Math.sin(ang) * d, 1.8 * (1 - end), "#ffffff", (1 - end) * .7);
+        _kfDisc(ctx, Math.cos(ang) * d, Math.sin(ang) * d + 18 * end * end, 2.2 * (1 - end), i & 1 ? teal : white, (1 - end) * .8);
       }
     }
   };
 
   // ---- 18. Triangle Collapse ------------------------------------------------
-  // circle -> triangle -> diamond -> point. The sides for each stage, and the
-  // array is out here because it must not be rebuilt every frame.
+  // teal / lime / blue / white / indigo.
+  // circle -> triangle -> diamond -> point, each stage in its own colour and
+  // cross-faded into the next, with a counter-turning inner cage inside it.
   const KF_TRIANGLE_SIDES = [ 0, 3, 4, 4 ];
+  // One colour per stage, built once rather than per frame.
+  const KF_TRIANGLE_HUES = [ KILL_PALETTES[18][0], KILL_PALETTES[18][1], KILL_PALETTES[18][2], KILL_PALETTES[18][3] ];
   const _kfPoly = (ctx, r, sides, rot, color, alpha, lw) => {
-    if (alpha <= .004 || r <= .5) return;
+    if (alpha <= .004 || r <= .5 || lw <= 0) return;
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = color;
     ctx.lineWidth = lw;
@@ -28518,43 +28931,56 @@ window.grbtp = 35;
     ctx.stroke();
   };
   const _kfTriangle = (ctx, slot, t) => {
-    const close = _kfSmooth(_kfSpan(t, 0, .85));
-    const r = 62 - 56 * close;
-    const rot = close * .8;
+    const P = KILL_PALETTES[18];
+    const lime = P[1], blue = P[2], white = P[3], indigo = P[4];
+    const close = _kfSmooth(_kfSpan(t, 0, .86));
+    const r = 66 - 60 * close;
+    const rot = close * .9;
+    _kfDisc(ctx, 0, 0, r, indigo, .2 * (1 - _kfSpan(t, .86, 1)));
     // The stages are cross-faded rather than swapped, so the cage changes
-    // shape instead of popping between three of them.
-    const phase = _kfSpan(t, 0, .78) * 3;
+    // shape instead of popping between three of them — and each stage has its
+    // own colour, so the change is legible at a glance.
+    const phase = _kfSpan(t, 0, .8) * 3;
     const stage = phase | 0;
     const mix = phase - stage;
-    _kfPoly(ctx, r, KF_TRIANGLE_SIDES[stage], rot, "#7ef0d0", (1 - mix) * .9, 2);
-    if (stage < 3) _kfPoly(ctx, r, KF_TRIANGLE_SIDES[stage + 1], rot, "#7ef0d0", mix * .9, 2);
-    _kfBody(ctx, slot, 1 - _kfSpan(t, .3, .8), KF_BODY, 0, 0, 0);
-    const point = _kfSpan(t, .85, 1);
-    if (point > 0) {
-      ctx.save();
-      ctx.globalCompositeOperation = "lighter";
-      _kfDisc(ctx, 0, 0, 6 * (1 - point), "#ffffff", 1 - point);
-      ctx.restore();
+    _kfPoly(ctx, r, KF_TRIANGLE_SIDES[stage], rot, KF_TRIANGLE_HUES[stage], (1 - mix) * .92, 2.4);
+    if (stage < 3) _kfPoly(ctx, r, KF_TRIANGLE_SIDES[stage + 1], rot, KF_TRIANGLE_HUES[stage + 1], mix * .92, 2.4);
+    // A second cage inside it, turning the other way and one stage behind.
+    _kfPoly(ctx, r * .58, KF_TRIANGLE_SIDES[stage], -rot * 1.6, blue, (1 - mix) * .45, 1.4);
+    // Nodes riding the outer cage.
+    const nodes = KF_TRIANGLE_SIDES[stage] < 3 ? 6 : KF_TRIANGLE_SIDES[stage];
+    for (let i = 0; i < nodes; i++) {
+      const b = rot + i / nodes * KF_TAU;
+      _kfDisc(ctx, Math.cos(b) * r, Math.sin(b) * r, 2.6, lime, .85 * (1 - _kfSpan(t, .8, .94)));
     }
+    _kfBody(ctx, slot, 1 - _kfSpan(t, .34, .84), KF_BODY, 0, 0, 0);
+    const point = _kfSpan(t, .86, 1);
+    if (point > 0) _kfGlow(ctx, 0, 0, 14 * (1 - point), blue, white, 1 - point);
   };
 
   // ---- 19. Ink Death --------------------------------------------------------
+  // ink / indigo / violet sheen / teal sheen / cream.
+  // They melt into it, it spreads and ripples, it pulls back to a point, and
+  // one drip falls off the edge. The two sheens on the surface are what keep
+  // a black shape from reading as a hole.
   const _kfInk = (ctx, slot, t) => {
+    const P = KILL_PALETTES[19];
+    const ink = P[0], indigo = P[1], violet = P[2], teal = P[3], cream = P[4];
     // Eight radial points on a slow wobble, joined by curves. It is not fluid
     // and there is nothing simulating one: it is a blob whose radius is a sine
     // of the clock, which at this size is indistinguishable and free.
-    const spread = _kfSmooth(_kfSpan(t, 0, .45));
-    const pull = _kfSmooth(_kfSpan(t, .45, .95));
-    const base = KF_BODY * (1 + .35 * spread) * (1 - pull);
+    const spread = _kfSmooth(_kfSpan(t, 0, .5));
+    const pull = _kfSmooth(_kfSpan(t, .56, .96));
+    const base = KF_BODY * (1 + .42 * spread) * (1 - pull);
+    const a = 1 - _kfSpan(t, .92, 1);
     if (base > .6) {
-      const a = 1 - _kfSpan(t, .9, 1);
       let fx = 0, fy = 0;
-      ctx.globalAlpha = a * .92;
-      ctx.fillStyle = "#0d0b16";
+      ctx.globalAlpha = a * .94;
+      ctx.fillStyle = ink;
       ctx.beginPath();
       for (let i = 0; i <= 8; i++) {
         const b = i / 8 * KF_TAU;
-        const rr = base * (1 + .2 * Math.sin(t * 9 + i * 2.3 + slot.seed));
+        const rr = base * (1 + .22 * Math.sin(t * 9 + i * 2.3 + slot.seed));
         const x = Math.cos(b) * rr, y = Math.sin(b) * rr * .92;
         if (i === 0) {
           fx = x;
@@ -28568,39 +28994,77 @@ window.grbtp = 35;
       }
       ctx.closePath();
       ctx.fill();
+      // Indigo under the surface, and two sheens sliding across it.
+      _kfDisc(ctx, base * .1, base * .1, base * .55, indigo, a * .5);
+      const sh = t * 2.2 % 1;
+      _kfArc(ctx, base * .82, sh * KF_TAU, sh * KF_TAU + .9, violet, a * .55, 3);
+      const sh2 = (t * 1.7 + .5) % 1;
+      _kfArc(ctx, base * .58, -sh2 * KF_TAU, -sh2 * KF_TAU + .7, teal, a * .45, 2.4);
+      // Ripples going out across it while it spreads.
+      const rip = _kfSpan(t, .18, .62);
+      if (rip > 0 && rip < 1) _kfRing(ctx, 0, 0, base * (.4 + .7 * rip), cream, (1 - rip) * .22, 1.6);
     }
-    _kfBody(ctx, slot, 1 - _kfSpan(t, .02, .36), KF_BODY, 0, 0, 0);
+    // One drip off the edge, which lands and is absorbed.
+    const drip = _kfSpan(t, .3, 1);
+    if (drip > 0 && drip < 1) {
+      const dx = KF_BODY * .8;
+      _kfDisc(ctx, dx, 4 + 34 * _kfIn(drip), 4.5 * (1 - drip * .5), ink, a * .9);
+    }
+    _kfBody(ctx, slot, 1 - _kfSpan(t, .04, .42), KF_BODY, 0, 0, 0);
   };
 
   // ---- 20. Comet Death ------------------------------------------------------
+  // gold / core / tail / spark / deep.
+  // It gathers first, then goes — a white-hot head, a cyan tail and magenta
+  // sparks shaken loose behind it, all on one heading.
   const _kfComet = (ctx, slot, t) => {
+    const P = KILL_PALETTES[20];
+    const gold = P[0], core = P[1], tail = P[2], spark = P[3], deep = P[4];
     // One heading for the whole kill, taken off the body's own facing, so the
-    // eight particles read as one thing leaving rather than a scatter.
+    // particles read as one thing leaving rather than a scatter.
     const dir = slot.angle + 2.1;
     const c = Math.cos(dir), s = Math.sin(dir);
-    const u = _kfOut(t);
-    const a = 1 - _kfSpan(t, .55, 1);
+    // It pulls itself together before it leaves.
+    const gather = _kfSpan(t, 0, .22);
+    if (gather < 1) {
+      const d = 46 * (1 - _kfSmooth(gather));
+      for (let i = 0; i < 8; i++) {
+        const ang = _kfRnd(slot.seed, i) * KF_TAU;
+        _kfDisc(ctx, Math.cos(ang) * d, Math.sin(ang) * d, 2.4, gold, .8);
+      }
+      _kfGlow(ctx, 0, 0, 16 * gather, gold, core, gather * .8);
+    }
+    const u = _kfOut(_kfSpan(t, .22, 1));
+    const a = 1 - _kfSpan(t, .66, 1);
     ctx.save();
     ctx.lineCap = "round";
-    ctx.strokeStyle = "#ffd98a";
-    ctx.lineWidth = 2.4;
     for (let i = 0; i < 8; i++) {
       const spd = .55 + .45 * _kfRnd(slot.seed, i);
       const off = (_kfRnd(slot.seed, i + 16) - .5) * 26;
-      const d = 300 * u * spd;
+      const d = 330 * u * spd;
       const x = c * d - s * off, y = s * d + c * off;
       // The trail is one line back along the heading, clamped so it never
-      // reaches back past where the particle started.
-      const tl = Math.min(d, 26 + 22 * spd);
-      ctx.globalAlpha = a * .55;
+      // reaches back past where the particle started. Deep under, cyan over.
+      const tl = Math.min(d, 30 + 26 * spd);
+      ctx.globalAlpha = a * .3;
+      ctx.strokeStyle = deep;
+      ctx.lineWidth = 5;
       ctx.beginPath();
       ctx.moveTo(x - c * tl, y - s * tl);
       ctx.lineTo(x, y);
       ctx.stroke();
-      _kfDisc(ctx, x, y, 2.6, "#fff4d0", a);
+      ctx.globalAlpha = a * .6;
+      ctx.strokeStyle = tail;
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+      _kfDisc(ctx, x, y, 2.8, i % 3 === 0 ? gold : core, a);
+      // A spark shaken loose off the trail, dropping behind.
+      const sd = d * (.45 + .3 * _kfRnd(slot.seed, i + 32));
+      _kfDisc(ctx, c * sd - s * (off * 1.7), s * sd + c * (off * 1.7), 1.9 * (1 - u), spark, a * .75);
     }
     ctx.restore();
-    _kfBody(ctx, slot, 1 - _kfSpan(t, 0, .2), KF_BODY, 0, 0, 0);
+    if (u > 0) _kfGlow(ctx, c * 330 * u, s * 330 * u, 13 * (1 - _kfSpan(t, .5, 1)), gold, core, a);
+    _kfBody(ctx, slot, 1 - _kfSpan(t, .12, .34), KF_BODY, 0, 0, 0);
   };
 
   // The dispatch. A switch on the style index rather than a table of function
