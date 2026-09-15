@@ -5,7 +5,7 @@ Changes to **`Ryn_Type_2.user.js`**, worked against the shipped game bundle in
 `drivers/game-drivers.json`.
 
 ```sh
-node tools/test-ryn-type2.js     # 116 behaviour tests
+node tools/test-ryn-type2.js     # 147 behaviour tests
 node --check Ryn_Type_2.user.js
 ```
 
@@ -78,6 +78,21 @@ of work, same server-side validation. Only the timing moves.
   death screen stops it the same way the menu does. A death itself costs
   nothing: tokens last four minutes, so the pause until you respawn is far too
   short for the pool to drain.
+- **Cannot wedge.** In-flight challenges are subtracted from what the pool may
+  start, so one that never settles holds a concurrency slot for good — and four
+  of those used to stop the pool for the rest of the page: empty, full or
+  otherwise, it computed nothing to do and never came back. Challenges are now
+  tracked as slots with a start time and written off after 30s, so the budget
+  always returns. A written-off challenge that answers late is still delivered;
+  only the accounting was reclaimed.
+- **Never competes with a spawn.** A spawn that found the pool empty used to
+  start its own challenge alongside the four the pool already had running —
+  five widgets stacked up the edge of the screen, and when Cloudflare wanted an
+  interaction there was no telling which of the five to answer. A spawn now
+  joins the queue for work already in progress and is served **ahead** of the
+  pool's own shelf, and the pool keeps minting for a waiter even when it is
+  otherwise full. If nothing is in flight it falls straight through to minting
+  its own, exactly as before.
 - **Recoverable.** A socket that opens and closes without ever producing
   `io-init` is what a declined token looks like from the client. That gets
   exactly one retry with the pool bypassed, so a pooled token can never leave a
@@ -89,12 +104,17 @@ of work, same server-side validation. Only the timing moves.
 | challenges rendering at once | 4 |
 | pool lifetime | derived: Cloudflare's 300s − 60s margin = 240s |
 | keeper interval | 2.5s |
+| a challenge is written off after | 30s |
+| a spawn waits for one in flight for | 5s, then mints its own |
 | runs when | Turnstile loaded **and** `myPlayer.inGame` |
 
-**Bots → Spawn** shows how many are ready, solving, spent and expired unused,
-and says *paused until you are in the game* when it is not running. **Fill now**
-skips the wait for the next keeper tick after a burst of spawns has drained the
-pool.
+**Bots → Spawn** shows ready, solving, spawns waiting, spent, expired unused and
+timed out, and says *paused until you are in the game* when it is not running.
+**Fill now** skips the wait for the next keeper tick after a burst of spawns has
+drained the pool.
+
+*Timed out* moving is the wedge recovery doing its job, not something stuck. A
+number that keeps climbing means Cloudflare is not answering.
 
 ### The standing cost, and what the gate buys
 

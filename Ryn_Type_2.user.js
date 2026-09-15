@@ -269,13 +269,38 @@ window.grbtp = 35;
   // existed.
   const TURNSTILE_MAX_CONCURRENT = 4;
   const TURNSTILE_KEEPER_MS = 2500;
+  // A challenge that has been running this long is written off. Its own
+  // timeout is 20s, so this only fires for one that never settled at all —
+  // and that is the failure this exists for. In-flight mints are subtracted
+  // from what the pool is allowed to start, so a mint that neither resolves
+  // nor rejects permanently holds one of the four concurrency slots. Four of
+  // those and the pool stops minting for the rest of the page: full, empty or
+  // otherwise, `refill` computes nothing to do and the pool never recovers.
+  // The reap below is what makes that impossible.
+  const TURNSTILE_MINT_TIMEOUT_MS = 3e4;
+  // How long a caller that needs a token now will wait for one the pool is
+  // already producing before giving up and minting its own.
+  const TURNSTILE_WAIT_MS = 5e3;
   const TokenPool = new class {
     ready=[];
-    minting=0;
-    // Minted, spent and aged out since the page loaded, for the panel readout.
+    // Challenges currently running, as slot objects rather than a bare count,
+    // so a stuck one can be identified by age and written off.
+    inflight=[];
+    // Callers blocked on the next token out of the pool. Served before the
+    // pool is, so a spawn never waits behind the background top-up.
+    waiters=[];
+    // Minted, spent, aged out and written off since the page loaded, for the
+    // panel readout.
     made=0;
     spent=0;
     expired=0;
+    stalled=0;
+    get minting() {
+      return this.inflight.length;
+    }
+    get waiting() {
+      return this.waiters.length;
+    }
     get target() {
       return TURNSTILE_POOL_TARGET;
     }
@@ -323,6 +348,87 @@ window.grbtp = 35;
         }
       }
     }
+    // Write off a challenge that never settled, so it stops counting against
+    // the concurrency budget. Without this the pool can wedge permanently:
+    // four stuck mints and it never starts another one, however empty it is.
+    // The slot is only removed from the accounting — if the challenge does
+    // come back later it is still a good token, and `_release` below lets it
+    // through.
+    _reap(now) {
+      const inflight = this.inflight;
+      for (let i = inflight.length - 1; i >= 0; i--) {
+        if (now - inflight[i].at >= TURNSTILE_MINT_TIMEOUT_MS) {
+          inflight.splice(i, 1);
+          this.stalled += 1;
+        }
+      }
+    }
+    _release(slot) {
+      const i = this.inflight.indexOf(slot);
+      if (i >= 0) {
+        this.inflight.splice(i, 1);
+      }
+    }
+    // A fresh token, to whoever needs it most. A caller blocked on `waitFor`
+    // is ahead of the pool: it has a bot to spawn now, and the pool is only
+    // stocking a shelf.
+    _deliver(token) {
+      this.made += 1;
+      const waiter = this.waiters.shift();
+      if (waiter !== undefined) {
+        this.spent += 1;
+        waiter.settle(token);
+        return;
+      }
+      this.ready.push({
+        token: token,
+        born: Date.now()
+      });
+    }
+    // Nothing left running and nothing on the shelf: anyone waiting is waiting
+    // for something that is not coming, so let them fall through to minting
+    // their own rather than sitting out the full timeout.
+    _wakeIfDry() {
+      if (this.waiters.length === 0 || this.inflight.length > 0 || this.ready.length > 0) {
+        return;
+      }
+      while (this.waiters.length > 0) {
+        this.waiters.shift().settle(null);
+      }
+    }
+    // The next token the pool produces, or null if none arrives in time.
+    //
+    // This is what stops a spawn and the background top-up fighting each
+    // other. Before it, a spawn that found the pool empty started its own
+    // challenge alongside the four the pool already had running — five
+    // widgets stacked up the edge of the screen, and when Cloudflare decided
+    // it wanted an interaction there was no way to tell which of the five to
+    // answer. Now the spawn joins the queue for work already in progress, and
+    // is served first.
+    waitFor(ms) {
+      return new Promise(resolve => {
+        let done = false;
+        const waiter = {
+          settle: token => {
+            if (done) {
+              return;
+            }
+            done = true;
+            clearTimeout(waiter.timer);
+            const i = this.waiters.indexOf(waiter);
+            if (i >= 0) {
+              this.waiters.splice(i, 1);
+            }
+            resolve(token === undefined ? null : token);
+          }
+        };
+        waiter.timer = setTimeout(() => waiter.settle(null), ms || TURNSTILE_WAIT_MS);
+        this.waiters.push(waiter);
+        // Do not sit on the keeper's 2.5s cadence when someone is waiting.
+        this.refill();
+        this._wakeIfDry();
+      });
+    }
     // The oldest token still inside its window, removed from the pool so no
     // second caller can be handed the same one. Null means mint inline.
     //
@@ -352,27 +458,34 @@ window.grbtp = 35;
     refill() {
       const now = Date.now();
       this._prune(now);
+      this._reap(now);
       if (!this._ready() || !this._inGame()) {
         return;
       }
-      const short = TURNSTILE_POOL_TARGET - this.ready.length - this.minting;
-      const want = Math.min(short, TURNSTILE_MAX_CONCURRENT - this.minting);
+      // Anyone waiting is demand on top of the shelf, so the pool keeps
+      // minting for them even when it is otherwise full.
+      const short = TURNSTILE_POOL_TARGET + this.waiters.length - this.ready.length - this.inflight.length;
+      const want = Math.min(short, TURNSTILE_MAX_CONCURRENT - this.inflight.length);
       for (let i = 0; i < want; i++) {
-        this.minting += 1;
+        const slot = {
+          at: now
+        };
+        this.inflight.push(slot);
         generateTurnstileToken().then(token => {
-          this.minting -= 1;
+          this._release(slot);
+          // Delivered even if the slot was reaped on the way: a token that
+          // arrives late is still a token, and throwing it away would waste a
+          // solve that has already been paid for.
           if (token) {
-            this.made += 1;
-            this.ready.push({
-              token: token,
-              born: Date.now()
-            });
+            this._deliver(token);
           }
+          this._wakeIfDry();
         }, () => {
           // A failed mint is not fatal and not worth a retry storm: the keeper
           // comes back for it, and createSocket still mints inline if the pool
           // is empty when a bot is actually asked for.
-          this.minting -= 1;
+          this._release(slot);
+          this._wakeIfDry();
         });
       }
     }
@@ -392,7 +505,16 @@ window.grbtp = 35;
       const origin = new URL(href).origin;
       let token = null;
       if (!fresh) {
-        const ready = TokenPool.take();
+        let ready = TokenPool.take();
+        // Empty, but the pool already has challenges running. Starting another
+        // one beside them is what made a manual spawn fail while the pool was
+        // busy: five widgets stacked up the edge of the screen, and no way to
+        // tell which one Cloudflare wanted answered. Join the queue for the
+        // work already in progress instead — waiters are served ahead of the
+        // pool's own shelf, so the spawn gets the first token out.
+        if (ready === null && TokenPool.minting > 0) {
+          ready = await TokenPool.waitFor(TURNSTILE_WAIT_MS);
+        }
         if (ready !== null) {
           token = "cf:" + ready;
           pooled = true;
@@ -27015,6 +27137,8 @@ window.grbtp = 35;
       let target = 0;
       let spent = 0;
       let expired = 0;
+      let stalled = 0;
+      let waiting = 0;
       let running = false;
       try {
         ready = TokenPool.size;
@@ -27022,6 +27146,8 @@ window.grbtp = 35;
         target = TokenPool.target;
         spent = TokenPool.spent;
         expired = TokenPool.expired;
+        stalled = TokenPool.stalled;
+        waiting = TokenPool.waiting;
         running = TokenPool.running;
       } catch (_) {
         return;
@@ -27033,8 +27159,17 @@ window.grbtp = 35;
       if (minting > 0) {
         bits.push(minting + " solving");
       }
+      if (waiting > 0) {
+        bits.push(waiting + " spawn waiting");
+      }
       if (spent > 0) {
         bits.push(spent + " spent");
+      }
+      // Challenges that never came back and were written off. Nothing is stuck
+      // when this moves — it is the recovery working — but a number that keeps
+      // climbing means Cloudflare is not answering.
+      if (stalled > 0) {
+        bits.push(stalled + " timed out");
       }
       // Tokens that aged out unused. On a pool that is kept full at all times
       // this is the standing cost of keeping it full, so it is worth showing

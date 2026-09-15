@@ -93,7 +93,8 @@ function buildPool(env) {
     ${poolSrc}
     return { TokenPool: TokenPool, TTL: TURNSTILE_TTL_MS, CF: TURNSTILE_CF_LIFETIME_MS,
              SAFETY: TURNSTILE_SAFETY_MS, MAXC: TURNSTILE_MAX_CONCURRENT,
-             TARGET: TURNSTILE_POOL_TARGET, KEEPER: TURNSTILE_KEEPER_MS };
+             TARGET: TURNSTILE_POOL_TARGET, KEEPER: TURNSTILE_KEEPER_MS,
+             MINT_TIMEOUT: TURNSTILE_MINT_TIMEOUT_MS, WAIT: TURNSTILE_WAIT_MS };
   `;
   return new Function("env", body)(env);
 }
@@ -474,6 +475,118 @@ async function testPool() {
   // The target is a constant now, not a setting.
   ok("the target is fixed at forty", h.k.TARGET === 40, "target=" + h.k.TARGET);
   ok("the pool reports the same target it fills to", h.pool.target === h.k.TARGET);
+
+  // ── the pool must not be able to wedge ────────────────────────────────────
+  //
+  // In-flight mints are subtracted from what the pool may start, so a
+  // challenge that never settles holds a concurrency slot for good. Four of
+  // those used to stop the pool for the rest of the page: empty, full or
+  // otherwise, it computed nothing to do and never recovered.
+  {
+    const hh = poolHarness();
+    hh.pool.refill();
+    ok("four challenges are running", hh.pool.minting === hh.k.MAXC, "minting=" + hh.pool.minting);
+    // None of them ever settle.
+    for (let i = 0; i < 10; i++) hh.pool.refill();
+    ok("a wedged pool starts nothing new", hh.minted === hh.k.MAXC, "minted=" + hh.minted);
+    ok("and has nothing to show for it", hh.pool.size === 0);
+
+    hh.advance(hh.k.MINT_TIMEOUT - 1);
+    hh.pool.refill();
+    ok("a challenge inside its deadline is left alone", hh.pool.minting === hh.k.MAXC, "minting=" + hh.pool.minting);
+
+    hh.advance(2);
+    hh.pool.refill();
+    ok("past the deadline the stuck ones are written off", hh.pool.stalled === hh.k.MAXC, "stalled=" + hh.pool.stalled);
+    ok("and the pool starts minting again", hh.minted === hh.k.MAXC * 2, "minted=" + hh.minted);
+    await hh.fill();
+    ok("a pool that wedged recovers to full", hh.pool.size === hh.k.TARGET, "size=" + hh.pool.size);
+  }
+
+  // A challenge written off and then answered anyway is still a good token.
+  {
+    const hh = poolHarness();
+    hh.pool.refill();
+    hh.advance(hh.k.MINT_TIMEOUT + 1);
+    hh.pool.refill();
+    ok("the slow ones were written off", hh.pool.stalled === hh.k.MAXC);
+    await hh.settleAll();
+    ok("a late token is kept rather than thrown away", hh.pool.size >= hh.k.MAXC, "size=" + hh.pool.size);
+  }
+
+  // Spending the whole pool, repeatedly, never stops it coming back.
+  {
+    const hh = poolHarness();
+    for (let cycle = 0; cycle < 3; cycle++) {
+      await hh.fill();
+      ok("cycle " + (cycle + 1) + ": filled to forty", hh.pool.size === hh.k.TARGET, "size=" + hh.pool.size);
+      for (let i = 0; i < hh.k.TARGET; i++) hh.pool.take();
+      ok("cycle " + (cycle + 1) + ": drained to nothing", hh.pool.size === 0);
+    }
+    ok("three full cycles spent one hundred and twenty tokens", hh.pool.spent === hh.k.TARGET * 3, "spent=" + hh.pool.spent);
+  }
+
+  // ── a spawn and the pool must not compete ─────────────────────────────────
+  //
+  // A spawn that found the pool empty used to start its own challenge beside
+  // the four already running. It now joins the queue for work in progress and
+  // is served ahead of the pool's shelf.
+  {
+    const hh = poolHarness();
+    hh.pool.refill();
+    ok("the pool is busy and empty", hh.pool.minting === hh.k.MAXC && hh.pool.size === 0);
+    const before = hh.minted;
+    const spawn = hh.pool.waitFor(5000);
+    ok("a waiting spawn starts no challenge of its own", hh.minted === before, "minted=" + hh.minted);
+    ok("the pool reports it as waiting", hh.pool.waiting === 1);
+    await hh.settleAll();
+    const got = await spawn;
+    ok("the spawn is handed the first token out", typeof got === "string" && got.length > 0);
+    ok("it counts as spent", hh.pool.spent === 1);
+    ok("the rest went to the shelf", hh.pool.size === hh.k.MAXC - 1, "size=" + hh.pool.size);
+  }
+
+  // Several spawns at once queue rather than each starting a challenge.
+  {
+    const hh = poolHarness();
+    hh.pool.refill();
+    const before = hh.minted;
+    const spawns = [ hh.pool.waitFor(5000), hh.pool.waitFor(5000), hh.pool.waitFor(5000) ];
+    ok("three waiting spawns start no challenges of their own", hh.minted === before, "minted=" + hh.minted);
+    await hh.settleAll();
+    const got = await Promise.all(spawns);
+    ok("all three are served", got.every(t => typeof t === "string"));
+    ok("with three different tokens", new Set(got).size === 3);
+  }
+
+  // A waiter must not sit out the full timeout when nothing is coming.
+  {
+    const hh = poolHarness();
+    hh.pool.refill();
+    const spawn = hh.pool.waitFor(5000);
+    await hh.failAll();
+    const got = await spawn;
+    ok("a waiter is released as soon as the pool runs dry", got === null);
+    ok("and is off the queue", hh.pool.waiting === 0);
+  }
+
+  // Waiting while the pool is stopped falls straight through.
+  {
+    const hh = poolHarness({ outOfGame: true });
+    const got = await hh.pool.waitFor(5000);
+    ok("a waiter on a stopped pool is released immediately", got === null);
+  }
+
+  // The pool keeps minting for a waiter even when the shelf is full, so a
+  // spawn is never starved by a pool that thinks it has enough.
+  {
+    const hh = poolHarness();
+    await hh.fill();
+    ok("the shelf is full", hh.pool.size === hh.k.TARGET);
+    const got = hh.pool.take();
+    ok("a spawn takes straight off a full shelf without waiting", typeof got === "string");
+    ok("no challenge was needed for it", hh.pool.minting === 0);
+  }
 }
 
 // ── 5 and 6. the two bot modules ───────────────────────────────────────────
