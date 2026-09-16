@@ -20147,7 +20147,14 @@ window.grbtp = 35;
       }
       if (useSoldier) {
         if (Settings_default._antienemy) {
-          if (EnemyManager2.detectedDangerEnemy || EnemyManager2.detectedEnemy || EnemyManager2.reverseInsta || EnemyManager2.toolHammerInsta || EnemyManager2.rangedBowInsta) {
+          // `velocityTickThreat` belongs in this list — it is in Glotus's own
+          // copy of it — and RYN's had dropped it. That went unnoticed while
+          // the Falcon heal was here, because its `velSoldier` was a straight
+          // read of the same flag and reached forceHat by another route. With
+          // that module gone the flag had no soldier path left at all: an
+          // enemy set up for a diamond-polearm turret tick is the one case
+          // where the helmet matters most, and nothing was putting it on.
+          if (EnemyManager2.detectedDangerEnemy || EnemyManager2.detectedEnemy || EnemyManager2.velocityTickThreat || EnemyManager2.reverseInsta || EnemyManager2.toolHammerInsta || EnemyManager2.rangedBowInsta) {
             ModuleHandler.shouldEquipSoldier = true;
             ModuleHandler.forceHat = 6;
             return 6;

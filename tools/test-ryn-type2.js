@@ -61,6 +61,7 @@ const healSrc = between(find(/^  const HEAL_FAST_KEY = /), find(/^  class Autoha
 // The heal reads the game's own food table for `restore`, so the table comes
 // out of the script rather than being written again here.
 const itemsSrc = between(find(/^  const Items = \[ \{/), find(/^  const WeaponVariants = \[ \{/));
+const hatSrc = between(find(/^  class DefaultHat \{/), find(/^  class SafeWalk \{/));
 
 // Everything the slices reach for that lives elsewhere in the script, stubbed
 // at the same shape.
@@ -1140,6 +1141,120 @@ function testHeal() {
   }
 }
 
+// ── 9. the soldier hat, after the heal stopped asking for one ──────────────
+//
+// The Falcon heal owned two hat asks, `wantsSoldier` and `wantsEMP`, and both
+// went with it. That is correct — Glotus's heal asks for no hat — but it means
+// every threat flag now has to reach the helmet through DefaultHat alone, and
+// one of them did not: RYN's copy of Glotus's threat line had dropped
+// `velocityTickThreat`, and Falcon's `velSoldier` had been quietly covering
+// for it. These pin the whole set down so the next module that moves cannot
+// take a flag's only path with it.
+
+function buildHat(env) {
+  const body = `
+    const Settings_default = env.Settings;
+    const DataHandler_default = { getWeapon: () => ({ range: 70 }) };
+    const pointInRiver = () => false;
+    const COWBOY_DROP_RANGE = 300;
+    ${hatSrc}
+    return { DefaultHat: DefaultHat };
+  `;
+  return new Function("env", body)(env);
+}
+
+function hatScenario(threats, opts) {
+  const o = opts || {};
+  const mod = buildHat({
+    Settings: {
+      _antienemy: o.antienemy !== false,
+      _antispike: true,
+      _antianimal: true,
+      _empDefense: false,
+      _biomehats: false,
+      _cowboyWhenSafe: false,
+      _botBeAngel: false
+    }
+  });
+  const pos = { x: 0, y: 0, distance: () => 9999 };
+  const mh = {
+    shouldEquipSoldier: false,
+    forceHat: null,
+    isMoving: true,
+    getHatStore: () => ({ actual: 0 }),
+    canBuy: () => true
+  };
+  const client = {
+    isOwner: true,
+    _ModuleHandler: mh,
+    myPlayer: {
+      pos: { current: pos, future: pos },
+      speed: 20,
+      hatID: 0,
+      onPlatform: false,
+      shameCount: 0,
+      getItemByType: () => 0,
+      isEnemyByID: () => true,
+      collidingSimple: () => false
+    },
+    EnemyManager: Object.assign({
+      nearestEnemy: null,
+      nearestDangerAnimal: null,
+      willCollideSpike: false,
+      detectedEnemy: false,
+      detectedDangerEnemy: false,
+      dangerWithoutSoldier: false,
+      velocityTickThreat: false,
+      reverseInsta: false,
+      toolHammerInsta: false,
+      rangedBowInsta: false,
+      nearestEnemyInRangeOf: () => false
+    }, threats || {}),
+    ObjectManager: { grid2D: { query: () => {} }, objects: new Map() }
+  };
+  return { hat: new mod.DefaultHat(client).getBestCurrentHat(), mh: mh };
+}
+
+function testSoldierHat() {
+  section("9. the soldier hat");
+
+  const forces = [ "detectedDangerEnemy", "detectedEnemy", "velocityTickThreat", "reverseInsta", "toolHammerInsta", "rangedBowInsta" ];
+  for (const flag of forces) {
+    const s = hatScenario({ [flag]: true });
+    ok(flag + " puts soldier on", s.hat === 6, "hat=" + s.hat);
+    ok(flag + " claims the hat rather than only suggesting it", s.mh.forceHat === 6 && s.mh.shouldEquipSoldier === true);
+  }
+  // Every flag the heal treats as a threat has to have a helmet behind it, or
+  // the heal is eating through damage nothing is reducing. `dangerWithoutSoldier`
+  // is the one exception in Glotus's own code: it is the softer `return 6`
+  // below, not a forceHat, because by then soldier cannot save you anyway.
+  {
+    const s = hatScenario({ dangerWithoutSoldier: true });
+    ok("dangerWithoutSoldier still reaches soldier", s.hat === 6, "hat=" + s.hat);
+    ok("but does not claim forceHat", s.mh.forceHat === null);
+  }
+  {
+    const s = hatScenario({ willCollideSpike: true });
+    ok("an enemy spike within reach reaches soldier", s.hat === 6, "hat=" + s.hat);
+  }
+  {
+    const s = hatScenario({ nearestDangerAnimal: {} });
+    ok("a dangerous animal reaches soldier", s.hat === 6, "hat=" + s.hat);
+  }
+  {
+    const s = hatScenario({});
+    ok("nothing happening is not a soldier tick", s.hat !== 6, "hat=" + s.hat);
+  }
+  {
+    // The switch still switches: Anti Enemy off drops the six insta reasons,
+    // and only those. Anti Spike and Anti Animal are their own toggles.
+    const s = hatScenario({ velocityTickThreat: true }, { antienemy: false });
+    ok("Anti Enemy off drops the insta reasons", s.hat !== 6, "hat=" + s.hat);
+    const t = hatScenario({ willCollideSpike: true }, { antienemy: false });
+    ok("and leaves Anti Spike alone", t.hat === 6, "hat=" + t.hat);
+  }
+}
+
 // ── 5 and 6. the two bot modules ───────────────────────────────────────────
 
 function pt(x, y) {
@@ -1431,6 +1546,7 @@ function testMission() {
   testMission();
   testRemove();
   testHeal();
+  testSoldierHat();
   console.log("\n" + pass + " passed, " + fail + " failed\n");
   process.exit(fail === 0 ? 0 : 1);
 })();

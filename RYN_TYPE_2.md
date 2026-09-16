@@ -5,7 +5,7 @@ Changes to **`Ryn_Type_2.user.js`**, worked against the shipped game bundle in
 `drivers/game-drivers.json`.
 
 ```sh
-node tools/test-ryn-type2.js     # 253 behaviour tests
+node tools/test-ryn-type2.js     # 272 behaviour tests
 node --check Ryn_Type_2.user.js
 ```
 
@@ -532,7 +532,7 @@ in the field, and it is left exactly as it is.
 
 | | |
 |---|---|
-| `wantsSoldier` / `wantsEMP` | Falcon's own hat asks, read by `ModuleHandler`'s soldier block. Glotus's heal asks for no hat, so both terms are gone; RYN's own soldier reasoning below them is untouched. |
+| `wantsSoldier` / `wantsEMP` | Falcon's own hat asks, read by `ModuleHandler`'s soldier block. Glotus's heal asks for no hat, so both terms are gone; RYN's own soldier reasoning below them is untouched. See **the hat it was covering for** below. |
 | **EMP Anti** (`_soldierEMP`) | Falcon's EMP branch. No consumer left — switch and menu row removed. |
 | **Sensitive Healing** (`_sensitiveHealing`) | Already had no consumer. Removed with it. |
 | `Player.damages` push | Filled only for Falcon's damage identification. The array is back to what the base client leaves it as: declared, cleared, never written. |
@@ -546,3 +546,26 @@ it is held, capped at five foods and at the packet budget, and skipped on a tick
 the module already ate on. It is fenced off in `_fastHeal()` and marked as RYN's
 rather than part of the port — `_glotusTick()` is the port, verbatim.
 
+### The hat it was covering for
+
+Removing `wantsSoldier` meant every threat flag now has to reach the helmet
+through `DefaultHat` alone. One of them did not.
+
+RYN's copy of Glotus's threat line had dropped `velocityTickThreat`:
+
+```js
+// Glotus, DefaultHat.getBestCurrentHat
+detectedDangerEnemy || detectedEnemy || velocityTickThreat || reverseInsta || toolHammerInsta || rangedBowInsta
+// RYN, before this change
+detectedDangerEnemy || detectedEnemy ||                      reverseInsta || toolHammerInsta || rangedBowInsta
+```
+
+It never showed, because Falcon's `velSoldier` was a straight read of the same
+flag and reached `forceHat` by the other route. With that module gone the flag
+had no soldier path left at all — and an enemy set up for a diamond-polearm
+turret tick is the case where the helmet matters most. The line now matches
+Glotus's.
+
+Section 9 of the test suite pins the whole set down: every flag the heal treats
+as a threat has to put soldier on, so the next module that moves cannot take a
+flag's only path with it. Reverting the one word fails two of them.
