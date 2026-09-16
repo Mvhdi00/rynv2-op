@@ -150,72 +150,211 @@ window.grbtp = 35;
   }
   const altcha = new Altcha;
   const RYN_SITEKEY = "0x4AAAAAAAMYHI96GFiJzMmp";
-  const generateTurnstileToken = () => new Promise((resolve, reject) => {
+  // ── Minting, on widgets that are kept rather than rebuilt ─────────────────
+  //
+  // What stood here rendered a widget, took its token, and then removed the
+  // widget — a full teardown and rebuild for every single token. That rebuild
+  // is the expensive part, and none of it is the challenge: `turnstile.render`
+  // inserts a cross-origin iframe, which means a document fetch, a script
+  // bootstrap and a handshake with Cloudflare before any work starts. Solving
+  // is what is left over after all that.
+  //
+  // `turnstile.reset(widgetId)` runs a fresh challenge on a widget that is
+  // already standing, so the iframe, its document and its script stay put and
+  // only the challenge is repeated. So widgets are now kept and reset, and a
+  // render only happens when there is no free widget to reset.
+  //
+  // Two supporting choices:
+  //
+  //   · The idle wait is skipped for a reset. A render is what drops frames —
+  //     iframe insertion, layout, composite — so that is still handed to an
+  //     idle moment. A reset touches nothing outside the existing frame, and
+  //     making it queue behind `requestIdleCallback` (up to a 2s timeout on a
+  //     busy page) would cost more than it saves.
+  //
+  //   · `refresh-expired: "manual"` stops Cloudflare re-solving a token behind
+  //     our back while the widget sits idle. The pool takes the token the
+  //     moment it lands, so an automatic refresh is work nobody asked for.
+  //
+  // NOTE: I could not measure this in the environment it was written in —
+  // challenges.cloudflare.com is blocked there, so no real widget ever ran.
+  // The reasoning is from the Turnstile API and from what the old code did per
+  // token; the shape of the win is "stop rebuilding the iframe", not a number.
+  //
+  // Everything here falls back to the old behaviour on its own: a `turnstile`
+  // without `reset`, a widget that errors, and a reset that never answers all
+  // end up rendering a fresh widget, which is exactly what used to happen
+  // every time.
+
+  // How many widgets may stand at once. One more than the pool's own busiest
+  // rate, so a spawn asking for a token inline while the pool is working has a
+  // widget of its own to reset rather than having to render one.
+  const TURNSTILE_MAX_WIDGETS = 3;
+  // A widget nobody has used for this long is taken down. An idle widget is an
+  // idle cross-origin iframe, and keeping one alive for a session that has
+  // stopped spawning is not worth the memory.
+  const TURNSTILE_WIDGET_IDLE_MS = 12e4;
+  // How long a single challenge may take before its widget is written off.
+  const TURNSTILE_WIDGET_TIMEOUT_MS = 2e4;
+
+  const _tsWidgets = [];
+  const _tsApi = () => {
     try {
       const ts = window.turnstile || window.top && window.top.turnstile;
-      if (!ts || typeof ts.render !== "function") {
+      return ts && typeof ts.render === "function" ? ts : null;
+    } catch (_) {
+      return null;
+    }
+  };
+  const _tsDestroy = widget => {
+    const i = _tsWidgets.indexOf(widget);
+    if (i >= 0) {
+      _tsWidgets.splice(i, 1);
+    }
+    if (widget.timer !== null) {
+      clearTimeout(widget.timer);
+      widget.timer = null;
+    }
+    try { delete RYN._capSlots[widget.slot]; } catch (_) {}
+    try {
+      const ts = _tsApi();
+      if (ts && widget.id != null && typeof ts.remove === "function") {
+        ts.remove(widget.id);
+      }
+    } catch (_) {}
+    try {
+      widget.holder.remove();
+    } catch (_) {}
+  };
+  // A challenge finished, one way or the other. The widget is kept unless the
+  // outcome says it cannot be trusted to answer again.
+  const _tsSettle = (widget, token, error) => {
+    if (widget.timer !== null) {
+      clearTimeout(widget.timer);
+      widget.timer = null;
+    }
+    const resolve = widget.resolve;
+    const reject = widget.reject;
+    widget.resolve = null;
+    widget.reject = null;
+    widget.busy = false;
+    widget.idleSince = Date.now();
+    if (error) {
+      _tsDestroy(widget);
+    }
+    if (resolve === null && reject === null) {
+      return;
+    }
+    if (error) {
+      reject(error);
+    } else {
+      resolve(token);
+    }
+  };
+  const _tsArm = widget => {
+    widget.busy = true;
+    widget.timer = setTimeout(() => {
+      _tsSettle(widget, null, new Error("turnstile timeout"));
+    }, TURNSTILE_WIDGET_TIMEOUT_MS);
+  };
+  const _tsRender = widget => {
+    const ts = _tsApi();
+    if (!ts) {
+      _tsSettle(widget, null, new Error("turnstile API not available"));
+      return;
+    }
+    widget.id = ts.render(widget.holder, {
+      sitekey: RYN_SITEKEY,
+      appearance: "interaction-only",
+      "refresh-expired": "manual",
+      callback: token => _tsSettle(widget, token, null),
+      "error-callback": () => _tsSettle(widget, null, new Error("turnstile error-callback")),
+      "expired-callback": () => _tsSettle(widget, null, new Error("turnstile expired"))
+    });
+    // `render` returns undefined when it refuses the container outright, which
+    // is not an error path Turnstile reports any other way.
+    if (widget.id === undefined || widget.id === null) {
+      _tsSettle(widget, null, new Error("turnstile render refused"));
+    }
+  };
+  const _tsMakeWidget = () => {
+    // MULTI-CAPTCHA: stack widgets up the right edge so several can be visible
+    // at once without their challenges overlapping.
+    window.RYN = window.RYN || {};
+    RYN._capSlots = RYN._capSlots || {};
+    let slot = 0;
+    while (RYN._capSlots[slot]) slot++;
+    RYN._capSlots[slot] = true;
+    const holder = document.createElement("div");
+    // `contain: layout style` tells the browser this box's layout cannot
+    // affect anything outside it, so inserting it does not invalidate the rest
+    // of the page. Paint containment is deliberately not included: it clips to
+    // the box, and an interactive challenge that needs to draw outside its own
+    // frame would be clipped into something unanswerable.
+    holder.style.cssText = "position:fixed;right:0;bottom:" + (slot * 70) + "px;width:300px;height:65px;z-index:2147483647;contain:layout style;";
+    (document.body || document.documentElement).appendChild(holder);
+    const widget = {
+      id: null,
+      holder: holder,
+      slot: slot,
+      busy: false,
+      resolve: null,
+      reject: null,
+      timer: null,
+      idleSince: Date.now()
+    };
+    _tsWidgets.push(widget);
+    return widget;
+  };
+  // Take down widgets nobody has used in a while. Called from the keeper, so
+  // it costs nothing on a session that is actively spawning.
+  const _tsReapWidgets = () => {
+    const now = Date.now();
+    for (let i = _tsWidgets.length - 1; i >= 0; i--) {
+      const widget = _tsWidgets[i];
+      if (!widget.busy && now - widget.idleSince >= TURNSTILE_WIDGET_IDLE_MS) {
+        _tsDestroy(widget);
+      }
+    }
+  };
+  const generateTurnstileToken = () => new Promise((resolve, reject) => {
+    try {
+      const ts = _tsApi();
+      if (!ts) {
         reject(new Error("turnstile API not available"));
         return;
       }
-      const holder = document.createElement("div");
-      // MULTI-CAPTCHA: stack widgets up the right edge so several bots can be
-      // verified at once without their captchas overlapping.
-      window.RYN = window.RYN || {};
-      RYN._capSlots = RYN._capSlots || {};
-      let _capSlot = 0;
-      while (RYN._capSlots[_capSlot]) _capSlot++;
-      RYN._capSlots[_capSlot] = true;
-      // `contain: layout style` tells the browser this box's layout cannot
-      // affect anything outside it, so inserting and removing it does not
-      // invalidate the rest of the page — which is most of what a widget
-      // costs when one appears every few seconds over a running game. Paint
-      // containment is deliberately not included: it clips to the box, and an
-      // interactive challenge that needs to draw outside its own frame would
-      // be clipped into something unanswerable.
-      holder.style.cssText = "position:fixed;right:0;bottom:" + (_capSlot * 70) + "px;width:300px;height:65px;z-index:2147483647;contain:layout style;";
-      (document.body || document.documentElement).appendChild(holder);
-      let done = false;
-      let widgetId = null;
-      const cleanup = () => {
-        try { delete RYN._capSlots[_capSlot]; } catch (e) {}
+      const free = _tsWidgets.find(w => !w.busy && w.id != null);
+      if (free !== undefined && typeof ts.reset === "function") {
+        free.resolve = resolve;
+        free.reject = reject;
+        _tsArm(free);
+        // No idle wait: a reset runs inside an iframe that is already there,
+        // so there is no insertion, no layout and nothing to defer.
         try {
-          if (widgetId != null) ts.remove(widgetId);
-        } catch (e) {}
-        try {
-          holder.remove();
-        } catch (e) {}
-      };
-      const to = setTimeout(() => {
-        if (done) return;
-        done = true;
-        cleanup();
-        reject(new Error("turnstile timeout"));
-      }, 20000);
-      widgetId = ts.render(holder, {
-        sitekey: RYN_SITEKEY,
-        appearance: "interaction-only",
-        callback: token => {
-          if (done) return;
-          done = true;
-          clearTimeout(to);
-          cleanup();
-          resolve(token);
-        },
-        "error-callback": () => {
-          if (done) return;
-          done = true;
-          clearTimeout(to);
-          cleanup();
-          reject(new Error("turnstile error-callback"));
-        },
-        "expired-callback": () => {
-          if (done) return;
-          done = true;
-          clearTimeout(to);
-          cleanup();
-          reject(new Error("turnstile expired"));
+          ts.reset(free.id);
+        } catch (e) {
+          _tsSettle(free, null, e instanceof Error ? e : new Error("turnstile reset failed"));
         }
-      });
+        return;
+      }
+      if (_tsWidgets.length >= TURNSTILE_MAX_WIDGETS) {
+        // Every widget is working. Rather than stack another iframe on top,
+        // let the caller fail — the pool treats a failed mint as "try again
+        // next keeper tick", which is what should happen when it is already at
+        // its own rate.
+        reject(new Error("turnstile widgets busy"));
+        return;
+      }
+      const widget = _tsMakeWidget();
+      widget.resolve = resolve;
+      widget.reject = reject;
+      _tsArm(widget);
+      // A render is the expensive one: it inserts a cross-origin iframe, and
+      // the layout and composite that follow are what show up as a dropped
+      // frame. That is still handed to the browser to place in a frame with
+      // room, instead of landing in the middle of one the game needed.
+      _turnstileIdle(() => _tsRender(widget));
     } catch (e) {
       reject(e);
     }
@@ -876,6 +1015,9 @@ window.grbtp = 35;
   setInterval(() => {
     try {
       TokenPool.refill();
+    } catch (_) {}
+    try {
+      _tsReapWidgets();
     } catch (_) {}
   }, TURNSTILE_KEEPER_MS);
   // `fresh` forces an inline mint and skips the pool. Used for the one retry

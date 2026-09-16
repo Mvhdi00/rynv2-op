@@ -5,7 +5,7 @@ Changes to **`Ryn_Type_2.user.js`**, worked against the shipped game bundle in
 `drivers/game-drivers.json`.
 
 ```sh
-node tools/test-ryn-type2.js     # 287 behaviour tests
+node tools/test-ryn-type2.js     # 325 behaviour tests
 node --check Ryn_Type_2.user.js
 ```
 
@@ -619,3 +619,66 @@ with seconds to spare. That margin covers a slow connect and our clock
 disagreeing with Cloudflare's. Trimming it to 30s would buy 30s more shelf life
 per token; it is left at 60s, because the failure it prevents is a bot that
 silently fails to connect.
+
+---
+
+## 7. Minting on widgets that are kept
+
+Every token used to cost a whole widget: create a container, `turnstile.render`,
+take the token, `turnstile.remove`, drop the container. The rebuild is the
+expensive half and none of it is the challenge — `render` inserts a cross-origin
+iframe, which means a document fetch, a script bootstrap and a handshake with
+Cloudflare before any work starts. Solving is what is left over.
+
+`turnstile.reset(widgetId)` runs a fresh challenge on a widget that is already
+standing: the iframe, its document and its script stay put and only the
+challenge is repeated. So widgets are now **kept and reset**, and a render only
+happens when there is no free widget to reset.
+
+```
+before   render → token → remove     render → token → remove     …
+after    render → token →  reset → token →  reset → token → …
+```
+
+Two supporting choices:
+
+- **The idle wait is skipped for a reset.** A render is what drops frames —
+  iframe insertion, layout, composite — so that is still handed to
+  `requestIdleCallback`. A reset touches nothing outside the existing frame, and
+  queueing it behind an idle callback (up to a 2s timeout on a busy page) would
+  cost more than it saves.
+- **`refresh-expired: "manual"`**, so Cloudflare does not re-solve a token
+  behind our back while a widget sits idle. The pool takes the token the moment
+  it lands.
+
+At most three widgets stand at once — one more than the pool's busiest rate, so
+a spawn asking inline while the pool is working has a widget of its own to
+reset. A fourth request is refused rather than stacking another iframe, and the
+pool treats that like any failed mint: try again next keeper tick. A widget
+nobody has used for two minutes is taken down.
+
+### What is not claimed
+
+**This was never measured.** `challenges.cloudflare.com` is blocked from the
+environment it was written in, so no real widget ever ran. The reasoning is from
+the Turnstile API and from what the old code did per token; the shape of the win
+is "stop rebuilding the iframe", not a number.
+
+What *is* pinned down is the behaviour the win depends on, and every way it can
+fail. Cloudflare may well rate-limit repeated resets, or a widget may go stale
+after enough of them — so each failure path falls back to exactly what used to
+happen every time:
+
+| | |
+|---|---|
+| a `turnstile` with no `reset` | renders a fresh widget, the old way |
+| `error-callback` / `expired-callback` | widget taken down, slot freed, next token renders fresh |
+| `reset()` throws | rejects, and the widget is not left standing broken |
+| a challenge that never answers | written off at 20s, widget taken down |
+| `render` refuses the container | an error rather than a hang |
+
+### Still on the table
+
+`TURNSTILE_SAFETY_MS` holds 60s back from Cloudflare's 300, so a pooled token is
+discarded at 240s. Trimming it to 30s would buy 30s more shelf life per token.
+Left at 60s, because what it prevents is a bot that silently fails to connect.

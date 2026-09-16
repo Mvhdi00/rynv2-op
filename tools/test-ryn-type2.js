@@ -62,6 +62,7 @@ const healSrc = between(find(/^  const HEAL_SOLDIER_HAT = /), find(/^  class Aut
 // out of the script rather than being written again here.
 const itemsSrc = between(find(/^  const Items = \[ \{/), find(/^  const WeaponVariants = \[ \{/));
 const hatSrc = between(find(/^  class DefaultHat \{/), find(/^  class SafeWalk \{/));
+const mintSrc = between(find(/^  const TURNSTILE_MAX_WIDGETS = /), find(/^  \/\/ ── Verification, minted before/));
 
 // Everything the slices reach for that lives elsewhere in the script, stubbed
 // at the same shape.
@@ -1304,6 +1305,258 @@ function testHeal() {
   }
 }
 
+// ── 10. minting on widgets that are kept ───────────────────────────────────
+//
+// Every token used to cost a full widget teardown and rebuild, and the rebuild
+// is the expensive half: `render` inserts a cross-origin iframe, which is a
+// document fetch, a script bootstrap and a handshake before any challenge
+// starts. `reset` re-runs the challenge on a widget that is already standing.
+//
+// None of this could be measured where it was written — challenges.cloudflare
+// .com is blocked there — so these do not assert a speed. They assert the
+// thing the speed depends on: that a second token resets rather than renders,
+// and that every way a widget can fail still falls back to a fresh render.
+
+function buildMint(env) {
+  const body = `
+    const window = env.window;
+    const document = env.document;
+    const RYN = env.window.RYN;
+    const Date = env.Date;
+    const setTimeout = env.setTimeout;
+    const clearTimeout = env.clearTimeout;
+    const RYN_SITEKEY = "sitekey";
+    const _turnstileIdle = env.idle;
+    ${mintSrc}
+    return { generateTurnstileToken, _tsReapWidgets, _tsWidgets,
+             MAX: TURNSTILE_MAX_WIDGETS, IDLE_MS: TURNSTILE_WIDGET_IDLE_MS,
+             TIMEOUT: TURNSTILE_WIDGET_TIMEOUT_MS };
+  `;
+  return new Function("env", body)(env);
+}
+
+function mintHarness(opts) {
+  const o = opts || {};
+  let now = 1e6;
+  let timers = [];
+  const calls = { render: 0, reset: 0, remove: 0 };
+  const widgets = new Map();      // id -> options
+  let nextId = 1;
+  const el = () => ({
+    style: {},
+    remove() { this.removed = true; },
+    removed: false
+  });
+  const ts = {
+    render(holder, options) {
+      calls.render++;
+      if (o.renderRefuses) return undefined;
+      const id = "w" + nextId++;
+      widgets.set(id, { options: options, holder: holder });
+      return id;
+    },
+    remove(id) { calls.remove++; widgets.delete(id); },
+    reset(id) {
+      calls.reset++;
+      if (o.resetThrows) throw new Error("reset blew up");
+    }
+  };
+  if (o.noReset) delete ts.reset;
+  const win = { turnstile: o.noTurnstile ? undefined : ts, top: null, RYN: {} };
+  const doc = { createElement: () => el(), body: { appendChild: () => {} } };
+  const idleQueue = [];
+  const mod = buildMint({
+    window: win,
+    document: doc,
+    Date: { now: () => now },
+    setTimeout: (fn, ms) => { const t = { due: now + (ms || 0), fn: fn }; timers.push(t); return t; },
+    clearTimeout: t => { const i = timers.indexOf(t); if (i >= 0) timers.splice(i, 1); },
+    idle: fn => { idleQueue.push(fn); }
+  });
+  return {
+    mod: mod, ts: ts, calls: calls, win: win,
+    flushIdle: () => { const q = idleQueue.slice(); idleQueue.length = 0; q.forEach(f => f()); },
+    // Answer the challenge running on a given widget, by the order they were made.
+    answer: (id, token) => { widgets.get(id).options.callback(token); },
+    fail: id => { widgets.get(id).options["error-callback"](); },
+    expire: id => { widgets.get(id).options["expired-callback"](); },
+    ids: () => [ ...widgets.keys() ],
+    optionsFor: id => widgets.get(id).options,
+    advance: ms => {
+      now += ms;
+      const due = timers.filter(t => t.due <= now);
+      timers = timers.filter(t => t.due > now);
+      due.forEach(t => t.fn());
+    },
+    get live() { return mod._tsWidgets.length; },
+    get slots() { return Object.keys(win.RYN._capSlots || {}).length; }
+  };
+}
+
+async function testMint() {
+  section("10. minting on widgets that are kept");
+
+  {
+    const h = mintHarness();
+    const first = h.mod.generateTurnstileToken();
+    ok("a render is deferred to idle", h.calls.render === 0, "render=" + h.calls.render);
+    h.flushIdle();
+    ok("and happens once idle comes round", h.calls.render === 1, "render=" + h.calls.render);
+    h.answer(h.ids()[0], "tok1");
+    ok("the first token arrives", (await first) === "tok1");
+    ok("the widget is kept, not removed", h.calls.remove === 0 && h.live === 1);
+
+    // The whole point: the second token resets rather than rendering again.
+    const second = h.mod.generateTurnstileToken();
+    ok("a second token resets the standing widget", h.calls.reset === 1, "reset=" + h.calls.reset);
+    ok("and renders nothing new", h.calls.render === 1, "render=" + h.calls.render);
+    ok("a reset does not wait for idle", h.calls.reset === 1);
+    h.answer(h.ids()[0], "tok2");
+    ok("the second token arrives too", (await second) === "tok2");
+    ok("still one widget standing", h.live === 1);
+  }
+  {
+    // Two at once need two widgets; a third request beyond the cap is refused
+    // rather than stacking another iframe.
+    const h = mintHarness();
+    const a = h.mod.generateTurnstileToken();
+    const b = h.mod.generateTurnstileToken();
+    h.flushIdle();
+    ok("two at once render two widgets", h.calls.render === 2, "render=" + h.calls.render);
+    ok("on two different slots", h.slots === 2, "slots=" + h.slots);
+    const c = h.mod.generateTurnstileToken();
+    h.flushIdle();
+    ok("a third still fits under the cap", h.calls.render === 3, "render=" + h.calls.render);
+    const d = h.mod.generateTurnstileToken().then(() => "ok", e => e.message);
+    ok("a fourth is refused rather than stacked", (await d) === "turnstile widgets busy");
+    const ids = h.ids();
+    h.answer(ids[0], "a"); h.answer(ids[1], "b"); h.answer(ids[2], "c");
+    ok("all three answer", (await Promise.all([ a, b, c ])).join() === "a,b,c");
+    ok("and all three are kept", h.live === h.mod.MAX, "live=" + h.live);
+  }
+  {
+    // A freed widget is reused before a new one is rendered.
+    const h = mintHarness();
+    const a = h.mod.generateTurnstileToken();
+    h.flushIdle();
+    h.answer(h.ids()[0], "a");
+    await a;
+    const b = h.mod.generateTurnstileToken();
+    ok("the free widget is reset rather than a second rendered", h.calls.render === 1 && h.calls.reset === 1);
+    h.answer(h.ids()[0], "b");
+    await b;
+  }
+
+  // ── every failure still falls back to a fresh render ─────────────────────
+  {
+    const h = mintHarness();
+    const a = h.mod.generateTurnstileToken().then(() => "ok", e => e.message);
+    h.flushIdle();
+    h.fail(h.ids()[0]);
+    ok("an error rejects", (await a) === "turnstile error-callback");
+    ok("and the broken widget is taken down", h.live === 0, "live=" + h.live);
+    ok("its slot is given back", h.slots === 0, "slots=" + h.slots);
+    const b = h.mod.generateTurnstileToken();
+    h.flushIdle();
+    ok("the next token renders fresh", h.calls.render === 2, "render=" + h.calls.render);
+    h.answer(h.ids()[0], "b");
+    ok("and works", (await b) === "b");
+  }
+  {
+    const h = mintHarness();
+    const a = h.mod.generateTurnstileToken().then(() => "ok", e => e.message);
+    h.flushIdle();
+    h.expire(h.ids()[0]);
+    ok("an expiry rejects and takes the widget down", (await a) === "turnstile expired" && h.live === 0);
+  }
+  {
+    const h = mintHarness();
+    const a = h.mod.generateTurnstileToken().then(() => "ok", e => e.message);
+    h.flushIdle();
+    h.advance(h.mod.TIMEOUT + 1);
+    ok("a challenge that never answers times out", (await a) === "turnstile timeout");
+    ok("and its widget is taken down", h.live === 0, "live=" + h.live);
+  }
+  {
+    // A reset that throws must not leave the widget wedged as busy.
+    const h = mintHarness();
+    const a = h.mod.generateTurnstileToken();
+    h.flushIdle();
+    h.answer(h.ids()[0], "a");
+    await a;
+    h.ts.reset = () => { throw new Error("reset blew up"); };
+    const b = h.mod.generateTurnstileToken().then(() => "ok", e => e.message);
+    ok("a reset that throws rejects", (await b) === "reset blew up");
+    ok("and the widget is not left standing broken", h.live === 0, "live=" + h.live);
+  }
+  {
+    // An old Turnstile without reset still works, the slow way.
+    const h = mintHarness({ noReset: true });
+    const a = h.mod.generateTurnstileToken();
+    h.flushIdle();
+    h.answer(h.ids()[0], "a");
+    await a;
+    const b = h.mod.generateTurnstileToken();
+    h.flushIdle();
+    ok("without reset it renders a second widget", h.calls.render === 2, "render=" + h.calls.render);
+    h.answer(h.ids()[1], "b");
+    ok("and still delivers", (await b) === "b");
+  }
+  {
+    const h = mintHarness({ renderRefuses: true });
+    const a = h.mod.generateTurnstileToken().then(() => "ok", e => e.message);
+    h.flushIdle();
+    ok("a render that refuses the container is an error, not a hang", (await a) === "turnstile render refused");
+    ok("and leaves nothing standing", h.live === 0);
+  }
+  {
+    const h = mintHarness({ noTurnstile: true });
+    const a = h.mod.generateTurnstileToken().then(() => "ok", e => e.message);
+    ok("no Turnstile at all is refused up front", (await a) === "turnstile API not available");
+  }
+
+  // ── idle widgets are taken down ──────────────────────────────────────────
+  {
+    const h = mintHarness();
+    const a = h.mod.generateTurnstileToken();
+    h.flushIdle();
+    h.answer(h.ids()[0], "a");
+    await a;
+    h.advance(h.mod.IDLE_MS - 1);
+    h.mod._tsReapWidgets();
+    ok("a widget used recently is left alone", h.live === 1, "live=" + h.live);
+    h.advance(2);
+    h.mod._tsReapWidgets();
+    ok("one nobody has used is taken down", h.live === 0, "live=" + h.live);
+    ok("and gives its slot back", h.slots === 0, "slots=" + h.slots);
+  }
+  {
+    // The reaper skips busy widgets, and in practice never sees one: a
+    // challenge is written off at 20s and the idle window is 120s, so a busy
+    // widget is always settled one way or the other long before it could be a
+    // candidate. Asserted as the relationship rather than staged, because
+    // staging it would need the timeout not to fire.
+    const h = mintHarness();
+    ok("a challenge is written off well before the idle window",
+       h.mod.TIMEOUT < h.mod.IDLE_MS, "timeout=" + h.mod.TIMEOUT + " idle=" + h.mod.IDLE_MS);
+    h.mod.generateTurnstileToken();
+    h.flushIdle();
+    h.advance(h.mod.IDLE_MS + 1);
+    ok("so one that never answers is gone by then", h.live === 0, "live=" + h.live);
+  }
+  {
+    const h = mintHarness();
+    const a = h.mod.generateTurnstileToken();
+    h.flushIdle();
+    ok("refresh-expired is manual, so nothing re-solves behind us",
+       h.optionsFor(h.ids()[0])["refresh-expired"] === "manual");
+    ok("and the widget stays interaction-only",
+       h.optionsFor(h.ids()[0]).appearance === "interaction-only");
+    h.answer(h.ids()[0], "a");
+    await a;
+  }
+}
+
 // ── 9. the soldier hat, after the heal stopped asking for one ──────────────
 //
 // The Falcon heal owned two hat asks, `wantsSoldier` and `wantsEMP`, and both
@@ -1710,6 +1963,7 @@ function testMission() {
   testRemove();
   testHeal();
   testSoldierHat();
+  await testMint();
   console.log("\n" + pass + " passed, " + fail + " failed\n");
   process.exit(fail === 0 ? 0 : 1);
 })();
