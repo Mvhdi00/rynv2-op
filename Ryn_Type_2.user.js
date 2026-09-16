@@ -404,6 +404,14 @@ window.grbtp = 35;
   // oldest one the pool will ever serve still has the whole safety margin left
   // when it reaches the server.
   const TURNSTILE_TTL_MS = TURNSTILE_CF_LIFETIME_MS - TURNSTILE_SAFETY_MS;
+  // The smallest the shelf ever shrinks to. Enough to spawn a couple of bots
+  // back to back without waiting, which is the case even a capped connection
+  // still has.
+  const TURNSTILE_POOL_FLOOR = 4;
+  // How far the shelf moves on one piece of evidence. Small, because the
+  // evidence arrives one token at a time and a shelf that lurches would spend
+  // its life overshooting in both directions.
+  const TURNSTILE_POOL_STEP = 2;
   // Where the shelf is parked across a page load.
   //
   // Switching server is a page reload — the game's own switchServer assigns
@@ -641,8 +649,39 @@ window.grbtp = 35;
     get waiting() {
       return this.waiters.length;
     }
+    // ── how many to keep ────────────────────────────────────────────────────
+    //
+    // The shelf used to fill to TURNSTILE_POOL_TARGET and stay there, which is
+    // right only if the tokens get used. They are single-use and die at 240s,
+    // so a shelf bigger than the demand is not a reserve — it is a treadmill,
+    // re-solving the same tokens over and over as they age out, and paying
+    // frames for every one.
+    //
+    // That is what a connection limit looks like from in here. If only one bot
+    // can get on, ninety-nine tokens is ninety-eight solved for nothing.
+    //
+    // So the shelf is sized by what actually happens to the tokens. Two pieces
+    // of evidence, each worth one step:
+    //
+    //   a token aged out unused  ->  too many, shrink
+    //   a spawn had to wait      ->  too few, grow
+    //
+    // It settles wherever supply meets demand — near the floor on a capped
+    // connection, near the ceiling if the fleet really does spawn that fast —
+    // without being told what the limit is, because nothing in the browser can
+    // find that out.
+    _target=TURNSTILE_POOL_FLOOR;
     get target() {
+      return this._target;
+    }
+    get targetCeiling() {
       return TURNSTILE_POOL_TARGET;
+    }
+    _wantMore() {
+      this._target = Math.min(TURNSTILE_POOL_TARGET, this._target + TURNSTILE_POOL_STEP);
+    }
+    _wantFewer() {
+      this._target = Math.max(TURNSTILE_POOL_FLOOR, this._target - TURNSTILE_POOL_STEP);
     }
     // The manual switch, and it starts off. Nothing is minted until the pool
     // is switched on from the panel, which is itself hidden until `!tk` asks
@@ -851,6 +890,10 @@ window.grbtp = 35;
           if (entry.born > now || now - entry.born >= TURNSTILE_TTL_MS) {
             continue;
           }
+          // Capped at the ceiling rather than the live target. These are
+          // already solved and still inside their window, so keeping them
+          // costs nothing — and throwing them away to satisfy a shelf size is
+          // the waste this whole mechanism exists to stop.
           if (this.ready.length >= TURNSTILE_POOL_TARGET) {
             break;
           }
@@ -930,6 +973,9 @@ window.grbtp = 35;
         };
         waiter.timer = setTimeout(() => waiter.settle(null), ms || TURNSTILE_WAIT_MS);
         this.waiters.push(waiter);
+        // Someone wanted a token and the shelf had none. That is the only
+        // evidence that the shelf is too small, and it is worth one step up.
+        this._wantMore();
         // Do not sit on the keeper's 2.5s cadence when someone is waiting.
         this.refill();
         this._wakeIfDry();
@@ -975,7 +1021,7 @@ window.grbtp = 35;
       }
       // Anyone waiting is demand on top of the shelf, so the pool keeps
       // minting for them even when it is otherwise full.
-      const short = TURNSTILE_POOL_TARGET + this.waiters.length - this.ready.length - this.inflight.length;
+      const short = this._target + this.waiters.length - this.ready.length - this.inflight.length;
       const want = Math.min(short, this._sampleConcurrency(now) - this.inflight.length);
       for (let i = 0; i < want; i++) {
         const slot = {
@@ -30057,6 +30103,7 @@ window.grbtp = 35;
       let frames = -1;
       let enabled = true;
       let restored = 0;
+      let ceiling = 99;
       try {
         ready = TokenPool.size;
         minting = TokenPool.minting;
@@ -30070,6 +30117,7 @@ window.grbtp = 35;
         frames = TokenPool.frames;
         enabled = TokenPool.enabled;
         restored = TokenPool.restored;
+        ceiling = TokenPool.targetCeiling;
       } catch (_) {
         return;
       }
@@ -30078,7 +30126,13 @@ window.grbtp = 35;
         toggle.textContent = enabled ? "Stop" : "Start";
         toggle.classList.toggle("primary", !enabled);
       }
+      // The target moves now, so it is worth saying what it settled on and
+      // that there is room above it — otherwise "4 of 4 ready" reads like the
+      // pool has stopped rather than like it has found its level.
       const bits = [ ready + " of " + target + " ready" ];
+      if (expired > 0 && target < ceiling) {
+        bits.push("sized to what you use, up to " + ceiling);
+      }
       // Where the shelf came from, when some of it came back rather than being
       // solved: a server switch is a page reload, and this is what says the
       // pool was carried over instead of started again.

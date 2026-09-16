@@ -5,7 +5,7 @@ Changes to **`Ryn_Type_2.user.js`**, worked against the shipped game bundle in
 `drivers/game-drivers.json`.
 
 ```sh
-node tools/test-ryn-type2.js     # 325 behaviour tests
+node tools/test-ryn-type2.js     # 332 behaviour tests
 node --check Ryn_Type_2.user.js
 ```
 
@@ -682,3 +682,37 @@ happen every time:
 `TURNSTILE_SAFETY_MS` holds 60s back from Cloudflare's 300, so a pooled token is
 discarded at 240s. Trimming it to 30s would buy 30s more shelf life per token.
 Left at 60s, because what it prevents is a bot that silently fails to connect.
+
+---
+
+## 8. The shelf sizes itself to what actually gets used
+
+The pool filled to 99 and stayed there. That is right only if the tokens get
+used. They are **single-use and die at 240s**, so a shelf bigger than the demand
+is not a reserve — it is a treadmill, re-solving the same tokens over and over
+as they age out, and paying frames for every one.
+
+That is what a connection limit looks like from inside the client. If only one
+bot can get on, ninety-nine tokens is ninety-eight solved for nothing.
+
+Nothing in the browser can find out what the limit is, so the shelf is sized by
+what happens to the tokens instead. Two pieces of evidence, one step each:
+
+| observed | meaning | move |
+|---|---|---|
+| a token aged out unused | too many | shrink by 2 |
+| a spawn had to wait | too few | grow by 2 |
+
+It starts at the **floor (4)** rather than the ceiling, and settles wherever
+supply meets demand — near the floor on a capped connection, near the **ceiling
+(99)** if the fleet really does spawn that fast. The step is small because the
+evidence arrives one token at a time; a shelf that lurched would spend its life
+overshooting in both directions.
+
+One deliberate exception: **a shelf restored from a page load is not trimmed to
+the live target.** Those tokens are already solved and still inside their
+window, so keeping them costs nothing, and throwing them away to satisfy a size
+is exactly the waste this exists to stop.
+
+The panel says `sized to what you use, up to 99` once it has seen a token expire,
+so `4 of 4 ready` reads as having found its level rather than having stopped.

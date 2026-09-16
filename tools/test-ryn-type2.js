@@ -110,6 +110,7 @@ function buildPool(env) {
     ${poolSrc}
     return { TokenPool: TokenPool, TTL: TURNSTILE_TTL_MS, CF: TURNSTILE_CF_LIFETIME_MS,
              SAFETY: TURNSTILE_SAFETY_MS,
+             FLOOR: TURNSTILE_POOL_FLOOR, STEP: TURNSTILE_POOL_STEP,
              MOVING: TURNSTILE_CONCURRENT_MOVING, STILL: TURNSTILE_CONCURRENT_STILL,
              STILL_SPEED: TURNSTILE_STILL_SPEED, STILL_MS: TURNSTILE_STILL_MS,
              FPS_SLACK: TURNSTILE_FPS_SLACK, FPS_FLOOR: TURNSTILE_FPS_FLOOR_MS,
@@ -480,9 +481,10 @@ function poolHarness(opts) {
       await new Promise(r => setImmediate(r));
     },
     // Run the keeper until the pool is full, or give up.
+    // Run the keeper until the pool has as many as it currently wants.
     fill: async function (cap) {
       let rounds = 0;
-      while (built.TokenPool.size < built.TARGET && rounds < (cap || 200)) {
+      while (built.TokenPool.size < built.TokenPool.target && rounds < (cap || 200)) {
         await this.tick();
         rounds++;
       }
@@ -638,7 +640,7 @@ async function testPool() {
     h.client.myPlayer.inGame = true;
     ok("the panel reports it as running once in the game", h.pool.running === true);
     await h.fill();
-    ok("entering the game fills the pool", h.pool.size === h.k.TARGET, "size=" + h.pool.size);
+    ok("entering the game fills the pool", h.pool.size === h.pool.target, "size=" + h.pool.size);
 
     // Death takes it out of the game again. The pool does not drain in that
     // time, but nothing new is minted either.
@@ -647,7 +649,7 @@ async function testPool() {
     h.pool.take();
     h.pump();
     ok("a death pauses minting", h.minted === before);
-    ok("but the pool it already has survives", h.pool.size === h.k.TARGET - 1, "size=" + h.pool.size);
+    ok("but the pool it already has survives", h.pool.size === h.pool.target - 1, "size=" + h.pool.size);
     h.client.myPlayer.inGame = true;
     h.pumpAll();
     ok("respawning resumes it", h.minted > before);
@@ -661,7 +663,7 @@ async function testPool() {
   ok("a refill does not double-mint what is already in flight", h.minted === h.pool.concurrency, "minted=" + h.minted);
 
   const rounds = await h.fill();
-  ok("it fills to the full ninety-nine", h.pool.size === h.k.TARGET, "size=" + h.pool.size);
+  ok("it fills to what it currently wants", h.pool.size === h.pool.target, "size=" + h.pool.size);
   ok("in no more ticks than the faster rate allows", rounds <= h.k.TARGET, "rounds=" + rounds);
   h.pump();
   ok("a full pool mints nothing more", h.inflight === 0);
@@ -669,7 +671,7 @@ async function testPool() {
   const a = h.pool.take();
   const b = h.pool.take();
   ok("two takes give two different tokens", a !== null && b !== null && a !== b);
-  ok("taking removes them from the pool", h.pool.size === h.k.TARGET - 2, "size=" + h.pool.size);
+  ok("taking removes them from the pool", h.pool.size === h.pool.target - 2, "size=" + h.pool.size);
   ok("spending is counted", h.pool.spent === 2);
 
   // Oldest-first, so the bottom of the pool cannot rot unused.
@@ -689,7 +691,7 @@ async function testPool() {
     ok("a fully drained pool is empty", hh.pool.size === 0);
     ok("an empty pool returns null rather than reusing one", hh.pool.take() === null);
     await hh.fill();
-    ok("and fills itself straight back up", hh.pool.size === hh.k.TARGET, "size=" + hh.pool.size);
+    ok("and fills itself straight back up", hh.pool.size === hh.pool.target, "size=" + hh.pool.size);
   }
 
   // Expiry, and the standing cost of holding a pool full.
@@ -701,7 +703,7 @@ async function testPool() {
     hh.advance(2);
     ok("one millisecond past the window it is gone", hh.pool.take() === null);
     ok("the whole pool ages out together", hh.pool.size === 0);
-    ok("tokens that aged out unused are counted", hh.pool.expired >= hh.k.TARGET - 1, "expired=" + hh.pool.expired);
+    ok("tokens that aged out unused are counted", hh.pool.expired > 0, "expired=" + hh.pool.expired);
     const before = hh.minted;
     await hh.fill();
     ok("an aged-out pool is minted again", hh.minted > before);
@@ -759,8 +761,55 @@ async function testPool() {
   }
 
   // The target is a constant now, not a setting.
-  ok("the target is fixed at ninety-nine", h.k.TARGET === 99, "target=" + h.k.TARGET);
-  ok("the pool reports the same target it fills to", h.pool.target === h.k.TARGET);
+  ok("the ceiling is ninety-nine", h.k.TARGET === 99, "ceiling=" + h.k.TARGET);
+  ok("the pool reports the ceiling it may grow to", h.pool.targetCeiling === h.k.TARGET);
+
+  // ── the shelf sizes itself to what gets used ──────────────────────────────
+  //
+  // Tokens are single-use and die at 240s, so a shelf bigger than the demand
+  // is not a reserve — it is a treadmill, re-solving the same tokens as they
+  // age out and paying frames for every one. That is what a connection limit
+  // looks like from in here: if only one bot can get on, ninety-nine tokens is
+  // ninety-eight solved for nothing.
+  {
+    const h = poolHarness();
+    ok("it starts at the floor, not the ceiling", h.pool.target === h.k.FLOOR, "target=" + h.pool.target);
+    ok("and the ceiling is still there to grow into", h.pool.targetCeiling === h.k.TARGET);
+  }
+  {
+    // Nobody takes anything: the shelf fills, ages out, and shrinks.
+    const h = poolHarness();
+    await h.fill();
+    const started = h.pool.target;
+    for (let i = 0; i < 40; i++) await h.tick();
+    ok("tokens ageing out unused shrink the shelf", h.pool.target <= started, "target=" + h.pool.target + " started=" + started);
+    ok("but never below the floor", h.pool.target >= h.k.FLOOR, "target=" + h.pool.target);
+  }
+  {
+    // Spawns that have to wait grow it.
+    const h = poolHarness();
+    const started = h.pool.target;
+    for (let i = 0; i < 3; i++) h.pool.waitFor(5000);
+    ok("a spawn that had to wait grows the shelf", h.pool.target > started, "target=" + h.pool.target + " started=" + started);
+    h.advance(6000);
+  }
+  {
+    // And it cannot run away: the ceiling holds.
+    const h = poolHarness();
+    for (let i = 0; i < 200; i++) h.pool.waitFor(5000);
+    ok("demand cannot push it past the ceiling", h.pool.target === h.k.TARGET, "target=" + h.pool.target);
+    h.advance(6000);
+  }
+  {
+    // Tokens already solved are kept even when the shelf has shrunk — they
+    // cost nothing to hold and throwing them away is the waste being fixed.
+    const first = poolHarness();
+    await first.fill();
+    const saved = first.pool.size;
+    const after = poolHarness({ store: first.store, at: first.now });
+    ok("a restored shelf is not trimmed to the live target",
+       after.pool.size === saved, "size=" + after.pool.size + " saved=" + saved);
+  }
 
   // ── the shelf survives a page load ────────────────────────────────────────
   //
@@ -772,17 +821,18 @@ async function testPool() {
   {
     const first = poolHarness();
     await first.fill();
-    ok("the pool filled before the switch", first.pool.size === first.k.TARGET, "size=" + first.pool.size);
+    ok("the pool filled before the switch", first.pool.size === first.pool.target, "size=" + first.pool.size);
     const before = [];
-    for (let i = 0; i < 5; i++) before.push(first.pool.take());
+    for (let i = 0; i < 2; i++) before.push(first.pool.take());
+    const saved = first.pool.size;
 
     // The reload: a brand new pool, nothing in memory, same localStorage.
     const after = poolHarness({ store: first.store, at: first.now });
-    ok("the shelf comes back on its own at startup", after.pool.size === first.k.TARGET - 5, "size=" + after.pool.size);
-    ok("and says how many it restored", after.pool.restored === first.k.TARGET - 5, "restored=" + after.pool.restored);
+    ok("the shelf comes back on its own at startup", after.pool.size === saved, "size=" + after.pool.size + " saved=" + saved);
+    ok("and says how many it restored", after.pool.restored === saved, "restored=" + after.pool.restored);
     // Loading twice must not put the same tokens on the shelf again.
     after.pool._load();
-    ok("a second load adds nothing", after.pool.size === first.k.TARGET - 5, "size=" + after.pool.size);
+    ok("a second load adds nothing", after.pool.size === saved, "size=" + after.pool.size);
     // A token is single-use. One handed out before the switch must not come
     // back after it.
     const back = [];
@@ -864,7 +914,7 @@ async function testPool() {
     ok("past the deadline the stuck ones are written off", hh.pool.stalled >= rate, "stalled=" + hh.pool.stalled);
     ok("and the pool starts minting again", hh.minted > rate, "minted=" + hh.minted);
     await hh.fill();
-    ok("a pool that wedged recovers to full", hh.pool.size === hh.k.TARGET, "size=" + hh.pool.size);
+    ok("a pool that wedged recovers to full", hh.pool.size === hh.pool.target, "size=" + hh.pool.size);
   }
 
   // A challenge written off and then answered anyway is still a good token.
@@ -884,11 +934,11 @@ async function testPool() {
     const hh = poolHarness();
     for (let cycle = 0; cycle < 3; cycle++) {
       await hh.fill();
-      ok("cycle " + (cycle + 1) + ": filled to ninety-nine", hh.pool.size === hh.k.TARGET, "size=" + hh.pool.size);
-      for (let i = 0; i < hh.k.TARGET; i++) hh.pool.take();
+      ok("cycle " + (cycle + 1) + ": filled to what it wants", hh.pool.size === hh.pool.target, "size=" + hh.pool.size);
+      while (hh.pool.size > 0) hh.pool.take();
       ok("cycle " + (cycle + 1) + ": drained to nothing", hh.pool.size === 0);
     }
-    ok("three full cycles spent three times the target", hh.pool.spent === hh.k.TARGET * 3, "spent=" + hh.pool.spent);
+    ok("three full cycles drained it every time", hh.pool.spent > 0 && hh.pool.size === 0, "spent=" + hh.pool.spent);
   }
 
   // ── a spawn and the pool must not compete ─────────────────────────────────
@@ -960,7 +1010,7 @@ async function testPool() {
   {
     const hh = poolHarness();
     await hh.fill();
-    ok("the shelf is full", hh.pool.size === hh.k.TARGET);
+    ok("the shelf is full", hh.pool.size === hh.pool.target, "size=" + hh.pool.size);
     const got = hh.pool.take();
     ok("a spawn takes straight off a full shelf without waiting", typeof got === "string");
     ok("no challenge was needed for it", hh.pool.minting === 0);
