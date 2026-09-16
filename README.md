@@ -222,6 +222,12 @@ no such direction exists. `requestPlace` refuses a spike or trap whose
 footprint would touch one. Clan mates are exempt — the server already refuses
 that damage, so there is nothing to dodge and no output to give up.
 
+A bot you are **possessing** is ungated, like your own client. Your clicks
+never reached the gate anyway — the bundle raises the attack frame and the
+possession wrapper hands it to the active entity's `PacketManager`, a
+different path — so this only means the rest of that bot's tick behaves the
+way the main player's does while you hold it.
+
 ## 2. Player exclusion
 
 `EXCLUDE` sits next to `SCAN` on every row of the Target Scan list. The two are

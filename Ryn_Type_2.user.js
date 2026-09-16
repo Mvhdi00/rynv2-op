@@ -26927,6 +26927,19 @@ window.grbtp = 35;
       if (c.isOwner || angle === null || angle === undefined || !this.holdingWeapon) {
         return angle;
       }
+      // A bot you are driving yourself is you, so it is ungated like you.
+      //
+      // Your own clicks never reached this in the first place: the bundle
+      // raises the attack frame and the possession wrapper hands it straight
+      // to the active entity's PacketManager, which is a different path to
+      // this one. What this line changes is the rest of that bot's tick — the
+      // insta modules, auto break, the swing modules — so the whole
+      // connection behaves the way the main player's does while you hold it,
+      // rather than half of it obeying a rule the half you are steering does
+      // not.
+      if (Possess !== null && Possess.isActive(c)) {
+        return angle;
+      }
       const shielded = RynSafeAim.shielded(c);
       if (shielded.length === 0) {
         return angle;
@@ -27032,6 +27045,10 @@ window.grbtp = 35;
       }
       const c = this.client;
       if (c.isOwner) {
+        return false;
+      }
+      // Same rule as the swing: the bot you are holding places what you place.
+      if (Possess !== null && Possess.isActive(c)) {
         return false;
       }
       const shielded = RynSafeAim.shielded(c);
