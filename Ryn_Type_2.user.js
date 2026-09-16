@@ -265,23 +265,32 @@ window.grbtp = 35;
   // oldest one the pool will ever serve still has the whole safety margin left
   // when it reaches the server.
   const TURNSTILE_TTL_MS = TURNSTILE_CF_LIFETIME_MS - TURNSTILE_SAFETY_MS;
-  // How many are kept ready, always. Forty is the fleet cap, so a full pool is
-  // a full fleet spawned back to back with nothing waiting on verification.
-  const TURNSTILE_POOL_TARGET = 40;
-  // Challenges rendering at once.
+  // How many are kept ready, always. Ninety-nine is well past the fleet cap, so
+  // a full pool is a full fleet spawned back to back with nothing waiting on
+  // verification, and a deep reserve behind it for the ones that age out.
+  const TURNSTILE_POOL_TARGET = 99;
+  // Challenges rendering at once. Five, whether moving or standing still.
   //
   // A Turnstile challenge is a cross-origin iframe that lays out, composites
-  // and runs proof of work, and several of them side by side is a frame-rate
-  // cost you can feel — the page is trying to render a game at the same time.
-  // So the default is one. The pool takes longer to fill and the game stays
-  // smooth, which is the right way round: a pool that is a minute behind costs
-  // nothing once it is full, and dropped frames cost something every second.
+  // and runs proof of work. Five of those is a real cost, and what keeps it
+  // payable is not a lower number but the two guards around it: the frame
+  // test below, which stops starting anything the moment the smoothed frame
+  // time runs long, and the stagger next to it.
+  const TURNSTILE_CONCURRENT = 5;
+  // How far apart the five are started.
   //
-  // Standing still is the exception. Nothing about the game needs the frame
-  // budget at that moment, so a second challenge can run alongside and the
-  // pool catches up while you are not doing anything.
-  const TURNSTILE_CONCURRENT_MOVING = 1;
-  const TURNSTILE_CONCURRENT_STILL = 2;
+  // This is the part that makes five workable rather than five times worse.
+  // The expensive phase of a challenge is the front of it — inserting the
+  // iframe, the layout and composite that follow, and the first slice of proof
+  // of work — and five of those landing in the same frame is one long stall
+  // that the frame test can only notice after the fact. Spread across a second
+  // and a half, each front end lands in a frame of its own and the five still
+  // overlap for most of their life, which is where the throughput comes from.
+  //
+  // Five at once is also slower in wall-clock terms than five staggered: they
+  // contend for the same main thread, so each one's proof of work takes longer
+  // and they all finish late together.
+  const TURNSTILE_STAGGER_MS = 350;
   // Frames the pool will not spend.
   //
   // The rate above is a guess at when there is room; this is the measurement.
@@ -441,13 +450,6 @@ window.grbtp = 35;
     } catch (_) {}
     setTimeout(fn, 0);
   };
-  // Entity.speed is the distance covered in the last server tick, and the rest
-  // of this client already calls anything under about this "not moving".
-  const TURNSTILE_STILL_SPEED = 8;
-  // How long still before the second slot opens. Longer than the keeper's own
-  // interval, so it takes two consecutive quiet ticks rather than catching the
-  // one frame between two steps of a fight.
-  const TURNSTILE_STILL_MS = 4e3;
   const TURNSTILE_KEEPER_MS = 2500;
   // A challenge that has been running this long is written off. Its own
   // timeout is 20s, so this only fires for one that never settled at all —
@@ -508,38 +510,21 @@ window.grbtp = 35;
     get running() {
       return this.enabled && this._ready() && this._inGame();
     }
-    // When the player was first seen standing still. Zero means they are
-    // moving, so the second slot is closed.
-    _stillSince=0;
-    _concurrency=TURNSTILE_CONCURRENT_MOVING;
-    // Sampled once per top-up, and only there. The panel reads the result
-    // rather than taking its own sample, because this advances the stillness
-    // clock — a reading that moved with whether the menu happened to be open
-    // would be a different rate depending on where you were looking.
-    _sampleConcurrency(now) {
-      let speed = Infinity;
-      try {
-        const mp = client && client.myPlayer;
-        if (mp && typeof mp.speed === "number") {
-          speed = mp.speed;
-        }
-      } catch (_) {}
-      // Written as `!(speed <= x)` so an unreadable speed — Infinity, NaN —
-      // counts as moving and takes the quieter rate.
-      if (!(speed <= TURNSTILE_STILL_SPEED)) {
-        this._stillSince = 0;
-        this._concurrency = TURNSTILE_CONCURRENT_MOVING;
-        return this._concurrency;
-      }
-      if (this._stillSince === 0) {
-        this._stillSince = now;
-      }
-      this._concurrency = now - this._stillSince >= TURNSTILE_STILL_MS ? TURNSTILE_CONCURRENT_STILL : TURNSTILE_CONCURRENT_MOVING;
-      return this._concurrency;
+    // Five slots, always. What used to sit here read the player's speed and
+    // opened a second slot only once they had been standing still for four
+    // seconds. That is gone: the rate no longer depends on what the player is
+    // doing, because the two things that actually protect the frame rate — the
+    // frame test below and the stagger in `refill` — do not either.
+    _concurrency=TURNSTILE_CONCURRENT;
+    _sampleConcurrency() {
+      return TURNSTILE_CONCURRENT;
     }
     get concurrency() {
       return this._concurrency;
     }
+    // When the next challenge may start. Held across top-ups, so five started
+    // in one pass and five started one per keeper tick are spaced the same.
+    _nextStartAt=0;
     // The machine's own best smoothed frame time lately. Drifts up slowly so a
     // single fast frame cannot hold the bar high for the rest of the session.
     _dtBest=0;
@@ -744,8 +729,16 @@ window.grbtp = 35;
       const short = TURNSTILE_POOL_TARGET + this.waiters.length - this.ready.length - this.inflight.length;
       const want = Math.min(short, this._sampleConcurrency(now) - this.inflight.length);
       for (let i = 0; i < want; i++) {
+        // Spaced out rather than started together. `_nextStartAt` is carried
+        // between top-ups so the gap holds however the five are asked for —
+        // all in one pass here, or one per keeper tick.
+        const delay = Math.max(0, this._nextStartAt - now);
+        this._nextStartAt = now + delay + TURNSTILE_STAGGER_MS;
         const slot = {
-          at: now
+          // Dated from when the challenge will actually start, not from now,
+          // so a slot waiting its turn at the back of the stagger is not
+          // already eating into the reaper's patience.
+          at: now + delay
         };
         this.inflight.push(slot);
         // Started from idle rather than from here. Rendering the widget means
@@ -753,7 +746,18 @@ window.grbtp = 35;
         // follow are the part that shows up as a dropped frame — so they are
         // handed to the browser to place in a frame with room, instead of
         // landing in the middle of one the game needed.
-        _turnstileIdle(() => generateTurnstileToken().then(token => {
+        const start = () => {
+          // Re-tested at the moment it actually begins, not only when it was
+          // scheduled. A slot at the back of the stagger was committed to over
+          // a second ago, and the whole point of the frame test is not to
+          // spend frames *now* — so a challenge queued while things were calm
+          // is abandoned if they no longer are, and gives its slot back rather
+          // than holding one until the reaper comes for it.
+          if (!this.enabled || !this._ready() || !this._inGame() || !this._framesOk()) {
+            this._release(slot);
+            return;
+          }
+          _turnstileIdle(() => generateTurnstileToken().then(token => {
           this._release(slot);
           // Delivered even if the slot was reaped on the way: a token that
           // arrives late is still a token, and throwing it away would waste a
@@ -769,6 +773,12 @@ window.grbtp = 35;
           this._release(slot);
           this._wakeIfDry();
         }));
+        };
+        if (delay === 0) {
+          start();
+        } else {
+          setTimeout(start, delay);
+        }
       }
     }
   };
@@ -2410,9 +2420,9 @@ window.grbtp = 35;
 
   const Visuals_default = "<div class=\"menu-page\" data-id=\"3\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Visual</h1>\n        <p class=\"page-description\">Everything the client draws over the game. Turn off what you do not read during a fight — the fewer overlays are on, the less there is between you and the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Names<span class=\"sec-sub\">How players are labelled on the field.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">My Name</span>\n                    <span class=\"opt-desc\">Draws your own nickname in a colour of your choosing.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_myNameColorValue\" type=\"color\" title=\"Select Color\">\n                    <label class=\"switch-checkbox\"><input id=\"_myNameColor\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Mark RYN Players</span>\n                    <span class=\"opt-desc\">Flags other players running this client.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_markRynPlayers\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Player ID</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_showPlayerID\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Player HUD<span class=\"sec-sub\">Readouts drawn on and around players.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Weapon Reload Ring</span>\n                    <span class=\"opt-desc\">Draws what is left of each weapon's cooldown as a white edge inside its own tile in the item bar.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_weaponReloadRing\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Render HP</span>\n                    <span class=\"opt-desc\">Draws a health value on players instead of a bar alone.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_renderHP\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Position Prediction</span>\n                    <span class=\"opt-desc\">Marks where a moving player is expected to be on the next tick.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_positionPrediction\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">My Turret Reload Bar</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_playerTurretReloadBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Display player angle</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_displayPlayerAngle\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">World<span class=\"sec-sub\">Tint and weather drawn over the map itself.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Purple Tint</span>\n                    <span class=\"opt-desc\">Recolours world objects so structures read faster.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_objectTint\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Tint Transparency</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_objectTintOpacity\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_weather\">Rain &amp; Snow</label>\n                    <span class=\"opt-desc\">Rain across the map, turning to snow inside the snow biome.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_weather\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Intensity</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_weatherAmount\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_deathCorpse\">Death Corpses</label>\n                    <span class=\"opt-desc\">Leaves a body where a player you killed died, wearing a halo and angel wings &mdash; or a cowboy hat and a devil tail if they were the one carrying the skull. It holds on the spot, then floats up and fades away. Local and visual only.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_deathCorpse\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_killAnimation\">Kill Animation</label>\n                        <span class=\"opt-desc\">Which animation the body goes out on. The choice holds until you change it; Random draws a new one for every kill.</span>\n                    </div>\n                    <select id=\"_killAnimation\" class=\"ryn-select\">" + KILL_STYLE_OPTIONS + "</select>\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Structures<span class=\"sec-sub\">Who owns a building, and how much of it is left.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Structure Readout (Mine/Clan)</span>\n                    <span class=\"opt-desc\">Owner name and a health bar over your own and your clan's structures, within 500 units.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_itemHealthBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Structure Readout (Enemy)</span>\n                    <span class=\"opt-desc\">The same over everything that is not yours.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_itemHealthBarEnemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Health Bar Colour</span>\n                    <span class=\"opt-desc\">The fill inside the bar, for every structure.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_itemHealthBarColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Structure Colours<span class=\"sec-sub\">Spikes and traps recoloured by who placed them.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_structureColors\">Structure Colours</label>\n                    <span class=\"opt-desc\">Tints every spike and trap by its owner, so an enemy build reads at a glance. Ownership is the client's own team detection. Purely visual.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_structureColors\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Colour Strength</span>\n                    <span class=\"opt-desc\">How much of the original sprite the tint covers.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_structureColorStrength\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Own Spike</span>\n                    <span class=\"opt-desc\">Spikes you placed.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_ownSpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Ally Spike</span>\n                    <span class=\"opt-desc\">Spikes placed by your clan.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_allySpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enemy Spike</span>\n                    <span class=\"opt-desc\">Everyone else's spikes.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_enemySpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Own Trap</span>\n                    <span class=\"opt-desc\">Traps you placed.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_ownTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Ally Trap</span>\n                    <span class=\"opt-desc\">Traps placed by your clan.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_allyTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enemy Trap</span>\n                    <span class=\"opt-desc\">Everyone else's traps.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_enemyTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Hitboxes<span class=\"sec-sub\">Debug outlines. Useful while learning a range, noisy otherwise.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Weapon hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_weaponHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Collision hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_collisionHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Placement hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_placementHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Possible placement</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_possiblePlacement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Interface<span class=\"sec-sub\">The game's own interface and how much it draws.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Hide game HUD</span>\n                    <span class=\"opt-desc\">Removes moomoo's own interface and leaves the map alone.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_hideHUD\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Melee Animation</span>\n                    <span class=\"opt-desc\">Grip-based swing, thrust and chop animations for melee weapons. Off restores moomoo's own spin. Shields, every bow and the musket are never touched either way.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_meleeAnimation\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_visualSmoothing\">Visual Smoothing</label>\n                    <span class=\"opt-desc\">Keeps motion even rather than dropping frames to keep up. Off lets Low Quality Mode skip every second frame when the rate collapses.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_visualSmoothing\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_renderOptimization\">Rendering Optimization</label>\n                    <span class=\"opt-desc\">Caches the canvas contexts and skips canvas state writes that would not change anything.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_renderOptimization\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_performanceOptimization\">Performance Optimization</label>\n                    <span class=\"opt-desc\">Skips per-object overlay work for overlays that are switched off. Never touches anything the modules act on.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_performanceOptimization\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Low Quality Mode</span>\n                    <span class=\"opt-desc\">Cuts rendering detail. Turn this on if the game drops frames.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_lowQuality\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
   const Misc_default = "<div class=\"menu-page\" data-id=\"4\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Misc</h1>\n        <p class=\"page-description\">Everything around the fight: what happens on a kill, what gets typed into chat for you and for the bots, how this menu behaves, and the counters the client has kept since you installed it.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Match<span class=\"sec-sub\">What the client does when a round starts or ends.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Kill Message</span>\n                    <span class=\"opt-desc\">Sends this line in chat every time you get a kill.</span>\n                </div>\n                <div class=\"option-content\">\n                    <input id=\"_killMessageText\" class=\"input\" type=\"text\" maxlength=\"30\" placeholder=\"Message\">\n                    <label class=\"switch-checkbox\"><input id=\"_killMessage\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Provoke on Kill</span>\n                    <span class=\"opt-desc\">Reacts in chat when someone kills you instead.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_deathProvoke\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autospawn</span>\n                    <span class=\"opt-desc\">Respawns you as soon as the death screen appears.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autospawn\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoaccept</span>\n                    <span class=\"opt-desc\">Accepts incoming clan requests without asking.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoaccept\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Auto Chat<span class=\"sec-sub\">Lines you post on a timer. They cycle in the order listed.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enable</span>\n                    <span class=\"opt-desc\">Starts posting your messages while you are in game.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoChat\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Interval</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoChatInterval\" type=\"range\" step=\"1\" min=\"1\" max=\"60\" data-suffix=\"s\">\n                </label>\n            </div>\n            <div id=\"autoChatMsgList\"></div>\n            <div class=\"content-option centered\">\n                <button id=\"addAutoChatMsg\" class=\"option-button\">Add message</button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Auto Chat<span class=\"sec-sub\">The same thing, typed by every connected bot.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enable Player Chat</span>\n                    <span class=\"opt-desc\">Lets the bots post their own list of lines.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoBotChat\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div id=\"autoBotChatMsgList\"></div>\n            <div class=\"content-option centered\">\n                <button id=\"addAutoBotChatMsg\" class=\"option-button\">Add player message</button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Menu<span class=\"sec-sub\">How this interface itself behaves.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">See through the menu</span>\n                    <span class=\"opt-desc\">Lets the game show faintly behind this panel while it is open.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_menuTransparency\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Session<span class=\"sec-sub\">Counters kept by the client. They persist between games.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Total kills</span></div>\n                <span id=\"_totalKills\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Global kills with bots</span></div>\n                <span id=\"_globalKills\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Deaths</span></div>\n                <span id=\"_deaths\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Autosync</span></div>\n                <span id=\"_autoSyncTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike sync hammer</span></div>\n                <span id=\"_spikeSyncHammerTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike sync</span></div>\n                <span id=\"_spikeSyncTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Velocity tick</span></div>\n                <span id=\"_velocityTickTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Client</span></div>\n                <span id=\"author\" class=\"text-value\">Ryn Type 2</span>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Reset<span class=\"sec-sub\">Puts every setting on every page back to its shipped value.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Reset all settings</span>\n                    <span class=\"opt-desc\">Keybinds, combat, visual, misc and bot options all return to defaults. Your music library is not touched.</span>\n                </div>\n                <button id=\"resetSettings\" class=\"option-button red\">Reset settings</button>\n            </div>\n        </div>\n    </div>\n</div>";
-  const Bots_default = "<div class=\"menu-page\" data-id=\"5\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Bots</h1>\n        <p class=\"page-description\">Connect alternate clients, name them, and decide how they follow, fight, build and farm. Everything below applies to every bot you have connected.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Fleet<span class=\"sec-sub\">Add a bot, give it a name, connect it. Connected bots appear underneath.</span></div>\n        <div class=\"section-content\">\n            <div id=\"bot-container\"></div>\n            <div id=\"dynamic-bot-list\"></div>\n            <div class=\"content-option stacked\" id=\"_botBulkRow\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Name every bot</span>\n                    <span class=\"opt-desc\">One name for the whole fleet. Every new row is pre-filled with it, so bots you add from here on join under it. <b>Apply to all</b> also gives it to the rows and bots you already have &mdash; a bot that is alive keeps the name it spawned with until it next respawns.</span>\n                </div>\n                <div class=\"inline\">\n                    <input id=\"_botBulkName\" class=\"input\" type=\"text\" maxlength=\"15\" placeholder=\"Enter name\" autocomplete=\"off\" spellcheck=\"false\">\n                    <button id=\"_botBulkNameApply\" class=\"option-button\">Apply to all</button>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Number the fleet</span>\n                    <span class=\"opt-desc\">Off, every bot joins under the name exactly as typed. On, each bot gets its slot number appended &mdash; base <b>555</b> becomes 5551, 5552, 5553 and so on. Applied when a bot spawns, so turning it off puts them back on their next respawn.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botNameNumbering\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">First number</span></div>\n                <div class=\"inline\"><input id=\"_botNameNumberStart\" class=\"input\" type=\"number\" min=\"0\" max=\"99\" step=\"1\" value=\"1\"></div>\n            </div>\n            <div class=\"content-option centered\">\n                <button id=\"add-bot-dynamic\" class=\"option-button primary tall\">Add bot</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Clan joins</span>\n                    <span class=\"opt-desc\">Restarts the join rotation for any bot that is still outside your clan. Bots already in it are skipped.</span>\n                </div>\n                <button id=\"_clanRecheck\" class=\"option-button\">Re-check clan joins</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto random bot names</span>\n                    <span class=\"opt-desc\">Pre-fills each new row with a random 1&ndash;7 character name.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoRandomBotNames\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bots own clan</span>\n                    <span class=\"opt-desc\">Each bot creates its own clan instead of joining yours.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botIndividualClans\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\" id=\"_tokenPoolSection\" style=\"display:none;\">\n        <div class=\"section-title\">Spawn<span class=\"sec-sub\">Verification solved ahead of the press, so Spawn Bot buys sockets rather than challenges. One press connects as many bots as there are tokens ready.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\" id=\"_tokenPoolRow\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Tokens ready</span>\n                    <span class=\"opt-desc\" id=\"_tokenPoolStatus\">&mdash;</span>\n                </div>\n                <div class=\"inline\">\n                    <button id=\"_tokenPoolToggle\" class=\"option-button primary\">Stop</button>\n                    <button id=\"_tokenPoolFill\" class=\"option-button\">Fill now</button>\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Target Scan<span class=\"sec-sub\">Everyone this tab has seen, from any of its connections. Tick any number of them and the fleet goes looking.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Scan <span id=\"_scanCount\" class=\"scan-count\">none picked</span></span>\n                    <span class=\"opt-desc\" id=\"_scanStatus\">Pick one or more players below.</span>\n                </div>\n                <button id=\"_scanToggle\" class=\"option-button primary\">SCAN ON</button>\n            </div>\n            <div class=\"content-option stacked\">\n                <div class=\"scan-bar\">\n                    <input id=\"_scanFilter\" class=\"input scan-filter\" type=\"search\" placeholder=\"Filter by name or id\" autocomplete=\"off\" spellcheck=\"false\">\n                    <button id=\"_scanClearTargets\" class=\"option-button\">Clear picks</button>\n                    <button id=\"_scanClearDex\" class=\"option-button\">Clear list</button>\n                </div>\n                <div id=\"_scanList\"></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Behaviour<span class=\"sec-sub\">What the bots do while they are following you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Follow cursor</span>\n                    <span class=\"opt-desc\">Bots move toward where you are pointing rather than to you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_followCursor\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Stop movement radius</span>\n                    <span class=\"opt-desc\">How close a bot gets to its target point before it stops.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_movementRadius\" type=\"range\" step=\"25\" min=\"25\" max=\"250\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Auto Break</span>\n                    <span class=\"opt-desc\">Bots break structures standing in their way.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAutoBreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Ranged Kiting</span>\n                    <span class=\"opt-desc\">Bots holding a ranged weapon back off instead of closing.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botRangedKite\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Kite distance</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botKiteDistance\" type=\"range\" step=\"25\" min=\"150\" max=\"1200\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Volley Fire</span>\n                    <span class=\"opt-desc\">Bots fire in waves rather than all at once.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botVolley\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">First wave size</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botVolleyWave\" type=\"range\" step=\"1\" min=\"1\" max=\"20\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Avoid Shield Bots</span>\n                    <span class=\"opt-desc\">Bots steer away from a target that is holding a shield up.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAvoidShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Be Angel</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_botBeAngel\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Formation<span class=\"sec-sub\">The shape the fleet holds around you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Shape</span>\n                    <span class=\"opt-desc\">Pick a formation, and bind a key to any of them from inside the picker.</span>\n                </div>\n                <div id=\"_formationGrid\"></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Circle rotation</span>\n                    <span class=\"opt-desc\">Rotates the formation around you instead of holding it still.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_circleRotation\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Circle radius</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_circleRadius\" type=\"range\" step=\"25\" min=\"50\" max=\"600\">\n                </label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Loadout<span class=\"sec-sub\">What each bot carries. &ldquo;Copy from me&rdquo; mirrors your own weapon.</span></div>\n        <div class=\"section-content\">\n            <div class=\"stack\">\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Primary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-weapon-selector\">\n                        <div class=\"bot-weapon-btn\" data-wid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"0\" title=\"Tool Hammer\">Tool Hammer</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"1\" title=\"Hand Axe\">Hand Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"2\" title=\"Great Axe\">Great Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"3\" title=\"Short Sword\">Short Sword</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"4\" title=\"Katana\">Katana</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"5\" title=\"Polearm\">Polearm</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"6\" title=\"Bat\">Bat</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"7\" title=\"Daggers\">Daggers</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"8\" title=\"Stick\">Stick</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Secondary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-sec-weapon-selector\">\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"9\" title=\"Hunting Bow\">Hunting Bow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"10\" title=\"Great Hammer\">Great Hammer</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"11\" title=\"Wooden Shield\">Wooden Shield</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"12\" title=\"Crossbow\">Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"13\" title=\"Repeater Crossbow\">Repeater Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"14\" title=\"Mc Grabby\">Mc Grabby</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"15\" title=\"Musket\">Musket</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-sec-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Age 4 building</div>\n                    <div class=\"wpn-grid\" id=\"bot-age4-selector\">\n                        <div class=\"bot-weapon-btn\" data-age4id=\"0\" title=\"Trap\">Trap</div>\n                        <div class=\"bot-weapon-btn\" data-age4id=\"1\" title=\"Boost Pad\">Boost Pad</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-age4-label\">Trap (default)</span></div>\n                </div>\n            </div>\n\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Platform w/ Musket</span>\n                    <span class=\"opt-desc\">Bots carrying a musket build a platform to shoot from.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_platformMusket\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Auto Farm<span class=\"sec-sub\">Bots gather on their own and come back when they are done.</span></div>\n        <div class=\"section-content\">\n            <div class=\"stack\">\n                <div class=\"field\">\n                    <div class=\"field-head\">Farm mode</div>\n                    <div class=\"seg\">\n                        <button id=\"_farmModeSingle\" class=\"seg-btn\">Single</button>\n                        <button id=\"_farmModeNearest\" class=\"seg-btn\">Nearest</button>\n                    </div>\n                    <p class=\"field-note\">In <b>Single</b> mode every bot goes for one resource type. In <b>Nearest</b> mode each bot takes whatever is closest to it.</p>\n                </div>\n\n                <div class=\"field\" id=\"_farmTypeRow\">\n                    <div class=\"field-head\">Resource type</div>\n                    <div class=\"seg\">\n                        <button data-farm-type=\"0\" class=\"farm-type-btn\">Wood</button>\n                        <button data-farm-type=\"1\" class=\"farm-type-btn\">Food</button>\n                        <button data-farm-type=\"2\" class=\"farm-type-btn\">Stone</button>\n                        <button data-farm-type=\"3\" class=\"farm-type-btn\">Gold</button>\n                    </div>\n                    <input id=\"_botFarmType\" type=\"hidden\" value=\"0\">\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"field-head\">Limit</div>\n                    <div class=\"inline\">\n                        <input id=\"_botFarmLimit\" class=\"input\" type=\"number\" min=\"0\" max=\"9999\" step=\"50\" value=\"0\">\n                        <p class=\"field-note\" style=\"margin-top:0;\">Bots stop and return to you at this amount. <b>0</b> means no limit.</p>\n                    </div>\n                </div>\n            </div>\n        </div>\n    </div>\n    <div class=\"section\">\n        <div class=\"section-title\">Possession<span class=\"sec-sub\">Switch control into a bot and it becomes your character: its camera, its world, its HUD, its resources, its age, its inventory, its chat. Not a spectator view &mdash; you are that character until you switch back.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Who you are controlling</span>\n                    <span class=\"opt-desc\">Click a character to take it over. The game's own HUD, camera and minimap follow whoever is selected, and the rest of the fleet follows that character too.</span>\n                </div>\n                <div id=\"_possessList\"></div>\n            </div>\n        </div>\n    </div>\n\n</div>";
+  const Bots_default = "<div class=\"menu-page\" data-id=\"5\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Bots</h1>\n        <p class=\"page-description\">Connect alternate clients, name them, and decide how they follow, fight, build and farm. Everything below applies to every bot you have connected.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Fleet<span class=\"sec-sub\">Add a bot, give it a name, connect it. Connected bots appear underneath.</span></div>\n        <div class=\"section-content\">\n            <div id=\"bot-container\"></div>\n            <div id=\"dynamic-bot-list\"></div>\n            <div class=\"content-option stacked\" id=\"_botBulkRow\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Name every bot</span>\n                    <span class=\"opt-desc\">One name for the whole fleet. Every new row is pre-filled with it, so bots you add from here on join under it. <b>Apply to all</b> also gives it to the rows and bots you already have &mdash; a bot that is alive keeps the name it spawned with until it next respawns.</span>\n                </div>\n                <div class=\"inline\">\n                    <input id=\"_botBulkName\" class=\"input\" type=\"text\" maxlength=\"15\" placeholder=\"Enter name\" autocomplete=\"off\" spellcheck=\"false\">\n                    <button id=\"_botBulkNameApply\" class=\"option-button\">Apply to all</button>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Number the fleet</span>\n                    <span class=\"opt-desc\">Off, every bot joins under the name exactly as typed. On, each bot gets its slot number appended &mdash; base <b>555</b> becomes 5551, 5552, 5553 and so on. Applied when a bot spawns, so turning it off puts them back on their next respawn.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botNameNumbering\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">First number</span></div>\n                <div class=\"inline\"><input id=\"_botNameNumberStart\" class=\"input\" type=\"number\" min=\"0\" max=\"99\" step=\"1\" value=\"1\"></div>\n            </div>\n            <div class=\"content-option centered\">\n                <button id=\"add-bot-dynamic\" class=\"option-button primary tall\">Add bot</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Clan joins</span>\n                    <span class=\"opt-desc\">Restarts the join rotation for any bot that is still outside your clan. Bots already in it are skipped.</span>\n                </div>\n                <button id=\"_clanRecheck\" class=\"option-button\">Re-check clan joins</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto random bot names</span>\n                    <span class=\"opt-desc\">Pre-fills each new row with a random 1&ndash;7 character name.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoRandomBotNames\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bots own clan</span>\n                    <span class=\"opt-desc\">Each bot creates its own tribe instead of joining yours, named from the fleet name plus its slot &mdash; base <b>GG1</b> over five bots gives GG11, GG12, GG13, GG14, GG15. Tribe names are capped at seven characters by the game, so the stem is trimmed and the number kept. Bots still never attack each other or you: that is decided by ownership, not by the tribe.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botIndividualClans\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Clan name stem</span>\n                    <span class=\"opt-desc\">Optional. Leave empty to use the fleet name. The slot number is always appended, so every bot gets its own tribe either way.</span>\n                </div>\n                <input id=\"_botClanPrefix\" class=\"input\" type=\"text\" maxlength=\"6\" placeholder=\"GG1\" autocomplete=\"off\" spellcheck=\"false\">\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\" id=\"_tokenPoolSection\" style=\"display:none;\">\n        <div class=\"section-title\">Spawn<span class=\"sec-sub\">Verification solved ahead of the press, so Spawn Bot buys sockets rather than challenges. One press connects as many bots as there are tokens ready.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\" id=\"_tokenPoolRow\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Tokens ready</span>\n                    <span class=\"opt-desc\" id=\"_tokenPoolStatus\">&mdash;</span>\n                </div>\n                <div class=\"inline\">\n                    <button id=\"_tokenPoolToggle\" class=\"option-button primary\">Stop</button>\n                    <button id=\"_tokenPoolFill\" class=\"option-button\">Fill now</button>\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Target Scan<span class=\"sec-sub\">Everyone this tab has seen, from any of its connections. <b>SCAN</b> sends the fleet looking for them; <b>EXCLUDE</b> takes them off the target list for every bot, everywhere. The two are independent &mdash; a player can be scanned and excluded at once, which tracks them without ever attacking them.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Scan <span id=\"_scanCount\" class=\"scan-count\">none picked</span></span>\n                    <span class=\"opt-desc\" id=\"_scanStatus\">Pick one or more players below.</span>\n                </div>\n                <button id=\"_scanToggle\" class=\"option-button primary\">SCAN ON</button>\n            </div>\n            <div class=\"content-option stacked\">\n                <div class=\"scan-bar\">\n                    <input id=\"_scanFilter\" class=\"input scan-filter\" type=\"search\" placeholder=\"Filter by name or id\" autocomplete=\"off\" spellcheck=\"false\">\n                    <button id=\"_scanClearTargets\" class=\"option-button\">Clear picks</button>\n                    <button id=\"_scanClearExcluded\" class=\"option-button\">Clear excluded</button>\n                    <button id=\"_scanClearDex\" class=\"option-button\">Clear list</button>\n                </div>\n                <div id=\"_scanList\"></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Behaviour<span class=\"sec-sub\">What the bots do while they are following you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Follow cursor</span>\n                    <span class=\"opt-desc\">Bots move toward where you are pointing rather than to you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_followCursor\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Stop movement radius</span>\n                    <span class=\"opt-desc\">How close a bot gets to its target point before it stops.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_movementRadius\" type=\"range\" step=\"25\" min=\"25\" max=\"250\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Auto Break</span>\n                    <span class=\"opt-desc\">Bots break structures standing in their way.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAutoBreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Ranged Kiting</span>\n                    <span class=\"opt-desc\">Bots holding a ranged weapon back off instead of closing.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botRangedKite\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Kite distance</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botKiteDistance\" type=\"range\" step=\"25\" min=\"150\" max=\"1200\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Volley Fire</span>\n                    <span class=\"opt-desc\">Bots fire in waves rather than all at once.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botVolley\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">First wave size</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botVolleyWave\" type=\"range\" step=\"1\" min=\"1\" max=\"20\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Avoid Shield Bots</span>\n                    <span class=\"opt-desc\">Bots steer away from a target that is holding a shield up.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAvoidShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Be Angel</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_botBeAngel\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Protection<span class=\"sec-sub\">Puts part of the fleet in front of the rest as a screen. This covers your <b>bots</b> &mdash; it is not a bodyguard for you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Protection <span id=\"_protectState\" class=\"scan-count\">off</span></span>\n                    <span class=\"opt-desc\" id=\"_protectStatus\">Off. The whole fleet keeps its normal jobs.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botProtection\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Guards</span>\n                    <span class=\"opt-desc\">How many bots take the screen. They are the first bots of the fleet, so a guard keeps its slot; every bot past this count carries on with whatever it was doing.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botProtectionGuards\" type=\"range\" step=\"1\" min=\"1\" max=\"40\">\n                </label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Advance</span>\n                    <span class=\"opt-desc\">How far ahead of the bots it covers the screen sits, and how deep it spreads. 0% is a huddle on top of them; 60% is a picket line well out in front.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botProtectionAdvance\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Screen shape</span>\n                    <span class=\"opt-desc\">The formation the guards hold. It turns to face the threat and the guards keep their slots as it turns.</span>\n                </div>\n                <div class=\"option-content\"><select id=\"_botProtectionFormation\" class=\"ryn-select\"></select></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Formation<span class=\"sec-sub\">The shape the fleet holds around you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Shape</span>\n                    <span class=\"opt-desc\">Pick a formation, and bind a key to any of them from inside the picker.</span>\n                </div>\n                <div id=\"_formationGrid\"></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Circle rotation</span>\n                    <span class=\"opt-desc\">Rotates the formation around you instead of holding it still.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_circleRotation\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Circle radius</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_circleRadius\" type=\"range\" step=\"25\" min=\"50\" max=\"600\">\n                </label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Loadout<span class=\"sec-sub\">What each bot carries. &ldquo;Copy from me&rdquo; mirrors your own weapon.</span></div>\n        <div class=\"section-content\">\n            <div class=\"stack\">\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Primary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-weapon-selector\">\n                        <div class=\"bot-weapon-btn\" data-wid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"0\" title=\"Tool Hammer\">Tool Hammer</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"1\" title=\"Hand Axe\">Hand Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"2\" title=\"Great Axe\">Great Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"3\" title=\"Short Sword\">Short Sword</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"4\" title=\"Katana\">Katana</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"5\" title=\"Polearm\">Polearm</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"6\" title=\"Bat\">Bat</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"7\" title=\"Daggers\">Daggers</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"8\" title=\"Stick\">Stick</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Secondary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-sec-weapon-selector\">\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"9\" title=\"Hunting Bow\">Hunting Bow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"10\" title=\"Great Hammer\">Great Hammer</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"11\" title=\"Wooden Shield\">Wooden Shield</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"12\" title=\"Crossbow\">Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"13\" title=\"Repeater Crossbow\">Repeater Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"14\" title=\"Mc Grabby\">Mc Grabby</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"15\" title=\"Musket\">Musket</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-sec-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Age 4 building</div>\n                    <div class=\"wpn-grid\" id=\"bot-age4-selector\">\n                        <div class=\"bot-weapon-btn\" data-age4id=\"0\" title=\"Trap\">Trap</div>\n                        <div class=\"bot-weapon-btn\" data-age4id=\"1\" title=\"Boost Pad\">Boost Pad</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-age4-label\">Trap (default)</span></div>\n                </div>\n            </div>\n\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Platform w/ Musket</span>\n                    <span class=\"opt-desc\">Bots carrying a musket build a platform to shoot from.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_platformMusket\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Auto Farm<span class=\"sec-sub\">Bots gather on their own and come back when they are done.</span></div>\n        <div class=\"section-content\">\n            <div class=\"stack\">\n                <div class=\"field\">\n                    <div class=\"field-head\">Farm mode</div>\n                    <div class=\"seg\">\n                        <button id=\"_farmModeSingle\" class=\"seg-btn\">Single</button>\n                        <button id=\"_farmModeNearest\" class=\"seg-btn\">Nearest</button>\n                    </div>\n                    <p class=\"field-note\">In <b>Single</b> mode every bot goes for one resource type. In <b>Nearest</b> mode each bot takes whatever is closest to it.</p>\n                </div>\n\n                <div class=\"field\" id=\"_farmTypeRow\">\n                    <div class=\"field-head\">Resource type</div>\n                    <div class=\"seg\">\n                        <button data-farm-type=\"0\" class=\"farm-type-btn\">Wood</button>\n                        <button data-farm-type=\"1\" class=\"farm-type-btn\">Food</button>\n                        <button data-farm-type=\"2\" class=\"farm-type-btn\">Stone</button>\n                        <button data-farm-type=\"3\" class=\"farm-type-btn\">Gold</button>\n                    </div>\n                    <input id=\"_botFarmType\" type=\"hidden\" value=\"0\">\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"field-head\">Limit</div>\n                    <div class=\"inline\">\n                        <input id=\"_botFarmLimit\" class=\"input\" type=\"number\" min=\"0\" max=\"9999\" step=\"50\" value=\"0\">\n                        <p class=\"field-note\" style=\"margin-top:0;\">Bots stop and return to you at this amount. <b>0</b> means no limit.</p>\n                    </div>\n                </div>\n            </div>\n        </div>\n    </div>\n    <div class=\"section\">\n        <div class=\"section-title\">Possession<span class=\"sec-sub\">Switch control into a bot and it becomes your character: its camera, its world, its HUD, its resources, its age, its inventory, its chat. Not a spectator view &mdash; you are that character until you switch back.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Who you are controlling</span>\n                    <span class=\"opt-desc\">Click a character to take it over. The game's own HUD, camera and minimap follow whoever is selected, and the rest of the fleet follows that character too.</span>\n                </div>\n                <div id=\"_possessList\"></div>\n            </div>\n        </div>\n    </div>\n\n</div>";
   const Music_default = "<div class=\"menu-page\" data-id=\"7\">\n<style>\n@keyframes ryn-eq{0%,100%{height:4px;}50%{height:16px;}}\n\n.rm-root{display:flex;flex-direction:column;max-width:1180px;margin:0 auto;}\n\n/* ---------- now playing ---------- */\n.rm-player{\n  display:grid;\n  grid-template-columns:auto minmax(0,1fr) auto;\n  grid-template-areas:\"art meta actions\" \"art transport transport\";\n  column-gap:26px;row-gap:22px;align-items:center;\n  padding:26px 0 30px;\n  border-bottom:1px solid var(--line);\n}\n.rm-art{\n  grid-area:art;\n  width:96px;height:96px;flex-shrink:0;\n  display:flex;align-items:flex-end;justify-content:center;gap:4px;\n  padding-bottom:22px;\n  border-radius:var(--r3);\n  background:linear-gradient(150deg,#221D33,#131320);\n  border:1px solid var(--line);\n  position:relative;\n  transition:border-color 260ms var(--ease);\n}\n.rm-art::after{\n  content:'\\266B';\n  position:absolute;inset:0;\n  display:flex;align-items:center;justify-content:center;\n  font-size:30px;color:var(--tx-4);\n  transition:opacity 220ms var(--ease);\n}\n.rm-art.playing{border-color:var(--sage-40);}\n.rm-art.playing::after{opacity:0;}\n.rm-eq{display:none;align-items:flex-end;gap:4px;height:18px;}\n.rm-art.playing .rm-eq{display:flex;}\n.rm-eq-bar{width:3px;border-radius:2px;background:var(--sage);animation:ryn-eq .95s ease-in-out infinite;}\n.rm-eq-bar:nth-child(2){animation-delay:.16s;}\n.rm-eq-bar:nth-child(3){animation-delay:.32s;}\n\n.rm-meta{grid-area:meta;min-width:0;}\n.rm-kicker{\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.24em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:9px;\n}\n.rm-title{\n  font-size:clamp(22px,2.1vw,29px);font-weight:800;line-height:1.12;\n  letter-spacing:-.028em;color:var(--tx-1);\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n}\n.rm-artist{\n  margin-top:7px;font-size:14px;font-weight:600;color:var(--tx-3);\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n}\n.rm-album-badge{\n  display:inline-block;margin-top:10px;\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--iris-hi);\n}\n.rm-album-badge:empty{display:none;}\n\n.rm-actions{grid-area:actions;display:flex;gap:8px;align-self:start;}\n.rm-like-btn,.rm-save-now-btn{\n  width:42px;height:42px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);border:1px solid var(--line);\n  font-size:16px;line-height:1;color:var(--tx-3);cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.rm-like-btn:hover,.rm-save-now-btn:hover{background:rgba(255,255,255,.08);color:var(--tx-1);border-color:var(--line-2);}\n.rm-like-btn.liked,.rm-like-btn.on{color:var(--rose);border-color:rgba(217,163,171,.4);background:var(--rose-12);}\n.rm-save-now-btn.on{color:var(--sky);border-color:var(--sky-45);background:var(--sky-12);}\n\n.rm-transport{grid-area:transport;display:flex;align-items:center;gap:24px;min-width:0;}\n.rm-ctrl{display:flex;align-items:center;gap:8px;flex-shrink:0;}\n.rm-btn{\n  width:38px;height:38px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r2);\n  background:transparent;border:1px solid transparent;\n  color:var(--tx-3);font-size:12.5px;cursor:pointer;\n  transition:background 150ms var(--ease),color 150ms var(--ease),border-color 150ms var(--ease);\n}\n.rm-btn:hover{background:rgba(255,255,255,.06);color:var(--tx-1);}\n.rm-btn.rm-on,.rm-btn.on{color:var(--sage);border-color:var(--sage-40);background:var(--sage-14);}\n.rm-play-btn{\n  width:52px;height:52px;flex-shrink:0;\n  border-radius:16px;\n  background:var(--tx-1);border:none;color:#0A0A0D;\n  font-size:15.5px;\n  transition:transform 150ms var(--ease),background 150ms var(--ease);\n}\n.rm-play-btn:hover{background:#FFFFFF;transform:scale(1.04);}\n.rm-play-btn:active{transform:scale(.97);}\n\n.rm-prog-wrap{flex:1;min-width:0;display:flex;align-items:center;gap:14px;}\n.rm-prog-rail{\n  flex:1;min-width:0;height:5px;border-radius:999px;cursor:pointer;\n  background:rgba(255,255,255,.08);position:relative;\n}\n.rm-prog-fill{\n  height:100%;border-radius:999px;width:0;\n  background:var(--sky);position:relative;\n  transition:width 120ms linear;\n}\n.rm-prog-fill::after{\n  content:'';position:absolute;right:-5px;top:50%;\n  width:11px;height:11px;border-radius:50%;background:#EEF4FA;\n  transform:translateY(-50%) scale(0);\n  transition:transform 150ms var(--ease);\n  box-shadow:0 1px 4px rgba(0,0,0,.6);\n}\n.rm-prog-wrap:hover .rm-prog-fill::after{transform:translateY(-50%) scale(1);}\n.rm-time{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);flex-shrink:0;\n}\n.rm-vol{display:flex;align-items:center;gap:10px;flex-shrink:0;}\n.rm-vol-icon{font-size:13px;color:var(--tx-4);}\n#music-volume{\n  -webkit-appearance:none;appearance:none;\n  width:110px;height:18px;background:transparent;cursor:pointer;\n}\n#music-volume::-webkit-slider-runnable-track{height:4px;border-radius:999px;background:rgba(255,255,255,.09);}\n#music-volume::-webkit-slider-thumb{\n  -webkit-appearance:none;width:12px;height:12px;margin-top:-4px;\n  border-radius:50%;background:#EEF4FA;border:1px solid rgba(0,0,0,.35);\n  transition:transform 130ms var(--ease);\n}\n#music-volume:hover::-webkit-slider-thumb{transform:scale(1.15);}\n.rm-vol-val{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);min-width:34px;text-align:right;\n}\n\n/* ---------- sections ---------- */\n.rm-sec{border-bottom:1px solid var(--line);}\n.rm-sec-head{\n  display:flex;align-items:center;gap:12px;\n  padding:22px 2px;cursor:pointer;user-select:none;\n}\n.rm-sec-dot{\n  width:5px;height:5px;border-radius:50%;flex-shrink:0;\n  background:var(--tx-4);transition:background 200ms var(--ease);\n}\n.rm-sec.open .rm-sec-dot{background:var(--iris-hi);}\n.rm-sec-title{\n  flex:1;font-family:var(--mono);font-size:11.5px;font-weight:700;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-2);\n}\n.rm-sec.open .rm-sec-title{color:var(--iris-hi);}\n.rm-sec-arrow{font-size:9px;color:var(--tx-4);transition:transform 200ms var(--ease);}\n.rm-sec.open .rm-sec-arrow{transform:rotate(180deg);}\n.rm-sec-body{display:none;flex-direction:column;gap:14px;padding:0 2px 26px;}\n.rm-sec.open .rm-sec-body{display:flex;animation:soft-in 180ms var(--ease);}\n\n/* ---------- library ---------- */\n.rm-filter-bar{display:flex;gap:7px;flex-wrap:wrap;}\n.rm-filter-btn{\n  height:34px;padding:0 16px;border-radius:999px;\n  background:rgba(255,255,255,.04);border:1px solid var(--line);\n  font-size:12.5px;font-weight:700;color:var(--tx-3);cursor:pointer;\n  transition:background 150ms var(--ease),color 150ms var(--ease),border-color 150ms var(--ease);\n}\n.rm-filter-btn:hover{background:rgba(255,255,255,.08);color:var(--tx-1);}\n.rm-filter-btn.active{background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;}\n\n#song-list{display:flex;flex-direction:column;}\n.rm-song-row{\n  display:flex;align-items:center;gap:15px;\n  padding:12px 13px;border-radius:var(--r2);cursor:pointer;\n  position:relative;\n  transition:background 140ms var(--ease);\n}\n.rm-song-row:hover{background:rgba(255,255,255,.035);}\n.rm-song-row.active{background:var(--sage-14);}\n.rm-song-row.active::before{\n  content:'';position:absolute;left:0;top:10px;bottom:10px;\n  width:2px;border-radius:0 2px 2px 0;background:var(--sage);\n}\n.rm-snum{\n  width:23px;flex-shrink:0;text-align:center;\n  font-family:var(--mono);font-size:12.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);\n}\n.rm-song-row.active .rm-snum{color:var(--sage);}\n.rm-stitle{\n  flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n}\n.rm-sartist{\n  flex-shrink:1;min-width:0;max-width:30%;\n  font-size:12.5px;font-weight:500;color:var(--tx-4);\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n}\n.rm-s-icons{display:flex;gap:4px;flex-shrink:0;opacity:0;transition:opacity 150ms var(--ease);}\n.rm-song-row:hover .rm-s-icons,.rm-song-row.active .rm-s-icons{opacity:1;}\n.rm-s-like,.rm-s-save,.rm-sdel{\n  width:30px;height:30px;flex-shrink:0;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r1);font-size:12.5px;line-height:1;\n  color:var(--tx-4);cursor:pointer;\n  transition:background 140ms var(--ease),color 140ms var(--ease);\n}\n.rm-s-like:hover,.rm-sdel:hover{background:var(--rose-12);color:var(--rose);}\n.rm-s-save:hover{background:var(--sky-12);color:var(--sky);}\n.rm-s-like.on{color:var(--rose);}\n.rm-s-save.on{color:var(--sky);}\n.rm-song-row:not(:hover) .rm-s-icons:has(.on){opacity:1;}\n.rm-empty{\n  padding:26px 0;text-align:center;\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n\n/* ---------- albums ---------- */\n.rm-album-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}\n.rm-album-card{\n  position:relative;padding:14px;border-radius:var(--r3);cursor:pointer;\n  background:rgba(255,255,255,.03);border:1px solid var(--line);\n  transition:background 160ms var(--ease),border-color 160ms var(--ease),transform 160ms var(--ease);\n}\n.rm-album-card:hover{background:rgba(255,255,255,.06);border-color:var(--line-2);transform:translateY(-2px);}\n.rm-album-card.active{background:var(--iris-12);border-color:var(--iris-45);}\n.rm-album-icon{\n  display:flex;align-items:center;justify-content:center;\n  width:100%;aspect-ratio:1.6;border-radius:var(--r2);margin-bottom:11px;\n  font-size:22px;\n  background:linear-gradient(150deg,#221D33,#131320);\n}\n.rm-album-name{font-size:13.5px;font-weight:700;color:var(--tx-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}\n.rm-album-count{margin-top:3px;font-size:11.5px;font-weight:500;color:var(--tx-4);}\n.rm-album-del{\n  position:absolute;top:8px;right:8px;\n  width:22px;height:22px;border-radius:var(--r1);\n  display:flex;align-items:center;justify-content:center;\n  background:rgba(0,0,0,.55);color:var(--tx-3);\n  font-size:10px;cursor:pointer;opacity:0;\n  transition:opacity 150ms var(--ease),color 150ms var(--ease);\n}\n.rm-album-card:hover .rm-album-del{opacity:1;}\n.rm-album-del:hover{color:var(--rose);}\n\n/* ---------- forms ---------- */\n.rm-form{display:flex;flex-direction:column;gap:9px;max-width:620px;}\n.rm-inp{\n  width:100%;height:42px;padding:0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);border:1px solid var(--line-2);\n  color:var(--tx-1);font-size:13.5px;font-weight:600;\n  outline:none;\n  transition:border-color 150ms var(--ease),background 150ms var(--ease);\n}\n.rm-inp::placeholder{color:var(--tx-4);font-weight:500;}\n.rm-inp:focus{border-color:var(--sky-45);background:var(--sky-12);}\ninput[type=\"file\"].rm-inp{padding:10px 12px;height:auto;font-size:12.5px;font-weight:500;cursor:pointer;}\n.rm-lrc{\n  padding:14px;border-radius:var(--r3);\n  background:rgba(255,255,255,.022);border:1px solid var(--line);\n}\n.rm-lrc-head{\n  display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n#lrc-status{font-family:var(--mono);font-size:11.5px;letter-spacing:0;text-transform:none;color:var(--sky);}\ntextarea.rm-inp{\n  height:98px;padding:11px 13px;resize:vertical;\n  font-family:var(--mono);font-size:12.5px;font-weight:500;line-height:1.6;\n}\n.rm-check{\n  display:flex;align-items:center;gap:9px;margin-top:11px;\n  font-size:12.5px;font-weight:600;color:var(--tx-3);cursor:pointer;\n}\n.rm-check input{accent-color:#A6D7B2;width:15px;height:15px;cursor:pointer;}\n.rm-row{display:flex;gap:9px;}\n\n/* ---------- sync ---------- */\n.rm-sync-row{\n  display:flex;align-items:center;justify-content:space-between;gap:16px;\n  padding:12px 14px;border-radius:var(--r2);\n  transition:background 140ms var(--ease);\n}\n.rm-sync-row:hover{background:rgba(255,255,255,.028);}\n.rm-sync-label{flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);}\n.rm-sync-note{padding:0 14px 8px;font-size:12.5px;font-weight:500;line-height:1.5;color:var(--tx-4);}\n.rm-badge{\n  display:inline-block;margin-left:9px;padding:2px 8px;border-radius:999px;\n  background:var(--iris-12);color:var(--iris-hi);\n  font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;\n  vertical-align:middle;\n}\n.rm-divider{height:1px;background:var(--line);margin:6px 0;}\n.rm-status{\n  font-family:var(--mono);font-size:11.5px;font-weight:500;\n  color:var(--tx-4);min-height:16px;\n}\n#bm-dbg-box{\n  margin:0;padding:11px 13px;border-radius:var(--r2);\n  background:rgba(0,0,0,.4);border:1px solid var(--line);\n  font-family:var(--mono);font-size:11.5px;color:var(--tx-3);\n  white-space:pre-wrap;max-height:150px;overflow-y:auto;\n}\n\n/* ---------- toast + guide ---------- */\n.rm-toast{\n  display:none;position:fixed;left:50%;bottom:28px;\n  transform:translateX(-50%);\n  padding:11px 20px;border-radius:999px;z-index:99999;\n  background:var(--tx-1);color:#0A0A0D;\n  font-size:12.5px;font-weight:700;\n  box-shadow:0 16px 40px -12px rgba(0,0,0,.8);\n}\n.rm-guide{\n  padding:18px 20px;margin-bottom:4px;\n  border-radius:var(--r3);\n  background:rgba(255,255,255,.022);border:1px solid var(--line);\n}\n.rm-guide summary{\n  cursor:pointer;list-style:none;\n  font-size:13.5px;font-weight:700;color:var(--tx-2);\n  display:flex;align-items:center;gap:10px;\n}\n.rm-guide summary::-webkit-details-marker{display:none;}\n.rm-guide summary::before{\n  content:'?';flex-shrink:0;width:20px;height:20px;border-radius:50%;\n  background:var(--iris-12);color:var(--iris-hi);\n  font-family:var(--mono);font-size:11px;font-weight:700;\n  display:grid;place-items:center;\n}\n.rm-guide[open] summary{margin-bottom:14px;color:var(--tx-1);}\n.rm-guide ol{margin:0;padding-left:20px;color:var(--tx-3);font-size:12.5px;line-height:2;}\n.rm-guide code{\n  background:rgba(255,255,255,.06);color:var(--sky);\n  padding:2px 7px;border-radius:5px;font-family:var(--mono);font-size:11.5px;\n}\n.rm-guide a{color:var(--sky);border-bottom:1px solid rgba(155,197,232,.35);}\n.rm-guide a:hover{color:var(--tx-1);border-bottom-color:var(--tx-1);}\n.rm-guide-note{margin-top:14px;color:var(--tx-4);font-size:11.5px;line-height:1.75;}\n</style>\n\n<div id=\"rm-toast\" class=\"rm-toast\"></div>\n\n<div class=\"page-head\">\n    <h1 class=\"page-title\">Music</h1>\n    <p class=\"page-description\">A local library that plays inside the client and can type synced lyrics into chat for you, for your bots, or for both at once.</p>\n</div>\n\n<div class=\"rm-root\">\n\n  <div class=\"rm-player\">\n    <div class=\"rm-art\" id=\"rm-art\">\n      <div class=\"rm-eq\"><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div></div>\n    </div>\n    <div class=\"rm-meta\">\n      <div class=\"rm-kicker\">Now playing</div>\n      <div id=\"music-title\" class=\"rm-title\">No song selected</div>\n      <div id=\"music-artist\" class=\"rm-artist\">--</div>\n      <div id=\"music-album-badge\" class=\"rm-album-badge\"></div>\n    </div>\n    <div class=\"rm-actions\">\n      <button id=\"rm-like-now\" class=\"rm-like-btn\" title=\"Like\">&#9825;</button>\n      <button id=\"rm-save-now\" class=\"rm-save-now-btn\" title=\"Save\">&#9733;</button>\n    </div>\n    <div class=\"rm-transport\">\n      <div class=\"rm-ctrl\">\n        <button id=\"music-prev\" class=\"rm-btn\" title=\"Previous\">&#9664;&#9664;</button>\n        <button id=\"music-play\" class=\"rm-btn rm-play-btn\" title=\"Play / pause\">&#9654;</button>\n        <button id=\"music-next\" class=\"rm-btn\" title=\"Next\">&#9654;&#9654;</button>\n        <button id=\"music-loop\" class=\"rm-btn\" title=\"Loop\">&#8635;</button>\n        <button id=\"music-shuffle\" class=\"rm-btn\" title=\"Shuffle\" style=\"font-size:10px;letter-spacing:.08em;font-weight:700;\">SHF</button>\n      </div>\n      <div class=\"rm-prog-wrap\">\n        <span id=\"music-time-current\" class=\"rm-time\">0:00</span>\n        <div id=\"music-progress-bar\" class=\"rm-prog-rail\"><div id=\"music-progress-fill\" class=\"rm-prog-fill\"></div></div>\n        <span id=\"music-time-total\" class=\"rm-time\">0:00</span>\n      </div>\n      <div class=\"rm-vol\">\n        <span class=\"rm-vol-icon\">&#9834;</span>\n        <input id=\"music-volume\" type=\"range\" min=\"0\" max=\"100\" value=\"70\">\n        <span id=\"music-volume-label\" class=\"rm-vol-val\">70%</span>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec open\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Library</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div id=\"rm-filter-bar\" class=\"rm-filter-bar\">\n        <button class=\"rm-filter-btn active\" data-filter=\"\">All songs</button>\n        <button class=\"rm-filter-btn\" data-filter=\"__liked\">&#9829; Liked</button>\n      </div>\n      <div id=\"song-list\"></div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec open\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Albums</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div id=\"rm-album-grid\" class=\"rm-album-grid\"></div>\n      <div class=\"rm-row\" style=\"max-width:480px;\">\n        <input id=\"album-name-input\" class=\"rm-inp\" type=\"text\" placeholder=\"New album name\" maxlength=\"30\">\n        <button id=\"add-album\" class=\"option-button\">Add</button>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Add song</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <details class=\"rm-guide\">\n        <summary>How to add a song with its lyrics</summary>\n        <ol>\n          <li>Find the song on <a href=\"https://www.youtube.com/\" target=\"_blank\" rel=\"noreferrer\">youtube.com</a> and copy its link.</li>\n          <li>Turn the link into a file on <a href=\"https://ytmp3.gl/\" target=\"_blank\" rel=\"noreferrer\">ytmp3.gl</a> and download the <code>.mp3</code>.</li>\n          <li>Search the same song on <a href=\"https://lrclib.net/\" target=\"_blank\" rel=\"noreferrer\">lrclib.net</a> and download the <b>synced</b> lyrics as <code>.lrc</code>.</li>\n          <li>Fill in the <b>Title</b> below and pick the <code>.mp3</code> in the file box, or paste a direct link in <b>URL</b>.</li>\n          <li>In the <b>LRC sync</b> box, pick the <code>.lrc</code> file &mdash; or paste its lines into the text area.</li>\n          <li>Press <b>Add song</b>. It shows up in the library with its lyrics attached.</li>\n        </ol>\n        <div class=\"rm-guide-note\">The <code>.lrc</code> has to be the synced kind &mdash; the one whose lines start with a timestamp like <code>[01:23.45]</code>. Plain lyrics still show up, but they will not follow the song. If the words drift, an <code>.lrc</code> from a different release of the track is usually the reason.</div>\n      </details>\n      <div class=\"rm-form\">\n        <input id=\"song-title-input\" class=\"rm-inp\" type=\"text\" placeholder=\"Title *\" maxlength=\"50\">\n        <input id=\"song-artist-input\" class=\"rm-inp\" type=\"text\" placeholder=\"Artist\" maxlength=\"30\">\n        <input id=\"song-url-input\" class=\"rm-inp\" type=\"text\" placeholder=\"URL (.mp3  .ogg  .wav)\">\n        <input id=\"song-file-input\" class=\"rm-inp\" type=\"file\" accept=\".mp3,.ogg,.wav,.flac,.aac,.m4a\">\n        <select id=\"song-album-select\" class=\"rm-inp ryn-select\"><option value=\"\">No album</option></select>\n        <div class=\"rm-lrc\">\n          <div class=\"rm-lrc-head\"><span>LRC sync</span><span id=\"lrc-status\"></span></div>\n          <input id=\"lrc-file-input\" class=\"rm-inp\" type=\"file\" accept=\".lrc,.txt\" style=\"margin-bottom:9px;\">\n          <textarea id=\"song-lyrics-input\" class=\"rm-inp\" placeholder=\"[0:15] Line 1&#10;[0:30] Line 2\"></textarea>\n          <label class=\"rm-check\"><input id=\"song-autosync\" type=\"checkbox\"> Auto-play and sync when added</label>\n        </div>\n        <div class=\"rm-row\">\n          <button id=\"add-song\" class=\"option-button primary wide\">Add song</button>\n          <button id=\"save-song-btn\" class=\"option-button\">Save lyrics</button>\n        </div>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Chat sync</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Enable chat sync</span><label class=\"switch-checkbox\"><input id=\"music-chat-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Mixed sync<span class=\"rm-badge\">Me + bots</span></span><label class=\"switch-checkbox\"><input id=\"music-mixed-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">You: line &#8594; bots: line &#8594; you &hellip;</div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Bots only sync<span class=\"rm-badge\">Bots</span></span><label class=\"switch-checkbox\"><input id=\"music-bots-only-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">Bot 1: line 1 &bull; bot 2: line 2 &bull; bot 3: line 3 &hellip;</div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Unified sync<span class=\"rm-badge\">All</span></span><label class=\"switch-checkbox\"><input id=\"music-unified-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">You and every bot post the same line at the same moment.</div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Auto delay<span id=\"bm-auto-delay-badge\" class=\"rm-badge\">off</span></span><label class=\"switch-checkbox\"><input id=\"music-auto-delay\" type=\"checkbox\" checked><span></span></label></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Sync bot<span id=\"bm-sync-bot-badge\" class=\"rm-badge\">off</span></span><button id=\"music-sync-bot-btn\" class=\"option-button\">OFF</button></div>\n      <div id=\"bm-manual-delay-row\" class=\"rm-sync-row\" style=\"display:none;\"><span class=\"rm-sync-label\">Delay</span><label class=\"slider\"><span class=\"slider-value\">0ms</span><input id=\"music-sync-delay\" type=\"range\" min=\"-3000\" max=\"3000\" step=\"50\" value=\"0\"></label></div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-row\" style=\"align-items:center;\">\n        <button id=\"bm-test-chat\" class=\"option-button\">Test chat</button>\n        <span id=\"bm-test-chat-status\" class=\"rm-status\" style=\"align-self:center;\"></span>\n      </div>\n      <button id=\"bm-send-all-lyrics\" class=\"option-button wide\">&#9836; Send All Lyrics: OFF</button>\n      <div id=\"bm-send-lyrics-status\" class=\"rm-status\" style=\"text-align:center;\"></div>\n      <div id=\"bm-dbg-wrap\" style=\"display:none;\"><pre id=\"bm-dbg-box\"></pre></div>\n      <button id=\"bm-dbg-toggle\" class=\"option-button wide\">Show Debug Log</button>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Backup &amp; restore</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <p class=\"rm-sync-note\" style=\"padding-left:0;\">Export the whole library to a JSON file and bring it back on another machine.</p>\n      <div class=\"rm-row\" style=\"max-width:420px;\">\n        <button id=\"music-export-btn\" class=\"option-button wide\">Export</button>\n        <button id=\"music-import-btn\" class=\"option-button wide\">Import</button>\n        <input id=\"music-import-file\" type=\"file\" accept=\".json\" style=\"display:none;\">\n      </div>\n      <div id=\"music-backup-status\" class=\"rm-status\"></div>\n    </div>\n  </div>\n\n</div>\n</div>";
-  const styles_default = "@import url(\"https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap\");\n\n/* ============================================================\n   RYN TYPE 2 — interface stylesheet\n   Ground: near-black neutral. Iris (muted purple) = navigation.\n   Sage (soft light green) = enabled. Sky (light blue) = values,\n   focus and interaction. Nothing else carries colour.\n   ============================================================ */\n\n:root{\n  --ink-0:#07070A;\n  --ink-1:#0C0C11;\n  --ink-2:#101016;\n  --ink-3:#15151C;\n  --ink-4:#1B1B24;\n\n  --line:rgba(255,255,255,0.055);\n  --line-2:rgba(255,255,255,0.10);\n  --line-3:rgba(255,255,255,0.16);\n\n  --iris:#8E76CE;\n  --iris-hi:#A894E0;\n  --iris-05:rgba(142,118,206,0.05);\n  --iris-12:rgba(142,118,206,0.12);\n  --iris-18:rgba(142,118,206,0.18);\n  --iris-45:rgba(142,118,206,0.45);\n\n  --sage:#A6D7B2;\n  --sage-14:rgba(166,215,178,0.14);\n  --sage-40:rgba(166,215,178,0.40);\n\n  --sky:#9BC5E8;\n  --sky-12:rgba(155,197,232,0.12);\n  --sky-45:rgba(155,197,232,0.45);\n\n  --rose:#D9A3AB;\n  --rose-12:rgba(217,163,171,0.12);\n\n  --tx-1:#F3F2F7;\n  --tx-2:#ACA9BA;\n  --tx-3:#726F80;\n  --tx-4:#4E4B5A;\n\n  --r1:6px;\n  --r2:10px;\n  --r3:14px;\n  --r4:22px;\n\n  --s1:4px;  --s2:8px;   --s3:12px;  --s4:16px;\n  --s5:24px; --s6:32px;  --s7:44px;  --s8:64px;\n\n  --ease:cubic-bezier(.2,.8,.3,1);\n  --font:'Manrope','Segoe UI',system-ui,sans-serif;\n  --mono:'Space Grotesk','Manrope',system-ui,sans-serif;\n\n  /* legacy aliases kept so any stray rule still resolves */\n  --accent:#8E76CE;\n  --accent2:#9BC5E8;\n  --border:rgba(255,255,255,0.055);\n  --text:#F3F2F7;\n  --text-muted:#ACA9BA;\n  --text-dim:#726F80;\n}\n\n*{box-sizing:border-box;-webkit-user-select:none;user-select:none;}\nhtml,body{margin:0;padding:0;height:100%;overflow:hidden;background:transparent;}\nbody{font-family:var(--font);color:var(--tx-1);-webkit-font-smoothing:antialiased;}\nh1,h2,h3,p{margin:0;}\nbutton{font-family:inherit;border:none;outline:none;background:none;cursor:pointer;color:inherit;}\ninput,textarea,select{font-family:inherit;}\ninput,textarea{-webkit-user-select:text;user-select:text;}\na{color:var(--sky);text-decoration:none;}\n\n@keyframes toopen{from{opacity:0;transform:translateY(8px) scale(.994);}to{opacity:1;transform:none;}}\n@keyframes toclose{from{opacity:1;transform:none;}to{opacity:0;transform:translateY(6px) scale(.994);}}\n@keyframes page-in{from{opacity:0;transform:translateX(10px);}to{opacity:1;transform:none;}}\n@keyframes cap-pulse{0%,100%{opacity:1;}50%{opacity:.55;}}\n@keyframes ripple{from{opacity:.22;transform:scale(0);}to{opacity:0;transform:scale(1.3);}}\n@keyframes soft-in{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:none;}}\n\n/* ------------------------------------------------------------------\n   SHELL\n   ------------------------------------------------------------------ */\n\n#menu-container{\n  position:absolute;inset:0;\n  display:flex;align-items:center;justify-content:center;\n  padding:18px;\n}\n\n#menu-wrapper{\n  position:relative;\n  width:min(1100px,100%);\n  height:min(690px,100%);\n  min-width:860px;min-height:520px;\n  display:flex;\n  background:var(--ink-1);\n  border:1px solid var(--line-2);\n  border-radius:var(--r4);\n  overflow:hidden;\n  box-shadow:0 48px 110px -34px rgba(0,0,0,.92),0 0 0 1px rgba(0,0,0,.4);\n  transform:scale(var(--ryn-scale,1));\n  transform-origin:center center;\n}\n#menu-container.transparent #menu-wrapper{background:rgba(12,12,17,0.90);}\n#menu-wrapper.toopen{animation:180ms var(--ease) toopen both;}\n#menu-wrapper.toclose{animation:140ms ease-in toclose both;}\n\nmain{display:flex;flex:1;min-width:0;min-height:0;}\n\n/* the old top bar is gone — everything identifying lives in the rail */\nheader{display:none;}\n\n/* ------------------------------------------------------------------\n   NAVIGATION RAIL\n   ------------------------------------------------------------------ */\n\n#navbar-container{\n  width:236px;min-width:236px;flex-shrink:0;\n  display:flex;flex-direction:column;\n  background:var(--ink-2);\n  border-right:1px solid var(--line);\n  padding:22px 12px 12px;\n}\n\n.rail-brand{display:flex;align-items:baseline;gap:9px;padding:0 12px 18px;}\n.rail-mark{\n  font-family:var(--mono);font-weight:700;font-size:25px;line-height:1;\n  letter-spacing:-.02em;color:var(--tx-1);\n}\n.rail-sub{\n  font-family:var(--mono);font-weight:600;font-size:10.5px;line-height:1;\n  letter-spacing:.24em;text-transform:uppercase;color:var(--iris-hi);\n}\n\n.rail-label{\n  font-family:var(--mono);font-weight:600;font-size:10px;\n  letter-spacing:.22em;text-transform:uppercase;color:var(--tx-4);\n  padding:0 12px;margin:20px 0 7px;\n}\n\n#navbar-container nav{display:flex;flex-direction:column;gap:2px;}\n\n.open-menu{\n  position:relative;\n  display:flex;align-items:center;gap:13px;\n  width:100%;padding:12px 13px;\n  border-radius:var(--r2);\n  background:transparent;\n  color:var(--tx-2);\n  text-align:left;\n  overflow:hidden;\n  transition:background 150ms var(--ease),color 150ms var(--ease);\n}\n.open-menu .nav-index{\n  font-family:var(--mono);font-weight:600;font-size:11px;line-height:1;\n  letter-spacing:.06em;color:var(--tx-4);\n  width:20px;flex-shrink:0;\n  transition:color 150ms var(--ease);\n}\n.open-menu .nav-label{\n  font-weight:800;font-size:15px;line-height:1.1;letter-spacing:-.012em;\n}\n.open-menu:hover{background:rgba(255,255,255,.035);color:var(--tx-1);}\n.open-menu:active{background:rgba(255,255,255,.06);}\n.open-menu.active{background:var(--iris-12);color:#FFFFFF;}\n.open-menu.active .nav-index{color:var(--iris-hi);}\n.open-menu.active::before{\n  content:'';position:absolute;left:0;top:11px;bottom:11px;\n  width:3px;border-radius:0 3px 3px 0;background:var(--iris);\n}\n.open-menu .ripple{\n  position:absolute;border-radius:50%;\n  background:rgba(255,255,255,.07);\n  opacity:0;pointer-events:none;\n  animation:ripple 420ms ease-out;\n}\n\n/* live outline of the open category */\n#nav-outline{\n  display:flex;flex-direction:column;gap:1px;\n  margin-top:4px;padding-left:6px;\n  overflow-y:auto;flex:1;min-height:0;\n}\n#nav-outline::-webkit-scrollbar{width:6px;}\n#nav-outline::-webkit-scrollbar-thumb{background:rgba(255,255,255,.07);border-radius:6px;}\n.outline-item{\n  position:relative;\n  padding:7px 10px 7px 16px;\n  border-radius:var(--r1);\n  font-size:12.5px;font-weight:600;line-height:1.3;\n  color:var(--tx-3);text-align:left;\n  transition:color 140ms var(--ease),background 140ms var(--ease);\n}\n.outline-item::before{\n  content:'';position:absolute;left:4px;top:50%;\n  width:4px;height:4px;margin-top:-2px;border-radius:50%;\n  background:var(--tx-4);\n  transition:background 160ms var(--ease),transform 160ms var(--ease);\n}\n.outline-item:hover{color:var(--tx-1);background:rgba(255,255,255,.03);}\n.outline-item.current{color:var(--tx-1);}\n.outline-item.current::before{background:var(--iris-hi);transform:scale(1.35);}\n\n.rail-foot{\n  margin-top:auto;padding-top:16px;\n  border-top:1px solid var(--line);\n  display:flex;align-items:center;gap:10px;\n}\n#ryn-version{\n  font-family:var(--mono);font-size:10.5px;font-weight:500;\n  letter-spacing:.14em;text-transform:uppercase;color:var(--tx-4);\n  padding-left:12px;margin-right:auto;\n}\n#close-button{\n  width:34px;height:34px;padding:8px;flex-shrink:0;\n  border-radius:var(--r2);\n  fill:none;stroke:var(--tx-3);stroke-width:1.9;\n  background:transparent;cursor:pointer;\n  transition:background 150ms var(--ease),stroke 150ms var(--ease);\n}\n#close-button:hover{background:rgba(255,255,255,.06);stroke:var(--tx-1);}\n#close-button:active{background:rgba(255,255,255,.09);}\n\n/* search lives in the rail head */\n#ryn-search-wrap{\n  position:relative;\n  display:flex;align-items:center;gap:8px;\n  height:40px;padding:0 13px;\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line-2);\n  border-radius:var(--r2);\n  transition:border-color 160ms var(--ease),background 160ms var(--ease),box-shadow 160ms var(--ease);\n}\n#ryn-search-wrap:focus-within{\n  border-color:var(--sky-45);\n  background:var(--sky-12);\n  box-shadow:0 0 0 3px rgba(155,197,232,.10);\n}\n#ryn-search-wrap::before{\n  content:'';flex-shrink:0;width:15px;height:15px;\n  background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23726F80' stroke-width='1.6' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='4.6'/%3E%3Cpath d='M10.4 10.4L14 14'/%3E%3C/svg%3E\");\n  background-repeat:no-repeat;background-position:center;background-size:contain;\n}\n#ryn-search-input{\n  flex:1;min-width:0;\n  background:transparent;border:none;outline:none;\n  font-size:13.5px;font-weight:600;color:var(--tx-1);\n}\n#ryn-search-input::placeholder{color:var(--tx-4);font-weight:500;}\n#ryn-search-clear{\n  display:none;flex-shrink:0;\n  font-size:11px;line-height:1;color:var(--tx-4);cursor:pointer;\n  transition:color 140ms;\n}\n#ryn-search-clear:hover{color:var(--tx-1);}\n#ryn-search-dropdown{\n  display:none;position:absolute;top:calc(100% + 8px);left:0;\n  width:320px;max-height:340px;overflow-y:auto;\n  padding:6px;\n  background:var(--ink-3);\n  border:1px solid var(--line-2);\n  border-radius:var(--r3);\n  box-shadow:0 26px 60px -18px rgba(0,0,0,.9);\n  z-index:9999;\n  animation:soft-in 150ms var(--ease);\n}\n#ryn-search-dropdown::-webkit-scrollbar{width:8px;}\n#ryn-search-dropdown::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:8px;border:2px solid transparent;background-clip:padding-box;}\n.ryn-si{\n  display:flex;flex-direction:column;gap:3px;\n  padding:9px 11px;border-radius:var(--r2);cursor:pointer;\n  transition:background 130ms var(--ease);\n}\n.ryn-si:hover,.ryn-si.ryn-fx{background:var(--iris-12);}\n.ryn-st{font-size:13px;font-weight:700;color:var(--tx-1);line-height:1.3;}\n.ryn-st mark{background:var(--iris-45);color:#fff;border-radius:3px;padding:0 2px;}\n.ryn-sp{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--tx-4);}\n.ryn-se{text-align:center;padding:22px 12px;font-size:12.5px;font-weight:600;color:var(--tx-4);}\n.ryn-sl{\n  font-family:var(--mono);font-size:9.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--iris-hi);\n  padding:9px 11px 4px;\n}\n\n/* ------------------------------------------------------------------\n   CONTENT COLUMN — one continuous vertical flow, full available width\n   ------------------------------------------------------------------ */\n\n#page-container{\n  flex:1;min-width:0;\n  overflow-y:auto;overflow-x:hidden;\n  background:var(--ink-1);\n}\n#page-container::-webkit-scrollbar{width:12px;}\n#page-container::-webkit-scrollbar-track{background:transparent;}\n#page-container::-webkit-scrollbar-thumb{\n  background:rgba(255,255,255,.09);\n  border-radius:12px;\n  border:4px solid transparent;\n  background-clip:padding-box;\n}\n#page-container::-webkit-scrollbar-thumb:hover{background:rgba(142,118,206,.55);background-clip:padding-box;}\n\n.menu-page{display:none;}\n.menu-page.opened{\n  display:block;\n  padding:34px clamp(20px,2.6vw,38px) 92px;\n  animation:page-in 190ms var(--ease);\n}\n.page-head{\n  max-width:1180px;margin:0 auto 6px;\n  padding-bottom:24px;\n  border-bottom:1px solid var(--line);\n}\n.menu-page .page-title{\n  font-size:clamp(27px,2.5vw,33px);font-weight:800;line-height:1.03;\n  letter-spacing:-.03em;color:var(--tx-1);\n}\n.page-description{\n  margin-top:12px;max-width:74ch;\n  font-size:13.5px;font-weight:500;line-height:1.6;color:var(--tx-3);\n}\n\n.section{max-width:1180px;margin:0 auto;padding-top:36px;}\n.section-title{\n  display:flex;flex-direction:column;gap:7px;\n  padding:0 2px 13px;\n  border-bottom:1px solid var(--line);\n  font-family:var(--mono);font-size:11.5px;font-weight:700;\n  letter-spacing:.19em;text-transform:uppercase;color:var(--iris-hi);\n}\nh2.section-title{font-family:var(--mono);}\n.sec-sub{\n  font-family:var(--font);font-size:12.5px;font-weight:500;\n  letter-spacing:0;text-transform:none;line-height:1.55;color:var(--tx-3);\n}\n.section-content{display:flex;flex-direction:column;padding-top:4px;}\n\n/* ------------------------------------------------------------------\n   SETTING ROW\n   ------------------------------------------------------------------ */\n\n.content-option{\n  position:relative;\n  display:flex;align-items:center;justify-content:space-between;gap:24px;\n  min-height:60px;\n  padding:13px 15px 13px 17px;\n  border-radius:var(--r2);\n  border-bottom:1px solid rgba(255,255,255,.032);\n  transition:background 150ms var(--ease);\n}\n.content-option:last-child{border-bottom:none;}\n.content-option:hover{background:rgba(255,255,255,.026);}\n.content-option::before{\n  content:'';position:absolute;left:0;top:14px;bottom:14px;\n  width:2px;border-radius:0 2px 2px 0;\n  background:var(--sage);\n  opacity:0;\n  transition:opacity 190ms var(--ease);\n}\n.content-option:has(input[type=\"checkbox\"]:checked)::before{opacity:.85;}\n\n.content-option.centered{justify-content:center;}\n.content-option.left-flex{justify-content:flex-start;gap:14px;}\n.content-option.text{justify-content:flex-start;}\n.content-option.stacked{flex-direction:column;align-items:stretch;gap:14px;}\n\n.opt-main{display:flex;flex-direction:column;gap:5px;min-width:0;flex:1;}\n.option-title{\n  font-size:15.5px;font-weight:700;line-height:1.32;\n  letter-spacing:-.008em;color:var(--tx-1);\n}\nlabel.option-title{cursor:pointer;}\nlabel.option-title:active{opacity:.75;}\n.opt-desc{\n  font-size:12.5px;font-weight:500;line-height:1.5;\n  color:var(--tx-3);max-width:74ch;\n}\n.content-option.quiet .option-title{font-size:14.5px;font-weight:600;color:var(--tx-2);}\n.content-option.quiet{min-height:54px;}\n.content-option.quiet:hover .option-title{color:var(--tx-1);}\n.option-content{display:flex;align-items:center;gap:12px;flex-shrink:0;}.ryn-select{appearance:none;-webkit-appearance:none;background:rgba(255,255,255,.06);color:inherit;border:1px solid rgba(255,255,255,.18);border-radius:7px;padding:5px 26px 5px 10px;font:inherit;font-size:12px;cursor:pointer;flex-shrink:0;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 14px) calc(50% + 1px),calc(100% - 9px) calc(50% + 1px);background-size:5px 5px,5px 5px;background-repeat:no-repeat;}.ryn-select:hover{border-color:rgba(255,255,255,.32);}.ryn-select:focus{outline:none;border-color:var(--iris);}.ryn-select option{background:#1a1526;color:#fff;}\n\n.text-value{\n  font-family:var(--mono);font-size:15px;font-weight:700;\n  color:var(--sky);font-variant-numeric:tabular-nums;\n}\n.simplified{font-size:12.5px;font-weight:500;color:var(--tx-3);line-height:1.6;}\n.highlight{color:var(--iris-hi);}\n\n/* nested detail rows under a parent toggle */\n.sub-options{\n  margin:2px 0 6px 18px;\n  padding-left:16px;\n  border-left:1px solid var(--line-2);\n  transition:opacity 200ms var(--ease);\n}\n.sub-options .content-option{min-height:50px;padding-top:9px;padding-bottom:9px;}\n.sub-options .option-title{font-size:14px;font-weight:600;color:var(--tx-2);}\n.sub-options .content-option:hover .option-title{color:var(--tx-1);}\n.content-option:has(> .switch-checkbox > input:not(:checked)) + .sub-options{\n  opacity:.32;pointer-events:none;\n}\n\n/* ------------------------------------------------------------------\n   CONTROLS\n   ------------------------------------------------------------------ */\n\n/* toggle */\n.switch-checkbox{position:relative;width:48px;height:27px;flex-shrink:0;}\n.switch-checkbox input{position:absolute;opacity:0;width:0;height:0;}\n.switch-checkbox span{\n  position:absolute;inset:0;\n  border-radius:10px;cursor:pointer;\n  background:rgba(255,255,255,.06);\n  border:1px solid rgba(255,255,255,.11);\n  transition:background 180ms var(--ease),border-color 180ms var(--ease);\n}\n.switch-checkbox span::before{\n  content:'';position:absolute;left:4px;top:50%;\n  width:18px;height:18px;border-radius:6px;\n  background:rgba(255,255,255,.32);\n  transform:translateY(-50%);\n  transition:transform 190ms var(--ease),background 190ms var(--ease);\n}\n.switch-checkbox span:hover{border-color:rgba(255,255,255,.2);}\n.switch-checkbox input:checked + span{\n  background:var(--sage-14);\n  border-color:var(--sage-40);\n}\n.switch-checkbox input:checked + span::before{\n  transform:translateY(-50%) translateX(21px);\n  background:var(--sage);\n}\n.switch-checkbox input:focus-visible + span{box-shadow:0 0 0 3px rgba(155,197,232,.20);}\n\n/* keycap */\n.hotkeyInput{\n  display:flex;align-items:center;justify-content:center;\n  min-width:82px;height:42px;padding:0 15px;\n  border-radius:10px;\n  background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.028));\n  border:1px solid rgba(255,255,255,.115);\n  box-shadow:0 2px 0 rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.10);\n  font-family:var(--mono);font-size:13.5px;font-weight:700;\n  letter-spacing:.07em;text-transform:uppercase;color:var(--tx-1);\n  transition:transform 120ms var(--ease),border-color 150ms var(--ease),\n             background 150ms var(--ease),box-shadow 150ms var(--ease),color 150ms var(--ease);\n}\n.hotkeyInput:hover{border-color:var(--sky-45);color:#fff;}\n.hotkeyInput:active{transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.06);}\n.hotkeyInput.active{\n  border-color:var(--iris);background:var(--iris-18);color:var(--iris-hi);\n  box-shadow:inset 0 1px 0 rgba(255,255,255,.08);\n  transform:translateY(2px);\n  animation:cap-pulse 1.15s ease-in-out infinite;\n}\n.hotkeyInput.red{\n  border-color:rgba(217,163,171,.5);background:var(--rose-12);color:var(--rose);\n}\n.key-state{\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--tx-4);\n  min-width:78px;text-align:right;\n}\n.key-state::after{content:'';}\n.content-option:has(.hotkeyInput.red) .key-state::after{content:'Conflict';color:var(--rose);}\n.content-option:has(.hotkeyInput.active) .key-state::after{content:'Press a key';color:var(--iris-hi);}\n.content-option:has(.hotkeyInput.red) .key-state,\n.content-option:has(.hotkeyInput.active) .key-state{color:inherit;}\n\n/* button */\n.option-button{\n  display:inline-flex;align-items:center;justify-content:center;gap:8px;\n  height:42px;padding:0 21px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.05);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);\n  font-size:13.5px;font-weight:700;letter-spacing:.005em;\n  white-space:nowrap;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),\n             transform 110ms var(--ease),color 150ms var(--ease);\n}\n.option-button:hover{background:rgba(255,255,255,.085);border-color:var(--line-3);}\n.option-button:active{transform:translateY(1px);background:rgba(255,255,255,.11);}\n.option-button:disabled{opacity:.4;pointer-events:none;}\n.option-button.primary{\n  background:var(--iris-18);border-color:var(--iris-45);color:#EFEAFF;\n}\n.option-button.primary:hover{background:rgba(142,118,206,.26);border-color:rgba(142,118,206,.7);}\n.option-button.wide{width:100%;}\n.option-button.tall{height:48px;padding:0 28px;font-size:14.5px;}\n.option-button.red,.option-button.danger{\n  background:transparent;border-color:rgba(217,163,171,.28);color:var(--rose);\n}\n.option-button.red:hover,.option-button.danger:hover{\n  background:var(--rose-12);border-color:rgba(217,163,171,.5);color:#F0CDD2;\n}\n.option-button.icon-only{width:42px;padding:0;}\n\n/* segmented control */\n.seg{display:flex;gap:6px;flex-wrap:wrap;max-width:680px;}\n.seg-btn,.farm-type-btn{\n  flex:1;min-width:92px;height:44px;padding:0 15px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line);\n  color:var(--tx-3);\n  font-family:var(--font);font-size:13.5px;font-weight:700;\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.seg-btn:hover,.farm-type-btn:hover{background:rgba(255,255,255,.06);color:var(--tx-1);}\n.seg-btn.seg-active,.farm-type-btn.seg-active{\n  background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;\n}\n\n/* text / number input */\n.input{\n  height:42px;width:235px;padding:0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);\n  font-size:13.5px;font-weight:600;text-align:left;\n  transition:border-color 150ms var(--ease),background 150ms var(--ease),box-shadow 150ms var(--ease);\n}\n.input::placeholder{color:var(--tx-4);font-weight:500;}\n.input:focus{\n  outline:none;border-color:var(--sky-45);\n  background:var(--sky-12);\n  box-shadow:0 0 0 3px rgba(155,197,232,.11);\n}\ninput[type=\"number\"].input{width:122px;font-family:var(--mono);font-variant-numeric:tabular-nums;}\n.input.invalid{border-color:rgba(217,163,171,.6);background:var(--rose-12);}\n\n/* rows the client builds for auto chat: input plus a remove control */\n.chat-row{min-height:58px;}\n.chat-row .input{flex:1;min-width:0;}\n\n/* colour */\ninput[id][type=\"color\"]{\n  width:36px;height:36px;padding:0;\n  border:none;border-radius:9px;background:transparent;cursor:pointer;\n  box-shadow:0 0 0 1px rgba(255,255,255,.16);\n  transition:box-shadow 160ms var(--ease),transform 160ms var(--ease);\n}\ninput[id][type=\"color\"]::-webkit-color-swatch-wrapper{padding:3px;}\ninput[id][type=\"color\"]::-webkit-color-swatch{border:none;border-radius:7px;}\ninput[id][type=\"color\"]:hover{transform:scale(1.06);box-shadow:0 0 0 1px rgba(255,255,255,.34);}\n.reset-color{\n  width:15px;height:15px;flex-shrink:0;\n  border-radius:50%;border:1px solid rgba(255,255,255,.22);\n  background:var(--data-color,var(--iris));\n  opacity:0;cursor:pointer;\n  transition:opacity 160ms var(--ease),transform 160ms var(--ease);\n}\n.content-option:hover .reset-color{opacity:.85;}\n.reset-color:hover{opacity:1;transform:scale(1.2);}\n\n/* slider */\n.slider{display:flex;align-items:center;gap:18px;flex-shrink:0;}\n.slider input[type=\"range\"]{order:1;}\n.slider-value{\n  order:2;\n  font-family:var(--mono);font-size:13.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;\n  color:var(--sky);min-width:58px;text-align:right;\n}\n.slider input[type=\"range\"]{\n  -webkit-appearance:none;appearance:none;\n  width:clamp(150px,17vw,250px);height:22px;\n  background:transparent;cursor:pointer;outline:none;border:none;\n}\n.slider input[type=\"range\"]::-webkit-slider-runnable-track{\n  height:4px;border-radius:999px;\n  background:linear-gradient(90deg,var(--sky) var(--val,0%),rgba(255,255,255,.09) var(--val,0%));\n}\n.slider input[type=\"range\"]::-webkit-slider-thumb{\n  -webkit-appearance:none;\n  width:15px;height:15px;margin-top:-5.5px;\n  border-radius:50%;background:#EEF4FA;\n  border:1px solid rgba(0,0,0,.35);\n  box-shadow:0 1px 4px rgba(0,0,0,.55);\n  transition:transform 130ms var(--ease),box-shadow 130ms var(--ease);\n}\n.slider input[type=\"range\"]:hover::-webkit-slider-thumb{transform:scale(1.14);}\n.slider input[type=\"range\"]:active::-webkit-slider-thumb{\n  transform:scale(1.06);box-shadow:0 0 0 6px rgba(155,197,232,.16);\n}\n\n/* select */\nselect.ryn-select{\n  height:42px;padding:0 38px 0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);font-size:13.5px;font-weight:600;\n  -webkit-appearance:none;appearance:none;cursor:pointer;\n  background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7' viewBox='0 0 11 7'%3E%3Cpath d='M1 1l4.5 4.5L10 1' stroke='%239BC5E8' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\");\n  background-repeat:no-repeat;background-position:right 14px center;\n  transition:border-color 150ms var(--ease);\n}\nselect.ryn-select:focus{outline:none;border-color:var(--sky-45);}\nselect.ryn-select option{background:var(--ink-3);color:var(--tx-1);}\n\n/* misc atoms */\n.icon{width:20px;height:20px;}\n.small-icon{width:15px;height:15px;}\n.key-badge{\n  display:inline-flex;align-items:center;justify-content:center;\n  min-width:26px;height:20px;padding:0 6px;\n  border-radius:var(--r1);\n  background:rgba(255,255,255,.05);border:1px solid var(--line-2);\n  font-family:var(--mono);font-size:10.5px;font-weight:600;color:var(--tx-2);\n}\n.note{\n  max-width:1180px;margin:14px auto 0;\n  padding:14px 18px;\n  border-left:2px solid var(--line-2);\n  font-size:12.5px;font-weight:500;line-height:1.6;color:var(--tx-3);\n}\n\n/* ------------------------------------------------------------------\n   BOTS\n   ------------------------------------------------------------------ */\n\n#bot-container{display:flex;flex-direction:column;}\n#bot-container:empty{display:none;}\n.content-option[data-bot-id]{\n  background:rgba(255,255,255,.028);\n  border:1px solid var(--line);border-bottom:1px solid var(--line);\n  margin-bottom:6px;min-height:52px;\n}\n.content-option[data-bot-id] .option-title{font-family:var(--mono);font-size:13.5px;font-weight:600;}\n.disconnect-button{\n  width:16px;height:16px;flex-shrink:0;\n  fill:var(--tx-4);cursor:pointer;\n  transition:fill 150ms var(--ease);\n}\n.content-option:hover .disconnect-button{fill:var(--tx-2);}\n.disconnect-button:hover{fill:var(--rose)!important;}\n\n#connectingBot{\n  padding:14px 18px;margin-bottom:6px;\n  border-radius:var(--r2);\n  border:1px dashed var(--line-2);\n  font-family:var(--mono);font-size:12px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--tx-4);\n}\n\n#dynamic-bot-list{display:flex;flex-direction:column;gap:8px;}\n.bot-row{\n  display:flex;align-items:center;gap:10px;\n  padding:10px 12px;\n  background:rgba(255,255,255,.028);\n  border:1px solid var(--line);\n  border-radius:var(--r2);\n  transition:border-color 150ms var(--ease),opacity 150ms var(--ease);\n}\n.bot-row:hover{border-color:var(--line-2);}\n.bot-row.connected{background:var(--sage-14);border-color:var(--sage-40);}\n.bot-row-label{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  letter-spacing:.12em;text-transform:uppercase;color:var(--tx-4);\n  min-width:74px;flex-shrink:0;\n}\n.bot-row-name{flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}\n.bot-row-name .pending{color:var(--tx-4);font-weight:600;}\n.bot-row .input{flex:1;min-width:0;width:auto;}\n.bot-row-check{width:17px;height:17px;flex-shrink:0;fill:var(--sage);}\n.icon-btn{\n  display:flex;align-items:center;justify-content:center;\n  width:42px;height:42px;flex-shrink:0;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.045);\n  border:1px solid var(--line-2);\n  font-size:15px;line-height:1;color:var(--tx-2);\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.icon-btn:hover{background:rgba(255,255,255,.08);border-color:var(--line-3);color:var(--tx-1);}\n.icon-btn.danger:hover{background:var(--rose-12);border-color:rgba(217,163,171,.45);color:var(--rose);}\n\n/* option grids (weapons, age-4 building) */\n.wpn-label{\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:12px;\n}\n.wpn-grid{\n  display:grid;grid-template-columns:repeat(auto-fill,minmax(124px,1fr));\n  gap:8px;\n}\n.bot-weapon-btn,.bot-sec-weapon-btn{\n  display:flex;align-items:center;justify-content:center;\n  min-height:54px;padding:10px 12px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.03);\n  border:1px solid var(--line);\n  color:var(--tx-3);\n  font-size:13px;font-weight:600;text-align:center;line-height:1.3;\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.bot-weapon-btn:hover,.bot-sec-weapon-btn:hover{\n  background:rgba(255,255,255,.06);border-color:var(--line-2);color:var(--tx-1);\n}\n.bot-weapon-btn.wpn-active,.bot-sec-weapon-btn.wpn-active{\n  background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;\n}\n.wpn-selected-bar{\n  display:flex;align-items:center;gap:10px;\n  margin-top:12px;padding:11px 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.025);\n  border:1px solid var(--line);\n}\n.wpn-selected-dot{\n  width:6px;height:6px;flex-shrink:0;border-radius:50%;background:var(--iris-hi);\n}\n.wpn-selected-text{font-size:13px;font-weight:600;color:var(--tx-2);}\n\n.stack{display:flex;flex-direction:column;gap:22px;padding-top:8px;}\n.field{display:flex;flex-direction:column;gap:0;}\n.field-head{\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:10px;\n}\n.field-note{margin-top:10px;font-size:12.5px;font-weight:500;line-height:1.55;color:var(--tx-3);}\n.field-note b{color:var(--tx-2);font-weight:700;}\n.inline{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}\n#_botBulkRow .input{flex:1;min-width:180px;width:auto;}\n.bot-row-id{\n  font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.06em;\n  color:var(--tx-4);flex-shrink:0;padding:0 9px;height:25px;\n  display:flex;align-items:center;white-space:nowrap;\n  border:1px solid var(--line);border-radius:var(--r2);\n}\n\n#_formationGrid{width:100%;}\n\n/* ------------------------------------------------------------------\n   FORMATION POPUP (built in JS, lives on document.body)\n   ------------------------------------------------------------------ */\n\n.fsel-trigger{\n  display:flex;align-items:center;gap:12px;\n  width:100%;padding:13px 14px;max-width:680px;\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line-2);\n  border-radius:var(--r2);\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease);\n}\n.fsel-trigger:hover{background:rgba(255,255,255,.06);border-color:var(--line-3);}\n.fsel-trigger.open{border-color:var(--iris-45);background:var(--iris-12);}\n.fsel-trigger .fsel-icon{width:26px;flex-shrink:0;text-align:center;font-size:16px;color:var(--iris-hi);}\n.fsel-trigger .fsel-label{flex:1;font-size:14.5px;font-weight:700;color:var(--tx-1);}\n.fsel-trigger .fsel-arrow{font-size:10px;color:var(--tx-4);transition:transform 170ms var(--ease);}\n.fsel-trigger.open .fsel-arrow{transform:rotate(180deg);}\n\n.fsel-popup{\n  position:fixed;z-index:99999;width:300px;\n  display:flex;flex-direction:column;overflow:hidden;\n  background:var(--ink-3);\n  border:1px solid var(--line-2);\n  border-radius:var(--r3);\n  box-shadow:0 30px 70px -20px rgba(0,0,0,.92);\n}\n.fsel-popup.toopen{animation:soft-in 160ms var(--ease);}\n.fsel-popup-header{\n  display:flex;align-items:center;gap:10px;\n  padding:12px 14px;\n  border-bottom:1px solid var(--line);\n  cursor:grab;\n}\n.fsel-popup-header:active{cursor:grabbing;}\n.fsel-popup-title{\n  flex:1;font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n.fsel-popup-close{\n  width:22px;height:22px;flex-shrink:0;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r1);font-size:11px;color:var(--tx-4);cursor:pointer;\n  transition:background 140ms,color 140ms;\n}\n.fsel-popup-close:hover{background:rgba(255,255,255,.07);color:var(--tx-1);}\n.fsel-popup-body{\n  display:grid;grid-template-columns:repeat(4,1fr);gap:8px;\n  padding:12px;max-height:280px;overflow-y:auto;\n}\n.fsel-popup-body::-webkit-scrollbar{width:8px;}\n.fsel-popup-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:8px;border:2px solid transparent;background-clip:padding-box;}\n.fcat-btn{\n  position:relative;\n  display:flex;align-items:center;justify-content:center;\n  aspect-ratio:1;border-radius:var(--r2);\n  background:rgba(255,255,255,.03);\n  border:1px solid var(--line);\n  color:var(--tx-2);font-size:17px;cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.fcat-btn:hover{background:rgba(255,255,255,.07);border-color:var(--line-2);color:var(--tx-1);}\n.fcat-btn.active{background:var(--iris-18);border-color:var(--iris-45);color:#fff;}\n.fcat-tip{\n  display:none;position:absolute;top:calc(100% + 6px);left:50%;\n  transform:translateX(-50%);\n  padding:4px 9px;border-radius:var(--r1);\n  background:var(--ink-4);border:1px solid var(--line-2);\n  font-family:var(--font);font-size:11px;font-weight:600;color:var(--tx-1);\n  white-space:nowrap;pointer-events:none;z-index:5;\n}\n.fcat-btn:hover .fcat-tip{display:block;}\n.fcat-key{\n  position:absolute;top:3px;right:3px;\n  min-width:17px;height:15px;padding:0 3px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:4px;\n  background:rgba(0,0,0,.45);border:1px solid var(--line);\n  font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--tx-3);\n  line-height:1;cursor:pointer;\n  transition:background 130ms,border-color 130ms,color 130ms;\n}\n.fcat-key:hover{background:rgba(255,255,255,.10);color:var(--tx-1);}\n.fcat-key.set{background:var(--iris-18);border-color:var(--iris-45);color:#EFEAFF;}\n.fcat-key.recording{background:var(--sky-12);border-color:var(--sky-45);color:var(--sky);animation:cap-pulse 1.1s ease-in-out infinite;}\n.fcat-reset{\n  position:absolute;bottom:3px;left:3px;\n  width:15px;height:15px;display:none;\n  align-items:center;justify-content:center;\n  border-radius:4px;\n  background:var(--rose-12);border:1px solid rgba(217,163,171,.3);\n  font-size:9px;line-height:1;color:var(--rose);cursor:pointer;\n}\n.fcat-reset.show{display:flex;}\n.fcat-reset:hover{background:rgba(217,163,171,.24);}\n.fsel-popup-footer{padding:10px 12px;border-top:1px solid var(--line);}\n.fsel-reset-all{\n  width:100%;padding:9px 0;\n  border-radius:var(--r2);\n  background:transparent;border:1px solid rgba(217,163,171,.26);\n  font-family:var(--font);font-size:12px;font-weight:700;\n  color:var(--rose);text-align:center;cursor:pointer;\n  transition:background 140ms,border-color 140ms;\n}\n.fsel-reset-all:hover{background:var(--rose-12);border-color:rgba(217,163,171,.48);}\n\n/* ============================================================\n   Target Scan — the picker is a multi-select, so it is built\n   like one: a tick per row, picked rows lifted out of the list\n   rather than merely tinted, and a state chip only on the ones\n   actually being tracked. Colours come from the tokens above,\n   with sky for picked and sage for live.\n   ============================================================ */\n\n.scan-count{\n  font:600 10px/1 var(--mono);\n  letter-spacing:.08em;\n  text-transform:uppercase;\n  color:var(--tx-3);\n  background:var(--ink-4);\n  border:1px solid var(--line);\n  border-radius:999px;\n  padding:3px 8px;\n  margin-left:8px;\n  vertical-align:middle;\n}\n\n.scan-bar{\n  display:flex;\n  gap:var(--s2);\n  align-items:center;\n  width:100%;\n  margin-bottom:var(--s3);\n}\n.scan-filter{flex:1;min-width:0;}\n.scan-bar .option-button{flex:0 0 auto;white-space:nowrap;}\n\n#_scanList{\n  display:flex;\n  flex-direction:column;\n  gap:3px;\n  width:100%;\n  max-height:340px;\n  overflow-y:auto;\n  padding-right:2px;\n}\n#_scanList::-webkit-scrollbar{width:6px;}\n#_scanList::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:3px;}\n\n.scan-row{\n  display:flex;\n  align-items:center;\n  gap:var(--s3);\n  padding:8px 10px;\n  border-radius:var(--r2);\n  border:1px solid transparent;\n  background:var(--ink-2);\n  cursor:pointer;\n  transition:background 140ms var(--ease),border-color 140ms var(--ease);\n}\n.scan-row:hover{background:var(--ink-3);border-color:var(--line-2);}\n.scan-row.picked{background:var(--sky-12);border-color:var(--sky-45);}\n.scan-row.live{background:var(--sage-14);border-color:var(--sage-40);}\n\n.scan-tick{\n  flex:0 0 auto;\n  width:17px;\n  height:17px;\n  display:flex;\n  align-items:center;\n  justify-content:center;\n  border-radius:5px;\n  border:1px solid var(--line-3);\n  background:var(--ink-0);\n  font:700 11px/1 var(--font);\n  color:var(--ink-0);\n}\n.scan-row.picked .scan-tick{background:var(--sky);border-color:var(--sky);}\n.scan-row.live .scan-tick{background:var(--sage);border-color:var(--sage);}\n\n.scan-main{\n  flex:1;\n  min-width:0;\n  display:flex;\n  flex-direction:column;\n  gap:2px;\n}\n.scan-name{\n  font:600 13px/1.2 var(--font);\n  color:var(--tx-1);\n  overflow:hidden;\n  text-overflow:ellipsis;\n  white-space:nowrap;\n}\n.scan-meta{\n  font:500 10px/1.2 var(--mono);\n  color:var(--tx-3);\n  overflow:hidden;\n  text-overflow:ellipsis;\n  white-space:nowrap;\n}\n\n.scan-chip{\n  flex:0 0 auto;\n  font:700 9px/1 var(--mono);\n  letter-spacing:.1em;\n  color:var(--ink-0);\n  background:var(--sage);\n  border-radius:999px;\n  padding:4px 8px;\n}\n\n.scan-empty{\n  font:500 12px/1.5 var(--font);\n  color:var(--tx-3);\n  padding:14px 10px;\n  text-align:center;\n  border:1px dashed var(--line-2);\n  border-radius:var(--r2);\n}\n";
+  const styles_default = "@import url(\"https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap\");\n\n/* ============================================================\n   RYN TYPE 2 \u2014 interface stylesheet\n   Ground: near-black neutral. Iris (muted purple) = navigation.\n   Sage (soft light green) = enabled. Sky (light blue) = values,\n   focus and interaction. Nothing else carries colour.\n   ============================================================ */\n\n:root{\n  --ink-0:#07070A;\n  --ink-1:#0C0C11;\n  --ink-2:#101016;\n  --ink-3:#15151C;\n  --ink-4:#1B1B24;\n\n  --line:rgba(255,255,255,0.055);\n  --line-2:rgba(255,255,255,0.10);\n  --line-3:rgba(255,255,255,0.16);\n\n  --iris:#8E76CE;\n  --iris-hi:#A894E0;\n  --iris-05:rgba(142,118,206,0.05);\n  --iris-12:rgba(142,118,206,0.12);\n  --iris-18:rgba(142,118,206,0.18);\n  --iris-45:rgba(142,118,206,0.45);\n\n  --sage:#A6D7B2;\n  --sage-14:rgba(166,215,178,0.14);\n  --sage-40:rgba(166,215,178,0.40);\n\n  --sky:#9BC5E8;\n  --sky-12:rgba(155,197,232,0.12);\n  --sky-45:rgba(155,197,232,0.45);\n\n  --rose:#D9A3AB;\n  --rose-12:rgba(217,163,171,0.12);\n\n  --tx-1:#F3F2F7;\n  --tx-2:#ACA9BA;\n  --tx-3:#726F80;\n  --tx-4:#4E4B5A;\n\n  --r1:6px;\n  --r2:10px;\n  --r3:14px;\n  --r4:22px;\n\n  --s1:4px;  --s2:8px;   --s3:12px;  --s4:16px;\n  --s5:24px; --s6:32px;  --s7:44px;  --s8:64px;\n\n  --ease:cubic-bezier(.2,.8,.3,1);\n  --font:'Manrope','Segoe UI',system-ui,sans-serif;\n  --mono:'Space Grotesk','Manrope',system-ui,sans-serif;\n\n  /* legacy aliases kept so any stray rule still resolves */\n  --accent:#8E76CE;\n  --accent2:#9BC5E8;\n  --border:rgba(255,255,255,0.055);\n  --text:#F3F2F7;\n  --text-muted:#ACA9BA;\n  --text-dim:#726F80;\n}\n\n*{box-sizing:border-box;-webkit-user-select:none;user-select:none;}\nhtml,body{margin:0;padding:0;height:100%;overflow:hidden;background:transparent;}\nbody{font-family:var(--font);color:var(--tx-1);-webkit-font-smoothing:antialiased;}\nh1,h2,h3,p{margin:0;}\nbutton{font-family:inherit;border:none;outline:none;background:none;cursor:pointer;color:inherit;}\ninput,textarea,select{font-family:inherit;}\ninput,textarea{-webkit-user-select:text;user-select:text;}\na{color:var(--sky);text-decoration:none;}\n\n@keyframes toopen{from{opacity:0;transform:translateY(8px) scale(.994);}to{opacity:1;transform:none;}}\n@keyframes toclose{from{opacity:1;transform:none;}to{opacity:0;transform:translateY(6px) scale(.994);}}\n@keyframes page-in{from{opacity:0;transform:translateX(10px);}to{opacity:1;transform:none;}}\n@keyframes cap-pulse{0%,100%{opacity:1;}50%{opacity:.55;}}\n@keyframes ripple{from{opacity:.22;transform:scale(0);}to{opacity:0;transform:scale(1.3);}}\n@keyframes soft-in{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:none;}}\n\n/* ------------------------------------------------------------------\n   SHELL\n   ------------------------------------------------------------------ */\n\n#menu-container{\n  position:absolute;inset:0;\n  display:flex;align-items:center;justify-content:center;\n  padding:18px;\n}\n\n#menu-wrapper{\n  position:relative;\n  width:min(1100px,100%);\n  height:min(690px,100%);\n  min-width:860px;min-height:520px;\n  display:flex;\n  background:var(--ink-1);\n  border:1px solid var(--line-2);\n  border-radius:var(--r4);\n  overflow:hidden;\n  box-shadow:0 48px 110px -34px rgba(0,0,0,.92),0 0 0 1px rgba(0,0,0,.4);\n  transform:scale(var(--ryn-scale,1));\n  transform-origin:center center;\n}\n#menu-container.transparent #menu-wrapper{background:rgba(12,12,17,0.90);}\n#menu-wrapper.toopen{animation:180ms var(--ease) toopen both;}\n#menu-wrapper.toclose{animation:140ms ease-in toclose both;}\n\nmain{display:flex;flex:1;min-width:0;min-height:0;}\n\n/* the old top bar is gone \u2014 everything identifying lives in the rail */\nheader{display:none;}\n\n/* ------------------------------------------------------------------\n   NAVIGATION RAIL\n   ------------------------------------------------------------------ */\n\n#navbar-container{\n  width:236px;min-width:236px;flex-shrink:0;\n  display:flex;flex-direction:column;\n  background:var(--ink-2);\n  border-right:1px solid var(--line);\n  padding:22px 12px 12px;\n}\n\n.rail-brand{display:flex;align-items:baseline;gap:9px;padding:0 12px 18px;}\n.rail-mark{\n  font-family:var(--mono);font-weight:700;font-size:25px;line-height:1;\n  letter-spacing:-.02em;color:var(--tx-1);\n}\n.rail-sub{\n  font-family:var(--mono);font-weight:600;font-size:10.5px;line-height:1;\n  letter-spacing:.24em;text-transform:uppercase;color:var(--iris-hi);\n}\n\n.rail-label{\n  font-family:var(--mono);font-weight:600;font-size:10px;\n  letter-spacing:.22em;text-transform:uppercase;color:var(--tx-4);\n  padding:0 12px;margin:20px 0 7px;\n}\n\n#navbar-container nav{display:flex;flex-direction:column;gap:2px;}\n\n.open-menu{\n  position:relative;\n  display:flex;align-items:center;gap:13px;\n  width:100%;padding:12px 13px;\n  border-radius:var(--r2);\n  background:transparent;\n  color:var(--tx-2);\n  text-align:left;\n  overflow:hidden;\n  transition:background 150ms var(--ease),color 150ms var(--ease);\n}\n.open-menu .nav-index{\n  font-family:var(--mono);font-weight:600;font-size:11px;line-height:1;\n  letter-spacing:.06em;color:var(--tx-4);\n  width:20px;flex-shrink:0;\n  transition:color 150ms var(--ease);\n}\n.open-menu .nav-label{\n  font-weight:800;font-size:15px;line-height:1.1;letter-spacing:-.012em;\n}\n.open-menu:hover{background:rgba(255,255,255,.035);color:var(--tx-1);}\n.open-menu:active{background:rgba(255,255,255,.06);}\n.open-menu.active{background:var(--iris-12);color:#FFFFFF;}\n.open-menu.active .nav-index{color:var(--iris-hi);}\n.open-menu.active::before{\n  content:'';position:absolute;left:0;top:11px;bottom:11px;\n  width:3px;border-radius:0 3px 3px 0;background:var(--iris);\n}\n.open-menu .ripple{\n  position:absolute;border-radius:50%;\n  background:rgba(255,255,255,.07);\n  opacity:0;pointer-events:none;\n  animation:ripple 420ms ease-out;\n}\n\n/* live outline of the open category */\n#nav-outline{\n  display:flex;flex-direction:column;gap:1px;\n  margin-top:4px;padding-left:6px;\n  overflow-y:auto;flex:1;min-height:0;\n}\n#nav-outline::-webkit-scrollbar{width:6px;}\n#nav-outline::-webkit-scrollbar-thumb{background:rgba(255,255,255,.07);border-radius:6px;}\n.outline-item{\n  position:relative;\n  padding:7px 10px 7px 16px;\n  border-radius:var(--r1);\n  font-size:12.5px;font-weight:600;line-height:1.3;\n  color:var(--tx-3);text-align:left;\n  transition:color 140ms var(--ease),background 140ms var(--ease);\n}\n.outline-item::before{\n  content:'';position:absolute;left:4px;top:50%;\n  width:4px;height:4px;margin-top:-2px;border-radius:50%;\n  background:var(--tx-4);\n  transition:background 160ms var(--ease),transform 160ms var(--ease);\n}\n.outline-item:hover{color:var(--tx-1);background:rgba(255,255,255,.03);}\n.outline-item.current{color:var(--tx-1);}\n.outline-item.current::before{background:var(--iris-hi);transform:scale(1.35);}\n\n.rail-foot{\n  margin-top:auto;padding-top:16px;\n  border-top:1px solid var(--line);\n  display:flex;align-items:center;gap:10px;\n}\n#ryn-version{\n  font-family:var(--mono);font-size:10.5px;font-weight:500;\n  letter-spacing:.14em;text-transform:uppercase;color:var(--tx-4);\n  padding-left:12px;margin-right:auto;\n}\n#close-button{\n  width:34px;height:34px;padding:8px;flex-shrink:0;\n  border-radius:var(--r2);\n  fill:none;stroke:var(--tx-3);stroke-width:1.9;\n  background:transparent;cursor:pointer;\n  transition:background 150ms var(--ease),stroke 150ms var(--ease);\n}\n#close-button:hover{background:rgba(255,255,255,.06);stroke:var(--tx-1);}\n#close-button:active{background:rgba(255,255,255,.09);}\n\n/* search lives in the rail head */\n#ryn-search-wrap{\n  position:relative;\n  display:flex;align-items:center;gap:8px;\n  height:40px;padding:0 13px;\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line-2);\n  border-radius:var(--r2);\n  transition:border-color 160ms var(--ease),background 160ms var(--ease),box-shadow 160ms var(--ease);\n}\n#ryn-search-wrap:focus-within{\n  border-color:var(--sky-45);\n  background:var(--sky-12);\n  box-shadow:0 0 0 3px rgba(155,197,232,.10);\n}\n#ryn-search-wrap::before{\n  content:'';flex-shrink:0;width:15px;height:15px;\n  background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23726F80' stroke-width='1.6' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='4.6'/%3E%3Cpath d='M10.4 10.4L14 14'/%3E%3C/svg%3E\");\n  background-repeat:no-repeat;background-position:center;background-size:contain;\n}\n#ryn-search-input{\n  flex:1;min-width:0;\n  background:transparent;border:none;outline:none;\n  font-size:13.5px;font-weight:600;color:var(--tx-1);\n}\n#ryn-search-input::placeholder{color:var(--tx-4);font-weight:500;}\n#ryn-search-clear{\n  display:none;flex-shrink:0;\n  font-size:11px;line-height:1;color:var(--tx-4);cursor:pointer;\n  transition:color 140ms;\n}\n#ryn-search-clear:hover{color:var(--tx-1);}\n#ryn-search-dropdown{\n  display:none;position:absolute;top:calc(100% + 8px);left:0;\n  width:320px;max-height:340px;overflow-y:auto;\n  padding:6px;\n  background:var(--ink-3);\n  border:1px solid var(--line-2);\n  border-radius:var(--r3);\n  box-shadow:0 26px 60px -18px rgba(0,0,0,.9);\n  z-index:9999;\n  animation:soft-in 150ms var(--ease);\n}\n#ryn-search-dropdown::-webkit-scrollbar{width:8px;}\n#ryn-search-dropdown::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:8px;border:2px solid transparent;background-clip:padding-box;}\n.ryn-si{\n  display:flex;flex-direction:column;gap:3px;\n  padding:9px 11px;border-radius:var(--r2);cursor:pointer;\n  transition:background 130ms var(--ease);\n}\n.ryn-si:hover,.ryn-si.ryn-fx{background:var(--iris-12);}\n.ryn-st{font-size:13px;font-weight:700;color:var(--tx-1);line-height:1.3;}\n.ryn-st mark{background:var(--iris-45);color:#fff;border-radius:3px;padding:0 2px;}\n.ryn-sp{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--tx-4);}\n.ryn-se{text-align:center;padding:22px 12px;font-size:12.5px;font-weight:600;color:var(--tx-4);}\n.ryn-sl{\n  font-family:var(--mono);font-size:9.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--iris-hi);\n  padding:9px 11px 4px;\n}\n\n/* ------------------------------------------------------------------\n   CONTENT COLUMN \u2014 one continuous vertical flow, full available width\n   ------------------------------------------------------------------ */\n\n#page-container{\n  flex:1;min-width:0;\n  overflow-y:auto;overflow-x:hidden;\n  background:var(--ink-1);\n}\n#page-container::-webkit-scrollbar{width:12px;}\n#page-container::-webkit-scrollbar-track{background:transparent;}\n#page-container::-webkit-scrollbar-thumb{\n  background:rgba(255,255,255,.09);\n  border-radius:12px;\n  border:4px solid transparent;\n  background-clip:padding-box;\n}\n#page-container::-webkit-scrollbar-thumb:hover{background:rgba(142,118,206,.55);background-clip:padding-box;}\n\n.menu-page{display:none;}\n.menu-page.opened{\n  display:block;\n  padding:34px clamp(20px,2.6vw,38px) 92px;\n  animation:page-in 190ms var(--ease);\n}\n.page-head{\n  max-width:1180px;margin:0 auto 6px;\n  padding-bottom:24px;\n  border-bottom:1px solid var(--line);\n}\n.menu-page .page-title{\n  font-size:clamp(27px,2.5vw,33px);font-weight:800;line-height:1.03;\n  letter-spacing:-.03em;color:var(--tx-1);\n}\n.page-description{\n  margin-top:12px;max-width:74ch;\n  font-size:13.5px;font-weight:500;line-height:1.6;color:var(--tx-3);\n}\n\n.section{max-width:1180px;margin:0 auto;padding-top:36px;}\n.section-title{\n  display:flex;flex-direction:column;gap:7px;\n  padding:0 2px 13px;\n  border-bottom:1px solid var(--line);\n  font-family:var(--mono);font-size:11.5px;font-weight:700;\n  letter-spacing:.19em;text-transform:uppercase;color:var(--iris-hi);\n}\nh2.section-title{font-family:var(--mono);}\n.sec-sub{\n  font-family:var(--font);font-size:12.5px;font-weight:500;\n  letter-spacing:0;text-transform:none;line-height:1.55;color:var(--tx-3);\n}\n.section-content{display:flex;flex-direction:column;padding-top:4px;}\n\n/* ------------------------------------------------------------------\n   SETTING ROW\n   ------------------------------------------------------------------ */\n\n.content-option{\n  position:relative;\n  display:flex;align-items:center;justify-content:space-between;gap:24px;\n  min-height:60px;\n  padding:13px 15px 13px 17px;\n  border-radius:var(--r2);\n  border-bottom:1px solid rgba(255,255,255,.032);\n  transition:background 150ms var(--ease);\n}\n.content-option:last-child{border-bottom:none;}\n.content-option:hover{background:rgba(255,255,255,.026);}\n.content-option::before{\n  content:'';position:absolute;left:0;top:14px;bottom:14px;\n  width:2px;border-radius:0 2px 2px 0;\n  background:var(--sage);\n  opacity:0;\n  transition:opacity 190ms var(--ease);\n}\n.content-option:has(input[type=\"checkbox\"]:checked)::before{opacity:.85;}\n\n.content-option.centered{justify-content:center;}\n.content-option.left-flex{justify-content:flex-start;gap:14px;}\n.content-option.text{justify-content:flex-start;}\n.content-option.stacked{flex-direction:column;align-items:stretch;gap:14px;}\n\n.opt-main{display:flex;flex-direction:column;gap:5px;min-width:0;flex:1;}\n.option-title{\n  font-size:15.5px;font-weight:700;line-height:1.32;\n  letter-spacing:-.008em;color:var(--tx-1);\n}\nlabel.option-title{cursor:pointer;}\nlabel.option-title:active{opacity:.75;}\n.opt-desc{\n  font-size:12.5px;font-weight:500;line-height:1.5;\n  color:var(--tx-3);max-width:74ch;\n}\n.content-option.quiet .option-title{font-size:14.5px;font-weight:600;color:var(--tx-2);}\n.content-option.quiet{min-height:54px;}\n.content-option.quiet:hover .option-title{color:var(--tx-1);}\n.option-content{display:flex;align-items:center;gap:12px;flex-shrink:0;}.ryn-select{appearance:none;-webkit-appearance:none;background:rgba(255,255,255,.06);color:inherit;border:1px solid rgba(255,255,255,.18);border-radius:7px;padding:5px 26px 5px 10px;font:inherit;font-size:12px;cursor:pointer;flex-shrink:0;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 14px) calc(50% + 1px),calc(100% - 9px) calc(50% + 1px);background-size:5px 5px,5px 5px;background-repeat:no-repeat;}.ryn-select:hover{border-color:rgba(255,255,255,.32);}.ryn-select:focus{outline:none;border-color:var(--iris);}.ryn-select option{background:#1a1526;color:#fff;}\n\n.text-value{\n  font-family:var(--mono);font-size:15px;font-weight:700;\n  color:var(--sky);font-variant-numeric:tabular-nums;\n}\n.simplified{font-size:12.5px;font-weight:500;color:var(--tx-3);line-height:1.6;}\n.highlight{color:var(--iris-hi);}\n\n/* nested detail rows under a parent toggle */\n.sub-options{\n  margin:2px 0 6px 18px;\n  padding-left:16px;\n  border-left:1px solid var(--line-2);\n  transition:opacity 200ms var(--ease);\n}\n.sub-options .content-option{min-height:50px;padding-top:9px;padding-bottom:9px;}\n.sub-options .option-title{font-size:14px;font-weight:600;color:var(--tx-2);}\n.sub-options .content-option:hover .option-title{color:var(--tx-1);}\n.content-option:has(> .switch-checkbox > input:not(:checked)) + .sub-options{\n  opacity:.32;pointer-events:none;\n}\n\n/* ------------------------------------------------------------------\n   CONTROLS\n   ------------------------------------------------------------------ */\n\n/* toggle */\n.switch-checkbox{position:relative;width:48px;height:27px;flex-shrink:0;}\n.switch-checkbox input{position:absolute;opacity:0;width:0;height:0;}\n.switch-checkbox span{\n  position:absolute;inset:0;\n  border-radius:10px;cursor:pointer;\n  background:rgba(255,255,255,.06);\n  border:1px solid rgba(255,255,255,.11);\n  transition:background 180ms var(--ease),border-color 180ms var(--ease);\n}\n.switch-checkbox span::before{\n  content:'';position:absolute;left:4px;top:50%;\n  width:18px;height:18px;border-radius:6px;\n  background:rgba(255,255,255,.32);\n  transform:translateY(-50%);\n  transition:transform 190ms var(--ease),background 190ms var(--ease);\n}\n.switch-checkbox span:hover{border-color:rgba(255,255,255,.2);}\n.switch-checkbox input:checked + span{\n  background:var(--sage-14);\n  border-color:var(--sage-40);\n}\n.switch-checkbox input:checked + span::before{\n  transform:translateY(-50%) translateX(21px);\n  background:var(--sage);\n}\n.switch-checkbox input:focus-visible + span{box-shadow:0 0 0 3px rgba(155,197,232,.20);}\n\n/* keycap */\n.hotkeyInput{\n  display:flex;align-items:center;justify-content:center;\n  min-width:82px;height:42px;padding:0 15px;\n  border-radius:10px;\n  background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.028));\n  border:1px solid rgba(255,255,255,.115);\n  box-shadow:0 2px 0 rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.10);\n  font-family:var(--mono);font-size:13.5px;font-weight:700;\n  letter-spacing:.07em;text-transform:uppercase;color:var(--tx-1);\n  transition:transform 120ms var(--ease),border-color 150ms var(--ease),\n             background 150ms var(--ease),box-shadow 150ms var(--ease),color 150ms var(--ease);\n}\n.hotkeyInput:hover{border-color:var(--sky-45);color:#fff;}\n.hotkeyInput:active{transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.06);}\n.hotkeyInput.active{\n  border-color:var(--iris);background:var(--iris-18);color:var(--iris-hi);\n  box-shadow:inset 0 1px 0 rgba(255,255,255,.08);\n  transform:translateY(2px);\n  animation:cap-pulse 1.15s ease-in-out infinite;\n}\n.hotkeyInput.red{\n  border-color:rgba(217,163,171,.5);background:var(--rose-12);color:var(--rose);\n}\n.key-state{\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--tx-4);\n  min-width:78px;text-align:right;\n}\n.key-state::after{content:'';}\n.content-option:has(.hotkeyInput.red) .key-state::after{content:'Conflict';color:var(--rose);}\n.content-option:has(.hotkeyInput.active) .key-state::after{content:'Press a key';color:var(--iris-hi);}\n.content-option:has(.hotkeyInput.red) .key-state,\n.content-option:has(.hotkeyInput.active) .key-state{color:inherit;}\n\n/* button */\n.option-button{\n  display:inline-flex;align-items:center;justify-content:center;gap:8px;\n  height:42px;padding:0 21px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.05);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);\n  font-size:13.5px;font-weight:700;letter-spacing:.005em;\n  white-space:nowrap;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),\n             transform 110ms var(--ease),color 150ms var(--ease);\n}\n.option-button:hover{background:rgba(255,255,255,.085);border-color:var(--line-3);}\n.option-button:active{transform:translateY(1px);background:rgba(255,255,255,.11);}\n.option-button:disabled{opacity:.4;pointer-events:none;}\n.option-button.primary{\n  background:var(--iris-18);border-color:var(--iris-45);color:#EFEAFF;\n}\n.option-button.primary:hover{background:rgba(142,118,206,.26);border-color:rgba(142,118,206,.7);}\n.option-button.wide{width:100%;}\n.option-button.tall{height:48px;padding:0 28px;font-size:14.5px;}\n.option-button.red,.option-button.danger{\n  background:transparent;border-color:rgba(217,163,171,.28);color:var(--rose);\n}\n.option-button.red:hover,.option-button.danger:hover{\n  background:var(--rose-12);border-color:rgba(217,163,171,.5);color:#F0CDD2;\n}\n.option-button.icon-only{width:42px;padding:0;}\n\n/* segmented control */\n.seg{display:flex;gap:6px;flex-wrap:wrap;max-width:680px;}\n.seg-btn,.farm-type-btn{\n  flex:1;min-width:92px;height:44px;padding:0 15px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line);\n  color:var(--tx-3);\n  font-family:var(--font);font-size:13.5px;font-weight:700;\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.seg-btn:hover,.farm-type-btn:hover{background:rgba(255,255,255,.06);color:var(--tx-1);}\n.seg-btn.seg-active,.farm-type-btn.seg-active{\n  background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;\n}\n\n/* text / number input */\n.input{\n  height:42px;width:235px;padding:0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);\n  font-size:13.5px;font-weight:600;text-align:left;\n  transition:border-color 150ms var(--ease),background 150ms var(--ease),box-shadow 150ms var(--ease);\n}\n.input::placeholder{color:var(--tx-4);font-weight:500;}\n.input:focus{\n  outline:none;border-color:var(--sky-45);\n  background:var(--sky-12);\n  box-shadow:0 0 0 3px rgba(155,197,232,.11);\n}\ninput[type=\"number\"].input{width:122px;font-family:var(--mono);font-variant-numeric:tabular-nums;}\n.input.invalid{border-color:rgba(217,163,171,.6);background:var(--rose-12);}\n\n/* rows the client builds for auto chat: input plus a remove control */\n.chat-row{min-height:58px;}\n.chat-row .input{flex:1;min-width:0;}\n\n/* colour */\ninput[id][type=\"color\"]{\n  width:36px;height:36px;padding:0;\n  border:none;border-radius:9px;background:transparent;cursor:pointer;\n  box-shadow:0 0 0 1px rgba(255,255,255,.16);\n  transition:box-shadow 160ms var(--ease),transform 160ms var(--ease);\n}\ninput[id][type=\"color\"]::-webkit-color-swatch-wrapper{padding:3px;}\ninput[id][type=\"color\"]::-webkit-color-swatch{border:none;border-radius:7px;}\ninput[id][type=\"color\"]:hover{transform:scale(1.06);box-shadow:0 0 0 1px rgba(255,255,255,.34);}\n.reset-color{\n  width:15px;height:15px;flex-shrink:0;\n  border-radius:50%;border:1px solid rgba(255,255,255,.22);\n  background:var(--data-color,var(--iris));\n  opacity:0;cursor:pointer;\n  transition:opacity 160ms var(--ease),transform 160ms var(--ease);\n}\n.content-option:hover .reset-color{opacity:.85;}\n.reset-color:hover{opacity:1;transform:scale(1.2);}\n\n/* slider */\n.slider{display:flex;align-items:center;gap:18px;flex-shrink:0;}\n.slider input[type=\"range\"]{order:1;}\n.slider-value{\n  order:2;\n  font-family:var(--mono);font-size:13.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;\n  color:var(--sky);min-width:58px;text-align:right;\n}\n.slider input[type=\"range\"]{\n  -webkit-appearance:none;appearance:none;\n  width:clamp(150px,17vw,250px);height:22px;\n  background:transparent;cursor:pointer;outline:none;border:none;\n}\n.slider input[type=\"range\"]::-webkit-slider-runnable-track{\n  height:4px;border-radius:999px;\n  background:linear-gradient(90deg,var(--sky) var(--val,0%),rgba(255,255,255,.09) var(--val,0%));\n}\n.slider input[type=\"range\"]::-webkit-slider-thumb{\n  -webkit-appearance:none;\n  width:15px;height:15px;margin-top:-5.5px;\n  border-radius:50%;background:#EEF4FA;\n  border:1px solid rgba(0,0,0,.35);\n  box-shadow:0 1px 4px rgba(0,0,0,.55);\n  transition:transform 130ms var(--ease),box-shadow 130ms var(--ease);\n}\n.slider input[type=\"range\"]:hover::-webkit-slider-thumb{transform:scale(1.14);}\n.slider input[type=\"range\"]:active::-webkit-slider-thumb{\n  transform:scale(1.06);box-shadow:0 0 0 6px rgba(155,197,232,.16);\n}\n\n/* select */\nselect.ryn-select{\n  height:42px;padding:0 38px 0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);font-size:13.5px;font-weight:600;\n  -webkit-appearance:none;appearance:none;cursor:pointer;\n  background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7' viewBox='0 0 11 7'%3E%3Cpath d='M1 1l4.5 4.5L10 1' stroke='%239BC5E8' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\");\n  background-repeat:no-repeat;background-position:right 14px center;\n  transition:border-color 150ms var(--ease);\n}\nselect.ryn-select:focus{outline:none;border-color:var(--sky-45);}\nselect.ryn-select option{background:var(--ink-3);color:var(--tx-1);}\n\n/* misc atoms */\n.icon{width:20px;height:20px;}\n.small-icon{width:15px;height:15px;}\n.key-badge{\n  display:inline-flex;align-items:center;justify-content:center;\n  min-width:26px;height:20px;padding:0 6px;\n  border-radius:var(--r1);\n  background:rgba(255,255,255,.05);border:1px solid var(--line-2);\n  font-family:var(--mono);font-size:10.5px;font-weight:600;color:var(--tx-2);\n}\n.note{\n  max-width:1180px;margin:14px auto 0;\n  padding:14px 18px;\n  border-left:2px solid var(--line-2);\n  font-size:12.5px;font-weight:500;line-height:1.6;color:var(--tx-3);\n}\n\n/* ------------------------------------------------------------------\n   BOTS\n   ------------------------------------------------------------------ */\n\n#bot-container{display:flex;flex-direction:column;}\n#bot-container:empty{display:none;}\n.content-option[data-bot-id]{\n  background:rgba(255,255,255,.028);\n  border:1px solid var(--line);border-bottom:1px solid var(--line);\n  margin-bottom:6px;min-height:52px;\n}\n.content-option[data-bot-id] .option-title{font-family:var(--mono);font-size:13.5px;font-weight:600;}\n.disconnect-button{\n  width:16px;height:16px;flex-shrink:0;\n  fill:var(--tx-4);cursor:pointer;\n  transition:fill 150ms var(--ease);\n}\n.content-option:hover .disconnect-button{fill:var(--tx-2);}\n.disconnect-button:hover{fill:var(--rose)!important;}\n\n#connectingBot{\n  padding:14px 18px;margin-bottom:6px;\n  border-radius:var(--r2);\n  border:1px dashed var(--line-2);\n  font-family:var(--mono);font-size:12px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--tx-4);\n}\n\n#dynamic-bot-list{display:flex;flex-direction:column;gap:8px;}\n.bot-row{\n  display:flex;align-items:center;gap:10px;\n  padding:10px 12px;\n  background:rgba(255,255,255,.028);\n  border:1px solid var(--line);\n  border-radius:var(--r2);\n  transition:border-color 150ms var(--ease),opacity 150ms var(--ease);\n}\n.bot-row:hover{border-color:var(--line-2);}\n.bot-row.connected{background:var(--sage-14);border-color:var(--sage-40);}\n.bot-row-label{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  letter-spacing:.12em;text-transform:uppercase;color:var(--tx-4);\n  min-width:74px;flex-shrink:0;\n}\n.bot-row-name{flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}\n.bot-row-name .pending{color:var(--tx-4);font-weight:600;}\n.bot-row .input{flex:1;min-width:0;width:auto;}\n.bot-row-check{width:17px;height:17px;flex-shrink:0;fill:var(--sage);}\n.icon-btn{\n  display:flex;align-items:center;justify-content:center;\n  width:42px;height:42px;flex-shrink:0;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.045);\n  border:1px solid var(--line-2);\n  font-size:15px;line-height:1;color:var(--tx-2);\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.icon-btn:hover{background:rgba(255,255,255,.08);border-color:var(--line-3);color:var(--tx-1);}\n.icon-btn.danger:hover{background:var(--rose-12);border-color:rgba(217,163,171,.45);color:var(--rose);}\n\n/* option grids (weapons, age-4 building) */\n.wpn-label{\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:12px;\n}\n.wpn-grid{\n  display:grid;grid-template-columns:repeat(auto-fill,minmax(124px,1fr));\n  gap:8px;\n}\n.bot-weapon-btn,.bot-sec-weapon-btn{\n  display:flex;align-items:center;justify-content:center;\n  min-height:54px;padding:10px 12px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.03);\n  border:1px solid var(--line);\n  color:var(--tx-3);\n  font-size:13px;font-weight:600;text-align:center;line-height:1.3;\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.bot-weapon-btn:hover,.bot-sec-weapon-btn:hover{\n  background:rgba(255,255,255,.06);border-color:var(--line-2);color:var(--tx-1);\n}\n.bot-weapon-btn.wpn-active,.bot-sec-weapon-btn.wpn-active{\n  background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;\n}\n.wpn-selected-bar{\n  display:flex;align-items:center;gap:10px;\n  margin-top:12px;padding:11px 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.025);\n  border:1px solid var(--line);\n}\n.wpn-selected-dot{\n  width:6px;height:6px;flex-shrink:0;border-radius:50%;background:var(--iris-hi);\n}\n.wpn-selected-text{font-size:13px;font-weight:600;color:var(--tx-2);}\n\n.stack{display:flex;flex-direction:column;gap:22px;padding-top:8px;}\n.field{display:flex;flex-direction:column;gap:0;}\n.field-head{\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:10px;\n}\n.field-note{margin-top:10px;font-size:12.5px;font-weight:500;line-height:1.55;color:var(--tx-3);}\n.field-note b{color:var(--tx-2);font-weight:700;}\n.inline{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}\n#_botBulkRow .input{flex:1;min-width:180px;width:auto;}\n.bot-row-id{\n  font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.06em;\n  color:var(--tx-4);flex-shrink:0;padding:0 9px;height:25px;\n  display:flex;align-items:center;white-space:nowrap;\n  border:1px solid var(--line);border-radius:var(--r2);\n}\n\n#_formationGrid{width:100%;}\n\n/* ------------------------------------------------------------------\n   FORMATION POPUP (built in JS, lives on document.body)\n   ------------------------------------------------------------------ */\n\n.fsel-trigger{\n  display:flex;align-items:center;gap:12px;\n  width:100%;padding:13px 14px;max-width:680px;\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line-2);\n  border-radius:var(--r2);\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease);\n}\n.fsel-trigger:hover{background:rgba(255,255,255,.06);border-color:var(--line-3);}\n.fsel-trigger.open{border-color:var(--iris-45);background:var(--iris-12);}\n.fsel-trigger .fsel-icon{width:26px;flex-shrink:0;text-align:center;font-size:16px;color:var(--iris-hi);}\n.fsel-trigger .fsel-label{flex:1;font-size:14.5px;font-weight:700;color:var(--tx-1);}\n.fsel-trigger .fsel-arrow{font-size:10px;color:var(--tx-4);transition:transform 170ms var(--ease);}\n.fsel-trigger.open .fsel-arrow{transform:rotate(180deg);}\n\n.fsel-popup{\n  position:fixed;z-index:99999;width:300px;\n  display:flex;flex-direction:column;overflow:hidden;\n  background:var(--ink-3);\n  border:1px solid var(--line-2);\n  border-radius:var(--r3);\n  box-shadow:0 30px 70px -20px rgba(0,0,0,.92);\n}\n.fsel-popup.toopen{animation:soft-in 160ms var(--ease);}\n.fsel-popup-header{\n  display:flex;align-items:center;gap:10px;\n  padding:12px 14px;\n  border-bottom:1px solid var(--line);\n  cursor:grab;\n}\n.fsel-popup-header:active{cursor:grabbing;}\n.fsel-popup-title{\n  flex:1;font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n.fsel-popup-close{\n  width:22px;height:22px;flex-shrink:0;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r1);font-size:11px;color:var(--tx-4);cursor:pointer;\n  transition:background 140ms,color 140ms;\n}\n.fsel-popup-close:hover{background:rgba(255,255,255,.07);color:var(--tx-1);}\n.fsel-popup-body{\n  display:grid;grid-template-columns:repeat(4,1fr);gap:8px;\n  padding:12px;max-height:280px;overflow-y:auto;\n}\n.fsel-popup-body::-webkit-scrollbar{width:8px;}\n.fsel-popup-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:8px;border:2px solid transparent;background-clip:padding-box;}\n.fcat-btn{\n  position:relative;\n  display:flex;align-items:center;justify-content:center;\n  aspect-ratio:1;border-radius:var(--r2);\n  background:rgba(255,255,255,.03);\n  border:1px solid var(--line);\n  color:var(--tx-2);font-size:17px;cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.fcat-btn:hover{background:rgba(255,255,255,.07);border-color:var(--line-2);color:var(--tx-1);}\n.fcat-btn.active{background:var(--iris-18);border-color:var(--iris-45);color:#fff;}\n.fcat-tip{\n  display:none;position:absolute;top:calc(100% + 6px);left:50%;\n  transform:translateX(-50%);\n  padding:4px 9px;border-radius:var(--r1);\n  background:var(--ink-4);border:1px solid var(--line-2);\n  font-family:var(--font);font-size:11px;font-weight:600;color:var(--tx-1);\n  white-space:nowrap;pointer-events:none;z-index:5;\n}\n.fcat-btn:hover .fcat-tip{display:block;}\n.fcat-key{\n  position:absolute;top:3px;right:3px;\n  min-width:17px;height:15px;padding:0 3px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:4px;\n  background:rgba(0,0,0,.45);border:1px solid var(--line);\n  font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--tx-3);\n  line-height:1;cursor:pointer;\n  transition:background 130ms,border-color 130ms,color 130ms;\n}\n.fcat-key:hover{background:rgba(255,255,255,.10);color:var(--tx-1);}\n.fcat-key.set{background:var(--iris-18);border-color:var(--iris-45);color:#EFEAFF;}\n.fcat-key.recording{background:var(--sky-12);border-color:var(--sky-45);color:var(--sky);animation:cap-pulse 1.1s ease-in-out infinite;}\n.fcat-reset{\n  position:absolute;bottom:3px;left:3px;\n  width:15px;height:15px;display:none;\n  align-items:center;justify-content:center;\n  border-radius:4px;\n  background:var(--rose-12);border:1px solid rgba(217,163,171,.3);\n  font-size:9px;line-height:1;color:var(--rose);cursor:pointer;\n}\n.fcat-reset.show{display:flex;}\n.fcat-reset:hover{background:rgba(217,163,171,.24);}\n.fsel-popup-footer{padding:10px 12px;border-top:1px solid var(--line);}\n.fsel-reset-all{\n  width:100%;padding:9px 0;\n  border-radius:var(--r2);\n  background:transparent;border:1px solid rgba(217,163,171,.26);\n  font-family:var(--font);font-size:12px;font-weight:700;\n  color:var(--rose);text-align:center;cursor:pointer;\n  transition:background 140ms,border-color 140ms;\n}\n.fsel-reset-all:hover{background:var(--rose-12);border-color:rgba(217,163,171,.48);}\n\n/* ============================================================\n   Target Scan \u2014 the picker is a multi-select, so it is built\n   like one: a tick per row, picked rows lifted out of the list\n   rather than merely tinted, and a state chip only on the ones\n   actually being tracked. Colours come from the tokens above,\n   with sky for picked and sage for live.\n   ============================================================ */\n\n.scan-count{\n  font:600 10px/1 var(--mono);\n  letter-spacing:.08em;\n  text-transform:uppercase;\n  color:var(--tx-3);\n  background:var(--ink-4);\n  border:1px solid var(--line);\n  border-radius:999px;\n  padding:3px 8px;\n  margin-left:8px;\n  vertical-align:middle;\n}\n\n.scan-bar{\n  display:flex;\n  gap:var(--s2);\n  align-items:center;\n  width:100%;\n  margin-bottom:var(--s3);\n}\n.scan-filter{flex:1;min-width:0;}\n.scan-bar .option-button{flex:0 0 auto;white-space:nowrap;}\n\n#_scanList{\n  display:flex;\n  flex-direction:column;\n  gap:3px;\n  width:100%;\n  max-height:340px;\n  overflow-y:auto;\n  padding-right:2px;\n}\n#_scanList::-webkit-scrollbar{width:6px;}\n#_scanList::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:3px;}\n\n.scan-row{\n  display:flex;\n  align-items:center;\n  gap:var(--s3);\n  padding:8px 10px;\n  border-radius:var(--r2);\n  border:1px solid transparent;\n  background:var(--ink-2);\n  cursor:pointer;\n  transition:background 140ms var(--ease),border-color 140ms var(--ease);\n}\n.scan-row:hover{background:var(--ink-3);border-color:var(--line-2);}\n.scan-row.picked{background:var(--sky-12);border-color:var(--sky-45);}\n.scan-row.live{background:var(--sage-14);border-color:var(--sage-40);}\n\n.scan-tick{\n  flex:0 0 auto;\n  width:17px;\n  height:17px;\n  display:flex;\n  align-items:center;\n  justify-content:center;\n  border-radius:5px;\n  border:1px solid var(--line-3);\n  background:var(--ink-0);\n  font:700 11px/1 var(--font);\n  color:var(--ink-0);\n}\n.scan-row.picked .scan-tick{background:var(--sky);border-color:var(--sky);}\n.scan-row.live .scan-tick{background:var(--sage);border-color:var(--sage);}\n\n.scan-main{\n  flex:1;\n  min-width:0;\n  display:flex;\n  flex-direction:column;\n  gap:2px;\n}\n.scan-name{\n  font:600 13px/1.2 var(--font);\n  color:var(--tx-1);\n  overflow:hidden;\n  text-overflow:ellipsis;\n  white-space:nowrap;\n}\n.scan-meta{\n  font:500 10px/1.2 var(--mono);\n  color:var(--tx-3);\n  overflow:hidden;\n  text-overflow:ellipsis;\n  white-space:nowrap;\n}\n\n.scan-chip{\n  flex:0 0 auto;\n  font:700 9px/1 var(--mono);\n  letter-spacing:.1em;\n  color:var(--ink-0);\n  background:var(--sage);\n  border-radius:999px;\n  padding:4px 8px;\n}\n\n/* Per-row actions. SCAN and EXCLUDE are separate states on separate\n   buttons, because a player can be both and a single toggle cannot say\n   that. Excluded rows are tinted rose \u2014 the same colour the rest of the\n   menu uses for \"this is switched off / refused\". */\n\n.scan-actions{\n  flex:0 0 auto;\n  display:flex;\n  gap:6px;\n  align-items:center;\n}\n.scan-act{\n  font:700 9px/1 var(--mono);\n  letter-spacing:.09em;\n  padding:6px 9px;\n  border-radius:var(--r1);\n  border:1px solid var(--line-3);\n  background:var(--ink-0);\n  color:var(--tx-2);\n  cursor:pointer;\n  transition:background 140ms var(--ease),border-color 140ms var(--ease),color 140ms var(--ease);\n}\n.scan-act:hover{border-color:var(--line-3);background:var(--ink-4);color:var(--tx-1);}\n.scan-act.on-scan{background:var(--sky);border-color:var(--sky);color:var(--ink-0);}\n.scan-act.on-excl{background:var(--rose);border-color:var(--rose);color:var(--ink-0);}\n\n.scan-row.excluded{background:var(--rose-12);border-color:rgba(217,163,171,.45);}\n.scan-row.excluded .scan-name{color:var(--rose);}\n.scan-chip.excl{background:var(--rose);}\n\n.scan-empty{\n  font:500 12px/1.5 var(--font);\n  color:var(--tx-3);\n  padding:14px 10px;\n  text-align:center;\n  border:1px dashed var(--line-2);\n  border-radius:var(--r2);\n}\n";
   const Game_default = "#ryn-menu-frame {\r\n    position: absolute;\r\n    top: 0;\r\n    left: 0;\r\n    bottom: 0;\r\n    right: 0;\r\n    width: 100%;\r\n    height: 100%;\r\n    border: none;\r\n    outline: none;\r\n    z-index: 10;\r\n}\r\n\r\n#promoImgHolder,\r\n.menuHeader,\r\n.menuText,\r\n#guideCard,\r\n#gameName,\r\n#pingDisplay,\r\n#partyButton,\r\n#onetrust-consent-sdk,\r\n.adMenuCard,\r\n#topInfoHolder > div:not([id]):not([class]),\r\n#touch-controls-fullscreen,\r\n#altcha,\r\n#joinPartyButton {\r\n    display: none!important;\r\n}\r\n\r\n.menuCard {\r\n    box-shadow: none;\r\n}\r\n\r\n#setupCard {\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 12px;\r\n    background: rgba(25,25,25,0.45);\r\n    backdrop-filter: blur(25px);\r\n    -webkit-backdrop-filter: blur(25px);\r\n    border: 1px solid rgba(255,255,255,0.2);\r\n    border-radius: 20px;\r\n    box-shadow: 0 8px 32px 0 rgba(0,0,0,0.2), inset 0 1px 1px rgba(255,255,255,0.1);\r\n    max-height: auto;\r\n    width: 280px;\r\n}\r\n\r\n#setupCard > * {\r\n    margin: 0!important;\r\n}\r\n\r\n#linksContainer2 {\r\n    background: #6d6d6d77;\r\n}\r\n\r\n#bottomContainer {\r\n    bottom: 20px;\r\n}\r\n\r\n#topInfoHolder {\r\n    display: flex;\r\n    flex-direction: column;\r\n    justify-content: right;\r\n    align-items: flex-end;\r\n    gap: 10px;\r\n}\r\n\r\n#killCounter, #totalKillCounter {\r\n    position: static;\r\n    margin: 0;\r\n    background-image: url(../img/icons/skull.png);\r\n}\r\n\r\n.actionBarItem {\r\n    position: relative;\r\n    margin: 3px 5px !important;\r\n    border: 1.5px solid rgba(255,255,255,0.16) !important;\r\n    border-radius: 13px !important;\r\n    background-color: rgba(18,17,24,0.40) !important;\r\n    box-shadow: 0 3px 10px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.07) !important;\r\n    transition: transform 130ms ease, border-color 130ms ease, box-shadow 130ms ease !important;\r\n}\r\n\r\n.actionBarItem:hover {\r\n    transform: translateY(-2px) !important;\r\n    border-color: rgba(255,255,255,0.38) !important;\r\n    box-shadow: 0 6px 16px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.10) !important;\r\n}\r\n\r\n/* The weapon's reload, inside its own tile: a white edge that runs the tile's\r\n   outline, drawn whole the moment you swing and draining away as the weapon\r\n   comes back, so a bare tile is a ready weapon. It is one SVG path stroked\r\n   around a rounded square, with the dash pattern doing the drawing —\r\n   stroke-dasharray on a path is as old as SVG itself, so there is nothing here\r\n   a browser can quietly not support. The path starts at the top left corner\r\n   and runs clockwise. */\r\n.ryn-reload-ring {\r\n    position: absolute !important;\r\n    top: -1px !important;\r\n    left: -1px !important;\r\n    width: calc(100% + 2px) !important;\r\n    height: calc(100% + 2px) !important;\r\n    display: block !important;\r\n    overflow: visible !important;\r\n    pointer-events: none !important;\r\n    z-index: 9 !important;\r\n    filter: drop-shadow(0 0 2px rgba(0,0,0,0.75)) !important;\r\n}\r\n/* The stroke and nothing else. How much of it is drawn is set inline on the\r\n   path every tick, and it has to be: a stylesheet rule outranks an SVG\r\n   presentation attribute, so a stroke-dashoffset written here would pin every\r\n   ring at whatever it said and no attribute could move it. */\r\n.ryn-reload-edge {\r\n    fill: none;\r\n    stroke: #ffffff;\r\n    stroke-width: 6;\r\n    stroke-linecap: butt;\r\n    /* The reload advances once a game tick, about 110ms, so the edge would\r\n       otherwise step 25, 50, 75. Handing the interpolation to the browser is\r\n       what makes it continuous without a frame loop of our own: one property,\r\n       two small paths, and no javascript between the ticks. */\r\n    transition: stroke-dashoffset 110ms linear;\r\n}\r\n\r\n.itemCounter {\r\n    position: absolute;\r\n    top: 3px;\r\n    right: 3px;\r\n    font-size: 0.95em;\r\n    color: white;\r\n    text-shadow: #3d3f42 2px 0px 0px, #3d3f42 1.75517px 0.958851px 0px, #3d3f42 1.0806px 1.68294px 0px, #3d3f42 0.141474px 1.99499px 0px, #3d3f42 -0.832294px 1.81859px 0px, #3d3f42 -1.60229px 1.19694px 0px, #3d3f42 -1.97998px 0.28224px 0px, #3d3f42 -1.87291px -0.701566px 0px, #3d3f42 -1.30729px -1.5136px 0px, #3d3f42 -0.421592px -1.95506px 0px, #3d3f42 0.567324px -1.91785px 0px, #3d3f42 1.41734px -1.41108px 0px, #3d3f42 1.92034px -0.558831px 0px;\r\n}\r\n\r\n.itemCounter.hidden {\r\n    display: none;\r\n}\r\n\r\n#ryn-topright-hud { position: fixed; top: 12px; right: 12px; z-index: 9999; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; pointer-events: none; font-family: \"Hammersmith One\", Arial, sans-serif; }\r\n.ryn-hud-row { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 160px; }\r\n.ryn-hud-bar-bg { width: 160px; height: 8px; background: rgba(0,0,0,0.55); border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }\r\n.ryn-hud-bar-fill { height: 100%; border-radius: 4px; transition: width 0.15s ease; }\r\n#ryn-hud-hp-fill { background: linear-gradient(90deg,#cc5151,#e05151); }\r\n#ryn-hud-r1-fill { background: linear-gradient(90deg,#f0b429,#f0c060); }\r\n#ryn-hud-r2-fill { background: linear-gradient(90deg,#51cc88,#60e0a0); }\r\n.ryn-hud-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.6); text-shadow: 0 1px 3px rgba(0,0,0,0.9); }\r\n.ryn-hud-val { font-size: 11px; color: rgba(255,255,255,0.9); text-shadow: 0 1px 4px rgba(0,0,0,0.9); letter-spacing: 0.05em; }\r\n.ryn-hud-heal { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; white-space: nowrap; color: rgba(255,255,255,0.45); text-shadow: 0 1px 4px rgba(0,0,0,0.9); transition: color 0.15s ease; }\r\n\r\n#rynStats {\r\n    position: absolute;\r\n    color: rgb(225, 210, 255);\r\n    font: 13px \"Hammersmith One\";\r\n    bottom: 210px;\r\n    left: 20px;\r\n\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 5px;\r\n}\r\n\r\n.hidden {\r\n    display: none!important;\r\n}";
   const Store_default = "#ryn-store-container {\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 10px;\r\n    max-width: 400px;\r\n    width: 100%;\r\n\r\n    position: absolute;\r\n    top: 50%;\r\n    left: 50%;\r\n    transform: translate(-50%, -50%) scale(0.9);\r\n}\r\n\r\n#ryn-store-toggle {\r\n    display: flex;\r\n    justify-content: center;\r\n    align-items: center;\r\n    padding: 10px;\r\n    background-color: rgba(0, 0, 0, 0.15);\r\n    color: #fff;\r\n    border-radius: 4px;\r\n    cursor: pointer;\r\n    font-size: 20px;\r\n    pointer-events: all;\r\n}\r\n\r\n#ryn-store-items {\r\n    background-color: rgba(0, 0, 0, 0.15);\r\n    max-height: 200px;\r\n    height: 100%;\r\n    padding: 10px;\r\n    overflow-y: scroll;\r\n    border-radius: 4px;\r\n    pointer-events: all;\r\n    scrollbar-width: none;\r\n}\r\n\r\n#ryn-store-items::-webkit-scrollbar {\r\n    display: none;\r\n    width: 0;\r\n    height: 0;\r\n    background: transparent;\r\n}\r\n\r\n.storeItemContainer {\r\n    display: flex;\r\n    align-items: center;\r\n    gap: 10px;\r\n    padding: 5px;\r\n    height: 50px;\r\n    box-sizing: border-box;\r\n    overflow: hidden;\r\n}\r\n\r\n.storeHat {\r\n    display: flex;\r\n    justify-content: center;\r\n    align-items: center;\r\n    width: 45px;\r\n    height: 45px;\r\n    margin-top: -5px;\r\n    pointer-events: none;\r\n}\r\n\r\n.storeItemName {\r\n    color: #fff;\r\n    font-size: 20px;\r\n}\r\n\r\n.equipButton {\r\n    margin-left: auto;\r\n    color: #80eefc;\r\n    cursor: pointer;\r\n    font-size: 35px;\r\n}";
   const Hats = {
@@ -3842,6 +3852,9 @@ window.grbtp = 35;
       // neither of which an animal has and both of which a player does. On a
       // defended player it read a kill that was not there, swung, and put the
       // bull hat on for the tick their answer landed.
+      if (type === 0 && RynAllegiance.isProtected(this.client, enemy)) {
+        return;
+      }
       if (this.isNear(enemy, this._nearestEnemy[type])) {
         if (type === 0) {
           const nearest = this._nearestEnemy[type];
@@ -3892,6 +3905,11 @@ window.grbtp = 35;
       for (let i = 0, len = enemies.length; i < len; i++) {
         const enemy = enemies[i];
         if (ownerID !== undefined && enemy.id === ownerID) continue;
+        // PlayerManager.updatePlayer already keeps these out of `enemies`.
+        // Asked again here because this is the last point before a player
+        // becomes `nearestEnemy`, and everything that swings, shoots or
+        // pushes starts from `nearestEnemy`.
+        if (RynAllegiance.isProtected(this.client, enemy)) continue;
         this.checkCollision(enemy);
         this.handleDanger(enemy);
         this.handleNearest(0, enemy);
@@ -7613,10 +7631,26 @@ window.grbtp = 35;
         const ownerID = ownerClient && ownerClient.myPlayer && ownerClient.myPlayer.id;
         if (ownerID != null && id === ownerID) return false;
       }
+      // Ownership outranks the clan list. `teammates` is rebuilt from the
+      // server's clan-members frame, so with individual clans on it holds one
+      // name and every other bot of the fleet reads as an enemy — which is
+      // precisely the state that let bots fight each other. The duel above is
+      // the one deliberate exception and is answered before this.
+      if (RynAllegiance.isFriendlyID(this.client, id)) {
+        return true;
+      }
       return this.teammates.has(id);
     }
     isEnemyByID(id) {
-      return !this.isMyPlayerByID(id) && !this.isTeammateByID(id);
+      if (this.isMyPlayerByID(id)) {
+        return false;
+      }
+      if (this.isTeammateByID(id)) {
+        return false;
+      }
+      // An excluded player is not a teammate — they keep their own clan, their
+      // own buildings and their own enmity — they are simply never a target.
+      return !RynAllegiance.isExcludedID(id, null);
     }
     get isSandbox() {
       return /sandbox/.test(location.hostname) || this.client.SocketManager.isSandbox;
@@ -7793,6 +7827,11 @@ window.grbtp = 35;
       if (!PlayerManager.playerData.has(id)) {
         PlayerManager.playerData.set(id, this);
       }
+      // A connection learning its own sid changes who is friendly, and it can
+      // happen a tick before clientIDList hears about it.
+      try {
+        RynAllegiance.invalidate();
+      } catch (_) {}
     }
     onFirstTickAfterSpawn() {
       const {_ModuleHandler: ModuleHandler, isOwner: isOwner} = this.client;
@@ -7803,6 +7842,9 @@ window.grbtp = 35;
         const owner = this.client.ownerClient;
         UI_default.updateBotOption(this.client, "title");
         owner.clientIDList.add(this.id);
+        try {
+          RynAllegiance.invalidate();
+        } catch (_) {}
         // This bot may have been standing in another bot's view before it knew
         // its own id, which would have filed it as a player. Now that the id is
         // known, take it back out.
@@ -8495,6 +8537,447 @@ window.grbtp = 35;
     }
   };
 
+  // ==========================================================================
+  // Allegiance — the one list of players a bot is never allowed to hit
+  //
+  // Two questions, answered in one place because every consumer asks them
+  // together and because answering them anywhere else is how a bot ends up
+  // swinging at its own fleet:
+  //
+  //   FRIENDLY — the main player and every bot this tab owns.
+  //   EXCLUDED — players ticked out by hand in the Target Scan list.
+  //
+  // Why this has to exist at all. The game's own protection is clan-shaped and
+  // nothing else: the server skips a melee hit, an arrow and a spike's contact
+  // damage only when `owner.team == target.team` (index.js, the three
+  // `!(x.team && x.team == y.team)` tests). Everything in this client that
+  // decided "enemy" was reading `clanName`, directly or through
+  // `PlayerManager.isEnemy`. That is correct exactly as long as the whole fleet
+  // shares one clan — and the individual-clan feature deliberately breaks that,
+  // which is why bots could be turned on each other simply by giving each of
+  // them their own tribe. Ownership is the reliable fact, not the clan name, so
+  // ownership is what this answers with.
+  //
+  // Answers are by sid: the one thing about a player that cannot be changed or
+  // duplicated while they are connected, and the id the update stream, the
+  // leaderboard and every packet that names a player already use. A name is
+  // kept next to an exclusion only so the same person stays excluded after they
+  // die and come back on a new sid — it can add protection, never remove it.
+  //
+  // The friendly set is a real set, rebuilt only when the fleet actually
+  // changes. The three counters it watches are O(1) to read, so the question
+  // "is this player mine" costs one Set lookup however many bots are connected
+  // — which matters, because it is asked for every visible player, on every
+  // connection, on every tick.
+  // ==========================================================================
+  const EXCLUDE_LIMIT = 200;
+  const RynAllegiance = new class {
+    // sid -> { id, name }. Insertion-ordered, which is the order the panel
+    // lists them in.
+    excluded=new Map;
+    // Lowercased names of everyone excluded, for the respawn case above.
+    excludedNames=new Set;
+    revision=0;
+    _friendly=new Set;
+    _fOwner=null;
+    _fClients=-1;
+    _fIDs=-1;
+    _fMine=-2;
+    _fDirty=-1;
+    _dirty=0;
+    _owner(c) {
+      if (c && c.ownerClient) {
+        return c.ownerClient;
+      }
+      if (c && c.clients) {
+        return c;
+      }
+      return typeof client === "undefined" ? null : client;
+    }
+    // Called wherever the fleet's membership or a member's id changes. Cheap
+    // enough to call speculatively: it only marks the set stale.
+    invalidate() {
+      this._dirty++;
+    }
+    friendlySet(c) {
+      const owner = this._owner(c);
+      if (owner === null) {
+        return this._friendly;
+      }
+      const nClients = owner.clients ? owner.clients.size : 0;
+      const nIDs = owner.clientIDList ? owner.clientIDList.size : 0;
+      const mine = owner.myPlayer ? owner.myPlayer.id : -1;
+      if (owner !== this._fOwner || nClients !== this._fClients || nIDs !== this._fIDs || mine !== this._fMine || this._dirty !== this._fDirty) {
+        const set = this._friendly;
+        set.clear();
+        if (mine !== -1) {
+          set.add(mine);
+        }
+        if (owner.clientIDList) {
+          for (const id of owner.clientIDList) {
+            if (id !== -1) set.add(id);
+          }
+        }
+        // A bot that has connected but whose first tick has not landed is not
+        // in clientIDList yet, and that window is exactly when another bot can
+        // first see it. Its own connection already knows its id, so it is read
+        // from there.
+        if (owner.clients) {
+          for (const bot of owner.clients) {
+            const p = bot && bot.myPlayer;
+            if (p && p.id !== -1 && p.id !== null && p.id !== undefined) {
+              set.add(p.id);
+            }
+          }
+        }
+        this._fOwner = owner;
+        this._fClients = nClients;
+        this._fIDs = nIDs;
+        this._fMine = mine;
+        this._fDirty = this._dirty;
+      }
+      return this._friendly;
+    }
+    isFriendlyID(c, id) {
+      if (id === null || id === undefined || id === -1) {
+        return false;
+      }
+      return this.friendlySet(c).has(id);
+    }
+    isExcludedID(id, name) {
+      if (id !== null && id !== undefined && this.excluded.has(id)) {
+        return true;
+      }
+      if (this.excludedNames.size === 0 || typeof name !== "string" || name === "") {
+        return false;
+      }
+      return this.excludedNames.has(name.toLowerCase());
+    }
+    isExcluded(player) {
+      // Players only. Animals carry ids out of the same space and are never
+      // anybody's bot or anybody's exclusion, so asking about them by id
+      // could only ever produce a false positive.
+      if (!player || player.isPlayer !== true) {
+        return false;
+      }
+      return this.isExcludedID(player.id, player.nickname);
+    }
+    // The whole question: may this entity be hit by anything of mine, ever.
+    isProtectedID(c, id, name) {
+      return this.isFriendlyID(c, id) || this.isExcludedID(id, name);
+    }
+    isProtected(c, player) {
+      if (!player || player.isPlayer !== true) {
+        return false;
+      }
+      return this.isProtectedID(c, player.id, player.nickname);
+    }
+    // Would the server actually apply damage from `attacker` to `target`, or
+    // does it already refuse it? Same-clan players cannot hurt each other at
+    // all — melee, arrows and spikes all skip them — so a swing that happens to
+    // sweep a clan mate costs nothing and there is nothing to dodge. A bot on
+    // its own tribe, or an excluded stranger, is a different matter: to the
+    // server they are a legal target, so the refusal has to come from here.
+    isVulnerableTo(attacker, target) {
+      if (!attacker || !target) {
+        return true;
+      }
+      const a = attacker.clanName;
+      const b = target.clanName;
+      if (a !== null && a !== undefined && a === b) {
+        return false;
+      }
+      return true;
+    }
+    // Everyone this connection must not hit who could actually be hit. Built
+    // per call from the update stream's own player array, which is already
+    // walked every tick, so there is no scan of anything here.
+    collectShieldedFor(c, out) {
+      const list = out || [];
+      list.length = 0;
+      const pm = c && c.PlayerManager;
+      const me = c && c.myPlayer;
+      if (!pm || !me) {
+        return list;
+      }
+      if (this.excluded.size === 0 && this.friendlySet(c).size <= 1) {
+        return list;
+      }
+      const players = pm.players;
+      for (let i = 0; i < players.length; i++) {
+        const p = players[i];
+        if (!p || p === me || p.id === me.id) {
+          continue;
+        }
+        if (!this.isProtected(c, p)) {
+          continue;
+        }
+        if (!this.isVulnerableTo(me, p)) {
+          continue;
+        }
+        list.push(p);
+      }
+      return list;
+    }
+    toggleExcluded(id, name) {
+      if (id === null || id === undefined) {
+        return false;
+      }
+      if (this.excluded.has(id)) {
+        const gone = this.excluded.get(id);
+        this.excluded.delete(id);
+        if (gone && gone.name) {
+          // Only drop the name when no other excluded sid still carries it.
+          let stillUsed = false;
+          for (const entry of this.excluded.values()) {
+            if (entry.name && entry.name.toLowerCase() === gone.name.toLowerCase()) {
+              stillUsed = true;
+              break;
+            }
+          }
+          if (!stillUsed) {
+            this.excludedNames.delete(gone.name.toLowerCase());
+          }
+        }
+        this.revision++;
+        this._persist();
+        return false;
+      }
+      if (this.excluded.size >= EXCLUDE_LIMIT) {
+        const oldest = this.excluded.keys().next();
+        if (!oldest.done) {
+          this.toggleExcluded(oldest.value);
+        }
+      }
+      const clean = typeof name === "string" ? name.trim() : "";
+      this.excluded.set(id, {
+        id: id,
+        name: clean
+      });
+      if (clean) {
+        this.excludedNames.add(clean.toLowerCase());
+      }
+      this.revision++;
+      this._persist();
+      return true;
+    }
+    clear() {
+      if (this.excluded.size === 0) {
+        return;
+      }
+      this.excluded.clear();
+      this.excludedNames.clear();
+      this.revision++;
+      this._persist();
+    }
+    get count() {
+      return this.excluded.size;
+    }
+    // Exclusions outlive a reload, because "never hit this person" is not a
+    // per-session opinion.
+    _persist() {
+      try {
+        if (typeof Settings_default === "undefined") return;
+        Settings_default._excludedPlayers = [ ...this.excluded.values() ].map(e => [ e.id, e.name || "" ]);
+        SaveSettings();
+      } catch (_) {}
+    }
+    load(stored) {
+      if (!Array.isArray(stored)) {
+        return;
+      }
+      this.excluded.clear();
+      this.excludedNames.clear();
+      for (const row of stored) {
+        if (!Array.isArray(row)) continue;
+        const id = row[0];
+        const name = typeof row[1] === "string" ? row[1] : "";
+        if (id === null || id === undefined) continue;
+        this.excluded.set(id, {
+          id: id,
+          name: name
+        });
+        if (name) {
+          this.excludedNames.add(name.toLowerCase());
+        }
+      }
+      this.revision++;
+    }
+  };
+
+  // ==========================================================================
+  // Safe aim — the last gate in front of a swing or a shot
+  //
+  // Nothing in moomoo aims at a player. A swing damages *every* non-teammate
+  // inside `gatherAngle` of the direction it was sent at and within the
+  // weapon's reach —
+  //
+  //     V = getDistance(this.x, this.y, S.x, S.y) - S.scale * 1.8
+  //     V <= weapons[this.weaponIndex].range
+  //       && getAngleDist(getDirection(S.x, S.y, this.x, this.y), this.dir)
+  //            <= config.gatherAngle
+  //
+  // — and an arrow damages the first non-teammate whose box its flight line
+  // crosses. So "never hit this player" cannot be answered by picking a
+  // different target: picking a different target changes nothing about who the
+  // swing sweeps. It has to be answered by picking a direction that does not
+  // contain them, or by not swinging at all.
+  //
+  // Both tests below are the server's own, run before the frame rather than
+  // after it, with a tick of slack added because the server resolves against
+  // positions one step ahead of the ones we are looking at.
+  // ==========================================================================
+  const AIM_RANGE_SLACK = 14;
+  const AIM_ANGLE_SLACK = .06;
+  // Candidate offsets, in radians, tried either side of the wanted direction
+  // when the wanted one is not safe. Bounded by gatherAngle: past that the
+  // swing no longer contains the target it was meant for.
+  const AIM_STEPS = [ 0, .18, -.18, .36, -.36, .54, -.54, .72, -.72, .9, -.9, 1.08, -1.08 ];
+  const RynSafeAim = new class {
+    _weaponRange(myPlayer, slot) {
+      const id = myPlayer.getItemByType(slot);
+      if (id === null || id === undefined) {
+        return null;
+      }
+      try {
+        return DataHandler_default.getWeapon(id).range || null;
+      } catch (_) {
+        return null;
+      }
+    }
+    // Would a swing sent at `angle` sweep this player.
+    _sweeps(fromPos, p, angle, range) {
+      const positions = p.pos;
+      for (let i = 0; i < 2; i++) {
+        const tp = i === 0 ? positions.current : positions.future;
+        if (!tp) continue;
+        if (fromPos.distance(tp) - p.hitScale > range + AIM_RANGE_SLACK) continue;
+        if (getAngleDist(fromPos.angle(tp), angle) <= Config_default.gatherAngle + AIM_ANGLE_SLACK) {
+          return true;
+        }
+      }
+      return false;
+    }
+    // Would a projectile fired along `angle` cross this player's box before it
+    // reaches `maxDist`. The game's own lineInRect, against the same box the
+    // server builds (`l.x - l.scale` … `l.x + l.scale`).
+    _crosses(fromPos, p, angle, maxDist) {
+      const ex = fromPos.x + Math.cos(angle) * maxDist;
+      const ey = fromPos.y + Math.sin(angle) * maxDist;
+      for (let i = 0; i < 2; i++) {
+        const tp = i === 0 ? p.pos.current : p.pos.future;
+        if (!tp) continue;
+        const s = p.scale + AIM_RANGE_SLACK;
+        if (lineInRect(tp.x - s, tp.y - s, tp.x + s, tp.y + s, fromPos.x, fromPos.y, ex, ey)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    // The protected players this connection could actually damage right now.
+    // Empty almost always — no exclusions and a fleet that shares one clan —
+    // and every caller below short-circuits on that.
+    //
+    // Cached per connection for the length of a tick. The answer is a function
+    // of the update stream, which moves once a tick, and the callers are the
+    // attack gate and the target picker, which can both be asked several times
+    // in the same tick by different modules. The list is held on the
+    // connection rather than here so two connections resolving inside one
+    // synchronous call cannot share a scratch array.
+    shielded(c) {
+      const tick = c._ModuleHandler ? c._ModuleHandler.tickCount : 0;
+      if (c._rynShieldTick === tick && c._rynShieldList !== void 0) {
+        return c._rynShieldList;
+      }
+      if (c._rynShieldList === void 0) {
+        c._rynShieldList = [];
+      }
+      c._rynShieldTick = tick;
+      return RynAllegiance.collectShieldedFor(c, c._rynShieldList);
+    }
+    meleeBlocker(c, angle, slot, list) {
+      const shielded = list || this.shielded(c);
+      if (shielded.length === 0) {
+        return null;
+      }
+      const myPlayer = c.myPlayer;
+      const range = this._weaponRange(myPlayer, slot);
+      if (range === null) {
+        return null;
+      }
+      const fromPos = myPlayer.pos.current;
+      for (let i = 0; i < shielded.length; i++) {
+        if (this._sweeps(fromPos, shielded[i], angle, range)) {
+          return shielded[i];
+        }
+      }
+      return null;
+    }
+    shotBlocker(c, angle, slot, maxDist, list) {
+      const shielded = list || this.shielded(c);
+      if (shielded.length === 0) {
+        return null;
+      }
+      const myPlayer = c.myPlayer;
+      const id = myPlayer.getItemByType(slot);
+      if (id === null || id === undefined) {
+        return null;
+      }
+      let flight;
+      try {
+        const weapon = DataHandler_default.getWeapon(id);
+        if (!("projectile" in weapon)) {
+          return null;
+        }
+        flight = Projectiles[weapon.projectile].range || weapon.range || 1e3;
+      } catch (_) {
+        return null;
+      }
+      const limit = Math.min(flight, maxDist === null || maxDist === undefined ? flight : maxDist);
+      const fromPos = myPlayer.pos.current;
+      for (let i = 0; i < shielded.length; i++) {
+        if (this._crosses(fromPos, shielded[i], angle, limit)) {
+          return shielded[i];
+        }
+      }
+      return null;
+    }
+    // The direction to actually swing at. `wanted` if it is clear; otherwise
+    // the nearest offset that is clear and still contains `keep` (the entity
+    // the swing was meant for), so re-aiming never quietly drops the target it
+    // was asked to hit. null means there is no safe swing this tick — the
+    // caller holds, which is the whole of "wait if there is no safe attack".
+    safeMeleeAngle(c, wanted, slot, keep, list) {
+      const shielded = list || this.shielded(c);
+      if (shielded.length === 0) {
+        return wanted;
+      }
+      const myPlayer = c.myPlayer;
+      const range = this._weaponRange(myPlayer, slot);
+      if (range === null) {
+        return wanted;
+      }
+      const fromPos = myPlayer.pos.current;
+      const keepAngle = keep && keep.pos ? fromPos.angle(keep.pos.current) : null;
+      for (let s = 0; s < AIM_STEPS.length; s++) {
+        const candidate = wanted + AIM_STEPS[s];
+        if (keepAngle !== null && getAngleDist(candidate, keepAngle) > Config_default.gatherAngle - AIM_ANGLE_SLACK) {
+          continue;
+        }
+        let clear = true;
+        for (let i = 0; i < shielded.length; i++) {
+          if (this._sweeps(fromPos, shielded[i], candidate, range)) {
+            clear = false;
+            break;
+          }
+        }
+        if (clear) {
+          return candidate;
+        }
+      }
+      return null;
+    }
+  };
 
   class PlayerManager {
     playerData=new Map;
@@ -8639,10 +9122,24 @@ window.grbtp = 35;
             RynScan.sighting(this.client, player);
           }
         }
+        // An excluded player who died and came back carries a new sid. The
+        // name is the only thread between the two, so the first time the new
+        // sid is seen under an excluded name it is written into the list by
+        // id — after which everything downstream is answering by id again.
+        if (RynAllegiance.excludedNames.size !== 0 && !RynAllegiance.excluded.has(id) && player.nickname && RynAllegiance.excludedNames.has(player.nickname.toLowerCase())) {
+          RynAllegiance.toggleExcluded(id, player.nickname);
+        }
         if (!this.client.isBotByID(id) && !myPlayer.isMyPlayerByID(id) && myPlayer.isTeammateByID(id) && EnemyManager2.isNear(player, this.nearestTeammate, myPlayer)) {
           this.nearestTeammate = player;
         } else if (myPlayer.isEnemyByID(id)) {
-          this.enemies.push(player);
+          // The one gate every targeting module in the client inherits.
+          // `enemies` is what EnemyManager sweeps, what botPickTarget reads,
+          // what the insta modules count damage against and what the shield
+          // logic scores — so a player kept out of this array cannot be
+          // chosen as a target by any of them.
+          if (!RynAllegiance.isProtected(this.client, player)) {
+            this.enemies.push(player);
+          }
         }
       }
     }
@@ -8697,13 +9194,48 @@ window.grbtp = 35;
         myPlayer.spawn();
       }
     }
+    // "Is A an enemy of B." The clan comparison below is the game's own rule
+    // and is left exactly as it was; what is in front of it is the pair this
+    // client is never allowed to answer "yes" for — one of mine against
+    // anything protected. Both directions are tested because the two arguments
+    // arrive in either order depending on the caller (an object's owner
+    // against a target, or a target against an owner).
+    _protectedPair(a, b) {
+      if (a == null || b == null || a === b) {
+        return false;
+      }
+      // Animals share the sid space with players and are never ours, so they
+      // are answered by the clan rule below like anything else.
+      if (a.isPlayer !== true || b.isPlayer !== true) {
+        return false;
+      }
+      const c = this.client;
+      const aMine = RynAllegiance.isFriendlyID(c, a.id);
+      const bMine = RynAllegiance.isFriendlyID(c, b.id);
+      if (aMine && bMine) {
+        return true;
+      }
+      if (aMine && RynAllegiance.isExcluded(b)) {
+        return true;
+      }
+      if (bMine && RynAllegiance.isExcluded(a)) {
+        return true;
+      }
+      return false;
+    }
     isEnemy(target1, target2) {
+      if (this._protectedPair(target1, target2)) {
+        return false;
+      }
       return target1 == null || target2 == null || target1 !== target2 && (target1.clanName === null || target2.clanName === null || target1.clanName !== target2.clanName);
     }
     isEnemyByID(ownerID, target) {
       const player = this.playerData.get(ownerID);
       if (player == null) {
         throw Error("isEnemyByID Error: Failed to find an owner!");
+      }
+      if (this._protectedPair(player, target)) {
+        return false;
       }
       if (player instanceof ClientPlayer_default) {
         return player.isEnemyByID(target.id);
@@ -8721,9 +9253,15 @@ window.grbtp = 35;
         const ownerID = this.client.ownerClient?.myPlayer?.id;
         if (ownerID !== undefined && target.id === ownerID) return false;
       }
+      if (RynAllegiance.isProtected(this.client, target)) {
+        return false;
+      }
       return this.isEnemyByID(owner.id, target);
     }
     canShoot(ownerID, target) {
+      if (RynAllegiance.isProtected(this.client, target)) {
+        return false;
+      }
       return target instanceof Animal_default || this.isEnemyByID(ownerID, target);
     }
     canMoveOnTop(object) {
@@ -8771,6 +9309,15 @@ window.grbtp = 35;
       }
       const list = this.projectiles.get(key);
       list.push(projectile);
+      // The projectile frame, offered to the protection screen. This is the
+      // only place in the client every arrow passes through, and it is a
+      // packet handler rather than a scan — the guards get told about a shot
+      // when the server says there is one, at no per-tick cost at all.
+      if (Settings_default._botProtection) {
+        try {
+          RynProtect.noteProjectile(this.client, projectile);
+        } catch (_) {}
+      }
     }
     foundProjectile(projectile) {
       const owner = projectile.ownerClient;
@@ -9374,10 +9921,26 @@ window.grbtp = 35;
         break;
 
        case "3":
-        if (typeof temp[1] !== "string") {
-          myPlayer.teammates.clear();
+        {
+          // setPlayerTeam — the server's own answer to createClan, joinClan
+          // and leaveClan, and the only frame that confirms any of the three.
+          // Nothing used to read the team out of it: `clanName` was left to
+          // arrive with the next player update, a tick later, which is why a
+          // clan state machine built on `clanName` could never tell "the
+          // create has not landed yet" from "the create was refused". The
+          // update stream still writes the same field every tick, so this is
+          // the same value, just as early as the server offers it.
+          const team = temp[1];
+          if (typeof team !== "string") {
+            myPlayer.teammates.clear();
+            myPlayer.clanName = null;
+            myPlayer.isLeader = false;
+          } else {
+            myPlayer.clanName = team;
+            myPlayer.isLeader = !!temp[2];
+          }
+          break;
         }
-        break;
 
        case "A":
         {
@@ -10260,6 +10823,319 @@ window.grbtp = 35;
   window._gbot1v1BotID = null;
   window._gbot1v1LastBuild = 0;
   window._gbot1v1WinCleanup = null;
+  // ==========================================================================
+  // Formation geometry
+  //
+  // One table, two consumers: the fleet formation that follows you, and the
+  // guard wall the protection mode holds in front of the bots it is covering.
+  // Neither owns a shape of its own, so a formation added here is available to
+  // both and behaves the same way in each.
+  //
+  // Everything is in *formation-local* coordinates — `fwd` along the direction
+  // the formation faces, `side` to its right — and rotated into the world in
+  // one place, by `world()`. That is what makes the rotation rule hold: the
+  // shape turns, the slots do not move within it. A bot's position is a pure
+  // function of its slot index, the shape and the facing, and the slot index
+  // comes from the fleet order, so nothing here can hand slot 1's place to
+  // slot 5 because slot 5 happened to be standing nearer to it.
+  //
+  // The seven original shapes are not here. They are answered where they
+  // always were, in Movement.getFormationOffset, because several of them are
+  // world-space by design (a circle does not face anywhere, and the line
+  // formations are named for screen directions). This holds the ones that do
+  // face a direction, which is all of the military ones.
+  // ==========================================================================
+  const RynFormations = new class {
+    // id, the glyph the picker draws, and the label. Order is picker order.
+    LIST=[ {
+      id: "wedge",
+      icon: "◤",
+      label: "Wedge"
+    }, {
+      id: "vform",
+      icon: "∨",
+      label: "V Formation"
+    }, {
+      id: "arrow",
+      icon: "➤",
+      label: "Arrow"
+    }, {
+      id: "diamond",
+      icon: "◆",
+      label: "Diamond"
+    }, {
+      id: "cross",
+      icon: "✚",
+      label: "Cross"
+    }, {
+      id: "wall",
+      icon: "▬",
+      label: "Wall"
+    }, {
+      id: "doubleline",
+      icon: "☰",
+      label: "Double Line"
+    }, {
+      id: "spearhead",
+      icon: "▲",
+      label: "Spearhead"
+    }, {
+      id: "arc",
+      icon: "◠",
+      label: "Arc"
+    }, {
+      id: "crescent",
+      icon: "◡",
+      label: "Crescent"
+    }, {
+      id: "staggered",
+      icon: "⁙",
+      label: "Staggered Line"
+    } ];
+    _ids=null;
+    get ids() {
+      if (this._ids === null) {
+        this._ids = new Set(this.LIST.map(f => f.id));
+      }
+      return this._ids;
+    }
+    has(id) {
+      return this.ids.has(id);
+    }
+    // Cached geometry. A shape is a function of (id, slot, total, spacing,
+    // depth, radius) and none of those change between ticks in a fight, so
+    // twenty bots asking every tick is twenty map lookups rather than twenty
+    // trigonometric layouts. Bounded, and cleared whole when it fills.
+    _cache=new Map;
+    _key(id, slot, total, spacing, depth, radius) {
+      return id + "|" + slot + "|" + total + "|" + spacing + "|" + depth + "|" + radius;
+    }
+    local(id, slot, total, opts) {
+      const n = Math.max(1, total | 0);
+      const i = clamp(slot | 0, 0, n - 1);
+      const spacing = opts && opts.spacing ? opts.spacing : 80;
+      const depth = opts && opts.depth ? opts.depth : 70;
+      const radius = opts && opts.radius ? opts.radius : 140;
+      const key = this._key(id, i, n, spacing, depth, radius);
+      const hit = this._cache.get(key);
+      if (hit !== void 0) {
+        return hit;
+      }
+      const out = this._build(id, i, n, spacing, depth, radius);
+      if (this._cache.size > 4096) {
+        this._cache.clear();
+      }
+      this._cache.set(key, out);
+      return out;
+    }
+    _build(id, i, n, spacing, depth, radius) {
+      const mid = (n - 1) / 2;
+      switch (id) {
+       case "wall":
+        // One rank, shoulder to shoulder, square across the threat.
+        return {
+          fwd: 0,
+          side: (i - mid) * spacing
+        };
+
+       case "staggered":
+        // The same rank with every other bot pulled back, so the line has
+        // depth without opening a gap in it.
+        return {
+          fwd: i % 2 === 0 ? depth * .5 : -depth * .5,
+          side: (i - mid) * spacing * .78
+        };
+
+       case "doubleline":
+        {
+          const perRow = Math.ceil(n / 2);
+          const row = i < perRow ? 0 : 1;
+          const k = i - row * perRow;
+          const count = row === 0 ? perRow : n - perRow;
+          return {
+            fwd: row === 0 ? depth * .6 : -depth * .6,
+            side: (k - (count - 1) / 2) * spacing
+          };
+        }
+
+       case "wedge":
+        {
+          // Hollow: an apex and two arms sweeping back from it. Slot 0 takes
+          // the point, and every pair after it takes the next rank, left then
+          // right, so the shape grows outward without any slot moving.
+          if (i === 0) {
+            return {
+              fwd: 0,
+              side: 0
+            };
+          }
+          const rank = Math.ceil(i / 2);
+          const sign = i % 2 === 1 ? -1 : 1;
+          return {
+            fwd: -rank * depth,
+            side: sign * rank * spacing * .8
+          };
+        }
+
+       case "spearhead":
+        {
+          // Filled: rank r holds r+1 bots, so the mass is behind the point.
+          let r = 0, used = 0;
+          while (used + (r + 1) <= i) {
+            used += r + 1;
+            r++;
+          }
+          const col = i - used;
+          return {
+            fwd: -r * depth * .92,
+            side: (col - r / 2) * spacing * .86
+          };
+        }
+
+       case "vform":
+        // Slots run across the V as it is drawn, ends at the back and the
+        // middle at the point.
+        return {
+          fwd: (mid - Math.abs(i - mid)) * depth * .85,
+          side: (i - mid) * spacing * .9
+        };
+
+       case "arrow":
+        {
+          // A head, a bar and a tail.
+          if (i === 0) {
+            return {
+              fwd: depth * 1.6,
+              side: 0
+            };
+          }
+          if (n >= 3 && i === n - 1) {
+            return {
+              fwd: -depth * 1.6,
+              side: 0
+            };
+          }
+          const bar = Math.max(1, n - 2);
+          const k = i - 1;
+          return {
+            fwd: 0,
+            side: (k - (bar - 1) / 2) * spacing
+          };
+        }
+
+       case "diamond":
+        {
+          // A ring measured the long way round the square — vertices front,
+          // back and to each side.
+          const a = PI2 * i / n;
+          const c = Math.cos(a), s = Math.sin(a);
+          const denom = Math.abs(c) + Math.abs(s) || 1;
+          const k = radius / denom;
+          return {
+            fwd: c * k,
+            side: s * k
+          };
+        }
+
+       case "cross":
+        {
+          // A centre and four arms, filled a rank at a time. Splitting the
+          // count into a vertical run and a horizontal run instead put both
+          // runs' single member on the centre point at n=2, which is two bots
+          // standing in each other.
+          if (i === 0) {
+            return {
+              fwd: 0,
+              side: 0
+            };
+          }
+          const k = i - 1;
+          const rank = Math.floor(k / 4) + 1;
+          switch (k % 4) {
+           case 0:
+            return {
+              fwd: rank * spacing,
+              side: 0
+            };
+
+           case 1:
+            return {
+              fwd: -rank * spacing,
+              side: 0
+            };
+
+           case 2:
+            return {
+              fwd: 0,
+              side: rank * spacing
+            };
+
+           default:
+            return {
+              fwd: 0,
+              side: -rank * spacing
+            };
+          }
+        }
+
+       case "arc":
+        {
+          // Bows toward the threat: the middle of the line is the part
+          // closest to it, which is what puts the most shields in the way.
+          const span = 2;
+          const t = n === 1 ? .5 : i / (n - 1);
+          const a = -span / 2 + t * span;
+          return {
+            fwd: Math.cos(a) * radius,
+            side: Math.sin(a) * radius
+          };
+        }
+
+       case "crescent":
+        {
+          // The opposite bend: wings forward, centre back, so a group walking
+          // into it is walking into a pocket.
+          const off = mid === 0 ? 0 : (i - mid) / mid;
+          return {
+            fwd: -(1 - off * off) * depth * 1.7,
+            side: (i - mid) * spacing * .95
+          };
+        }
+
+       default:
+        return {
+          fwd: 0,
+          side: 0
+        };
+      }
+    }
+    // Local to world. The only place the facing is applied, and the reason a
+    // change of direction rotates the shape instead of reordering it.
+    world(id, slot, total, facing, opts, out) {
+      const local = this.local(id, slot, total, opts);
+      const cos = Math.cos(facing), sin = Math.sin(facing);
+      const o = out || {
+        dx: 0,
+        dy: 0
+      };
+      o.dx = local.fwd * cos - local.side * sin;
+      o.dy = local.fwd * sin + local.side * cos;
+      return o;
+    }
+    // Gap closing, as arithmetic rather than as a correction loop.
+    //
+    // A player is 35 units of scale, and the game's collision pushes two of
+    // them apart until they are 70 apart — so anything under 70 is a rank that
+    // spends the fight shoving itself sideways. At the other end, a body of
+    // radius 35 walks through any gap wider than 35 between two 35-radius
+    // guards, which puts the ceiling at 2*35 + 35 = 105. Between those two
+    // numbers the line is both stable and closed, so the wanted spacing is
+    // simply held inside them.
+    spacingFor(want) {
+      return clamp(want || 88, 72, 104);
+    }
+  };
+
   class Movement {
     moduleName="movement";
     client;
@@ -10510,10 +11386,23 @@ window.grbtp = 35;
         }
 
        default:
-        return {
-          dx: 0,
-          dy: 0
-        };
+        {
+          // The military shapes. They face a direction, so they come out of
+          // the shared table already rotated; everything above this line is
+          // world-space by design and stays where it was.
+          if (RynFormations.has(f)) {
+            const spacing = RynFormations.spacingFor(radius * .8);
+            return RynFormations.world(f, botIndex, totalBots, fAngle, {
+              spacing: spacing,
+              depth: Math.max(48, radius * .62),
+              radius: radius
+            });
+          }
+          return {
+            dx: 0,
+            dy: 0
+          };
+        }
       }
     }
     getActualPosition() {
@@ -10551,6 +11440,8 @@ window.grbtp = 35;
       // fleet behaviour and this is not a fleet member for as long as you have
       // it — nothing else about the bot changes.
       if (Possess !== null && Possess.isActive(this.client)) return;
+      // A guard holding the protection screen is not following anybody.
+      if (ModuleHandler._botProtectActive) return;
       if (ModuleHandler._scanMissionActive) return;
       if (ModuleHandler._scatterActive) return;
       if (ModuleHandler._autoFarmActive) return;
@@ -10714,8 +11605,31 @@ window.grbtp = 35;
   // Used by the Re-check button and by the bot counter in the HUD.
   function clanAudit(owner) {
     const q = clanQueue(owner);
-    const ownerClan = owner.myPlayer ? owner.myPlayer.clanName : null;
     const bots = owner.clientList();
+    // With one tribe per bot there is no single clan to count against: a bot
+    // is "in" when it holds the name its own state machine asked for.
+    if (Settings_default._botIndividualClans) {
+      let ownJoined = 0, ownAlive = 0;
+      for (let i = 0; i < bots.length; i++) {
+        const bot = bots[i];
+        const p = bot.myPlayer;
+        if (!p || !p.inGame) continue;
+        ownAlive += 1;
+        const joiner = bot._ModuleHandler && bot._ModuleHandler.staticModules && bot._ModuleHandler.staticModules.clanJoiner;
+        const wanted = joiner ? joiner.individualClanName : null;
+        if (wanted !== null && p.clanName === wanted) ownJoined += 1;
+      }
+      q.joined = ownJoined;
+      q.total = bots.length;
+      return {
+        joined: ownJoined,
+        alive: ownAlive,
+        total: bots.length,
+        clan: "own tribes",
+        individual: true
+      };
+    }
+    const ownerClan = owner.myPlayer ? owner.myPlayer.clanName : null;
     let joined = 0, alive = 0;
     for (let i = 0; i < bots.length; i++) {
       const p = bots[i].myPlayer;
@@ -10729,8 +11643,120 @@ window.grbtp = 35;
       joined: joined,
       alive: alive,
       total: bots.length,
-      clan: ownerClan
+      clan: ownerClan,
+      individual: false
     };
+  }
+
+  // ==========================================================================
+  // One tribe per bot
+  //
+  // What was here before sent a clan packet every third tick — about a third
+  // of a second — and decided what to send by reading `clanName` alone, which
+  // gave it three separate ways to fail:
+  //
+  //   · The name it asked for was the bot's *player* name, whole. Clan names
+  //     are capped at seven characters by the game (`maxLength: 7` on the
+  //     alliance input, and the value is sliced to 7 before it is sent), so a
+  //     longer name could never come back equal to what was asked for, and the
+  //     bot leave/create/leave/created forever.
+  //   · Every bot asked for the same name, because every bot carries the same
+  //     base name. One got a tribe and the rest asked for one that was taken.
+  //   · A taken name was answered with `joinClan`, which is a *request* the
+  //     tribe's owner has to accept — so against a stranger's tribe it was a
+  //     packet sent nine times a second for as long as the bot lived.
+  //
+  // What replaces it is a state machine over the transitions the server
+  // actually has. Each bot has its own name, derived from its fleet slot and
+  // cut to seven characters, so "GG1" over five bots is GG11…GG15 and no two
+  // bots can ask for the same tribe. Every request has a deadline and is
+  // graded against the setPlayerTeam frame above rather than against a guess;
+  // a name that turns out to belong to somebody else rotates to the next
+  // candidate instead of being asked for again; and the whole fleet shares one
+  // action token, so at most one clan packet is in flight at a time however
+  // many bots are connected.
+  // ==========================================================================
+  const CLAN_NAME_MAX = 7;
+  // How long a create or a leave is given to come back before it is graded a
+  // failure. Ten server ticks: the answer normally lands on the next one.
+  const CLAN_CONFIRM_MS = 1200;
+  // Gap between two clan packets anywhere in the fleet.
+  const CLAN_ACTION_MS = 450;
+  // Attempts at one name before deciding the name itself is the problem.
+  const CLAN_CREATE_TRIES = 3;
+  const CLAN_VARIANT_MARKS = "abcdefghijklmnopqrstuvwxyz";
+  const CLAN_ACTION_STATE = new WeakMap;
+
+  // One clan packet at a time across the fleet, handed round so a bot that
+  // keeps failing cannot hold the token against the others.
+  //
+  // The queue is built out of who is actually asking, not out of the fleet
+  // size. A bot that has its tribe stops asking and drops out on its own, and
+  // that is the whole reason this is written the way it is: waiting for "every
+  // bot in the fleet" to take a turn deadlocks the moment the rest of them are
+  // settled and never ask for one.
+  function clanActionTurn(owner, bot, now) {
+    let s = CLAN_ACTION_STATE.get(owner);
+    if (s === void 0) {
+      s = {
+        holder: null,
+        until: 0,
+        served: new Set,
+        asking: new Map
+      };
+      CLAN_ACTION_STATE.set(owner, s);
+    }
+    s.asking.set(bot, now);
+    if (now < s.until) {
+      return s.holder === bot;
+    }
+    const stale = CLAN_ACTION_MS * 3;
+    for (const [other, at] of s.asking) {
+      if (now - at > stale) s.asking.delete(other);
+    }
+    if (s.served.has(bot)) {
+      for (const other of s.asking.keys()) {
+        if (!s.served.has(other)) {
+          // Somebody else still wants this round's turn.
+          return false;
+        }
+      }
+      s.served.clear();
+    }
+    s.served.add(bot);
+    s.holder = bot;
+    s.until = now + CLAN_ACTION_MS;
+    return true;
+  }
+
+  // The stem of one bot's tribe name. Whatever the fleet is called, with an
+  // explicit clan prefix taking precedence when one is set.
+  function botClanBase(bot) {
+    let raw = Settings_default._botClanPrefix || bot._botCustomName || Settings_default._botBulkName || "";
+    if (!raw) {
+      try {
+        raw = window.localStorage.getItem("moo_name") || "";
+      } catch (_) {
+        raw = "";
+      }
+    }
+    const cleaned = String(raw).replace(/\s+/g, "");
+    return cleaned === "" ? "GG" : cleaned;
+  }
+
+  // base + this bot's fleet slot, cut to the game's seven characters with the
+  // slot number kept whole — the number is the part that makes it unique, so
+  // it is the stem that gives way. `variant` appends a letter and is only
+  // reached when the name it would otherwise want is already somebody else's.
+  function botClanCandidate(bot, base, variant) {
+    const start = Number(Settings_default._botNameNumberStart) || 1;
+    const slot = typeof bot.id === "number" && bot.id > 0 ? bot.id : 1;
+    let tail = String(start + slot - 1);
+    if (variant > 0) {
+      tail += CLAN_VARIANT_MARKS[(variant - 1) % CLAN_VARIANT_MARKS.length];
+    }
+    const room = Math.max(1, CLAN_NAME_MAX - tail.length);
+    return (base.slice(0, room) + tail).slice(0, CLAN_NAME_MAX);
   }
 
   // Drop everything and start the rotation over from the top. Bots already in
@@ -10742,6 +11768,17 @@ window.grbtp = 35;
     q.cursor = 0;
     q.nextAt = 0;
     q.failed = 0;
+    // The individual path has its own per-bot phase, and a bot stuck waiting
+    // on an answer that never came is exactly what this button is for.
+    CLAN_ACTION_STATE.delete(owner);
+    for (const bot of owner.clientList()) {
+      const joiner = bot._ModuleHandler && bot._ModuleHandler.staticModules && bot._ModuleHandler.staticModules.clanJoiner;
+      if (!joiner || !joiner._clan) continue;
+      joiner._clan.phase = "idle";
+      joiner._clan.until = 0;
+      joiner._clan.tries = 0;
+      joiner._clan.variant = 0;
+    }
     return clanAudit(owner);
   }
   class ClanJoiner {
@@ -10749,7 +11786,6 @@ window.grbtp = 35;
     client;
     joinCount=0;
     prevOwnerClan=null;
-    _ownClanAttempts=0;
     constructor(client2) {
       this.client = client2;
     }
@@ -10781,27 +11817,111 @@ window.grbtp = 35;
       owner.pendingJoins.add(myPlayer.id);
       PacketManager2.joinClan(ownerClan);
     }
+    // Per-bot clan state. `phase` is what this bot is waiting on, `until` is
+    // when that wait expires, `variant` is how many times the name it wanted
+    // turned out to be someone else's.
+    _clan={
+      phase: "idle",
+      until: 0,
+      tries: 0,
+      variant: 0,
+      base: null,
+      name: null
+    };
+    // What this bot's tribe is called right now, for the panel and the audit.
+    get individualClanName() {
+      return this._clan.name;
+    }
     _individualClanTick() {
-      const {myPlayer: myPlayer, PacketManager: PacketManager2, PlayerManager: PlayerManager2} = this.client;
-      if (!myPlayer.inGame) return;
-      const desiredName = this.client._botCustomName;
-      if (!desiredName) return;
-      if (myPlayer.clanName === desiredName) {
-        this._ownClanAttempts = 0;
+      const c = this.client;
+      const {myPlayer: myPlayer, PacketManager: PacketManager2, PlayerManager: PlayerManager2} = c;
+      const st = this._clan;
+      // Dead, or not yet holding a sid. Whatever tribe this bot had died with
+      // it, so the next life starts from a clean phase rather than grading an
+      // answer that is never coming.
+      if (!myPlayer.inGame || myPlayer.id === -1) {
+        st.phase = "idle";
+        st.until = 0;
+        st.tries = 0;
         return;
       }
-      this._ownClanAttempts += 1;
-      if (this._ownClanAttempts < 3) return;
-      this._ownClanAttempts = 0;
-      if (myPlayer.clanName !== null) {
+      const base = botClanBase(c);
+      if (st.base !== base) {
+        // The fleet was renamed. Start the search over from the first
+        // candidate rather than carrying a disambiguator earned by the old
+        // name.
+        st.base = base;
+        st.variant = 0;
+        st.tries = 0;
+        st.phase = "idle";
+        st.until = 0;
+      }
+      const want = botClanCandidate(c, base, st.variant);
+      st.name = want;
+      const now = Date.now();
+      const mine = myPlayer.clanName;
+      if (mine === want) {
+        st.phase = "idle";
+        st.tries = 0;
+        st.until = 0;
+        return;
+      }
+      // An answer is still owed. Nothing is sent while one is outstanding,
+      // which is the whole of "do not spam clan requests".
+      if (now < st.until) {
+        return;
+      }
+      if (st.phase === "creating") {
+        st.tries += 1;
+        // The deadline passed. If the tribe now shows in the world list under
+        // somebody else, the name is taken and no number of retries will
+        // change that. A record under this bot's *own* sid is different: it is
+        // its own tribe from a life it has already lost, the server clears
+        // those, and giving the name up over it would rename the bot's tribe
+        // every time it died.
+        const exists = PlayerManager2.clanExist(want);
+        const stale = exists && PlayerManager2.clanData.get(want) === myPlayer.id;
+        if (exists && !stale || st.tries >= CLAN_CREATE_TRIES) {
+          st.variant += 1;
+          st.tries = 0;
+        }
+      } else if (st.phase === "leaving") {
+        st.tries += 1;
+      }
+      st.phase = "idle";
+      if (!clanActionTurn(c.ownerClient, c, now)) {
+        return;
+      }
+      // In a tribe that is not the one this bot wants — the owner's clan from
+      // before the setting was turned on, one it was accepted into, or its own
+      // under a name that has since changed. The server refuses a create from
+      // a player who already has a tribe, so leaving is the only first move.
+      if (mine !== null && mine !== void 0) {
         PacketManager2.leaveClan();
+        st.phase = "leaving";
+        st.until = now + CLAN_CONFIRM_MS;
         return;
       }
-      if (PlayerManager2.clanExist(desiredName)) {
-        PacketManager2.joinClan(desiredName);
-      } else {
-        PacketManager2.createClan(desiredName);
+      const target = botClanCandidate(c, base, st.variant);
+      st.name = target;
+      // A stranger's tribe under the name this bot wants. joinClan is never
+      // the answer here — it is a *request* the tribe's owner has to accept,
+      // and a stranger never will, which is exactly what turned the old code
+      // into a packet every third tick for the life of the bot. The name is
+      // given up instead, and no packet is spent doing it: the next turn asks
+      // for the next candidate.
+      //
+      // A record under this bot's own sid is not a stranger's tribe and is not
+      // joinable either — the bot is its owner and is not in it, so there is
+      // nobody left to accept. That one is answered by creating again, which
+      // is what succeeds the moment the server clears the dead record.
+      if (PlayerManager2.clanExist(target) && PlayerManager2.clanData.get(target) !== myPlayer.id) {
+        st.variant += 1;
+        return;
       }
+      PacketManager2.createClan(target);
+      st.phase = "creating";
+      st.until = now + CLAN_CONFIRM_MS;
     }
   }
   const ClanJoiner_default = ClanJoiner;
@@ -20432,8 +21552,13 @@ window.grbtp = 35;
       }
       while (myPlayer.joinRequests.length > 0) {
         const id = myPlayer.joinRequests[0][0];
+        // `clientIDList` is this connection's own, which on a bot is empty —
+        // so a bot leading its own tribe had no way to recognise a fleet mate
+        // asking to join it. The allegiance list answers for the fleet as a
+        // whole, from whichever connection asks.
+        const isMine = RynAllegiance.isFriendlyID(this.client, id) || clientIDList.has(id);
         if (Settings_default._autoaccept || this.client.pendingJoins.size !== 0) {
-          PacketManager2.clanRequest(id, Settings_default._autoaccept || clientIDList.has(id));
+          PacketManager2.clanRequest(id, Settings_default._autoaccept || isMine);
           myPlayer.joinRequests.shift();
           this.client.pendingJoins.delete(id);
           if (isOwner) {
@@ -21943,6 +23068,15 @@ window.grbtp = 35;
         }
         return;
       }
+      // A guard on the protection screen is not roaming either, and for the
+      // same reason the duel branch below gives the flag up rather than merely
+      // declining to steer.
+      if (mh._botProtectActive) {
+        if (mh._scatterActive) {
+          this.stopRoaming(mh);
+        }
+        return;
+      }
       const now = Date.now();
 
       // A bot in a duel is driven by Movement's own 1v1 branch, and that branch
@@ -22089,11 +23223,15 @@ window.grbtp = 35;
   function botPickTarget(client) {
     const {myPlayer: myPlayer, PlayerManager: PlayerManager2, EnemyManager: EnemyManager2} = client;
     const nearest = EnemyManager2.nearestEnemy;
-    if (!Settings_default._botAvoidShield) {
+    // Everyone this bot must not hit and could. Normally empty, in which case
+    // every test below it is skipped outright.
+    const guarded = RynSafeAim.shielded(client);
+    if (!Settings_default._botAvoidShield && guarded.length === 0) {
       return {
         target: nearest,
         shielded: null,
-        blockedBy: null
+        blockedBy: null,
+        blockedByProtected: null
       };
     }
     const enemies = PlayerManager2.enemies;
@@ -22101,21 +23239,48 @@ window.grbtp = 35;
       return {
         target: nearest,
         shielded: null,
-        blockedBy: null
+        blockedBy: null,
+        blockedByProtected: null
       };
+    }
+    // Is the shot this bot would take a projectile. Only then can a protected
+    // player standing between it and a target be hit by it — a swing sweeps an
+    // arc, which is UpdateAttack's gate, not this one.
+    let ranged = false;
+    if (guarded.length !== 0) {
+      const secondaryID = myPlayer.getItemByType(1);
+      try {
+        ranged = secondaryID !== null && secondaryID !== undefined && DataHandler_default.isShootable(secondaryID) && BOT_RANGED_SECONDARIES.has(secondaryID);
+      } catch (_) {}
     }
     const myPos = myPlayer.pos.current;
     let open = null, openDist = Infinity;
     let shielded = null, shieldedDist = Infinity;
+    let guardedBlock = null, guardedDist = Infinity;
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i];
       if (!e || !e.pos) continue;
       const d = myPos.distance(e.pos.current);
       if (d > BOT_TARGET_RANGE) continue;
+      // The line to this enemy passes through somebody the bot is not allowed
+      // to hit. Not a target — and the reason is remembered, because the
+      // answer to it is to move, not to shoot anyway.
+      if (ranged) {
+        const aimAt = e.pos.future || e.pos.current;
+        if (RynSafeAim.shotBlocker(client, myPos.angle(aimAt), 1, d + e.hitScale, guarded) !== null) {
+          if (d < guardedDist) {
+            guardedDist = d;
+            guardedBlock = e;
+          }
+          continue;
+        }
+      }
       let blocking = false;
-      try {
-        blocking = PlayerManager2.lookingShield(e, myPlayer);
-      } catch (_) {}
+      if (Settings_default._botAvoidShield) {
+        try {
+          blocking = PlayerManager2.lookingShield(e, myPlayer);
+        } catch (_) {}
+      }
       if (blocking) {
         if (d < shieldedDist) {
           shieldedDist = d;
@@ -22139,7 +23304,10 @@ window.grbtp = 35;
     return {
       target: open,
       shielded: shielded,
-      blockedBy: open === null ? shielded : null
+      blockedBy: open === null ? shielded : null,
+      // Set whenever an otherwise valid target had to be passed over because
+      // the shot would have gone through a bot or an excluded player.
+      blockedByProtected: guardedBlock
     };
   }
 
@@ -22326,6 +23494,26 @@ window.grbtp = 35;
       }
 
       if (enemy === null) {
+        // The shot was refused because one of my own bots, or somebody
+        // excluded, is standing on the line. Holding still would hold it
+        // forever, so the bot steps off the line instead — one player width
+        // sideways is enough to open a lane past them, and which side is
+        // decided by the bot's fleet slot so two bots blocked by the same
+        // person do not both step the same way and stay blocked.
+        if (pick.blockedByProtected !== null) {
+          this.active = true;
+          const blockPos = pick.blockedByProtected.pos.current;
+          const toBlock = myPlayer.pos.current.angle(blockPos);
+          const owner2 = this.client.ownerClient;
+          const slot = owner2 && typeof owner2.getClientIndex === "function" ? owner2.getClientIndex(this.client) : 0;
+          const side = slot % 2 === 0 ? 1 : -1;
+          const step = toBlock + side * (Math.PI / 2);
+          if (this.lastDir === null || getAngleDist(step, this.lastDir) > .15) {
+            ModuleHandler.startMovement(step);
+            this.lastDir = step;
+          }
+          return;
+        }
         // Nothing worth shooting: hold the shot, but keep station off whoever is
         // hiding behind the shield rather than drifting into them.
         if (pick.blockedBy !== null) {
@@ -22486,7 +23674,7 @@ window.grbtp = 35;
         this._release(mh);
         return;
       }
-      if (Settings_default._botsFrozen || mh._autoFarmActive) {
+      if (Settings_default._botsFrozen || mh._autoFarmActive || mh._botProtectActive) {
         this._release(mh);
         return;
       }
@@ -23772,6 +24960,831 @@ window.grbtp = 35;
       ModuleHandler.useWeapon = prevWeapon;
     }
   }
+  // ==========================================================================
+  // BOT PROTECTION
+  //
+  // A slice of the fleet is taken off its normal job and put in front of the
+  // rest of the fleet as a screen. It protects bots, and only bots — the main
+  // player is not part of what it covers, which is what separates it from
+  // GuardModule below.
+  //
+  // Everything expensive is worked out once per owner per server tick and read
+  // by every guard, because the alternative is what a naive version of this
+  // costs: twenty bots each sweeping every visible player, every tracked
+  // projectile and a fresh formation layout, twenty times a tick. Here the
+  // enemy picture, the grouping, the projectile tracking, the anchor and the
+  // sector split are one pass; a guard's own tick is a cache read, one vector
+  // and a state machine.
+  //
+  // Slot identity is the other half of it. A guard's place comes from its
+  // fleet index and nothing else — never from which guard happens to be
+  // nearest to a position — so turning the formation rotates the shape and
+  // leaves every bot in the slot it already had.
+  // ==========================================================================
+
+  // One server tick. The board is rebuilt no more often than this whoever
+  // asks, so the cost is per fleet rather than per bot.
+  const PROT_BOARD_MS = 110;
+  // Two enemies further apart than this are not in the same group.
+  const PROT_GROUP_RADIUS = 360;
+  // Past this an enemy is somebody else's problem.
+  const PROT_ENGAGE_RANGE = 1e3;
+  // A bow or musket inside this is a reason to be holding a shield.
+  const PROT_SHIELD_RANGE = 760;
+  // How long the shield stays up after the last reason to hold it. Without
+  // this the guards flicker between daggers and shield on alternate ticks.
+  const PROT_SHIELD_HOLD_MS = 550;
+  // Floor on how often a guard may change weapon at all.
+  const PROT_SWITCH_COOLDOWN_MS = 220;
+  // Slack on a formation slot. Wider than the movement deadband so an arrived
+  // guard settles instead of twitching.
+  const PROT_ARRIVE = 28;
+  const PROT_HEADING_DEADBAND = .1;
+  // Walking further than this is worth spending a boost pad on.
+  const PROT_BOOST_MIN_DIST = 260;
+  const PROT_BOOST_COOLDOWN_MS = 2600;
+  // How long a sighted arrow stays on the board. Longer than any projectile's
+  // flight at the ranges this cares about.
+  const PROT_PROJ_LIFE_MS = 1200;
+  // The two ends of the Advance slider, in units ahead of the protected group.
+  const PROT_ADVANCE_MIN = 70;
+  const PROT_ADVANCE_MAX = 560;
+  // A cluster spanning wider than this from the anchor is two threats, not one.
+  const PROT_SECTOR_SPLIT = 1.75;
+  const PROT_RANGED_IDS = new Set([ 9, 12, 13, 15 ]);
+  const RYN_PROTECT_BOARDS = new WeakMap;
+
+  // "cowboy28" and "cowboy11" share a stem; "Player28" and "Player11" do too.
+  // Digits are what varies between one person's alts, so digits are what comes
+  // out before the comparison.
+  function protNameStem(name) {
+    if (typeof name !== "string") {
+      return "";
+    }
+    const stem = name.replace(/[0-9]+/g, "").replace(/[\s_\-.]+/g, "").toLowerCase();
+    return stem.length >= 3 ? stem : "";
+  }
+
+  function protBoard(owner) {
+    let b = RYN_PROTECT_BOARDS.get(owner);
+    if (b === void 0) {
+      b = {
+        at: 0,
+        guards: [],
+        wards: [],
+        anchor: {
+          x: 0,
+          y: 0
+        },
+        wardDrift: null,
+        guardSlots: 0,
+        enemies: [],
+        track: new Map,
+        sectors: [],
+        projectiles: [],
+        incoming: [],
+        grouped: false,
+        groupSize: 0,
+        rangedAt: 0,
+        threatAt: 0
+      };
+      RYN_PROTECT_BOARDS.set(owner, b);
+    }
+    return b;
+  }
+
+  const RynProtect = new class {
+    get enabled() {
+      return !!Settings_default._botProtection;
+    }
+    guardCount(owner) {
+      const fleet = owner && owner.clients ? owner.clients.size : 0;
+      const want = Math.max(0, Math.floor(Number(Settings_default._botProtectionGuards) || 0));
+      return Math.min(want, fleet);
+    }
+    // A bot's place in the screen, straight off the fleet order. Deliberately
+    // not filtered by "is alive": a guard that died keeps its slot, so the
+    // others do not all shuffle up one and back down again when it respawns.
+    roleOf(owner, bot) {
+      const index = owner && typeof owner.getClientIndex === "function" ? owner.getClientIndex(bot) : -1;
+      const count = this.guardCount(owner);
+      return {
+        isGuard: index >= 0 && index < count,
+        slot: index,
+        count: count
+      };
+    }
+    isGuard(bot) {
+      if (!this.enabled || !bot || bot.isOwner) {
+        return false;
+      }
+      return this.roleOf(bot.ownerClient, bot).isGuard;
+    }
+    // An arrow, seen by whichever connection could see it. The projectile
+    // frame carries no owner, so the shooter is found by where the arrow was
+    // created: the client places it 70 units back along its own heading, which
+    // is where whoever loosed it is standing.
+    noteProjectile(c, proj) {
+      if (!this.enabled || !c || c.isOwner && !c.clients) {
+        return;
+      }
+      const owner = c.ownerClient;
+      if (!owner) {
+        return;
+      }
+      const pos = proj && proj.pos && proj.pos.current;
+      if (!pos) {
+        return;
+      }
+      const pm = c.PlayerManager;
+      if (!pm) {
+        return;
+      }
+      let shooter = null, best = 8100;
+      const players = pm.players;
+      for (let i = 0; i < players.length; i++) {
+        const p = players[i];
+        if (!p || !p.pos) continue;
+        const d = p.pos.current.distanceDefault(pos);
+        if (d < best) {
+          best = d;
+          shooter = p;
+        }
+      }
+      if (shooter !== null && RynAllegiance.isFriendlyID(c, shooter.id)) {
+        return;
+      }
+      const b = protBoard(owner);
+      const now = Date.now();
+      // The same arrow is reported by every bot that can see it.
+      for (let i = 0; i < b.projectiles.length; i++) {
+        const q = b.projectiles[i];
+        if (now - q.at < 70 && Math.abs(q.x - pos.x) < 10 && Math.abs(q.y - pos.y) < 10 && getAngleDist(q.angle, proj.angle) < .06) {
+          return;
+        }
+      }
+      b.projectiles.push({
+        x: pos.x,
+        y: pos.y,
+        angle: proj.angle,
+        speed: proj.speed || 1.6,
+        range: proj.range || 1e3,
+        damage: proj.damage || 25,
+        at: now
+      });
+      if (b.projectiles.length > 48) {
+        b.projectiles.shift();
+      }
+    }
+    board(owner, now) {
+      const b = protBoard(owner);
+      if (now - b.at < PROT_BOARD_MS) {
+        return b;
+      }
+      b.at = now;
+      this._rebuild(owner, b, now);
+      return b;
+    }
+    _rebuild(owner, b, now) {
+      const fleet = owner.clientList();
+      const count = this.guardCount(owner);
+      // The number of *slots* in the screen, which is what the sector split
+      // divides. Deliberately not the number of guards currently alive: slots
+      // belong to fleet positions, so a dead guard leaves a hole rather than
+      // renumbering everybody behind it.
+      b.guardSlots = count;
+      b.guards.length = 0;
+      b.wards.length = 0;
+      for (let i = 0; i < fleet.length; i++) {
+        const bot = fleet[i];
+        const p = bot.myPlayer;
+        if (!p || !p.inGame || !p.pos) continue;
+        if (i < count) {
+          b.guards.push(bot);
+        } else {
+          b.wards.push(bot);
+        }
+      }
+      // With every bot on guard duty there is nobody left to cover, so the
+      // guards hold formation around themselves.
+      const covered = b.wards.length > 0 ? b.wards : b.guards;
+      let ax = 0, ay = 0, dx = 0, dy = 0, n = 0;
+      for (let i = 0; i < covered.length; i++) {
+        const p = covered[i].myPlayer;
+        const pos = p.pos.current;
+        ax += pos.x;
+        ay += pos.y;
+        const mv = covered[i]._ModuleHandler ? covered[i]._ModuleHandler.move_dir : null;
+        if (mv !== null && mv !== void 0) {
+          dx += Math.cos(mv);
+          dy += Math.sin(mv);
+        }
+        n++;
+      }
+      if (n > 0) {
+        b.anchor.x = ax / n;
+        b.anchor.y = ay / n;
+      }
+      b.wardDrift = dx === 0 && dy === 0 ? null : Math.atan2(dy, dx);
+      this._collectEnemies(owner, b, now);
+      this._prune(b, now);
+      this._cluster(b, now);
+    }
+    // Every enemy any of this fleet's connections can see, merged and
+    // deduplicated. Each connection's `enemies` array was built by the update
+    // stream this tick and has already had the allegiance filter applied, so
+    // nothing protected can enter here.
+    _collectEnemies(owner, b, now) {
+      const seen = new Set;
+      const list = b.enemies;
+      list.length = 0;
+      const ax = b.anchor.x, ay = b.anchor.y;
+      const sources = b.guards.length > 0 ? b.guards : owner.clientList();
+      const consider = c => {
+        const pm = c && c.PlayerManager;
+        if (!pm) return;
+        const arr = pm.enemies;
+        for (let i = 0; i < arr.length; i++) {
+          const p = arr[i];
+          if (!p || !p.pos || seen.has(p.id)) continue;
+          const pos = p.pos.current;
+          const ex = pos.x - ax, ey = pos.y - ay;
+          const dist = hyp(ex, ey);
+          if (dist > PROT_ENGAGE_RANGE) continue;
+          seen.add(p.id);
+          // One tick of movement, kept per player so "are these two walking
+          // together" has something to compare.
+          let t = b.track.get(p.id);
+          if (t === void 0) {
+            t = {
+              x: pos.x,
+              y: pos.y,
+              vx: 0,
+              vy: 0,
+              at: now
+            };
+            b.track.set(p.id, t);
+          } else if (now - t.at >= PROT_BOARD_MS) {
+            t.vx = pos.x - t.x;
+            t.vy = pos.y - t.y;
+            t.x = pos.x;
+            t.y = pos.y;
+            t.at = now;
+          }
+          const held = p.weapon ? p.weapon.current : null;
+          const owns = p.weapon ? p.weapon.secondary : null;
+          const holdingRanged = held !== null && held !== void 0 && PROT_RANGED_IDS.has(held);
+          const ownsRanged = owns !== null && owns !== void 0 && PROT_RANGED_IDS.has(owns);
+          list.push({
+            player: p,
+            id: p.id,
+            x: pos.x,
+            y: pos.y,
+            vx: t.vx,
+            vy: t.vy,
+            dist: dist,
+            angle: Math.atan2(ey, ex),
+            stem: protNameStem(p.nickname),
+            clan: p.clanName || null,
+            holdingRanged: holdingRanged,
+            ownsRanged: ownsRanged
+          });
+          if (holdingRanged && dist <= PROT_SHIELD_RANGE || ownsRanged && dist <= PROT_SHIELD_RANGE * .7) {
+            b.rangedAt = now;
+          }
+        }
+      };
+      for (let i = 0; i < sources.length; i++) {
+        consider(sources[i]);
+      }
+      for (let i = 0; i < b.wards.length; i++) {
+        consider(b.wards[i]);
+      }
+      if (list.length > 0) {
+        b.threatAt = now;
+      }
+      // Anyone not seen for a while is not worth remembering a velocity for.
+      if (b.track.size > 64) {
+        for (const [id, t] of b.track) {
+          if (now - t.at > 4e3) b.track.delete(id);
+        }
+      }
+    }
+    // Move every tracked arrow along its own heading and drop the ones that
+    // have landed or expired, then record which of them still threaten the
+    // group. Predicted, not observed: a projectile that has already hit is a
+    // projectile the shield was too late for.
+    _prune(b, now) {
+      const live = [];
+      const incoming = b.incoming;
+      incoming.length = 0;
+      const covered = b.wards.length > 0 ? b.wards : b.guards;
+      for (let i = 0; i < b.projectiles.length; i++) {
+        const q = b.projectiles[i];
+        const age = now - q.at;
+        if (age > PROT_PROJ_LIFE_MS) continue;
+        const travelled = q.speed * age;
+        if (travelled > q.range) continue;
+        live.push(q);
+        const cx = q.x + Math.cos(q.angle) * travelled;
+        const cy = q.y + Math.sin(q.angle) * travelled;
+        const left = q.range - travelled;
+        const ex = cx + Math.cos(q.angle) * left;
+        const ey = cy + Math.sin(q.angle) * left;
+        for (let k = 0; k < covered.length; k++) {
+          const p = covered[k].myPlayer;
+          if (!p || !p.pos) continue;
+          const t = p.pos.current;
+          const s = p.scale + 18;
+          if (lineInRect(t.x - s, t.y - s, t.x + s, t.y + s, cx, cy, ex, ey)) {
+            incoming.push({
+              x: cx,
+              y: cy,
+              angle: q.angle,
+              from: q.angle + Math.PI,
+              damage: q.damage
+            });
+            b.rangedAt = now;
+            break;
+          }
+        }
+      }
+      b.projectiles = live;
+    }
+    // Which directions the screen has to cover.
+    //
+    // A group is not "two players with similar names". Proximity is the entry
+    // condition — a cluster is built out of it — and a cluster only counts as
+    // a group when at least one other signal agrees: a shared name stem, a
+    // shared tribe, or a shared direction of travel. That is what stops three
+    // unrelated people who happen to be standing near each other from being
+    // read as a squad, and it is also why a squad that has spread its names
+    // out is still caught by the movement test.
+    _cluster(b, now) {
+      const sectors = b.sectors;
+      sectors.length = 0;
+      b.grouped = false;
+      b.groupSize = 0;
+      const enemies = b.enemies;
+      if (enemies.length === 0) {
+        return;
+      }
+      // Single-link clustering. The enemy list is what one fleet can see, so
+      // this is small; it is also only run once per owner per tick.
+      const label = new Array(enemies.length).fill(-1);
+      let groups = 0;
+      const r2 = PROT_GROUP_RADIUS * PROT_GROUP_RADIUS;
+      for (let i = 0; i < enemies.length; i++) {
+        if (label[i] !== -1) continue;
+        const id = groups++;
+        label[i] = id;
+        const stack = [ i ];
+        while (stack.length > 0) {
+          const a = stack.pop();
+          for (let j = 0; j < enemies.length; j++) {
+            if (label[j] !== -1) continue;
+            const ddx = enemies[a].x - enemies[j].x;
+            const ddy = enemies[a].y - enemies[j].y;
+            if (ddx * ddx + ddy * ddy > r2) continue;
+            label[j] = id;
+            stack.push(j);
+          }
+        }
+      }
+      const buckets = [];
+      for (let g = 0; g < groups; g++) {
+        buckets.push([]);
+      }
+      for (let i = 0; i < enemies.length; i++) {
+        buckets[label[i]].push(enemies[i]);
+      }
+      const rated = [];
+      for (let g = 0; g < buckets.length; g++) {
+        const members = buckets[g];
+        let score = 0;
+        // Shared name stem.
+        const stems = new Map;
+        let stemPair = false;
+        for (const m of members) {
+          if (!m.stem) continue;
+          const c = (stems.get(m.stem) || 0) + 1;
+          stems.set(m.stem, c);
+          if (c >= 2) stemPair = true;
+        }
+        if (stemPair) score += 1;
+        // Shared tribe.
+        const clans = new Map;
+        let clanPair = false;
+        for (const m of members) {
+          if (!m.clan) continue;
+          const c = (clans.get(m.clan) || 0) + 1;
+          clans.set(m.clan, c);
+          if (c >= 2) clanPair = true;
+        }
+        if (clanPair) score += 1;
+        // Walking together: two members with real speed whose headings agree.
+        let sync = false;
+        for (let i = 0; i < members.length && !sync; i++) {
+          const a = members[i];
+          const la = hyp(a.vx, a.vy);
+          if (la < 2) continue;
+          for (let j = i + 1; j < members.length; j++) {
+            const c = members[j];
+            const lc = hyp(c.vx, c.vy);
+            if (lc < 2) continue;
+            if ((a.vx * c.vx + a.vy * c.vy) / (la * lc) > .6) {
+              sync = true;
+              break;
+            }
+          }
+        }
+        if (sync) score += 1;
+        // Density on its own is weak, so it is worth half a signal: it can
+        // finish a case another signal has already opened, never open one.
+        if (members.length >= 3) score += 1;
+        let sx = 0, sy = 0, near = Infinity, ranged = false;
+        for (const m of members) {
+          sx += Math.cos(m.angle);
+          sy += Math.sin(m.angle);
+          if (m.dist < near) near = m.dist;
+          if (m.holdingRanged || m.ownsRanged) ranged = true;
+        }
+        rated.push({
+          members: members,
+          angle: Math.atan2(sy, sx),
+          dist: near,
+          ranged: ranged,
+          size: members.length,
+          // Proximity is already true for every member of a cluster, so it is
+          // the +1 that every cluster starts with; a lone player scores it and
+          // nothing else, and never reaches the bar.
+          score: score + 1,
+          group: members.length >= 2 && score >= 1
+        });
+      }
+      rated.sort((a, c) => a.dist - c.dist);
+      for (const r of rated) {
+        if (r.group) {
+          b.grouped = true;
+          b.groupSize = Math.max(b.groupSize, r.size);
+        }
+      }
+      // Cover at most the two nearest threat directions, and only treat them
+      // as separate when they really are: two clusters within a sector's width
+      // of each other are one arc to hold, not two lines to split.
+      const chosen = [];
+      for (const r of rated) {
+        if (chosen.length === 0) {
+          chosen.push(r);
+          continue;
+        }
+        if (chosen.length >= 2) break;
+        let apart = true;
+        for (const c of chosen) {
+          if (getAngleDist(c.angle, r.angle) < PROT_SECTOR_SPLIT) {
+            apart = false;
+            break;
+          }
+        }
+        if (apart) chosen.push(r);
+      }
+      const guards = b.guardSlots || b.guards.length;
+      if (chosen.length === 0 || guards === 0) {
+        return;
+      }
+      // Slots are handed to sectors in fleet order and in contiguous runs, so
+      // a guard's sector only changes when the number of sectors does — and
+      // when it does, it moves as part of a block rather than swapping places
+      // with somebody.
+      const per = Math.ceil(guards / chosen.length);
+      let from = 0;
+      for (let i = 0; i < chosen.length; i++) {
+        const take = Math.min(per, guards - from);
+        if (take <= 0) break;
+        sectors.push({
+          angle: chosen[i].angle,
+          dist: chosen[i].dist,
+          ranged: chosen[i].ranged,
+          size: chosen[i].size,
+          group: chosen[i].group,
+          from: from,
+          count: take
+        });
+        from += take;
+      }
+    }
+  };
+
+  class BotProtection {
+    moduleName="botProtection";
+    client;
+    // Weapon state, per guard. `mode` is what it is holding and why; the two
+    // timestamps are the hysteresis that stops it changing its mind every
+    // tick.
+    mode="daggers";
+    shieldUntil=0;
+    lastSwitch=0;
+    lastBoost=0;
+    lastHeading=null;
+    active=false;
+    constructor(client2) {
+      this.client = client2;
+    }
+    reset() {
+      this.active = false;
+      this.lastHeading = null;
+      this.mode = "daggers";
+      this.shieldUntil = 0;
+    }
+    _release(mh) {
+      if (this.active) {
+        this.active = false;
+        this.lastHeading = null;
+        mh._botProtectActive = false;
+      }
+    }
+    _steer(mh, heading) {
+      if (this.lastHeading !== null && getAngleDist(this.lastHeading, heading) <= PROT_HEADING_DEADBAND) {
+        mh.move_dir = heading;
+        return;
+      }
+      this.lastHeading = heading;
+      if (mh.startMovement(heading) === false) {
+        this.lastHeading = null;
+      }
+    }
+    _halt(mh) {
+      if (this.lastHeading !== null) {
+        this.lastHeading = null;
+        mh.stopMovement();
+      }
+    }
+    // Daggers and shield, by inventory slot. A guard that has not reached the
+    // age for one of them simply uses what it has — the role is not withheld
+    // for it, but nothing pretends the item is there either.
+    _has(slot, id) {
+      const have = this.client.myPlayer.getItemByType(slot);
+      return have === id;
+    }
+    _equip(mh, slot, angle, attack) {
+      const now = Date.now();
+      const holding = mh.currentHolding;
+      if (holding !== slot && now - this.lastSwitch < PROT_SWITCH_COOLDOWN_MS) {
+        // Too soon to change weapon: keep what is in hand, keep facing the
+        // threat. Switching every tick costs two packets a tick and leaves the
+        // guard holding neither thing properly.
+        mh.useAngle = angle;
+        mh._currentAngle = angle;
+        mh.moduleActive = true;
+        return;
+      }
+      if (holding !== slot) {
+        this.lastSwitch = now;
+      }
+      mh.forceWeapon = slot;
+      mh.useAngle = angle;
+      mh._currentAngle = angle;
+      mh.shouldAttack = !!attack;
+      mh.moduleActive = true;
+    }
+    // Is anything shooting at this guard's group right now, or about to.
+    _rangedThreat(board, now, myPos) {
+      if (board.incoming.length > 0) {
+        // `from` already points back down the arrow's flight line, which is
+        // where the shield has to look: the server blocks when
+        // `getAngleDist(projectile.dir + PI, player.dir) <= shieldAngle`, and
+        // `from` is that `projectile.dir + PI`. Facing the way the arrow is
+        // travelling instead would turn the guard's back to it.
+        return board.incoming[0].from;
+      }
+      let best = null, bestDist = Infinity;
+      for (let i = 0; i < board.enemies.length; i++) {
+        const e = board.enemies[i];
+        if (!e.holdingRanged && !e.ownsRanged) continue;
+        const d = hyp(e.x - myPos.x, e.y - myPos.y);
+        const limit = e.holdingRanged ? PROT_SHIELD_RANGE : PROT_SHIELD_RANGE * .7;
+        if (d > limit) continue;
+        if (d < bestDist) {
+          bestDist = d;
+          best = e;
+        }
+      }
+      if (best === null) {
+        return null;
+      }
+      return Math.atan2(best.y - myPos.y, best.x - myPos.x);
+    }
+    // A boost pad is a shove, not a wall — and it shoves whoever steps on it,
+    // friend or enemy, because the server's booster branch has no team test at
+    // all. So one is only ever laid on a heading that has nothing of mine on
+    // it, and the search is a ring around the formation rather than a line
+    // through it.
+    _boost(mh, myPos, toSlot, dist, now) {
+      if (dist < PROT_BOOST_MIN_DIST || now - this.lastBoost < PROT_BOOST_COOLDOWN_MS) {
+        return false;
+      }
+      const myPlayer = this.client.myPlayer;
+      const padID = myPlayer.getItemByType(7);
+      if (padID !== 16) {
+        return false;
+      }
+      if (!myPlayer.canPlace(7)) {
+        return false;
+      }
+      const owner = this.client.ownerClient;
+      const mates = [];
+      for (const bot of owner.clientList()) {
+        if (bot === this.client) continue;
+        const p = bot.myPlayer;
+        if (!p || !p.inGame || !p.pos) continue;
+        mates.push(p.pos.current);
+      }
+      const ownerPlayer = owner.myPlayer;
+      if (ownerPlayer && ownerPlayer.inGame && ownerPlayer.pos) {
+        mates.push(ownerPlayer.pos.current);
+      }
+      const padItem = Items[padID];
+      const reach = myPlayer.getItemPlaceScale(padID);
+      // The pad itself, and then the corridor it throws anything that touches
+      // it down. Both have to be clear of the fleet.
+      const corridor = 240;
+      const corridorHalf = padItem.scale;
+      const offsets = [ 0, .39, -.39, .79, -.79, 1.18, -1.18 ];
+      for (let i = 0; i < offsets.length; i++) {
+        const a = toSlot + offsets[i];
+        const spot = myPos.addDirection(a, reach);
+        const ex = spot.x + Math.cos(a) * corridor;
+        const ey = spot.y + Math.sin(a) * corridor;
+        let clear = true;
+        for (let k = 0; k < mates.length; k++) {
+          const m = mates[k];
+          if (spot.distance(m) <= padItem.scale + 35 + 10) {
+            clear = false;
+            break;
+          }
+          const s = 35 + corridorHalf;
+          if (lineInRect(m.x - s, m.y - s, m.x + s, m.y + s, spot.x, spot.y, ex, ey)) {
+            clear = false;
+            break;
+          }
+        }
+        if (!clear) continue;
+        if (mh.requestPlace(7, a, "botProtection") > 0) {
+          this.lastBoost = now;
+          mh.placedOnce = true;
+          return true;
+        }
+        return false;
+      }
+      return false;
+    }
+    postTick() {
+      const c = this.client;
+      const mh = c._ModuleHandler;
+      if (c.isOwner || !RynProtect.enabled) {
+        this._release(mh);
+        return;
+      }
+      const owner = c.ownerClient;
+      const myPlayer = c.myPlayer;
+      if (!owner || !myPlayer || !myPlayer.inGame || !myPlayer.pos) {
+        this._release(mh);
+        return;
+      }
+      const role = RynProtect.roleOf(owner, c);
+      if (!role.isGuard) {
+        this._release(mh);
+        return;
+      }
+      // The same four gates every other bot-movement module stands down for.
+      if (Possess !== null && Possess.isActive(c)) {
+        this._release(mh);
+        return;
+      }
+      if (Settings_default._botsFrozen || mh._autoFarmActive) {
+        this._release(mh);
+        return;
+      }
+      if (window._gbot1v1BotID !== null && c === window._gbot1v1BotID) {
+        this._release(mh);
+        return;
+      }
+      try {
+        if (typeof _isControlled === "function" && !_isControlled(c)) {
+          this._release(mh);
+          return;
+        }
+      } catch (_) {}
+      const now = Date.now();
+      const board = RynProtect.board(owner, now);
+      const myPos = myPlayer.pos.current;
+      // Which sector this guard belongs to, and where it stands inside it.
+      let sector = null;
+      for (let i = 0; i < board.sectors.length; i++) {
+        const s = board.sectors[i];
+        if (role.slot >= s.from && role.slot < s.from + s.count) {
+          sector = s;
+          break;
+        }
+      }
+      // No threat worth forming against: hold the screen on the side the
+      // group is heading, so it is already in front when something arrives.
+      const facing = sector !== null ? sector.angle : board.wardDrift !== null ? board.wardDrift : mh._currentAngle || 0;
+      // Both come from the configured guard count and this bot's fleet index,
+      // never from how many guards happen to be alive. A guard that dies would
+      // otherwise shrink the formation and move everybody else's slot, and
+      // they would all move back again when it respawned.
+      const localCount = sector !== null ? sector.count : Math.max(1, role.count);
+      const localSlot = sector !== null ? role.slot - sector.from : role.slot;
+      const pct = clamp(Number(Settings_default._botProtectionAdvance) || 0, 0, 100) / 100;
+      // Advance moves the whole shape forward and deepens it — the ranks
+      // spread out as the screen is pushed further from what it covers, which
+      // is the difference between a huddle and a picket line.
+      const ahead = PROT_ADVANCE_MIN + pct * (PROT_ADVANCE_MAX - PROT_ADVANCE_MIN);
+      const spacing = RynFormations.spacingFor(84 + pct * 16);
+      const depth = 52 + pct * 88;
+      const shape = Settings_default._botProtectionFormation || "wall";
+      const offset = RynFormations.world(shape, localSlot, localCount, facing, {
+        spacing: spacing,
+        depth: depth,
+        radius: 120 + pct * 120
+      });
+      const wantX = clamp(board.anchor.x + Math.cos(facing) * ahead + offset.dx, 0, Config_default.mapScale);
+      const wantY = clamp(board.anchor.y + Math.sin(facing) * ahead + offset.dy, 0, Config_default.mapScale);
+      const dx = wantX - myPos.x;
+      const dy = wantY - myPos.y;
+      const dist = hyp(dx, dy);
+      const toSlot = Math.atan2(dy, dx);
+      this.active = true;
+      mh._botProtectActive = true;
+      // ── the state machine ────────────────────────────────────────────────
+      //
+      //   SAFE          daggers, move to the slot
+      //   RANGED        shield up, face the shot, hold the slot
+      //   CONTACT       daggers, swing — but only when swinging does not
+      //                 compromise the screen and does not sweep anyone of
+      //                 mine, which UpdateAttack's own gate decides for us
+      const rangedAngle = this._rangedThreat(board, now, myPos);
+      if (rangedAngle !== null) {
+        this.shieldUntil = now + PROT_SHIELD_HOLD_MS;
+        this.mode = "shield";
+      } else if (now >= this.shieldUntil) {
+        this.mode = "daggers";
+      }
+      if (this.mode === "shield" && this._has(1, 11)) {
+        const faceAt = rangedAngle !== null ? rangedAngle : facing;
+        // Closing the last of the gap matters more than the shield's speed
+        // penalty; once on the slot, the guard stands and blocks.
+        if (dist > PROT_ARRIVE * 2) {
+          this._steer(mh, toSlot);
+        } else {
+          this._halt(mh);
+        }
+        this._equip(mh, 1, faceAt, false);
+        return;
+      }
+      // Daggers: the fastest weapon in the game, which is what a guard that
+      // has to keep up with a moving group wants in its hand.
+      const dagger = this._has(0, 7);
+      if (dist > PROT_ARRIVE) {
+        this._steer(mh, toSlot);
+        this._boost(mh, myPos, toSlot, dist, now);
+      } else {
+        // On station. Drift with the group rather than standing while it
+        // walks out from behind the screen.
+        if (board.wardDrift !== null) {
+          this._steer(mh, board.wardDrift);
+        } else {
+          this._halt(mh);
+        }
+      }
+      // Guards are guards first: a swing is only taken at something that has
+      // come to them, and never by walking out of the slot to find it.
+      let target = null;
+      let targetDist = Infinity;
+      const reachID = myPlayer.getItemByType(0);
+      let reach = 70;
+      try {
+        reach = DataHandler_default.getWeapon(reachID).range;
+      } catch (_) {}
+      for (let i = 0; i < board.enemies.length; i++) {
+        const e = board.enemies[i];
+        const d = hyp(e.x - myPos.x, e.y - myPos.y);
+        if (d > reach + e.player.hitScale) continue;
+        if (d < targetDist) {
+          targetDist = d;
+          target = e;
+        }
+      }
+      if (target !== null) {
+        const aimAt = target.player.pos.future || target.player.pos.current;
+        this._equip(mh, 0, myPos.angle(aimAt), true);
+        return;
+      }
+      this._equip(mh, dagger ? 0 : mh.currentHolding <= 1 ? mh.currentHolding : 0, facing, false);
+    }
+  }
+
   class GuardModule {
     moduleName="guardModule";
     client;
@@ -23825,6 +25838,10 @@ window.grbtp = 35;
           if (p === oc.myPlayer) continue;
           if (oc.isBotByID && oc.isBotByID(p.id)) continue;
         if (oc.myPlayer.clanName && p.clanName === oc.myPlayer.clanName) continue;
+          // Ownership and the exclusion list, which the clan test above
+          // cannot see: a bot on its own tribe fails that test and is still
+          // never a target.
+          if (RynAllegiance.isProtected(this.client, p)) continue;
           const dx = p.pos.current.x - fromPos.x;
           const dy = p.pos.current.y - fromPos.y;
           list.push({
@@ -23892,6 +25909,7 @@ window.grbtp = 35;
             if (!p || !p.inGame || p === oc.myPlayer) continue;
             if (oc.isBotByID && oc.isBotByID(p.id)) continue;
             if (oc.myPlayer.clanName && p.clanName && oc.myPlayer.clanName === p.clanName) continue;
+            if (RynAllegiance.isProtected(this.client, p)) continue;
             const sec = p.weapon ? p.weapon.secondary : null;
             if (sec !== null && sec !== undefined && RANGED_IDS.has(sec)) {
               rangedEnemiesRaw.push(p);
@@ -24607,6 +26625,13 @@ window.grbtp = 35;
     prevMoveTo="disable";
     autoattack=false;
     shouldAttack=false;
+    // Raised for one tick when a swing or shot was held back because it would
+    // have hit something protected. Read by the kite and the guards, which
+    // answer it by moving rather than by trying the same frame again.
+    blockedByProtected=false;
+    // This bot is holding a slot in the protection screen, so the modules that
+    // would otherwise decide where it walks stand aside.
+    _botProtectActive=false;
     mouse={
       sentAngle: 0
     };
@@ -24620,6 +26645,7 @@ window.grbtp = 35;
         tempData: new TempData_default(client2),
         movement: new Movement_default(client2),
         clanJoiner: new ClanJoiner_default(client2),
+        botProtection: new BotProtection(client2),
         autoAccept: new AutoAccept_default(client2),
         autoBuy: new AutoBuy(client2),
         defaultHat: new DefaultHat(client2),
@@ -24693,7 +26719,13 @@ window.grbtp = 35;
       // target is should be walking to them rather than roaming, and roaming is
       // what is left. It sets and clears `_scanMissionActive` before either
       // botExplorer or Movement reads it.
-      this.botModules = [ this.staticModules.tempData, this.staticModules.clanJoiner, this.staticModules.botRangedAttack, this.staticModules.botScanMission, this.staticModules.botExplorer, this.staticModules.movement, this.staticModules.botAutoBreak ];
+      // botProtection goes in front of the three movement claims for the same
+      // reason botRangedAttack sits in front of two of them: a guard holding a
+      // slot in the screen is not roaming, not converging on a scan target and
+      // not walking back to the owner. It claims the tick outright, so the
+      // modules after it stand down on `moduleActive` the way they already do
+      // for the kite.
+      this.botModules = [ this.staticModules.tempData, this.staticModules.clanJoiner, this.staticModules.botProtection, this.staticModules.botRangedAttack, this.staticModules.botScanMission, this.staticModules.botExplorer, this.staticModules.movement, this.staticModules.botAutoBreak ];
       this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.spikeSyncHammer, this.staticModules.adaptiveGearSwitching, this.staticModules.spikeSync, this.staticModules.velocityTick, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.antiRetrap, this.staticModules.autoBreak, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.spikeKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.autoPush, this.staticModules.trapStandoff, this.staticModules.autoPlay, this.staticModules.autoPlacer, this.staticModules.placementEngine, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule, this.staticModules.rynLink ];
       this.reset();
     }
@@ -24887,7 +26919,72 @@ window.grbtp = 35;
       this.client.PacketManager.selectItemByID(item, false);
       this.currentHolding = type;
     }
+    // The last gate in front of a damaging frame, and the only one that sees
+    // every swing and shot however it was decided — the insta modules, the
+    // kite, the guards, auto break, the placer's own hits. It answers one
+    // question: would this frame, as sent, damage something of mine or
+    // something excluded. If it would, the direction is nudged to one that
+    // still contains the intended target and does not contain them; if there
+    // is no such direction, the frame is not sent at all.
+    //
+    // A placement reaches attack() too — place() selects the item first, which
+    // takes `currentHolding` off the weapon slots — and a placement damages
+    // nobody, so `holdingWeapon` is the whole test for "this frame can hurt
+    // someone". The owner's own swings are never gated: this is about what
+    // bots do on their own.
+    _gateAttackAngle(angle) {
+      const c = this.client;
+      if (c.isOwner || angle === null || angle === undefined || !this.holdingWeapon) {
+        return angle;
+      }
+      // A bot you are driving yourself is you, so it is ungated like you.
+      //
+      // Your own clicks never reached this in the first place: the bundle
+      // raises the attack frame and the possession wrapper hands it straight
+      // to the active entity's PacketManager, which is a different path to
+      // this one. What this line changes is the rest of that bot's tick — the
+      // insta modules, auto break, the swing modules — so the whole
+      // connection behaves the way the main player's does while you hold it,
+      // rather than half of it obeying a rule the half you are steering does
+      // not.
+      if (Possess !== null && Possess.isActive(c)) {
+        return angle;
+      }
+      const shielded = RynSafeAim.shielded(c);
+      if (shielded.length === 0) {
+        return angle;
+      }
+      const slot = this.currentHolding;
+      const myPlayer = c.myPlayer;
+      const id = myPlayer.getItemByType(slot);
+      if (id === null || id === undefined) {
+        return angle;
+      }
+      let shootable = false;
+      try {
+        shootable = DataHandler_default.isShootable(id);
+      } catch (_) {}
+      const keep = c.EnemyManager.nearestEntity;
+      if (shootable) {
+        // An arrow stops at the first body it crosses, so a protected player
+        // only matters up to the target's own distance — someone standing
+        // well behind the target is never reached. With no target at all,
+        // anything on the line is a reason to hold.
+        let maxDist = null;
+        if (keep && keep.pos) {
+          maxDist = myPlayer.pos.current.distance(keep.pos.current) + keep.hitScale;
+        }
+        return RynSafeAim.shotBlocker(c, angle, slot, maxDist, shielded) === null ? angle : null;
+      }
+      return RynSafeAim.safeMeleeAngle(c, angle, slot, keep, shielded);
+    }
     attack(angle, priority = 2) {
+      const gated = this._gateAttackAngle(angle);
+      if (gated === null && angle !== null) {
+        this.blockedByProtected = true;
+        return;
+      }
+      angle = gated;
       if (angle !== null) {
         this.mouse.sentAngle = angle;
       }
@@ -24943,17 +27040,79 @@ window.grbtp = 35;
     // reservation ledger and the packet budget, and is batched and recorded
     // like every other placement. place() below is the wire primitive the
     // engine's executor drives; nothing else should be calling it.
+    // Spikes and pit traps are weapons the server resolves on contact, and it
+    // resolves them by the same clan rule as a swing:
+    //
+    //     u.dmg && u.owner != h && !(u.owner.team && u.owner.team == h.team)
+    //
+    // So a spike dropped next to a bot on its own tribe, or next to an
+    // excluded player, damages them — and a trap locks them. This is the same
+    // question _gateAttackAngle asks about a swing, asked about the footprint
+    // the placement would occupy.
+    _placementHitsProtected(type, angle) {
+      if (type !== 4 && type !== 7) {
+        return false;
+      }
+      const c = this.client;
+      if (c.isOwner) {
+        return false;
+      }
+      // Same rule as the swing: the bot you are holding places what you place.
+      if (Possess !== null && Possess.isActive(c)) {
+        return false;
+      }
+      const shielded = RynSafeAim.shielded(c);
+      if (shielded.length === 0) {
+        return false;
+      }
+      const myPlayer = c.myPlayer;
+      const id = myPlayer.getItemByType(type);
+      if (id === null || id === undefined) {
+        return false;
+      }
+      const item = Items[id];
+      // A boost pad shares the trap slot and hurts nobody — it is handled by
+      // the protection module's own placement rules, not refused here.
+      if (!item || !("damage" in item) && !item.trap) {
+        return false;
+      }
+      const spot = myPlayer.pos.current.addDirection(angle, myPlayer.getItemPlaceScale(id));
+      for (let i = 0; i < shielded.length; i++) {
+        const p = shielded[i];
+        const reach = item.scale + p.collisionScale;
+        if (spot.distance(p.pos.current) <= reach || spot.distance(p.pos.future) <= reach) {
+          return true;
+        }
+      }
+      return false;
+    }
     requestPlace(type, angle, owner) {
+      if (this._placementHitsProtected(type, angle)) {
+        this.blockedByProtected = true;
+        return 0;
+      }
       const engine = this.staticModules && this.staticModules.placementEngine;
       if (engine) return engine.request(type, angle, { owner: owner || this.activeModule });
       this.place(type, angle);
       return 1;
     }
     requestPlaceMany(type, angles, owner) {
+      let safe = angles;
+      if (type === 4 || type === 7) {
+        safe = [];
+        for (const a of angles) {
+          if (this._placementHitsProtected(type, a)) {
+            this.blockedByProtected = true;
+            continue;
+          }
+          safe.push(a);
+        }
+        if (safe.length === 0) return 0;
+      }
       const engine = this.staticModules && this.staticModules.placementEngine;
-      if (engine) return engine.requestMany(type, angles, { owner: owner || this.activeModule });
+      if (engine) return engine.requestMany(type, safe, { owner: owner || this.activeModule });
       let n = 0;
-      for (const a of angles) { this.place(type, a); n++; }
+      for (const a of safe) { this.place(type, a); n++; }
       return n;
     }
     // Every placement goes out through place(), so recording the footprint
@@ -25084,6 +27243,7 @@ window.grbtp = 35;
       this.useAcc = null;
       this.useAngle = null;
       this.shouldAttack = false;
+      this.blockedByProtected = false;
       this.prevMoveTo = this.moveTo;
       this.moveTo = "disable";
       if (!isOwner) {
@@ -25208,6 +27368,10 @@ window.grbtp = 35;
     }
     _touchClients() {
       this._clientCacheSize = -1;
+      // The friendly set is keyed off the fleet, so it goes stale here too.
+      try {
+        RynAllegiance.invalidate();
+      } catch (_) {}
     }
     // The fleet as an array, without a spread per caller. Treat it as read-only:
     // it is the cache, not a copy.
@@ -26636,7 +28800,7 @@ window.grbtp = 35;
       button.onclick = () => {
         try {
           const a = clanRecheck(client);
-          button.textContent = a.clan === null ? "You are not in a clan" : a.joined + "/" + a.total + " joined — retrying the rest";
+          button.textContent = a.individual ? a.joined + "/" + a.total + " bots on their own tribe — retrying the rest" : a.clan === null ? "You are not in a clan" : a.joined + "/" + a.total + " joined — retrying the rest";
           setTimeout(() => {
             button.textContent = "Re-check clan joins";
           }, 2500);
@@ -26660,7 +28824,100 @@ window.grbtp = 35;
       this._attachSpawnUI();
       this._attachScanUI();
       this._attachFormationSelector();
+      this._attachProtectionUI();
       this._attachWeaponSelector();
+    }
+
+    // ── Bot Protection panel ────────────────────────────────────────────────
+    //
+    // The toggle and the two sliders bind through attachCheckboxes and
+    // attachSliders like everything else; the select is filled from the shared
+    // formation table so the shapes offered here and in the fleet's own
+    // formation picker can never drift apart. What is left is the live line,
+    // which rides the same 500ms timer the scan panel uses and is gated the
+    // same way.
+    _attachProtectionUI() {
+      const doc = this.frame.document;
+      const select = doc.getElementById("_botProtectionFormation");
+      if (select) {
+        select.innerHTML = "";
+        for (const f of RynFormations.LIST) {
+          const option = doc.createElement("option");
+          option.value = f.id;
+          option.textContent = f.icon + "  " + f.label;
+          select.appendChild(option);
+        }
+        select.value = Settings_default._botProtectionFormation;
+      }
+      // The slider is deliberately not clamped to the current fleet size: the
+      // fleet grows and shrinks, and rewriting a chosen 5 down to 3 because
+      // two bots happen to be disconnected is not what was asked for.
+      // RynProtect.guardCount takes the minimum at the point of use instead,
+      // so a fleet smaller than the setting simply puts everyone on guard.
+      if (this._protectTimer) {
+        clearInterval(this._protectTimer);
+      }
+      this._protectTimer = setInterval(() => {
+        try {
+          this._protectRefresh();
+        } catch (_) {}
+      }, 500);
+      this._protectRefresh();
+    }
+    _protectTimer=null;
+    _protectRefresh() {
+      if (!this.frame || !this.frame.document) {
+        return;
+      }
+      const doc = this.frame.document;
+      const stateEl = doc.getElementById("_protectState");
+      const statusEl = doc.getElementById("_protectStatus");
+      if (!stateEl && !statusEl) {
+        return;
+      }
+      // Nothing to write for a page nobody is looking at, and the live line
+      // below asks the board to rebuild — so this gate is what keeps a closed
+      // menu from costing a fleet sweep twice a second.
+      if (!this.menuOpened) {
+        return;
+      }
+      const page = statusEl && statusEl.closest(".menu-page");
+      if (page && !page.classList.contains("opened")) {
+        return;
+      }
+      const on = !!Settings_default._botProtection;
+      const fleet = client.clients.size;
+      const count = RynProtect.guardCount(client);
+      if (stateEl) {
+        stateEl.textContent = !on ? "off" : count + " of " + fleet;
+      }
+      if (!statusEl) {
+        return;
+      }
+      if (!on) {
+        statusEl.textContent = "Off. The whole fleet keeps its normal jobs.";
+        return;
+      }
+      if (fleet === 0) {
+        statusEl.textContent = "On, but no bots are connected.";
+        return;
+      }
+      const board = RynProtect.board(client, Date.now());
+      const covering = board.wards.length;
+      const bits = [];
+      bits.push(count + " guard" + (count === 1 ? "" : "s"));
+      bits.push(covering > 0 ? "covering " + covering + " bot" + (covering === 1 ? "" : "s") : "covering each other");
+      if (board.sectors.length === 0) {
+        bits.push("no threat in range");
+      } else if (board.sectors.length === 1) {
+        bits.push(board.grouped ? "holding against a group of " + board.groupSize : "holding against " + board.sectors[0].size);
+      } else {
+        bits.push("split across " + board.sectors.length + " directions");
+      }
+      if (board.incoming.length > 0) {
+        bits.push(board.incoming.length + " shot" + (board.incoming.length === 1 ? "" : "s") + " incoming");
+      }
+      statusEl.textContent = bits.join(" · ") + ".";
     }
 
     // ── Spawn panel ─────────────────────────────────────────────────────────
@@ -26803,6 +29060,7 @@ window.grbtp = 35;
     // different page is open.
     _scanRevision=-1;
     _scanDexRevision=-1;
+    _scanExclRevision=-1;
     _attachScanUI() {
       const doc = this.frame.document;
       const listEl = doc.getElementById("_scanList");
@@ -26857,6 +29115,19 @@ window.grbtp = 35;
           this._scanRefresh(true);
         };
       }
+      const clearExcludedEl = doc.getElementById("_scanClearExcluded");
+      if (clearExcludedEl) {
+        clearExcludedEl.onclick = () => {
+          const had = RynAllegiance.count;
+          RynAllegiance.clear();
+          try {
+            if (window._rynBotToast && had > 0) {
+              window._rynBotToast("Exclusions cleared — " + had + " player" + (had === 1 ? "" : "s") + " targetable again");
+            }
+          } catch (_) {}
+          this._scanRefresh(true);
+        };
+      }
       if (this._scanTimer) {
         clearInterval(this._scanTimer);
       }
@@ -26902,7 +29173,8 @@ window.grbtp = 35;
         toggleEl.classList.toggle("primary", !RynScan.on);
       }
       if (countEl) {
-        countEl.textContent = picked === 0 ? "none picked" : picked + " picked" + (RynScan.on && found > 0 ? ", " + found + " found" : "");
+        const excl = RynAllegiance.count;
+        countEl.textContent = (picked === 0 ? "none picked" : picked + " picked" + (RynScan.on && found > 0 ? ", " + found + " found" : "")) + (excl > 0 ? " · " + excl + " excluded" : "");
       }
       if (statusEl) {
         if (picked === 0) {
@@ -26923,11 +29195,12 @@ window.grbtp = 35;
           statusEl.textContent = "FOUND — " + parts.join("  ·  ");
         }
       }
-      if (!force && this._scanRevision === RynScan.revision && this._scanDexRevision === RynPlayerDex.revision) {
+      if (!force && this._scanRevision === RynScan.revision && this._scanDexRevision === RynPlayerDex.revision && this._scanExclRevision === RynAllegiance.revision) {
         return;
       }
       this._scanRevision = RynScan.revision;
       this._scanDexRevision = RynPlayerDex.revision;
+      this._scanExclRevision = RynAllegiance.revision;
       const filterEl = doc.getElementById("_scanFilter");
       const needle = filterEl && filterEl.value ? filterEl.value.trim().toLowerCase() : "";
       const rows = RynPlayerDex.list();
@@ -26960,10 +29233,11 @@ window.grbtp = 35;
         }
         shown++;
         const picked = RynScan.has(entry.id);
+        const excluded = RynAllegiance.isExcludedID(entry.id, entry.name);
         const target = picked ? RynScan.targets.get(entry.id) : null;
         const live = !!(target && target.found);
         const row = doc.createElement("div");
-        row.className = "scan-row" + (picked ? " picked" : "") + (live ? " live" : "");
+        row.className = "scan-row" + (picked ? " picked" : "") + (live ? " live" : "") + (excluded ? " excluded" : "");
 
         // A tick box rather than a highlighted row, because more than one can
         // be on at a time and a row that is merely tinted does not say that.
@@ -27003,6 +29277,45 @@ window.grbtp = 35;
           chip.textContent = "TRACKING";
           row.appendChild(chip);
         }
+        if (excluded) {
+          const chip = doc.createElement("span");
+          chip.className = "scan-chip excl";
+          chip.textContent = "EXCLUDED";
+          row.appendChild(chip);
+        }
+
+        // Two buttons rather than one, because the two states are
+        // independent: scanning a player is "find them", excluding them is
+        // "never hit them", and somebody can be both at once — which is how
+        // you keep eyes on someone the fleet must leave alone.
+        const actions = doc.createElement("span");
+        actions.className = "scan-actions";
+        const scanBtn = doc.createElement("span");
+        scanBtn.className = "scan-act" + (picked ? " on-scan" : "");
+        scanBtn.textContent = "SCAN";
+        scanBtn.title = picked ? "Stop scanning for this player" : "Send the fleet looking for this player";
+        scanBtn.onclick = e => {
+          e.stopPropagation();
+          RynScan.toggleTarget(entry.id, entry.name);
+          this._scanRefresh(true);
+        };
+        const exclBtn = doc.createElement("span");
+        exclBtn.className = "scan-act" + (excluded ? " on-excl" : "");
+        exclBtn.textContent = "EXCLUDE";
+        exclBtn.title = excluded ? "Allow bots to target this player again" : "No bot will ever attack this player";
+        exclBtn.onclick = e => {
+          e.stopPropagation();
+          const on = RynAllegiance.toggleExcluded(entry.id, entry.name);
+          try {
+            if (window._rynBotToast) {
+              window._rynBotToast(on ? "EXCLUDED " + (entry.name || entry.id) + " — no bot will attack them" : (entry.name || entry.id) + " is targetable again");
+            }
+          } catch (_) {}
+          this._scanRefresh(true);
+        };
+        actions.appendChild(scanBtn);
+        actions.appendChild(exclBtn);
+        row.appendChild(actions);
 
         row.onclick = () => {
           RynScan.toggleTarget(entry.id, entry.name);
@@ -27053,7 +29366,10 @@ window.grbtp = 35;
         id: "train",
         icon: "🚂",
         label: "Train"
-      } ];
+      },
+      // The military shapes come straight off the shared table, so the picker
+      // and the guard wall can never disagree about what exists.
+      ...RynFormations.LIST ];
       const current = () => Settings_default._formation || "none";
       const btns = {};
       grid.innerHTML = "";
@@ -27540,7 +29856,7 @@ window.grbtp = 35;
   const UI_default = UI;
   window._rynUI = UI_default;
 
-  const FORMATION_IDS = new Set([ "none", "circle", "heart", "triangle", "square", "column", "hline", "train" ]);
+  const FORMATION_IDS = new Set([ "none", "circle", "heart", "triangle", "square", "column", "hline", "train", ...RynFormations.LIST.map(f => f.id) ]);
   // Gap between carriages, in px.
   const TRAIN_SPACING = 70;
   const defaultSettings = {
@@ -27757,6 +30073,16 @@ window.grbtp = 35;
     _circleRotation: true,
     _circleRadius: 100,
     _botIndividualClans: false,
+    // Optional stem for the per-bot tribe names. Empty falls back to the
+    // fleet's own name, which is what makes "GG1" come out as GG11…GG15.
+    _botClanPrefix: "",
+    // Players who are never a target, as [sid, name] pairs. Kept in settings
+    // because "never hit this person" should survive a reload.
+    _excludedPlayers: [],
+    _botProtection: false,
+    _botProtectionGuards: 5,
+    _botProtectionAdvance: 30,
+    _botProtectionFormation: "wall",
     _autoRandomBotNames: false,
     // One name for the whole fleet. Empty means each bot is named per row.
     _botBulkName: "",
@@ -27790,6 +30116,15 @@ window.grbtp = 35;
   if (!FORMATION_IDS.has(settings._formation)) {
     settings._formation = "none";
   }
+  // The guard wall is always a shape that faces somewhere, so "none" and the
+  // world-space shapes are not offered for it.
+  if (!RynFormations.has(settings._botProtectionFormation)) {
+    settings._botProtectionFormation = "wall";
+  }
+  if (!Array.isArray(settings._excludedPlayers)) {
+    settings._excludedPlayers = [];
+  }
+  RynAllegiance.load(settings._excludedPlayers);
   if (settings._breakPosition !== "inside" && settings._breakPosition !== "outside") {
     settings._breakPosition = "inside";
   }
@@ -27914,6 +30249,11 @@ window.grbtp = 35;
       const key = iterator;
       settings[key] = defaultSettings[key];
     }
+    // The exclusion list lives in settings but is also held in memory, so a
+    // reset has to clear both or the panel would show none and the bots would
+    // still be dodging them.
+    settings._excludedPlayers = [];
+    RynAllegiance.load([]);
     SaveSettings();
     UI_default.resetFrame();
   };
@@ -33825,7 +36165,15 @@ window.grbtp = 35;
     const _orig = mp.newUpgrade.bind(mp);
     mp.newUpgrade = function(points, age) {
       let chosen, chosenSec;
-      if (Settings_default._shieldGuard) {
+      // A protection guard's loadout is not a preference, it is the job:
+      // daggers because they are the fastest weapon in the game and a guard
+      // has to keep up with the group it is covering, and the wooden shield
+      // because it is the only thing in the game that stops an arrow. The
+      // boost pad is picked below, at the age the choice is offered.
+      if (RynProtect.isGuard(botClient)) {
+        chosen = 7;
+        chosenSec = 11;
+      } else if (Settings_default._shieldGuard) {
         const ownerClient = botClient.ownerClient;
         if (ownerClient) {
           const guardIndex = ownerClient.getClientIndex(botClient);
@@ -33983,7 +36331,8 @@ window.grbtp = 35;
       }
       if (slotHasItemOnly) {
         let target = null;
-        if (age === 3) target = 1 + 16; else if (age === 4) target = (Settings_default._botAge4BoostPad ? 16 : 15) + 16; else if (age === 5) target = 7 + 16; else if (age === 7) target = 18 + 16; else if (age === 8) target = 12 + 16; else if (age === 9) target = 9 + 16;
+        const wantsBoost = Settings_default._botAge4BoostPad || RynProtect.isGuard(botClient);
+        if (age === 3) target = 1 + 16; else if (age === 4) target = (wantsBoost ? 16 : 15) + 16; else if (age === 5) target = 7 + 16; else if (age === 7) target = 18 + 16; else if (age === 8) target = 12 + 16; else if (age === 9) target = 9 + 16;
         if (target !== null && ids.includes(target)) {
           this.upgradeIndex += 1;
           botClient._ModuleHandler._upgradeItem(target);
