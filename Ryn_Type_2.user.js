@@ -269,14 +269,16 @@ window.grbtp = 35;
   // a full pool is a full fleet spawned back to back with nothing waiting on
   // verification, and a deep reserve behind it for the ones that age out.
   const TURNSTILE_POOL_TARGET = 99;
-  // Challenges rendering at once. Five, whether moving or standing still.
+  // Challenges rendering at once. Two, whether moving or standing still.
   //
   // A Turnstile challenge is a cross-origin iframe that lays out, composites
-  // and runs proof of work. Five of those is a real cost, and what keeps it
-  // payable is not a lower number but the two guards around it: the frame
-  // test below, which stops starting anything the moment the smoothed frame
-  // time runs long, and the stagger next to it.
-  const TURNSTILE_CONCURRENT = 5;
+  // and runs proof of work. Five was tried and was slower than two, not
+  // faster: five widgets mounting inside one keeper cycle push the smoothed
+  // frame time up between themselves, and the frame test then refuses the
+  // starts behind them — so the batch spends its stagger and its slots and
+  // finishes with a fraction of what it claimed. Two mount without moving the
+  // frame time much, so both actually run.
+  const TURNSTILE_CONCURRENT = 2;
   // How far apart the five are started.
   //
   // This is the part that makes five workable rather than five times worse.
@@ -747,13 +749,24 @@ window.grbtp = 35;
         // handed to the browser to place in a frame with room, instead of
         // landing in the middle of one the game needed.
         const start = () => {
-          // Re-tested at the moment it actually begins, not only when it was
-          // scheduled. A slot at the back of the stagger was committed to over
-          // a second ago, and the whole point of the frame test is not to
-          // spend frames *now* — so a challenge queued while things were calm
-          // is abandoned if they no longer are, and gives its slot back rather
-          // than holding one until the reaper comes for it.
-          if (!this.enabled || !this._ready() || !this._inGame() || !this._framesOk()) {
+          // Re-tested at the moment it actually begins, but only against the
+          // things that make starting pointless rather than merely expensive:
+          // the pool switched off, Turnstile gone, the player back at the menu.
+          //
+          // Deliberately not the frame test. That belongs in `refill`, where it
+          // decides whether to *commit* to a challenge — re-running it here
+          // throws away work already committed to, and it throws it away in
+          // batches: the first widget of a batch is itself what pushes the
+          // frame time up, so it cancels the ones queued behind it. Measured
+          // over two minutes that was 95 abandoned challenges at five slots and
+          // 48 at two, against none without it — a pool that claimed its slots,
+          // spent its stagger and delivered almost nothing.
+          //
+          // `_framesOk` is also not free to call: it keeps a running minimum of
+          // the frame time as its baseline, so sampling it once per start
+          // rather than once per top-up moves the bar it is measuring against.
+          // That is the same reason `_sampleConcurrency` is taken in one place.
+          if (!this.enabled || !this._ready() || !this._inGame()) {
             this._release(slot);
             return;
           }

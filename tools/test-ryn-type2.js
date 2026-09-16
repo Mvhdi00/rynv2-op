@@ -516,15 +516,19 @@ async function testPool() {
     ok("healthy frames mint normally", h.minted > 0, "minted=" + h.minted);
     ok("the panel reports frames as healthy", h.pool.frames === 1);
 
-    const before = h.minted;
     h.rend._dtSmoothed = 16 * h.k.FPS_SLACK + 5;   // frames have gone long
+    // Whatever was already committed to still runs — the frame test gates the
+    // decision to start a challenge, not work already under way. Let those
+    // drain first, then nothing further may begin.
+    await h.tick();
+    const settled = h.minted;
     for (let i = 0; i < 10; i++) await h.tick();
-    ok("a frame-rate drop stops minting", h.minted === before, "minted=" + h.minted);
+    ok("a frame-rate drop stops minting", h.minted === settled, "minted=" + h.minted + " settled=" + settled);
     ok("the panel reports it holding off", h.pool.frames === 0);
 
     h.rend._dtSmoothed = 16;                       // recovered
     await h.tick();
-    ok("recovering resumes it", h.minted > before, "minted=" + h.minted);
+    ok("recovering resumes it", h.minted > settled, "minted=" + h.minted + " settled=" + settled);
   }
 
   // The bar is the machine's own baseline, not a fixed frame rate: a machine
@@ -535,8 +539,10 @@ async function testPool() {
     const steady = h.minted;
     ok("a slower machine holding steady still mints", steady >= 3, "minted=" + steady);
     h.rend._dtSmoothed = 40 * h.k.FPS_SLACK + 5;   // worse than its own normal
+    await h.tick();
+    const settled2 = h.minted;
     for (let i = 0; i < 5; i++) await h.tick();
-    ok("and stops when it drops below its own normal", h.minted === steady, "minted=" + h.minted);
+    ok("and stops when it drops below its own normal", h.minted === settled2, "minted=" + h.minted);
   }
 
   // Under the floor nothing is wrong on any machine.
@@ -588,6 +594,42 @@ async function testPool() {
     h.advance(h.k.STAGGER * (h.k.CONCURRENT - 2));
     ok("and the rest follow in turn", h.minted === h.k.CONCURRENT, "minted=" + h.minted);
     ok("nothing is left queued once they have all begun", h.timersPending === 0);
+  }
+  {
+    // A slot already committed to is not thrown away when frames dip.
+    //
+    // The version that shipped re-ran the frame test at the moment each
+    // staggered start fired, which sounds careful and is not: the first widget
+    // of a batch is itself what pushes the frame time up, so it cancelled the
+    // ones queued behind it. The batch spent its slots and its stagger and
+    // delivered a fraction of what it claimed.
+    const h = poolHarness({ speed: 0 });
+    h.pump();
+    const startedFirst = h.minted;
+    ok("the first of the batch is away", startedFirst === 1, "minted=" + startedFirst);
+    ok("and the rest are committed to", h.pool.minting === h.k.CONCURRENT, "claimed=" + h.pool.minting);
+    // Frames go long, exactly as a mounting widget makes them.
+    h.rend._dtSmoothed = 16 * h.k.FPS_SLACK + 20;
+    h.advance(h.k.STAGGER * (h.k.CONCURRENT + 1));
+    ok("a dip does not cancel what was already committed", h.minted === h.k.CONCURRENT, "minted=" + h.minted);
+    ok("and no slot is left stranded", h.pool.minting === h.k.CONCURRENT, "claimed=" + h.pool.minting);
+    // But nothing new is committed to while it lasts.
+    const after = h.minted;
+    for (let i = 0; i < 5; i++) h.pumpAll();
+    ok("while frames are bad nothing new is started", h.minted === after, "minted=" + h.minted);
+  }
+  {
+    // The gates that do still cancel a queued start, because finishing it
+    // would be pointless rather than merely expensive.
+    const h = poolHarness({ speed: 0 });
+    h.pump();
+    const started = h.minted;
+    h.client.myPlayer.inGame = false;
+    h.advance(h.k.STAGGER * (h.k.CONCURRENT + 1));
+    ok("going back to the menu cancels the queued starts", h.minted === started, "minted=" + h.minted);
+    // The one that had already begun keeps its slot — it is real work in
+    // flight. Only the cancelled ones give theirs back.
+    ok("and gives back only the slots that were cancelled", h.pool.minting === started, "claimed=" + h.pool.minting + " started=" + started);
   }
   {
     // Moving or standing still, the rate is the same — the speed test that
@@ -645,7 +687,7 @@ async function testPool() {
     ok("a death pauses minting", h.minted === before);
     ok("but the pool it already has survives", h.pool.size === h.k.TARGET - 1, "size=" + h.pool.size);
     h.client.myPlayer.inGame = true;
-    h.pump();
+    h.pumpAll();
     ok("respawning resumes it", h.minted > before);
   }
 
@@ -849,9 +891,9 @@ async function testPool() {
     const got = await Promise.all(spawns);
     ok("all three are served rather than sent off to mint their own", got.every(t => typeof t === "string"), JSON.stringify(got));
     ok("with three different tokens", new Set(got).size === 3);
-    // Not one challenge per waiter, and not a burst either: the concurrency
-    // cap still bounds what three waiting spawns can set going.
-    ok("and no more challenges than the cap allows", hh.minted <= hh.k.CONCURRENT, "minted=" + hh.minted);
+    // Not one challenge per waiter, and not a burst either: the cap is on how
+    // many run at once, and it holds while the three are being served.
+    ok("and never more than the cap running at once", hh.pool.minting <= hh.k.CONCURRENT, "running=" + hh.pool.minting);
   }
 
   // A waiter is released rather than left hanging when nothing comes back.

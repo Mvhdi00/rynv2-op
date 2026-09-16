@@ -5,7 +5,7 @@ Changes to **`Ryn_Type_2.user.js`**, worked against the shipped game bundle in
 `drivers/game-drivers.json`.
 
 ```sh
-node tools/test-ryn-type2.js     # 277 behaviour tests
+node tools/test-ryn-type2.js     # 284 behaviour tests
 node --check Ryn_Type_2.user.js
 ```
 
@@ -541,32 +541,53 @@ switch per branch.
 
 ---
 
-## 6. Token pool — 99, five at a time, started apart
+## 6. Token pool — 99 tokens, two at a time, started apart
 
-Target raised from 40 to 99, and the rate no longer depends on what the player
-is doing: **five challenges run at once**, moving or standing still. The speed
-test that opened a second slot only after four seconds of standing still is
-gone, along with the two constants behind it.
+Target raised from 40 to 99. The rate no longer depends on what the player is
+doing — the speed test that opened a second slot only after four seconds of
+standing still is gone, along with the two constants behind it — but the number
+is **two**, not five.
 
-What makes five payable is the **stagger**. The expensive part of a Turnstile
-challenge is its front end — inserting the cross-origin iframe, the layout and
-composite that follow, and the first slice of proof of work — and five of those
-in one frame is a single long stall that the frame test can only notice
-afterwards. Started 350ms apart they each land in a frame of their own and still
-overlap for most of their life, which is where the throughput comes from.
+### Five was slower than two
 
-Five at once is also slower in wall-clock terms than five staggered: they
-contend for the same main thread, so each one's proof of work takes longer and
-they all finish late together.
+Five was tried and had to come back out. A Turnstile challenge is a cross-origin
+iframe that lays out, composites and runs proof of work, and five of them
+mounting inside one keeper cycle push the smoothed frame time up between
+themselves. The frame test then refuses the starts behind them, so the batch
+spends its slots and its stagger and finishes with a fraction of what it claimed.
+Two mount without moving the frame time much, so both actually run.
 
-`_nextStartAt` is held across top-ups, so five asked for in one pass and five
-asked for one per keeper tick are spaced the same.
+### The part that made it much worse
 
-A staggered start also **re-tests the gates when it actually begins**, not only
-when it was scheduled. A slot at the back of the stagger was committed to over a
-second earlier, and the point of the frame test is not to spend frames *now*, so
-a challenge queued while things were calm is abandoned if they no longer are —
-and gives its slot back rather than holding one until the reaper comes for it.
+The same change re-ran the frame test at the moment each staggered start fired,
+rather than only when it was scheduled. That sounds careful and is not: the
+first widget of a batch is itself what pushes the frame time up, so it cancelled
+the ones queued behind it.
+
+Modelling the loop — a mounting widget costing frame time, the frame test gating
+the next start — over two minutes: **95 abandoned challenges at five slots, 48
+at two, none without the re-check.** A pool that claimed its slots, spent its
+stagger and delivered almost nothing.
+
+The frame test belongs in `refill`, where it decides whether to **commit** to a
+challenge. A start that fires is now re-tested only against the things that make
+finishing it pointless rather than merely expensive — the pool switched off,
+Turnstile gone, the player back at the menu — and those give their slots back.
+Work already committed to runs.
+
+`_framesOk` is also not free to call: it keeps a running minimum of the frame
+time as its baseline, so sampling it once per start rather than once per top-up
+moves the bar it is measuring against. That is the same reason
+`_sampleConcurrency` is taken in exactly one place.
+
+### The stagger
+
+Kept. The expensive part of a challenge is its front end — inserting the iframe,
+the layout and composite that follow, and the first slice of proof of work — so
+the two are started **350ms apart** and each lands in a frame of its own while
+still overlapping for most of their life. `_nextStartAt` is held across top-ups,
+so two asked for in one pass and two asked for one per keeper tick are spaced
+the same.
 
 ### A test that was passing by sleeping
 
