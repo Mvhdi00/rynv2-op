@@ -1,11 +1,11 @@
-# RYN Type 2 — bot spawn, target scan, second weapon
+# RYN Type 2 — bot spawn, target scan, second weapon, auto heal
 
 Changes to **`Ryn_Type_2.user.js`**, worked against the shipped game bundle in
 `src/game_index.js` and the tables extracted from it in
 `drivers/game-drivers.json`.
 
 ```sh
-node tools/test-ryn-type2.js     # 212 behaviour tests
+node tools/test-ryn-type2.js     # 253 behaviour tests
 node --check Ryn_Type_2.user.js
 ```
 
@@ -463,3 +463,86 @@ a live sighting. Colours come from the menu's own tokens — sky for picked, sag
 for live — so it sits in the existing design rather than beside it. The header
 carries a running count, and **Clear picks** empties the selection without
 touching the player index.
+
+---
+
+## 5. Auto heal — replaced with Glotus's
+
+The heal that was here was a port of Falcon V2's: a damage-identification
+pipeline that took the number which had just landed, worked backwards to the
+weapon that produced it, summed what its owner still had loaded, and only then
+chose a helmet and a tick to eat on. It is gone. In its place is **Glotus
+Client 5.5.5's `AntiInsta`**, whole.
+
+### It was not working
+
+`Player.maxHealth` is declared `Math.LN1`. There is no such constant on `Math`,
+so the field is `undefined`, and nothing in the client ever assigns it — that is
+true of Glotus and it was true here.
+
+Falcon's heal took a value, and the ladder handed it
+`maxHealth - currentHealth`:
+
+```
+maxHealth         = undefined
+value passed in   = NaN
+for (let i = 0; i < NaN; i++)  ->  zero iterations
+```
+
+Lifting `heal(value)` verbatim out of the previous commit and calling it the way
+the ladder called it sends **zero packets**. Autoheal had not eaten one apple
+since it was written. The test suite pins that arithmetic down so it cannot come
+back.
+
+### What Glotus does instead
+
+It identifies nothing. Once a tick it asks two questions:
+
+| | condition | result |
+|---|---|---|
+| **FORCE** | a threat is live, shame under 7, health under 95 | eat, spend the shame |
+| **SAFE** | 125ms clear of the last hit, health under 100 | eat, no shame spent |
+
+"A threat is live" is `EnemyManager`'s whole surface — `velocityTickThreat`,
+`reverseInsta`, `toolHammerInsta`, `rangedBowInsta`, `detectedDangerEnemy`,
+`detectedEnemy`, `dangerWithoutSoldier` — plus being at or under 20 health, plus
+a soldier ask the hat picker has not served yet. The 125 is the server's 120ms
+shame window with the round trip added back in.
+
+Nothing is forecast and nothing is deferred: no held food, no forced helmet, no
+queue, no second opinion about what the damage was.
+
+### How much it eats
+
+The same undefined `maxHealth` reaches Glotus's `needTimes`, and this is why it
+survives there:
+
+```js
+const needTimes = Math.ceil((myPlayer.maxHealth - myPlayer.tempHealth) / restore);  // NaN
+healingTimes = needTimes || 1;                                                      // 1
+for (let i = 0; i <= healingTimes; i++) ModuleHandler.heal();                       // 2 foods
+```
+
+`|| 1` catches the NaN, and the inclusive `<=` makes it two. So a heal is always
+exactly two foods, and because the module runs every tick a deeper hole closes
+over consecutive ticks rather than in one send. That is Glotus's real behaviour
+in the field, and it is left exactly as it is.
+
+### What went with it
+
+| | |
+|---|---|
+| `wantsSoldier` / `wantsEMP` | Falcon's own hat asks, read by `ModuleHandler`'s soldier block. Glotus's heal asks for no hat, so both terms are gone; RYN's own soldier reasoning below them is untouched. |
+| **EMP Anti** (`_soldierEMP`) | Falcon's EMP branch. No consumer left — switch and menu row removed. |
+| **Sensitive Healing** (`_sensitiveHealing`) | Already had no consumer. Removed with it. |
+| `Player.damages` push | Filled only for Falcon's damage identification. The array is back to what the base client leaves it as: declared, cleared, never written. |
+| `ShameReset.shouldReset` | Still refuses to put bull on into an incoming hit, but reads `AntiInsta.forceHeal` — Glotus's own signal, computed one module earlier — instead of Falcon's `shouldResetShame`. |
+| HUD heal line | Two states now, FORCE and SAFE, because that is all the module has. |
+
+### What is kept, and is not Glotus's
+
+The **manual burst** on `HEAL_FAST_KEY` (Q). Held, it clears the bar on the tick
+it is held, capped at five foods and at the packet budget, and skipped on a tick
+the module already ate on. It is fenced off in `_fastHeal()` and marked as RYN's
+rather than part of the port — `_glotusTick()` is the port, verbatim.
+

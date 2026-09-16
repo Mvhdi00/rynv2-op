@@ -2362,7 +2362,7 @@ window.grbtp = 35;
   const Navbar_default = "<div id=\"navbar-container\">\n  <div class=\"rail-brand\">\n    <span class=\"rail-mark\">RYN</span>\n    <span class=\"rail-sub\">Type 2</span>\n  </div>\n\n  <div id=\"ryn-search-wrap\">\n    <input id=\"ryn-search-input\" type=\"text\" placeholder=\"Search settings\" autocomplete=\"off\" spellcheck=\"false\">\n    <span id=\"ryn-search-clear\" title=\"Clear\">&#10005;</span>\n    <div id=\"ryn-search-dropdown\"></div>\n  </div>\n\n  <div class=\"rail-label\">Categories</div>\n  <nav>\n    <button data-id=\"1\" class=\"open-menu active\"><span class=\"nav-index\">01</span><span class=\"nav-label\">Keybinds</span></button>\n    <button data-id=\"3\" class=\"open-menu\"><span class=\"nav-index\">02</span><span class=\"nav-label\">Visual</span></button>\n    <button data-id=\"2\" class=\"open-menu\"><span class=\"nav-index\">03</span><span class=\"nav-label\">Combat</span></button>\n    <button data-id=\"4\" class=\"open-menu\"><span class=\"nav-index\">04</span><span class=\"nav-label\">Misc</span></button>\n    <button data-id=\"7\" class=\"open-menu\"><span class=\"nav-index\">05</span><span class=\"nav-label\">Music</span></button>\n    <button data-id=\"5\" class=\"open-menu\"><span class=\"nav-index\">06</span><span class=\"nav-label\">Bots</span></button>\n  </nav>\n\n  <div class=\"rail-label\">In this category</div>\n  <div id=\"nav-outline\"></div>\n\n  <div class=\"rail-foot\">\n    <span id=\"ryn-version\">Ryn Type 2</span>\n    <svg id=\"close-button\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" title=\"Close menu\">\n      <line x1=\"5\" y1=\"5\" x2=\"19\" y2=\"19\" stroke-linecap=\"round\"/>\n      <line x1=\"19\" y1=\"5\" x2=\"5\" y2=\"19\" stroke-linecap=\"round\"/>\n    </svg>\n  </div>\n</div>";
   const Devtool_default = "";
   const Keybinds_default = "<div class=\"menu-page opened\" data-id=\"1\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Keybinds</h1>\n        <p class=\"page-description\">Click a key to start editing, then press the key or mouse button you want. Backspace clears a binding. A key used twice is marked as a conflict on both rows.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Items &amp; Weapons<span class=\"sec-sub\">Hotbar placement and the weapon slots.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Food</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_food\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Wall</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_wall\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spike\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Windmill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_windmill\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Farm</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_farm\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Trap</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_trap\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Turret</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_turret\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spawn</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spawn\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Client<span class=\"sec-sub\">Opening this menu and firing the instakill sequence.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Menu</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_toggleMenu\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Instakill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_instakill\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Quick Actions<span class=\"sec-sub\">One-press build patterns and on/off switches for the automations.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Quad Spikes</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_fourSpikes\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Quad Traps</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_fourTraps\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Boost Spike Rush</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_boostSpikes\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Automill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoMillKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Dash</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_dashMovementKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Auto Grind</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoGrindKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Autoplacer</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoplacerKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Controls<span class=\"sec-sub\">Everything that commands the bots you have connected.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spawn Bot</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spawnBot\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Kill All Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_killAllBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Hold Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_holdBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Release Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_releaseBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Bot Auto-Attack</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAutoAttack\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Auto Farm</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAutoFarm\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Repel Alts</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_repelAlts\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Bot Random Movement</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_scatterBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Avoid Shield Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAvoidShieldKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Volley Fire</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botVolleyKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Freeze Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_freezeBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Lock bot position</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_lockBotPosition\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n    <div class=\"section\">\n        <div class=\"section-title\">Possession<span class=\"sec-sub\">Which of your characters you are controlling. These three keys are taken before anything else sees them &mdash; the game maps the arrows to movement, so letting one through would walk the character you just left.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Next character</span>\n                    <span class=\"opt-desc\">Steps forward through you and every bot that is in the game.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessNext\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Previous character</span>\n                    <span class=\"opt-desc\">The same ring, backwards.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessPrev\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Back to your own character</span>\n                    <span class=\"opt-desc\">Jumps straight back to you from wherever you are.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessMain\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n</div>";
-  const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Combat</h1>\n        <p class=\"page-description\">Every automation the client runs during a fight, ordered by the moment it fires: the kill sequence first, then how it places, how it survives, and what it does with the rest of the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Kill Sequences<span class=\"sec-sub\">Timed weapon and hat chains that try to finish a target outright.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_toolSpearInsta\">Tool Spear Insta</label>\n                    <span class=\"opt-desc\">Tool hammer into polearm burst.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_toolSpearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeGearInsta\">Spike Gear Insta</label>\n                    <span class=\"opt-desc\">Spike placement combined with a gear swap on the same tick.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeGearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\n                    <span class=\"opt-desc\">Ranged finisher chaining musket and bow shots.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_musketBowInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Sync<span class=\"sec-sub\">Landing separate sources of damage on the same server tick.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\n                    <span class=\"opt-desc\">Lines up your hits with whatever else is about to damage the target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\n                    <span class=\"opt-desc\">Times your swing to a turret shot landing.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_velocityTick\">Velocity Tick</label>\n                    <span class=\"opt-desc\">Uses the target's movement to predict the tick worth hitting.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_velocityTick\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSync\">Spike sync</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSyncHammer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeSync2\">Spike Sync 2</label>\n                    <span class=\"opt-desc\">Runs with Autopush. While a shove is walking a trapped target onto a spike - the purple line - Spike KB is held, because its knockback moves them away from you, which is off the line the shove is walking them down. Then the tick they actually touch the spike, the swing goes out on that same tick: they are trapped, pinned against it and already taking its damage, so the hit lands with the spike's own. The turret shot follows on the next tick. Like Spike KB, but where Spike KB fires on a knockback that would put them in a spike, this waits until they are in it - and it needs the shove to have been live, so an enemy merely standing near a spike is still Spike KB's. Runs on this switch alone; Velocity Tick keeps its own conditions and turning it off does not affect this. Needs Autopush on, and a diamond polearm with the turret.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync2\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Placement<span class=\"sec-sub\">Where spikes and traps go, and how fast they get replaced.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacer\">Autoplacer</label>\n                    <span class=\"opt-desc\">Keeps spikes going down around you without holding the key.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoplacer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoplacer radius</span>\n                    <span class=\"opt-desc\">How far from you the autoplacer is allowed to build.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Placer scanners</span>\n                    <span class=\"opt-desc\">How many spots the autoplacer looks at once. The first one is aimed at the enemy; each of the others owns its own slice of the ring around you and never builds in another's, so the open ground on your other sides gets used instead of ignored. 1 is the enemy-facing scanner alone.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerScanners\" type=\"range\" step=\"1\" min=\"1\" max=\"6\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacerResolution\">Placer resolution</label>\n                    <span class=\"opt-desc\">How finely the autoplacer cuts the ring around you when it looks for ground. A spike on the ring blocks about 153 degrees of it, so what is left is a few arcs and the slots between builds are thin - finer steps find slots a coarser pass walks straight past. One step moves the landing point 13.8 units at 36, 6.9 at 72, 3.4 at 144 and 2.5 at 200, and the furthest a wanted direction can sit from a sample is half of that. 144 is the resolution this client shipped on and reproduces it exactly; 200 is the default. Nothing else changes between them - same validation, same collision solve, same scoring, same prediction, same scheduler. Legality is solved for the whole ring at once rather than asked one angle at a time, and the sin/cos table is built once for the whole session, so the finer settings cost no trigonometry and no allocation per tick. Preplace and replace draw candidates from this same table, so raising it makes the prediction finer as well as the placement. Used flat, every tick.</span>\n                </div>\n                <select id=\"_autoplacerResolution\" class=\"ryn-select\">\n                    <option value=\"36\">36 - coarse</option>\n                    <option value=\"72\">72 - balanced</option>\n                    <option value=\"144\">144 - original</option>\n                    <option value=\"200\">200 - default</option>\n                </select>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_prePlace\">Preplace</label>\n                    <span class=\"opt-desc\">Puts the next spike down before the target arrives at it.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_prePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spamPrePlace\">Spam Preplace</label>\n                    <span class=\"opt-desc\">Sends a preplace on its forecast rather than waiting for the break it is predicting, and lets one refused for being a tick early try the same slot again on the next tick instead of being locked out of it by its own send. This is what takes an enemy build's ground on the tick it falls: the placement is already at the server, instead of starting a round trip when the deletion packet arrives. Costs packets on the guesses that miss.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spamPrePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <span class=\"option-title\">Retrap Resend</span>\n                        <span class=\"opt-desc\">Extra sends of the same replacement while an enemy is breaking out of your trap, timed into the rest of the tick and offset for your ping. It starts early and gets louder: four swings out it is already holding the slot with one send, two swings out it spends half, and on the last tick all of them, swept back across the window from a ping-compensated anchor so the same claim exists at several moments rather than one. The trap they are standing in is also looked further ahead than any other build, so the replacement is booked - and the ground reserved - well before the break instead of arriving to contest it afterwards. It is the same claim sent again, not a second placement, so it takes no extra ground and files nothing; only the packets are new. Worth it here and nowhere else: a trapped enemy cannot walk away from the ground being fought over, so this is the one forecast their movement cannot spoil, and the trap they are breaking is the most valuable slot on the board. 0 turns it off. Needs Spam Preplace on.</span>\n                    </div>\n                    <label class=\"slider\">\n                        <span class=\"slider-value\"></span>\n                        <input id=\"_retrapResend\" type=\"range\" step=\"1\" min=\"0\" max=\"6\">\n                    </label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_replace\">Replace</label>\n                    <span class=\"opt-desc\">Rebuilds a broken spike the moment it goes down.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_replace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <span class=\"option-title\">Replace Burst</span>\n                        <span class=\"opt-desc\">How many builds one deletion may put down. A freed slot is ground, not a point, and one build is one thing to refuse - the enemy takes the slot beside it and the ground is theirs anyway. Several non-overlapping builds around the same opening cannot all be answered. This raises only the ceiling: the value floor, the reservation ledger, the per-item caps, the non-overlap rule and the packet budget still apply to every build in the burst, so an opening worth one build still gets one. Only a deletion plans this deep; an ordinary tick is unchanged.</span>\n                    </div>\n                    <label class=\"slider\">\n                        <span class=\"slider-value\"></span>\n                        <input id=\"_replaceBurst\" type=\"range\" step=\"1\" min=\"3\" max=\"6\">\n                    </label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\n                    <span class=\"opt-desc\">Builds to block an incoming placement against you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_placementDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapKB\">Trap KB</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapKB\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeKB\">Spike KB</label>\n                    <span class=\"opt-desc\">Swings the primary when the knockback would put them in one of your spikes, or when they are already standing in one. Katana or polearm.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeKB\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Healing, shielding and the hats that keep you alive.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\n                    <span class=\"opt-desc\">Predicts what can land this tick and eats before it does, not after.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoheal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_sensitiveHealing\">Sensitive Healing</label>\n                        <span class=\"opt-desc\">Adds the two threats that arrive without a damage number to the sum the heal is decided against: the spikes you are about to walk into, and a spike an enemy could drop on you before the next heal lands. Both are read off the game\u0027s own build ring and contact radius, so they are positions the server would accept rather than guesses. Off, only damage that has actually landed counts.</span>\n                    </div>\n                    <label class=\"switch-checkbox\"><input id=\"_sensitiveHealing\" type=\"checkbox\"><span></span></label>\n                </div>\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_soldierEMP\">EMP Anti</label>\n                        <span class=\"opt-desc\">Wears the EMP helmet instead of soldier when the lethal half of the tick is turret fire. Turrets will not shoot someone wearing it, so it removes that damage rather than reducing it - but only that damage, which is why it is asked for only when every source that has hit you this tick is one it answers. It needs the helmet owned, soldier already on, and the tick to be survivable once the turret's 25 is taken out. Needs Heal Priority on.</span>\n                    </div>\n                    <label class=\"switch-checkbox\"><input id=\"_soldierEMP\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoShield\">Auto Shield</label>\n                    <span class=\"opt-desc\">Raises the shield against incoming melee.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_rangedShield\">Ranged Shield</label>\n                    <span class=\"opt-desc\">Also shields against projectiles.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_rangedShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_empDefense\">Emp Defense</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_empDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoemp\">Auto emp</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoemp\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_soldierDefault\">Soldier default</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_soldierDefault\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeSoldier\">Safe Soldier</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeSoldier\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeWalk\">Safe walk</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeWalk\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Anti Systems<span class=\"sec-sub\">Reactions to what other players and the world do to you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\n                    <span class=\"opt-desc\">Reacts to an enemy closing in on you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_antienemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antianimal\">Anti animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antianimal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antispike\">Anti spike</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antispike\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiSpikePush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiRetrap\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you wear, and when it changes.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\n                    <span class=\"opt-desc\">Swaps to the hat that suits the biome you are standing in.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_biomehats\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\n                    <span class=\"opt-desc\">Picks gear from the threat in front of you rather than a fixed set.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_adaptiveGearSwitching\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_tailPriority\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_cowboyWhenSafe\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\n                    <span class=\"opt-desc\">Pushes a target toward your own spikes.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto Push Range</span>\n                    <span class=\"opt-desc\">How close a target has to be before autopush engages.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_trapStandoff\">Trap Standoff</label>\n                    <span class=\"opt-desc\">Keeps you off an enemy held in your trap. Your body is the only thing that can push a trapped player out - a weapon hit cannot, because the trap zeroes their velocity, but walking into them moves their position directly. Blocks only the part of your movement that closes the gap, so you still circle and reposition normally. Auto Push does the opposite on purpose and takes priority when it is on.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_trapStandoff\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Trap Standoff Distance</span>\n                    <span class=\"opt-desc\">The closest you will get. The game starts pushing at 70, so 70 and up stops the push outright; under 70 you still overlap and still shove them, and the number only caps how deep the overlap gets. Holding a direction against the line orbits outward a little before turning back in, so you sit between this number and about 28 above it - and a melee swing reaches weapon range plus 63, which is 128 for the shortest primary in the game, so every weapon stays in reach across the whole slider.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_trapStandoffRange\" type=\"range\" step=\"1\" min=\"50\" max=\"90\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\n                    <span class=\"opt-desc\">Short burst movement instead of a steady walk.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_dashMovement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\n                    <span class=\"opt-desc\">Breaks the structures standing between you and a target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autobreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_breakPosition\">Break Position</label>\n                        <span class=\"opt-desc\">Which trap Autobreak takes. Inside: only the trap you are caught in. Outside: only traps you are not in. Spikes break the same either way.</span>\n                    </div>\n                    <select id=\"_breakPosition\" class=\"ryn-select\">\n                        <option value=\"inside\">Inside</option>\n                        <option value=\"outside\">Outside</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_automill\">Automill</label>\n                    <span class=\"opt-desc\">Leaves windmills behind you while you move.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_automill\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\n                    <span class=\"opt-desc\">Gathers resources on its own when nothing is threatening you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoGrind\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetPrimary\">Grind Until (primary)</label>\n                        <span class=\"opt-desc\">Which variant to take your primary weapon to. Grinding idles once both slots reach their target, and picks straight back up if you raise one.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetPrimary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                    </select>\n                </div>\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetSecondary\">Grind Until (secondary)</label>\n                        <span class=\"opt-desc\">The same for your secondary. Only the great hammer is ground here, so this does nothing while you carry anything else.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetSecondary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPlay\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_turretSteal\">Turret steal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSteal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapAnimal\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
+  const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Combat</h1>\n        <p class=\"page-description\">Every automation the client runs during a fight, ordered by the moment it fires: the kill sequence first, then how it places, how it survives, and what it does with the rest of the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Kill Sequences<span class=\"sec-sub\">Timed weapon and hat chains that try to finish a target outright.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_toolSpearInsta\">Tool Spear Insta</label>\n                    <span class=\"opt-desc\">Tool hammer into polearm burst.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_toolSpearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeGearInsta\">Spike Gear Insta</label>\n                    <span class=\"opt-desc\">Spike placement combined with a gear swap on the same tick.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeGearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\n                    <span class=\"opt-desc\">Ranged finisher chaining musket and bow shots.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_musketBowInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Sync<span class=\"sec-sub\">Landing separate sources of damage on the same server tick.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\n                    <span class=\"opt-desc\">Lines up your hits with whatever else is about to damage the target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\n                    <span class=\"opt-desc\">Times your swing to a turret shot landing.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_velocityTick\">Velocity Tick</label>\n                    <span class=\"opt-desc\">Uses the target's movement to predict the tick worth hitting.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_velocityTick\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSync\">Spike sync</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSyncHammer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeSync2\">Spike Sync 2</label>\n                    <span class=\"opt-desc\">Runs with Autopush. While a shove is walking a trapped target onto a spike - the purple line - Spike KB is held, because its knockback moves them away from you, which is off the line the shove is walking them down. Then the tick they actually touch the spike, the swing goes out on that same tick: they are trapped, pinned against it and already taking its damage, so the hit lands with the spike's own. The turret shot follows on the next tick. Like Spike KB, but where Spike KB fires on a knockback that would put them in a spike, this waits until they are in it - and it needs the shove to have been live, so an enemy merely standing near a spike is still Spike KB's. Runs on this switch alone; Velocity Tick keeps its own conditions and turning it off does not affect this. Needs Autopush on, and a diamond polearm with the turret.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync2\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Placement<span class=\"sec-sub\">Where spikes and traps go, and how fast they get replaced.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacer\">Autoplacer</label>\n                    <span class=\"opt-desc\">Keeps spikes going down around you without holding the key.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoplacer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoplacer radius</span>\n                    <span class=\"opt-desc\">How far from you the autoplacer is allowed to build.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Placer scanners</span>\n                    <span class=\"opt-desc\">How many spots the autoplacer looks at once. The first one is aimed at the enemy; each of the others owns its own slice of the ring around you and never builds in another's, so the open ground on your other sides gets used instead of ignored. 1 is the enemy-facing scanner alone.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerScanners\" type=\"range\" step=\"1\" min=\"1\" max=\"6\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacerResolution\">Placer resolution</label>\n                    <span class=\"opt-desc\">How finely the autoplacer cuts the ring around you when it looks for ground. A spike on the ring blocks about 153 degrees of it, so what is left is a few arcs and the slots between builds are thin - finer steps find slots a coarser pass walks straight past. One step moves the landing point 13.8 units at 36, 6.9 at 72, 3.4 at 144 and 2.5 at 200, and the furthest a wanted direction can sit from a sample is half of that. 144 is the resolution this client shipped on and reproduces it exactly; 200 is the default. Nothing else changes between them - same validation, same collision solve, same scoring, same prediction, same scheduler. Legality is solved for the whole ring at once rather than asked one angle at a time, and the sin/cos table is built once for the whole session, so the finer settings cost no trigonometry and no allocation per tick. Preplace and replace draw candidates from this same table, so raising it makes the prediction finer as well as the placement. Used flat, every tick.</span>\n                </div>\n                <select id=\"_autoplacerResolution\" class=\"ryn-select\">\n                    <option value=\"36\">36 - coarse</option>\n                    <option value=\"72\">72 - balanced</option>\n                    <option value=\"144\">144 - original</option>\n                    <option value=\"200\">200 - default</option>\n                </select>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_prePlace\">Preplace</label>\n                    <span class=\"opt-desc\">Puts the next spike down before the target arrives at it.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_prePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spamPrePlace\">Spam Preplace</label>\n                    <span class=\"opt-desc\">Sends a preplace on its forecast rather than waiting for the break it is predicting, and lets one refused for being a tick early try the same slot again on the next tick instead of being locked out of it by its own send. This is what takes an enemy build's ground on the tick it falls: the placement is already at the server, instead of starting a round trip when the deletion packet arrives. Costs packets on the guesses that miss.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spamPrePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <span class=\"option-title\">Retrap Resend</span>\n                        <span class=\"opt-desc\">Extra sends of the same replacement while an enemy is breaking out of your trap, timed into the rest of the tick and offset for your ping. It starts early and gets louder: four swings out it is already holding the slot with one send, two swings out it spends half, and on the last tick all of them, swept back across the window from a ping-compensated anchor so the same claim exists at several moments rather than one. The trap they are standing in is also looked further ahead than any other build, so the replacement is booked - and the ground reserved - well before the break instead of arriving to contest it afterwards. It is the same claim sent again, not a second placement, so it takes no extra ground and files nothing; only the packets are new. Worth it here and nowhere else: a trapped enemy cannot walk away from the ground being fought over, so this is the one forecast their movement cannot spoil, and the trap they are breaking is the most valuable slot on the board. 0 turns it off. Needs Spam Preplace on.</span>\n                    </div>\n                    <label class=\"slider\">\n                        <span class=\"slider-value\"></span>\n                        <input id=\"_retrapResend\" type=\"range\" step=\"1\" min=\"0\" max=\"6\">\n                    </label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_replace\">Replace</label>\n                    <span class=\"opt-desc\">Rebuilds a broken spike the moment it goes down.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_replace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <span class=\"option-title\">Replace Burst</span>\n                        <span class=\"opt-desc\">How many builds one deletion may put down. A freed slot is ground, not a point, and one build is one thing to refuse - the enemy takes the slot beside it and the ground is theirs anyway. Several non-overlapping builds around the same opening cannot all be answered. This raises only the ceiling: the value floor, the reservation ledger, the per-item caps, the non-overlap rule and the packet budget still apply to every build in the burst, so an opening worth one build still gets one. Only a deletion plans this deep; an ordinary tick is unchanged.</span>\n                    </div>\n                    <label class=\"slider\">\n                        <span class=\"slider-value\"></span>\n                        <input id=\"_replaceBurst\" type=\"range\" step=\"1\" min=\"3\" max=\"6\">\n                    </label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\n                    <span class=\"opt-desc\">Builds to block an incoming placement against you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_placementDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapKB\">Trap KB</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapKB\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeKB\">Spike KB</label>\n                    <span class=\"opt-desc\">Swings the primary when the knockback would put them in one of your spikes, or when they are already standing in one. Katana or polearm.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeKB\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Healing, shielding and the hats that keep you alive.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\n                    <span class=\"opt-desc\">Predicts what can land this tick and eats before it does, not after.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoheal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoShield\">Auto Shield</label>\n                    <span class=\"opt-desc\">Raises the shield against incoming melee.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_rangedShield\">Ranged Shield</label>\n                    <span class=\"opt-desc\">Also shields against projectiles.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_rangedShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_empDefense\">Emp Defense</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_empDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoemp\">Auto emp</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoemp\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_soldierDefault\">Soldier default</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_soldierDefault\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeSoldier\">Safe Soldier</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeSoldier\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeWalk\">Safe walk</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeWalk\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Anti Systems<span class=\"sec-sub\">Reactions to what other players and the world do to you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\n                    <span class=\"opt-desc\">Reacts to an enemy closing in on you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_antienemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antianimal\">Anti animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antianimal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antispike\">Anti spike</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antispike\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiSpikePush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiRetrap\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you wear, and when it changes.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\n                    <span class=\"opt-desc\">Swaps to the hat that suits the biome you are standing in.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_biomehats\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\n                    <span class=\"opt-desc\">Picks gear from the threat in front of you rather than a fixed set.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_adaptiveGearSwitching\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_tailPriority\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_cowboyWhenSafe\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\n                    <span class=\"opt-desc\">Pushes a target toward your own spikes.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto Push Range</span>\n                    <span class=\"opt-desc\">How close a target has to be before autopush engages.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_trapStandoff\">Trap Standoff</label>\n                    <span class=\"opt-desc\">Keeps you off an enemy held in your trap. Your body is the only thing that can push a trapped player out - a weapon hit cannot, because the trap zeroes their velocity, but walking into them moves their position directly. Blocks only the part of your movement that closes the gap, so you still circle and reposition normally. Auto Push does the opposite on purpose and takes priority when it is on.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_trapStandoff\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Trap Standoff Distance</span>\n                    <span class=\"opt-desc\">The closest you will get. The game starts pushing at 70, so 70 and up stops the push outright; under 70 you still overlap and still shove them, and the number only caps how deep the overlap gets. Holding a direction against the line orbits outward a little before turning back in, so you sit between this number and about 28 above it - and a melee swing reaches weapon range plus 63, which is 128 for the shortest primary in the game, so every weapon stays in reach across the whole slider.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_trapStandoffRange\" type=\"range\" step=\"1\" min=\"50\" max=\"90\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\n                    <span class=\"opt-desc\">Short burst movement instead of a steady walk.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_dashMovement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\n                    <span class=\"opt-desc\">Breaks the structures standing between you and a target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autobreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_breakPosition\">Break Position</label>\n                        <span class=\"opt-desc\">Which trap Autobreak takes. Inside: only the trap you are caught in. Outside: only traps you are not in. Spikes break the same either way.</span>\n                    </div>\n                    <select id=\"_breakPosition\" class=\"ryn-select\">\n                        <option value=\"inside\">Inside</option>\n                        <option value=\"outside\">Outside</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_automill\">Automill</label>\n                    <span class=\"opt-desc\">Leaves windmills behind you while you move.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_automill\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\n                    <span class=\"opt-desc\">Gathers resources on its own when nothing is threatening you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoGrind\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetPrimary\">Grind Until (primary)</label>\n                        <span class=\"opt-desc\">Which variant to take your primary weapon to. Grinding idles once both slots reach their target, and picks straight back up if you raise one.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetPrimary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                    </select>\n                </div>\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetSecondary\">Grind Until (secondary)</label>\n                        <span class=\"opt-desc\">The same for your secondary. Only the great hammer is ground here, so this does nothing while you carry anything else.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetSecondary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPlay\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_turretSteal\">Turret steal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSteal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapAnimal\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
   // ==========================================================================
   // Kill animation styles — the one list
   //
@@ -4293,14 +4293,12 @@ window.grbtp = 35;
           this.damages.length = 0;
         }
         this.tickDamage += difference;
-        // novastorm's `damages.push(UTILS.fixTo(damage, 2))`. The array was
-        // already declared and cleared here and never written to; FalconHeal
-        // reads it as the tick's damage bucket and splits it into hits, shots
-        // and spikes the way novastorm's distributionDamages does. Rounded to
-        // two places for the same reason novastorm rounds: the numbers are
-        // matched against computed weapon damage, and float drift would stop
-        // them matching.
-        this.damages.push(Math.round(difference * 100) / 100);
+        // `damages` is declared and cleared here and nothing writes to it. It
+        // was filled for the old Falcon heal, which read it as the tick's
+        // damage bucket and worked backwards from each number to the weapon
+        // that produced it. Glotus's heal identifies nothing, so the push is
+        // gone with the module that wanted it and the array is back to what
+        // the base client leaves it as.
         this.damageTick = this.tickCount + 1;
         if (isEnemy) {
           PlayerManager.lastEnemyReceivedDamage[0] = this.id;
@@ -9555,7 +9553,7 @@ window.grbtp = 35;
     instaToggle=false;
     instakillTarget=null;
     // Held, not toggled: the fast heal key is a "keep eating while I hold this"
-    // key, and FalconHeal reads the flag once a tick. keydown ignores
+    // key, and AntiInsta reads the flag once a tick. keydown ignores
     // repeats, so this is set once on the way down and cleared on the way up.
     fastHealPress=false;
     // Delete-key hold detection: the pending timer, and whether it already
@@ -10035,7 +10033,7 @@ window.grbtp = 35;
         } catch (_) {}
       }
       // Fast heal. Held rather than toggled, and it does nothing here beyond
-      // raising the flag: the heal itself belongs to FalconHeal's tick,
+      // raising the flag: the heal itself belongs to AntiInsta's tick,
       // where the packet budget and the shame count are known and where it
       // lands ahead of the placement modules. The key is HEAL_FAST_KEY — the
       // food hotkey's own default, which is the pairing this was asked for:
@@ -19420,6 +19418,7 @@ window.grbtp = 35;
         if (myPlayer.shameCount < 7) {
           ModuleHandler.heal();
           ModuleHandler.healedOnce = true;
+          ModuleHandler.didAntiInsta = true;
         }
         return;
       }
@@ -19787,1056 +19786,159 @@ window.grbtp = 35;
     }
   }
   // ==========================================================================
-  // AUTO HEAL — Falcons V2's system, ported whole onto RYN's data.
+  // AUTO HEAL — Glotus Client 5.5.5's AntiInsta, ported whole.
   //
-  // The system this replaces predicted damage: every tick it summed what could
-  // land — spike contact, a swing in range, a turret off cooldown — and healed
-  // against the sum. That reads the board, and reading the board is guessing.
+  // What stood here was Falcon V2's heal: a damage-identification pipeline
+  // that took the number which had just landed, worked backwards to the weapon
+  // that produced it, summed what its owner still had loaded, and only then
+  // chose a helmet and a tick to eat on. All of it is gone. Glotus's heal is a
+  // different idea, and it is the one asked for.
   //
-  // Falcon does the opposite, and it is the whole idea: it heals against damage
-  // that has *already landed*, and works backwards from the number.
+  // Glotus identifies nothing. Once a tick it asks two questions:
   //
-  //     a damage number arrives  ->  which weapon produces exactly that number?
-  //                             ->  whose weapon is it?
-  //                             ->  what else does that player still have loaded?
-  //                             ->  can that finish me?
-  //                             ->  which hat survives it, and when do I eat?
+  //   is something dangerous happening right now?  ->  eat, shame and all
+  //   am I clear of the server's 120ms window?     ->  eat, top up
   //
-  // The first step is `fitsPalette`: every hit in moomoo is a weapon's base
-  // damage times a small set of known multipliers, so the observed number
-  // identifies the weapon that produced it. From there the rest is bookkeeping
-  // the client already has — reload counters, hats, tails, what is standing
-  // nearby — and the answer is a fact about this tick rather than a forecast.
+  // "Dangerous" is EnemyManager's whole threat surface — the same flags the
+  // insta modules and the hat picker already run off — plus being at or under
+  // 20 health, plus a tick that is asking for soldier. Nothing is forecast and
+  // nothing is deferred: no held food, no forced helmet, no queue, no second
+  // opinion about what the damage was.
   //
-  // Everything below is Falcon's, function for function, in Falcon's order.
-  // What changed is only the data underneath:
+  // Both clients descend from the same base, so the port is name for name:
+  // `_autoheal`, `shameActive`, `shameCount`, `tempHealth`, `maxHealth`,
+  // `receivedDamage` (the timestamp of the last hit taken, not an amount —
+  // Animal carries an amount under the same name), `SocketManager.pong`, every
+  // EnemyManager flag and `ModuleHandler.heal()` all already exist here under
+  // the names Glotus reads them by. Nothing in `_glotusTick` is adapted.
   //
-  //   Falcon                      RYN
-  //   er                          client.myPlayer
-  //   er.health / skinIndex       currentHealth / hatID
-  //   er.tailIndex                accessoryID
-  //   er.trapData                 trappedIn
-  //   er.skins[id]                ModuleHandler.canBuy(0, id)
-  //   er.items[0]                 myPlayer.getItemByType(2)
-  //   er.vel                      pos.future
-  //   Jt.tick                     myPlayer.tickCount
-  //   Jt.enemies.near             _near, rebuilt per tick on Falcon's own rule
-  //   Jt.closeObjects             ObjectManager.grid2D query
-  //   Jt.nextTick / tickOut       _next / _later, drained at the top of postTick
-  //   f.weapons[id]               DataHandler.getWeapon(id)
-  //   items.list[id]              Items[id]
-  //   isFriendly(sid)             !PlayerManager.isEnemyByID(ownerID, myPlayer)
-  //   or.storeEquip(hat)          forcedSoldier / forcedEMP -> ModuleHandler.forceHat
+  // ── Read `needTimes` carefully ────────────────────────────────────────────
+  // `Player.maxHealth` is declared `Math.LN1` — which is `undefined`, there
+  // being no such constant on Math — and nothing ever assigns it. That is true
+  // in Glotus and it is true here. So `(undefined - tempHealth) / restore` is
+  // NaN, `needTimes || 1` is 1, and `for (i = 0; i <= 1; i++)` sends exactly
+  // two foods. That is not a transcription slip, it is what Glotus does on
+  // every heal it performs; and because the module runs every tick, a deeper
+  // hole closes over consecutive ticks instead of in one send.
   //
-  // ── Where this port deliberately differs from Falcon ──────────────────────
-  // Four places, all forced by RYN's data or by a defect that would make the
-  // port do nothing at all. Every one of them is marked in the code below with
-  // the same tag, PORT-DIFF, so they can be found and reverted individually.
-  //
-  //   1. soldierRound's non-soldier branch. Falcon calls
-  //      `doPreciseValues(e)` with one argument, so the float tolerance is
-  //      never applied and the comparison becomes exact equality. That works in
-  //      Falcon because its whole pipeline is float-consistent. It cannot work
-  //      here: RYN rounds the observed damage to two places on arrival, while a
-  //      computed palette entry like 35 * 1.1 * 1.5 is 57.75000000000001, so
-  //      exact equality would fail and the palette would match nothing. Both
-  //      branches pass both arguments here.
-  //
-  //   2. Ranged weapon damage. Falcon is a bundle fork carrying its own item
-  //      table, where the hunting bow has `dmg: 25` on the weapon. The live
-  //      game does not: ranged weapons have no `dmg` and the projectile carries
-  //      it (Projectiles 0/2/3/5 = 25/35/30/50). Reading `weapon.damage` here
-  //      would score every bow, crossbow and musket at zero, so getDamage falls
-  //      through to the projectile the way RYN's own getMaxWeaponDamage does.
-  //
-  //   3. Result entries carry `sid`. Falcon's spike branch looks up an existing
-  //      entry with `n.find(i => i.sid == e.sid)`, but nothing ever sets `sid`,
-  //      so the lookup always misses and a spike hit is counted twice — once as
-  //      its own entry and once against the enemy. Setting it makes the merge
-  //      the author wrote actually run.
-  //
-  //   4. heal() sends four packets, not three. Asked for: Falcon sends
-  //      select / hit / restore, and this adds the explicit stop between hit
-  //      and restore, which is the same shape RYN's own place() uses.
-  //
-  // Everything else is Falcon's, including the parts that look odd — the
-  // monkey-tail multiplier applied after the sum it should scale, the EMP
-  // condition's exact polarity — because those change what the system decides,
-  // and the point of the port is Falcon's decisions.
+  // The same expression is what made the outgoing port do nothing at all.
+  // Falcon's heal took a value, `heal(maxHealth - currentHealth)` handed it
+  // NaN, and `for (i = 0; i < NaN; i++)` never ran a single iteration — so
+  // Autoheal had not eaten one apple since it was written. Glotus's `|| 1` is
+  // the reason the same undefined is survivable there and fatal here.
   // ==========================================================================
 
-  // ── Identity, every number read off the game's own tables ─────────────────
-  // (drivers/game-drivers.json, extracted from src/game_index.js)
-  const HEAL_SOLDIER_HAT = 6;            // Hats[6]  dmgMult 0.75
-  const HEAL_EMP_HAT = 22;               // Hats[22] antiTurret 1
-  const HEAL_BULL_HAT = 7;               // Hats[7]  healthRegen -5
-  const HEAL_TURRET_GEAR = 53;           // Hats[53] turret.rate 2500
-  const HEAL_MONKEY_TAIL = 11;           // Accessories[11] dmgMultO 0.2
-  const HEAL_GREAT_HAMMER = 10;
-  // Projectiles[1].dmg — the turret gear's own shot.
-  const HEAL_TURRET_DMG = 25;
-  // The multipliers a hit can carry, which is what makes a damage number
-  // identify its weapon. Attacker side: nothing, Bull (dmgMultO 1.5),
-  // Bloodthirster (dmgMultO 1.2). Victim side: nothing, Monkey Tail
-  // (dmgMultO 0.2). Falcon's [1, 1.5, 1.2] x [1, .2], and all four values are
-  // the game's.
-  const HEAL_ATTACKER_MULTS = [ 1, 1.5, 1.2 ];
-  const HEAL_VICTIM_MULTS = [ 1, .2 ];
-  const HEAL_SOLDIER_MULT = .75;
-  // Spike contact damage by tier: spikes 20, greater 35, spinning 45,
-  // poison 30. Items 6..9.
-  const HEAL_SPIKE_TIERS = [ 20, 35, 45, 30 ];
-
-  // ── Forced add-on slots ───────────────────────────────────────────────────
-  // Falcon's four, in Falcon's order. A slot holds a hat on for a number of
-  // ticks rather than for a moment, which is what lets a heal be decided on one
-  // tick and land on the next with the right helmet already worn.
-  const HEAL_FORCE_SOLDIER = 0;
-  const HEAL_FORCE_EMP = 1;
-  const HEAL_FORCE_TRAP_SOLDIER = 2;
-  const HEAL_FORCE_ONETICK_SOLDIER = 3;
-  const HEAL_FORCE_SLOTS = 4;
-
-  // How far past a weapon's own reach an enemy still counts as "near".
-  // Falcon: `getDistance(enemy, me) - 100 <= weapons[enemy.primary].range`.
-  const HEAL_NEAR_PAD = 100;
-  // How recently a weapon must have fired to count as the thing that hit me.
-  const HEAL_HIT_WINDOW = 2;
-  // How loaded a weapon has to be before its damage is counted as coming.
-  const HEAL_READY_FRACTION = .7;
-  // The server's own shame rule: eating inside 120ms of taking damage raises
-  // the count, and at 8 it locks eating out for 30 seconds. Falcon stops at 7.
-  const HEAL_SHAME_LIMIT = 7;
-  // Falcon's zero-shame hold: two ticks, and the spike that makes it worth
-  // holding for.
-  const HEAL_ZERO_SHAME_DELAY = 2;
-  const HEAL_ZERO_SHAME_SPIKE_RANGE = 50;
-  const HEAL_ZERO_SHAME_SPIKE_DMG = 20;
-  // The turret line test: how far the enemy's own target may be, and how close
-  // to the line between them I have to stand to be in the way.
-  const HEAL_TURRET_LINE_RANGE = 600;
-  const HEAL_TURRET_LINE_TOLERANCE = 60;
-  // checkForSpikePlacements walks the enemy's spike ring at Falcon's own
-  // resolution: PI/16 per step, so 32 directions plus the closing sample.
-  const HEAL_SPIKE_RING_STEP = Math.PI / 16;
-  // The spike an enemy is assumed to be holding when we cannot tell. Item 9 is
-  // spinning spikes, the worst case at 45 damage.
-  const HEAL_SPIKE_DEFAULT_ID = 9;
-  // Falcon's float tolerance when matching a computed damage to an observed one.
-  const HEAL_PRECISION = .01;
-  // What one food costs on the wire in this port: select, hit, stop, restore.
-  const HEAL_PACKET_COST = 4;
-  // The most food one tick may send. The packet budget already bounds this,
-  // but the budget is shared with everything else in the client and a heal is
-  // not entitled to all of it: five apples is a full bar from one health, and
-  // anything past that is spending someone else's allowance.
-  const HEAL_MAX_PER_TICK = 5;
-  // Cells of the spatial grid to sweep for nearby objects. 3 is a 7x7 block,
-  // 700 units across, which covers every spike that can reach the ring.
-  const HEAL_GRID_SEARCH = 3;
-
-  // ── The HUD's reading of the ladder ───────────────────────────────────────
-  // Not part of Falcon's logic: these name the branch the ladder took so the
-  // debug row can print it. Nothing reads them back.
-  const HEAL_PRIORITY_NONE = 0;
-  const HEAL_PRIORITY_NORMAL = 1;
-  const HEAL_PRIORITY_SOLDIER = 2;
-  const HEAL_PRIORITY_EMP = 3;
-  const HEAL_PRIORITY_NAMES = [ "SAFE", "NORMAL", "SOLDIER", "EMP" ];
-
-  // The manual burst key. Held rather than toggled: it clears the whole health
-  // deficit on the tick it is held, under the same packet budget as everything
-  // else. KeyQ is the food hotkey's own default.
+  // The manual burst key. Not part of the port — it is RYN's own hold-to-eat
+  // key, and the only thing in this file that eats on a tick the module did
+  // not decide to. KeyQ is the food hotkey's own default.
   const HEAL_FAST_KEY = "KeyQ";
+  // What one food costs on the wire: select, hit, restore.
+  const HEAL_PACKET_COST = 3;
+  // The most food the burst may send in one tick. The packet budget already
+  // bounds it, but that budget is shared with everything else in the client
+  // and a held key is not entitled to all of it.
+  const HEAL_BURST_MAX = 5;
+  // A full bar. Only the burst needs it: the module above reads `maxHealth`
+  // and gets Glotus's undefined, which is the whole of the note above.
+  const HEAL_FULL_HEALTH = 100;
 
-  class FalconHeal {
-    // The slot, the name and the tick position are RYN's. "antiInsta" is what
-    // ModuleHandler registers, what RynPlacementEngine.priorityFor reads as
-    // DEFENSE, and what the debug HUD prints.
+  class AntiInsta {
     moduleName="antiInsta";
     client;
-
-    // ── Falcon's own state ──────────────────────────────────────────────────
-    // The tick's damage bucket. RYN fills myPlayer.damages on every health drop
-    // (Player.updateHealth), which is exactly Falcon's `damages.push(fixTo(d,2))`,
-    // so this is a reference to that array rather than a second copy of it.
-    damages=[];
-    // Falcon's held food: a heal deliberately sitting out a tick or two so it
-    // does not land inside the server's 120ms shame window.
-    healingDelay=0;
-    // Falcon's weapon-damage palette cache, keyed weapon:variant.
-    cachedDamages=new Map;
-    // Falcon's forced add-ons. A count of ticks per slot.
-    forcedAddOns=new Array(HEAL_FORCE_SLOTS).fill(0);
-    // Falcon's two standing soldier reasons, recomputed every tick.
-    velSoldier=false;
-    spikeSoldier=false;
-    // What the ladder decided this tick, for the HUD.
-    healPriority=HEAL_PRIORITY_NONE;
-    // ShameReset asks this before it puts the bull helmet on: a tick that is
-    // healing or holding food is not a tick to wear a damage-taking hat into.
-    shouldResetShame=true;
-    // Falcon's Jt.nextTick / Jt.tickOut, kept inside the module. Not a
-    // scheduler: a list of callbacks and the tick each is due, drained at the
-    // top of this module's own postTick. Nothing else can queue into it.
-    _next=[];
-    _later=[];
-    // This tick's world, refreshed once in postTick and read by everything.
-    _near=[];
-    _objects=[];
-    _tick=0;
-    // Scratch, so the per-tick sweeps allocate nothing.
-    _scratch={ x: 0, y: 0 };
-
+    forceHeal=false;
     constructor(client2) {
       this.client = client2;
     }
-
-    reset() {
-      this.damages = [];
-      this.healingDelay = 0;
-      this.cachedDamages.clear();
-      this.forcedAddOns.fill(0);
-      this.velSoldier = false;
-      this.spikeSoldier = false;
-      this.healPriority = HEAL_PRIORITY_NONE;
-      this.shouldResetShame = true;
-      this._next.length = 0;
-      this._later.length = 0;
-      this._near.length = 0;
-      this._objects.length = 0;
+    // Clear of the server's shame window. The 120ms rule is applied at the
+    // server, so the round trip goes back in before the comparison; 125 is the
+    // rule plus the only margin Glotus allows itself.
+    isSaveHealTime() {
+      const {myPlayer: myPlayer, SocketManager: SocketManager2} = this.client;
+      const startHit = myPlayer.receivedDamage || 0;
+      const timeSinceHit = Date.now() - startHit + SocketManager2.pong;
+      return timeSinceHit >= 125;
     }
-
-    // ── Falcon's Jt.nextTick / Jt.tickOut ───────────────────────────────────
-    // A heal decided on this tick lands on the next one, with the helmet the
-    // decision asked for already worn. That delay is the feature, not an
-    // artefact: it is what separates "eat now and take the shame" from "wear
-    // the right hat, then eat".
-    _next_(fn) {
-      this._next.push(fn);
+    isSaveHeal() {
+      return this.isSaveHealTime();
     }
-    _later_(fn, ticks) {
-      this._later.push({
-        fn: fn,
-        due: this._tick + Math.max(1, ticks | 0)
-      });
-    }
-    _runQueues() {
-      if (this._next.length !== 0) {
-        const due = this._next;
-        this._next = [];
-        for (const fn of due) {
-          try {
-            fn();
-          } catch (_) {}
-        }
-      }
-      if (this._later.length !== 0) {
-        const keep = [];
-        for (const entry of this._later) {
-          if (entry.due > this._tick) {
-            keep.push(entry);
-            continue;
-          }
-          try {
-            entry.fn();
-          } catch (_) {}
-        }
-        this._later = keep;
-      }
-    }
-
-    // ── oe.getDamage ────────────────────────────────────────────────────────
-    // A weapon's base damage against a player, before any hat or tail.
-    //
-    // PORT-DIFF 2: ranged weapons carry no `damage` in the live game — the
-    // projectile does — so this falls through to the projectile rather than
-    // returning zero for every bow, crossbow and musket.
-    getDamage(weaponID, variant) {
-      if (weaponID === null || weaponID === undefined) return 0;
-      const weapon = DataHandler_default.getWeapon(weaponID);
-      if (!weapon) return 0;
-      if (DataHandler_default.isShootable(weaponID)) {
-        const projectile = DataHandler_default.getProjectile(weaponID);
-        return projectile ? projectile.damage : 0;
-      }
-      const base = weapon.damage || 0;
-      const entry = WeaponVariants[variant];
-      return base * (entry && entry.val !== undefined ? entry.val : 1);
-    }
-
-    // ── oe.getReload ────────────────────────────────────────────────────────
-    // How ready a weapon is, 0..1. Falcon reads `1 - reloads[w]/speed` off a
-    // millisecond counter; RYN counts ticks up to the weapon's own tick count,
-    // which is the same fraction measured the other way round.
-    getReload(player, weaponID) {
-      const type = this._slotOf(weaponID);
-      if (type === null) return 1;
-      const reload = player.reload && player.reload[type];
-      if (!reload || !reload.max) return 1;
-      return Math.max(0, Math.min(1, reload.current / reload.max));
-    }
-    // Which of the three reload counters a weapon id belongs to: 0 primary,
-    // 1 secondary, 2 the turret gear's own 2500ms clock.
-    _slotOf(weaponID) {
-      if (weaponID === HEAL_TURRET_GEAR) return 2;
-      if (weaponID === null || weaponID === undefined) return null;
-      const weapon = DataHandler_default.getWeapon(weaponID);
-      return weapon ? weapon.itemType : null;
-    }
-
-    // ── oe.hasHit ───────────────────────────────────────────────────────────
-    // Did this weapon fire inside the last two ticks. Falcon keeps a per-weapon
-    // hit tick; RYN resets the reload counter on the attack packet, so a
-    // counter still near zero is a weapon that has just swung.
-    hasHit(player, weaponID) {
-      const type = this._slotOf(weaponID);
-      if (type === null) return false;
-      const reload = player.reload && player.reload[type];
-      if (!reload) return false;
-      return reload.current <= HEAL_HIT_WINDOW;
-    }
-
-    // ── qt.doPreciseValues / qt.soldierRound ────────────────────────────────
-    // Snap a computed damage onto an observed one when they are within a
-    // hundredth. The palette is built by multiplying floats; the observed
-    // number arrives rounded to two places. Without the snap they never match.
-    doPreciseValues(value, target) {
-      const diff = value - target;
-      return diff < HEAL_PRECISION && diff > 0 ? target : value;
-    }
-    // PORT-DIFF 1: Falcon's else branch drops the second argument, which turns
-    // the snap off. Both branches pass it here — see the header.
-    soldierRound(value, target) {
-      const myPlayer = this.client.myPlayer;
-      if (myPlayer.hatID === HEAL_SOLDIER_HAT) {
-        return this.doPreciseValues(HEAL_SOLDIER_MULT * value, target);
-      }
-      return this.doPreciseValues(value, target);
-    }
-
-    // ── qt.findCachedDamage ─────────────────────────────────────────────────
-    // Every number this weapon can produce: its base times each attacker
-    // multiplier times each victim multiplier. Six entries, built once per
-    // weapon and variant.
-    findCachedDamage(weaponID, variant, baseDamage) {
-      const key = weaponID + ":" + variant;
-      let cached = this.cachedDamages.get(key);
-      if (cached) return cached;
-      cached = [];
-      for (const attacker of HEAL_ATTACKER_MULTS) {
-        for (const victim of HEAL_VICTIM_MULTS) {
-          cached.push(baseDamage * attacker * victim);
-        }
-      }
-      this.cachedDamages.set(key, cached);
-      return cached;
-    }
-
-    // ── qt.fitsPalette ──────────────────────────────────────────────────────
-    // Which of this enemy's weapons produces exactly this damage number, or
-    // null. This is the whole inversion: a number identifies a weapon.
-    fitsPalette(damage, enemy) {
-      const primary = enemy.weapon.primary;
-      if (primary !== null && primary !== undefined) {
-        const variant = enemy.getWeaponVariant(primary).current;
-        const base = this.getDamage(primary, variant);
-        const palette = this.findCachedDamage(primary, variant, base);
-        for (const candidate of palette) {
-          if (this.soldierRound(candidate, damage) === damage) return "primary";
-        }
-      }
-      const secondary = enemy.weapon.secondary;
-      if (secondary !== null && secondary !== undefined) {
-        if (DataHandler_default.isShootable(secondary)) {
-          // A projectile carries no variant scaling, so its one number is the
-          // whole palette.
-          if (this.soldierRound(this.getDamage(secondary, 0), damage) === damage) return "secondary";
-        } else {
-          const variant = enemy.getWeaponVariant(secondary).current;
-          const base = this.getDamage(secondary, variant);
-          const palette = this.findCachedDamage(secondary, variant, base);
-          for (const candidate of palette) {
-            if (this.soldierRound(candidate, damage) === damage) return "secondary";
-          }
-        }
-      }
-      return this.soldierRound(HEAL_TURRET_DMG, damage) === damage ? "turret" : null;
-    }
-
-    // ── qt.checkIfUserCanOnetick / qt.checkCanOneTick ───────────────────────
-    // Could this enemy take me from full in one exchange: bull-multiplied
-    // primary, plus a turret shot, plus the ruby variant's poison tick.
-    checkCanOneTick(enemy) {
-      const primary = enemy.weapon.primary;
-      if (primary === null || primary === undefined) return false;
-      const variant = enemy.getWeaponVariant(primary).current;
-      return 1.5 * this.getDamage(primary, variant) + HEAL_TURRET_DMG + (variant === 3 ? 5 : 0) >= 100;
-    }
-
-    // ── ti.melee ────────────────────────────────────────────────────────────
-    // Where one of their swings puts me. The game's own impulse: an attack adds
-    // `0.3 * (weightM || 1) + (weapon.knock || 0)` to the victim's velocity
-    // along attacker -> victim, and one tick of that is `impulse * tickMs`.
-    //
-    // One tick, deliberately, and not the full glide: this asks where I am
-    // *when their follow-up lands*, which is the next tick, not where I
-    // eventually stop. It is the same quantity RYN's own weapon `knockback`
-    // table holds.
-    simulateMelee(weaponID, player, enemy) {
-      const weapon = DataHandler_default.getWeapon(weaponID);
-      const from = player.pos.current;
-      const dir = Math.atan2(from.y - enemy.pos.current.y, from.x - enemy.pos.current.x);
-      const knock = (weapon && weapon.knock ? weapon.knock : 0) + .3;
-      const travel = knock * RPE_TICK_MS;
-      this._scratch.x = from.x + Math.cos(dir) * travel;
-      this._scratch.y = from.y + Math.sin(dir) * travel;
-      return this._scratch;
-    }
-
-    // ── qt.spiekKB ──────────────────────────────────────────────────────────
-    // How much spike damage their swing would push me into. Zero while I am
-    // pinned, because the game zeroes a trapped player's velocity and the push
-    // cannot move me.
-    spiekKB(weaponID, enemy) {
-      const myPlayer = this.client.myPlayer;
-      if (myPlayer.trappedIn) return 0;
-      const landing = this.simulateMelee(weaponID, myPlayer, enemy);
-      const lx = landing.x, ly = landing.y;
-      let total = 0;
-      for (const object of this._objects) {
-        const damage = object.getDamage();
-        if (damage <= 0) continue;
-        const pos = object.pos.current;
-        if (hyp(lx - pos.x, ly - pos.y) <= Config_default.playerScale + object.scale) total += damage;
-      }
-      return total;
-    }
-
-    // ── qt.checkForSpikePlacements ──────────────────────────────────────────
-    // Could any enemy drop a spike onto me right now. Their ring is walked at
-    // Falcon's own resolution — PI/16, so 32 directions — and a direction
-    // counts when the build would be legal there and the spike would reach me
-    // either where I am or where I am going.
-    //
-    // The worst tier wins, because this feeds a decision about which helmet to
-    // wear and the helmet has to survive the worst of them.
-    checkForSpikePlacements() {
-      const {myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
-      let best = null;
-      for (const enemy of this._near) {
-        const spikeID = enemy.getItemByType ? enemy.getItemByType(4) : null;
-        const id = spikeID === null || spikeID === undefined ? HEAL_SPIKE_DEFAULT_ID : spikeID;
-        const item = Items[id];
-        if (!item) continue;
-        if (best !== null && (item.dmg || 0) <= best.dmg) continue;
-        // The game's own build ring: playerScale + item.scale + placeOffset.
-        const ringR = Config_default.playerScale + item.scale + (item.placeOffset || 0);
-        // And its own contact radius: playerScale + item.scale * colDiv, with
-        // colDiv 1 for every spike in the table.
-        const touchR = Config_default.playerScale + item.scale * ("colDiv" in item ? item.colDiv : 1);
-        const from = enemy.pos.current;
-        const me = myPlayer.pos.current;
-        const fut = myPlayer.pos.future ?? me;
-        let found = false;
-        for (let angle = 0; angle <= Math.PI * 2 && !found; angle += HEAL_SPIKE_RING_STEP) {
-          const x = from.x + Math.cos(angle) * ringR;
-          const y = from.y + Math.sin(angle) * ringR;
-          if (hyp(x - me.x, y - me.y) > touchR && hyp(x - fut.x, y - fut.y) > touchR) continue;
-          // Legality asked of the engine's own point test, so this and the
-          // placer cannot disagree about what the server would accept.
-          if (!this._pointBuildable(id, x, y, item.scale)) continue;
-          found = true;
-        }
-        if (found) {
-          best = {
-            enemy: enemy,
-            dmg: item.dmg || 0
-          };
-        }
-      }
-      return best || false;
-    }
-    // nn.checkItem — the game's checkItemLocation, asked of one point.
-    _pointBuildable(id, x, y, scale) {
-      const {ObjectManager: ObjectManager2} = this.client;
-      const placer = this.client._ModuleHandler.staticModules.autoPlacer;
-      if (placer && typeof placer._pointFree === "function") {
-        return placer._pointFree(id, x, y, scale, ObjectManager2, null);
-      }
-      return ObjectManager2.canPlaceItem(id, new Vector_default(x, y));
-    }
-
-    // ── qt.doTurretTargetLineMath ───────────────────────────────────────────
-    // Is their turret shot going to pass through me on its way to someone else.
-    // A turret picks the nearest hostile entity; if that is not me but I am
-    // standing on the line at a shorter range, I eat the projectile anyway —
-    // and the EMP helmet does not help with that, because it stops a turret
-    // choosing me, not a shot already in the air.
-    doTurretTargetLineMath(enemy) {
-      const {myPlayer: myPlayer, PlayerManager: PlayerManager2} = this.client;
-      const from = enemy.pos.current;
-      let target = null, bestDist = Infinity;
-      const consider = entity => {
-        if (!entity || entity === enemy || entity === myPlayer) return;
-        const d = from.distance(entity.pos.current);
-        if (d > HEAL_TURRET_LINE_RANGE || d >= bestDist) return;
-        bestDist = d;
-        target = entity;
-      };
-      for (const animal of PlayerManager2.animalData.values()) {
-        if (animal && animal.isDanger) consider(animal);
-      }
-      for (const player of PlayerManager2.players) {
-        if (!player || player.id === myPlayer.id) continue;
-        if (!PlayerManager2.isEnemyByID(player.id, enemy)) continue;
-        consider(player);
-      }
-      if (target === null) return false;
-      const mine = from.distance(myPlayer.pos.current);
-      if (mine > bestDist) return false;
-      const dir = Math.atan2(target.pos.current.y - from.y, target.pos.current.x - from.x);
-      const px = from.x + Math.cos(dir) * mine;
-      const py = from.y + Math.sin(dir) * mine;
-      return hyp(myPlayer.pos.current.x - px, myPlayer.pos.current.y - py) <= HEAL_TURRET_LINE_TOLERANCE;
-    }
-
-    // ── qt.interpretDamage ──────────────────────────────────────────────────
-    // The core. Every damage number this tick is matched to the weapon that
-    // produced it, then to the player holding that weapon, and then that
-    // player's remaining loaded weapons are added up as what is still coming.
-    //
-    // The result is one entry per attributed source carrying three things:
-    // how much more it can still do, whether a helmet that only stops turrets
-    // would save me from it, and whether spikes are part of it.
-    interpretDamage() {
-      const {myPlayer: myPlayer, PlayerManager: PlayerManager2} = this.client;
-      const enemies = this._near;
-      const results = [];
-      const usedEnemies = new Map;
-      const usedSpikes = new Map;
-
-      for (const damage of this.damages) {
-        let matched = false;
-        for (const enemy of enemies) {
-          if (usedEnemies.has(enemy.id)) continue;
-          const fit = this.fitsPalette(damage, enemy);
-          if (!fit) continue;
-          const entry = {
-            // PORT-DIFF 3: Falcon looks entries up by sid and never sets one.
-            sid: enemy.id,
-            canEMP: true,
-            potDamage: 0,
-            spike: false,
-            done: false
-          };
-          const primary = enemy.weapon.primary;
-          const secondary = enemy.weapon.secondary;
-          let primaryDmg = this.getDamage(primary, enemy.getWeaponVariant(primary).current);
-          const secondaryDmg = this.getDamage(secondary, enemy.getWeaponVariant(secondary).current);
-          const primaryReload = this.getReload(enemy, primary);
-          const secondaryReload = this.getReload(enemy, secondary);
-          const turretReload = this.getReload(enemy, HEAL_TURRET_GEAR);
-          const secondaryWeapon = DataHandler_default.getWeapon(secondary);
-
-          if (fit === "primary") {
-            // They swung the primary. What is left is the secondary and the
-            // turret.
-            if (this.hasHit(enemy, primary)) {
-              if (secondaryReload > HEAL_READY_FRACTION) {
-                entry.potDamage += secondaryDmg;
-                const kb = this.spiekKB(secondary, enemy);
-                if (kb) {
-                  entry.potDamage += kb;
-                  entry.spike = true;
-                }
-              }
-              if (turretReload > HEAL_READY_FRACTION) entry.potDamage += HEAL_TURRET_DMG;
-              // Falcon's polarity, kept: the turret helmet is only the answer
-              // when their shot is not already pointed elsewhere through me and
-              // their secondary cannot reach me by hand.
-              if (!(!this.doTurretTargetLineMath(enemy) && secondaryWeapon && DataHandler_default.isShootable(secondary))) {
-                entry.canEMP = false;
-              }
-              entry.done = true;
-            }
-          } else if (fit === "secondary") {
-            entry.canEMP = false;
-            if (this.hasHit(enemy, secondary)) {
-              if (primaryReload > HEAL_READY_FRACTION) {
-                // Falcon's order, kept: the tail multiplier is applied to
-                // `primaryDmg` after the sum that uses it, so it does not scale
-                // this term. Changing it would change what the ladder decides.
-                entry.potDamage += 1.5 * primaryDmg;
-                if (enemy.accessoryID === HEAL_MONKEY_TAIL) primaryDmg *= .2;
-                const kb = this.spiekKB(primary, enemy);
-                if (kb) {
-                  entry.potDamage += kb;
-                  entry.spike = true;
-                }
-              }
-              if (secondary === HEAL_GREAT_HAMMER) entry.potDamage += HEAL_TURRET_DMG;
-              entry.done = true;
-            }
-          } else if (this.hasHit(enemy, HEAL_TURRET_GEAR) && !DataHandler_default.isShootable(secondary) && this.hasHit(enemy, secondary)) {
-            if (primaryReload > HEAL_READY_FRACTION) {
-              entry.potDamage += 1.5 * primaryDmg;
-              const kb = this.spiekKB(primary, enemy);
-              if (kb) {
-                entry.potDamage += kb;
-                entry.spike = true;
-              }
-            }
-            if (this.checkCanOneTick(enemy)) this.resetForcedAddOn(HEAL_FORCE_ONETICK_SOLDIER);
-            entry.done = true;
-          }
-
-          if (entry.done) {
-            results.push(entry);
-            usedEnemies.set(enemy.id, 1);
-            matched = true;
-            break;
-          }
-        }
-        if (matched) continue;
-
-        // Not a weapon: a spike tier, raw or soldier-reduced. Only believed
-        // while I am pinned, because that is when standing on one is not a
-        // choice.
-        const tier = HEAL_SPIKE_TIERS.find(v => nearlyEqualHeal(v, damage) || nearlyEqualHeal(v, damage / HEAL_SOLDIER_MULT));
-        if (tier === undefined || !myPlayer.trappedIn) continue;
-
-        let extra = 0;
-        const candidates = [];
-        for (const object of this._objects) {
-          if (usedSpikes.has(object.id)) continue;
-          if (object.getDamage() !== tier) continue;
-          candidates.push(object);
-        }
-        candidates.sort((a, b) => myPlayer.pos.current.distance(a.pos.current) - myPlayer.pos.current.distance(b.pos.current));
-        for (const enemy of enemies) {
-          const spike = candidates.find(o => o.ownerID === enemy.id);
-          if (!spike) continue;
-          const existing = results.find(r => r.sid === enemy.id);
-          const primary = enemy.weapon.primary;
-          const reload = this.getReload(enemy, primary);
-          let dmg = 1.5 * this.getDamage(primary, enemy.getWeaponVariant(primary).current);
-          if (enemy.accessoryID === HEAL_MONKEY_TAIL) dmg *= .2;
-          const weapon = DataHandler_default.getWeapon(primary);
-          const speed = weapon && weapon.speed ? weapon.speed : 1e3;
-          // Their swing plus one tick of reload: a weapon this close to ready
-          // lands inside the window this heal has to survive.
-          if (reload + RPE_TICK_MS / speed < 1) continue;
-          if (!existing) {
-            usedSpikes.set(spike.id, true);
-            extra += dmg;
-            break;
-          }
-          if (existing.potDamage < dmg) {
-            usedSpikes.set(spike.id, true);
-            existing.potDamage = dmg;
-            break;
-          }
-        }
-        results.push({
-          sid: null,
-          canEMP: false,
-          spike: true,
-          potDamage: tier + extra
-        });
-      }
-
-      // ── Falcon's sensitiveHealing ──────────────────────────────────────────
-      // Two extra readings that are not tied to a damage number: the spikes I
-      // am about to walk into, and the spike an enemy could drop on me before
-      // the next heal lands.
-      if (Settings_default._sensitiveHealing) {
-        if (!myPlayer.trappedIn) {
-          const fut = myPlayer.pos.future ?? myPlayer.pos.current;
-          let velDamage = 0;
-          for (const object of this._objects) {
-            if (usedSpikes.has(object.id)) continue;
-            const damage = object.getDamage();
-            if (damage <= 0) continue;
-            const pos = object.pos.current;
-            if (hyp(fut.x - pos.x, fut.y - pos.y) <= Config_default.playerScale + object.scale) velDamage += damage;
-          }
-          results.push({
-            sid: null,
-            canEMP: false,
-            spike: true,
-            potDamage: velDamage
-          });
-        }
-        const placement = this.checkForSpikePlacements();
-        if (placement) {
-          const enemy = placement.enemy;
-          const primary = enemy.weapon.primary;
-          const dmg = 1.5 * this.getDamage(primary, enemy.getWeaponVariant(primary).current);
-          const reload = this.getReload(enemy, primary);
-          const existing = results.find(r => r.sid === enemy.id);
-          if (existing) {
-            existing.spike = true;
-            existing.canEMP = false;
-            if (reload === 1 && dmg + placement.dmg > existing.potDamage) existing.potDamage = dmg + placement.dmg;
-          } else {
-            results.push({
-              sid: enemy.id,
-              canEMP: false,
-              spike: true,
-              potDamage: placement.dmg + (reload === 1 ? dmg : 0)
-            });
-          }
-        }
-      }
-      return results;
-    }
-
-    // ── qt.validate ─────────────────────────────────────────────────────────
-    // Would this helmet actually save me. A hat that leaves me on one health is
-    // not an answer, and a hat I do not own is not an option.
-    validate(type, damage, hasSpike) {
-      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
-      const health = myPlayer.currentHealth;
-      if (type !== "emp" || myPlayer.isSandbox) {
-        if (health - damage <= 1) return false;
-        if (!ModuleHandler.canBuy(0, HEAL_SOLDIER_HAT)) return false;
-        // Pinned, with spikes in the sum, and a great hammer loaded: the hammer
-        // is the way out of the trap and wearing soldier to sit in it longer is
-        // the wrong trade.
-        if (myPlayer.trappedIn && hasSpike) {
-          const best = this.getBestWeapon(true);
-          if (best === HEAL_GREAT_HAMMER && this.getReload(myPlayer, best) === 1) return false;
-        }
-        return true;
-      }
-      if (!ModuleHandler.canBuy(0, HEAL_EMP_HAT)) return false;
-      // Falcon only ever swaps EMP in from soldier, never from bare.
-      if (myPlayer.hatID !== HEAL_SOLDIER_HAT) return false;
-      // EMP removes exactly one turret shot. If what is left still kills me it
-      // is the wrong hat.
-      if (health - (damage - HEAL_TURRET_DMG) <= 1) return false;
-      if (this.onlySoldier()) return false;
-      return true;
-    }
-
-    // ── Qi.getBestWeapon ────────────────────────────────────────────────────
-    getBestWeapon(includeTurret, target) {
-      const myPlayer = this.client.myPlayer;
-      const primary = myPlayer.weapon.primary;
-      if (myPlayer.weapon.secondary === HEAL_GREAT_HAMMER) {
-        if (includeTurret && primary !== 5 && this.getReload(myPlayer, primary) === 1 && target) {
-          const weapon = DataHandler_default.getWeapon(primary);
-          if (target.currentHealth - (weapon ? weapon.damage || 0 : 0) <= 0) return primary;
-        }
-        return HEAL_GREAT_HAMMER;
-      }
-      return primary;
-    }
-
-    // ── mi.addForcedAddOnValue / resetForcedAddOn / onlySoldier ─────────────
-    // A forced add-on is a helmet held for a number of ticks plus, optionally,
-    // a callback due at the end of that hold.
-    //
-    // Falcon sends the equip packet here and then uses the counter only to stop
-    // its hat routine overriding it. RYN re-asserts forceHat every tick, so the
-    // counter is what keeps the helmet on — which means it has to outlive the
-    // callback by one tick, or the helmet comes off on the very tick the food
-    // it was worn for lands.
-    addForcedAddOnValue(index, amount, callback) {
-      if (index < 0 || index >= HEAL_FORCE_SLOTS) return;
-      this.forcedAddOns[index] += amount + (callback ? 1 : 0);
-      if (typeof callback !== "function") return;
-      if (amount === 1) this._next_(callback);
-      else this._later_(callback, amount);
-    }
-    resetForcedAddOn(index) {
-      if (index < 0 || index >= HEAL_FORCE_SLOTS) return;
-      this.forcedAddOns[index] = 0;
-    }
-    onlySoldier() {
-      return this.forcedAddOns[HEAL_FORCE_SOLDIER] > 0 || this.forcedAddOns[HEAL_FORCE_TRAP_SOLDIER] > 0 || this.forcedAddOns[HEAL_FORCE_ONETICK_SOLDIER] > 0 || this.velSoldier || this.spikeSoldier;
-    }
-
-    // What ModuleHandler's hat block reads. EMP outranks soldier there, which
-    // is Falcon's own order.
-    get forcedEMP() {
-      return this.forcedAddOns[HEAL_FORCE_EMP] > 0;
-    }
-    get wantsEMP() {
-      return Settings_default._autoheal && this.forcedEMP;
-    }
-    get wantsSoldier() {
-      return Settings_default._autoheal && this.onlySoldier();
-    }
-
-    // ── qt.heal ─────────────────────────────────────────────────────────────
-    // Eat enough food to cover `value`, one send per food.
-    //
-    // PORT-DIFF 4: four packets per food — select, hit, stop, restore — where
-    // Falcon sends three. The explicit stop is the shape RYN's own place() uses
-    // and leaves no attack state behind.
-    heal(value) {
-      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
-      if (!myPlayer.inGame || value <= 0) return 0;
-      const food = myPlayer.getItemByType(2);
-      if (food === null || food === undefined) return 0;
-      const restore = food === 0 ? 20 : food === 1 ? 40 : 30;
-      let times = Math.ceil(value / restore);
-      const budget = ModuleHandler.packetLimit - ModuleHandler.packetCount;
-      const affordable = Math.floor(budget / HEAL_PACKET_COST);
-      if (times > affordable) times = affordable;
-      if (times > HEAL_MAX_PER_TICK) times = HEAL_MAX_PER_TICK;
-      if (times <= 0) return 0;
-      for (let i = 0; i < times; i++) {
-        ModuleHandler.selectItem(2);
-        ModuleHandler.attack(null, 1);
-        ModuleHandler.stopAttack(null);
-        ModuleHandler.whichWeapon(ModuleHandler._getPredictWeapon());
-      }
-      // What makes UpdateAngle resend the direction this tick and stops Placer
-      // from eating a second time.
-      ModuleHandler.healedOnce = true;
-      this.shouldResetShame = false;
-      return times;
-    }
-
-    // ── qt.start0ShameHeal ──────────────────────────────────────────────────
-    // The shame rule, in two modes. Eating inside 120ms of taking damage raises
-    // the server's shame count, and at eight it stops letting you eat for
-    // thirty seconds — so a heal that is not urgent waits two ticks instead.
-    //
-    // What decides whether to wait is a spike: standing next to one means the
-    // next damage is coming whatever I do, so the food goes out now.
-    start0ShameHeal(mode, amount) {
-      const nearSpike = this._nearbyDangerousSpike();
-      if (mode === 2) {
-        if (nearSpike) this._next_(() => this.heal(amount));
-        else this.healingDelay = HEAL_ZERO_SHAME_DELAY;
-        return;
-      }
-      const myPlayer = this.client.myPlayer;
-      if (nearSpike && mode === true && myPlayer.currentHealth - nearSpike.getDamage() > 0) {
-        this.healingDelay = HEAL_ZERO_SHAME_DELAY;
-        return;
-      }
-      this._next_(() => this.heal(amount));
-    }
-    _nearbyDangerousSpike() {
-      const myPlayer = this.client.myPlayer;
-      const me = myPlayer.pos.current;
-      for (const object of this._objects) {
-        const damage = object.getDamage();
-        if (damage <= HEAL_ZERO_SHAME_SPIKE_DMG) continue;
-        if (me.distance(object.pos.current) <= object.scale + HEAL_ZERO_SHAME_SPIKE_RANGE) return object;
-      }
-      return null;
-    }
-
-    // ── qt.autoHealing ──────────────────────────────────────────────────────
-    // The held food coming due, and the tick's damage bucket cleared behind it.
-    autoHealing() {
-      if (this.healingDelay > 0) {
-        this.healingDelay--;
-        if (this.healingDelay <= 0) {
-          this.healingDelay = 0;
-          const myPlayer = this.client.myPlayer;
-          this.heal(myPlayer.maxHealth - myPlayer.currentHealth);
-        }
-      }
-      this.damages.length = 0;
-    }
-
-    // ── mi.main's spike soldier ─────────────────────────────────────────────
-    // Not tied to any damage number: could a loaded primary knock me into
-    // enough spike damage to finish me from full. Computed only while free,
-    // because a pinned player cannot be pushed.
-    _updateSpikeSoldier() {
-      const myPlayer = this.client.myPlayer;
-      this.spikeSoldier = false;
-      this.velSoldier = !!this.client.EnemyManager.velocityTickThreat;
-      if (myPlayer.trappedIn) return;
-      const fut = myPlayer.pos.future ?? myPlayer.pos.current;
-      let onPath = 0;
-      const hazards = [];
-      for (const object of this._objects) {
-        const damage = object.getDamage();
-        if (damage <= 0) continue;
-        hazards.push(object);
-        const pos = object.pos.current;
-        if (hyp(fut.x - pos.x, fut.y - pos.y) <= Config_default.playerScale + object.scale) onPath += damage;
-      }
-      for (const enemy of this._near) {
-        const primary = enemy.weapon.primary;
-        if (primary === null || primary === undefined) continue;
-        if (this.getReload(enemy, primary) !== 1) continue;
-        const swing = 1.5 * this.getDamage(primary, enemy.getWeaponVariant(primary).current);
-        if (onPath > 0 && onPath + swing >= 100) {
-          this.spikeSoldier = true;
-          return;
-        }
-        const landing = this.simulateMelee(primary, myPlayer, enemy);
-        let total = 0;
-        for (const object of hazards) {
-          const pos = object.pos.current;
-          if (hyp(landing.x - pos.x, landing.y - pos.y) <= Config_default.playerScale + object.scale) total += object.getDamage();
-        }
-        if (total + swing >= 100) {
-          this.spikeSoldier = true;
-          return;
-        }
-      }
-    }
-
-    // ── qt.antiSpikeTick ────────────────────────────────────────────────────
-    // Pinned in their trap with a spike placement available: they are one build
-    // away from the exchange that kills, so the helmet goes on for two ticks.
-    antiSpikeTick() {
-      const myPlayer = this.client.myPlayer;
-      const trap = myPlayer.trappedIn;
-      if (!trap) return;
-      const placement = this.checkForSpikePlacements();
-      if (!placement) return;
-      if (placement.enemy.id !== trap.ownerID) return;
-      this.addForcedAddOnValue(HEAL_FORCE_TRAP_SOLDIER, 2);
-    }
-
-    // ── qt.main ─────────────────────────────────────────────────────────────
-    // The priority ladder, exactly as Falcon orders it.
-    //
-    //   the damage so far will not kill me      -> hold, and eat in two ticks
-    //   it will, and EMP alone answers it       -> EMP, eat next tick
-    //   it will, and soldier answers it         -> soldier, eat next tick
-    //   it will, and neither does, shame is low -> eat now and take the shame
-    //   it will, and shame is already high      -> hold
-    main() {
-      const {myPlayer: myPlayer} = this.client;
-      this.healPriority = HEAL_PRIORITY_NONE;
-      if (this.damages.length !== 0) {
-        const deficit = myPlayer.maxHealth - myPlayer.currentHealth;
-        if (this._near.length !== 0) {
-          const interpreted = this.interpretDamage();
-          let potential = 0;
-          let allCanEMP = true;
-          let anySpike = false;
-          for (const entry of interpreted) {
-            potential += entry.potDamage;
-            if (!entry.canEMP) allCanEMP = false;
-            if (entry.spike) anySpike = true;
-          }
-          // The bull helmet drains five health a tick, and it is mine, so it
-          // belongs in the sum of what is about to happen to me.
-          if (myPlayer.hatID === HEAL_BULL_HAT) potential += 5;
-
-          if (myPlayer.currentHealth - potential <= 0) {
-            if (Settings_default._soldierEMP && allCanEMP && this.validate("emp", potential)) {
-              this.healPriority = HEAL_PRIORITY_EMP;
-              this.addForcedAddOnValue(HEAL_FORCE_EMP, 1, () => this.heal(deficit));
-            } else if (this.validate("soldier", HEAL_SOLDIER_MULT * potential, anySpike)) {
-              this.healPriority = HEAL_PRIORITY_SOLDIER;
-              this.addForcedAddOnValue(HEAL_FORCE_SOLDIER, 1, () => this.heal(deficit));
-            } else if (myPlayer.shameCount < HEAL_SHAME_LIMIT) {
-              this.healPriority = HEAL_PRIORITY_NORMAL;
-              this.heal(deficit);
-            } else {
-              this.healPriority = HEAL_PRIORITY_NORMAL;
-              this.start0ShameHeal(true, deficit);
-            }
-          } else {
-            this.start0ShameHeal(2, deficit);
-          }
-        } else {
-          this.start0ShameHeal(true, deficit);
-        }
-      }
-      this.autoHealing();
-    }
-
-    // ── the tick ────────────────────────────────────────────────────────────
     postTick() {
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
-      this._tick = myPlayer.tickCount;
-      // Held food and forced-hat callbacks from last tick, before anything
-      // decides anything new.
-      this._runQueues();
-      if (!myPlayer.inGame) {
-        this.healingDelay = 0;
-        this.forcedAddOns.fill(0);
-        this._near.length = 0;
-        this._objects.length = 0;
-        this.damages.length = 0;
-        this.shouldResetShame = true;
+      this._glotusTick();
+      this._fastHeal();
+    }
+    // ── Glotus's AntiInsta.postTick, verbatim ───────────────────────────────
+    _glotusTick() {
+      this.forceHeal = false;
+      if (!Settings_default._autoheal) {
         return;
       }
-      this._refresh();
-      this._updateSpikeSoldier();
-      this.shouldResetShame = this.healingDelay <= 0 && !this.onlySoldier() && !this.forcedEMP;
-
-      if (Settings_default._autoheal) {
-        this.antiSpikeTick();
-        this.main();
-      } else {
-        // Nothing is decided while the switch is off, and nothing is left
-        // half-decided either: a hold that was running when it was turned off
-        // would otherwise sit at its count forever and fire on the tick it is
-        // turned back on.
-        this.healingDelay = 0;
-        this.damages.length = 0;
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2} = this.client;
+      // Shame is already locked in — the server will not let food land.
+      if (myPlayer.shameActive) {
+        return;
       }
+      const foodID = myPlayer.getItemByType(2);
+      const restore = Items[foodID].restore;
+      const needTimes = Math.ceil((myPlayer.maxHealth - myPlayer.tempHealth) / restore);
+      let healingTimes = null;
+      if (EnemyManager2.velocityTickThreat || EnemyManager2.reverseInsta || EnemyManager2.toolHammerInsta || EnemyManager2.rangedBowInsta || EnemyManager2.detectedDangerEnemy || EnemyManager2.detectedEnemy || myPlayer.tempHealth <= 20 || ModuleHandler.shouldEquipSoldier && ModuleHandler.forceHat !== 6 || EnemyManager2.dangerWithoutSoldier) {
+        this.forceHeal = true;
+      }
+      // Something is happening: eat below 95 and take the shame, for as long
+      // as there is shame left to spend. Otherwise eat only outside the
+      // window, and only when there is a point.
+      if (myPlayer.shameCount < 7 && this.forceHeal && myPlayer.tempHealth < 95) {
+        ModuleHandler.didAntiInsta = true;
+        healingTimes = needTimes || 1;
+      } else if (this.isSaveHeal() && myPlayer.tempHealth < 100) {
+        healingTimes = needTimes || 1;
+      }
+      if (healingTimes !== null) {
+        ModuleHandler.healedOnce = true;
+        for (let i = 0; i <= healingTimes; i++) {
+          ModuleHandler.heal();
+        }
+      }
+    }
 
-      // The manual burst: clears the whole deficit on the tick the key is
-      // held, under the same budget as everything else.
-      //
-      // Skipped on a tick the ladder has already eaten on. The ladder's own
-      // heal is the better one — it is behind the right helmet — and food is
-      // the one resource here that cannot be un-spent.
+    // ── RYN's manual burst, which is not Glotus's ───────────────────────────
+    // Held, it clears the bar on the tick it is held, under a bounded slice of
+    // the packet budget. Skipped on a tick that has already eaten: food is the
+    // one resource here that cannot be un-spent, and the module's own heal is
+    // the better one. Runs whatever the Autoheal switch says, because it is a
+    // key the player is holding down, but not while shame is locked in — the
+    // server would drop it.
+    _fastHeal() {
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      if (!myPlayer.inGame || myPlayer.shameActive || ModuleHandler.healedOnce) {
+        return;
+      }
       const input = IH(this.client);
-      if (input && input.fastHealPress && !ModuleHandler.healedOnce && myPlayer.currentHealth < myPlayer.maxHealth) {
-        this.heal(myPlayer.maxHealth - myPlayer.currentHealth);
+      if (!input || !input.fastHealPress) {
+        return;
       }
-
-      // Falcon ticks its counters down in mi.main. Done last here so a helmet
-      // asked for on this tick is still asked for while ModuleHandler's hat
-      // block runs, which is after every module.
-      this._tickForced();
-    }
-    _tickForced() {
-      for (let i = 0; i < this.forcedAddOns.length; i++) {
-        if (this.forcedAddOns[i] > 0 && --this.forcedAddOns[i] < 0) this.forcedAddOns[i] = 0;
+      const health = myPlayer.tempHealth;
+      if (!(health < HEAL_FULL_HEALTH)) {
+        return;
       }
-    }
-
-    // One sweep per tick, shared by everything above.
-    //
-    //   _near     Falcon's `enemies.near`: an enemy whose own primary reach,
-    //             plus 100, covers the distance between us.
-    //   _objects  every hostile damage-dealing object in the block around me,
-    //             which is what every spike question here is asked against.
-    _refresh() {
-      const {myPlayer: myPlayer, PlayerManager: PlayerManager2, ObjectManager: ObjectManager2} = this.client;
-      const me = myPlayer.pos.current;
-      this.damages = myPlayer.damages;
-      this._near.length = 0;
-      for (const enemy of PlayerManager2.enemies) {
-        if (!enemy || enemy.id === myPlayer.id) continue;
-        const primary = enemy.weapon.primary;
-        const weapon = primary === null || primary === undefined ? null : DataHandler_default.getWeapon(primary);
-        const range = weapon && weapon.range ? weapon.range : 0;
-        if (me.distance(enemy.pos.current) - HEAL_NEAR_PAD <= range) this._near.push(enemy);
+      const foodID = myPlayer.getItemByType(2);
+      const food = foodID === null || foodID === undefined ? null : Items[foodID];
+      if (food === null || food === undefined || !food.restore) {
+        return;
       }
-      this._objects.length = 0;
-      ObjectManager2.grid2D.query(me.x, me.y, HEAL_GRID_SEARCH, id => {
-        const object = ObjectManager2.objects.get(id);
-        if (!object) return false;
-        if (object.getDamage() <= 0) return false;
-        if (object instanceof PlayerObject && !PlayerManager2.isEnemyByID(object.ownerID, myPlayer)) return false;
-        this._objects.push(object);
-        return false;
-      });
+      let times = Math.ceil((HEAL_FULL_HEALTH - health) / food.restore);
+      const affordable = Math.floor((ModuleHandler.packetLimit - ModuleHandler.packetCount) / HEAL_PACKET_COST);
+      if (times > affordable) times = affordable;
+      if (times > HEAL_BURST_MAX) times = HEAL_BURST_MAX;
+      if (times <= 0) {
+        return;
+      }
+      for (let i = 0; i < times; i++) {
+        ModuleHandler.heal();
+      }
+      ModuleHandler.healedOnce = true;
     }
   }
-  const nearlyEqualHeal = (a, b) => Math.abs(a - b) < HEAL_PRECISION;
-  const AntiInsta_default = FalconHeal;
+  const AntiInsta_default = AntiInsta;
   class Autohat {
     moduleName="autoHat";
     client;
@@ -21150,15 +20252,15 @@ window.grbtp = 35;
     //     ... if (isBoughtHat(7, 0)) { if (shouldResetShame) currentHat = 7; }
     //
     // isBullTickTime already covers shame > 0 and poison, and notSave() covers
-    // spike contact. What RYN had no term for is "something is predicted to land
-    // this tick", which is the one that matters: bull gives up all defence, so
-    // wearing it into an incoming hit is how a shame reset kills you.
-    // FalconHeal has already answered that on this tick — it runs immediately
-    // before this module — so read its answer rather than form a second one.
+    // spike contact. What RYN had no term for is "something dangerous is
+    // happening right now", which is the one that matters: bull gives up all
+    // defence, so wearing it into an incoming hit is how a shame reset kills
+    // you. AntiInsta answers exactly that question one module earlier, and
+    // `forceHeal` is its answer — so read it rather than form a second one.
     get shouldReset() {
       const {_ModuleHandler: ModuleHandler} = this.client;
-      const novaHeal = ModuleHandler.staticModules.antiInsta;
-      const quietTick = novaHeal === undefined || novaHeal.shouldResetShame;
+      const antiInsta = ModuleHandler.staticModules.antiInsta;
+      const quietTick = antiInsta === undefined || !antiInsta.forceHeal;
       return quietTick && this.isBullTickTime() && ModuleHandler.canBuy(0, 7);
     }
     notSave() {
@@ -25357,6 +24459,10 @@ window.grbtp = 35;
     needToHeal;
     placedOnce;
     healedOnce;
+    // Glotus's flag for "this tick's food was the anti-insta one, not the
+    // quiet top-up". Nothing decides anything on it — it exists so the HUD can
+    // tell the two apart — but it is part of the module it came with.
+    didAntiInsta;
     totalPlaces;
     attacked;
     canHitEntity=false;
@@ -25487,6 +24593,7 @@ window.grbtp = 35;
       this.needToHeal = false;
       this.placedOnce = false;
       this.healedOnce = false;
+      this.didAntiInsta = false;
       this.totalPlaces = 0;
       this.attacked = false;
       this.canHitEntity = false;
@@ -25839,6 +24946,7 @@ window.grbtp = 35;
       this.sentAccEquip = false;
       this.placedOnce = false;
       this.healedOnce = false;
+      this.didAntiInsta = false;
       this.totalPlaces = 0;
       this.attacked = false;
       this.canHitEntity = false;
@@ -25891,31 +24999,15 @@ window.grbtp = 35;
         // tick too late against anything that closes fast — a bull-hat rush or a
         // spike push covers the gap between reach and 300 inside one tick.
         const _safeSoldier = Settings_default._safeSoldier && _dist < SAFE_SOLDIER_RANGE;
-        // novastorm's Auto Soldier, which is its own reading of the same
-        // question, and the last hat write in its hatFc — so it wins over
-        // everything above it, biome hats and the shame-reset bull included:
-        //
-        //     if (totalDmgPot >= 100) soldierAnti = true;
-        //     ... if (isBoughtHat(6, 0)) { if (soldierAnti) currentHat = 6; }
-        //
-        // It catches the case _isDanger cannot, because _isDanger comes from
-        // EnemyManager's eager sum and has no term for a spike push: an enemy
-        // whose swing alone is survivable but whose knockback puts us on a spike.
-        // FalconHeal has already resolved that on this tick, so read its
-        // answer rather than a second estimate of it. wantsSoldier is hatFc's
-        // whole set of soldier reasons: the 100-damage prediction, the spike-ring
-        // tick, and being pinned on spikes inside a trap.
-        const _novaHeal = this.staticModules.antiInsta;
-        const _soldierAnti = _novaHeal !== undefined && _novaHeal.wantsSoldier;
-        // EMP outranks every soldier reason below it, and only ever asks on a
-        // tick whose lethal damage it removes outright rather than reduces —
-        // FalconHeal.wantsEMP is the whole of that test. Taken first so the
-        // soldier branch cannot claim forceHat and leave the swap for a tick
-        // that no longer needs it.
-        if (_novaHeal !== undefined && _novaHeal.wantsEMP && this.canBuy(0, 22)) {
-          this.forceHat = 22;
-          this.shouldEquipSoldier = true;
-        } else if (Settings_default._antienemy && _isDanger || _isClose || _safeSoldier || _soldierAnti) {
+        // Two more terms used to sit here: `_soldierAnti` and an EMP branch in
+        // front of the whole block, both read off the old Falcon heal's
+        // `wantsSoldier` / `wantsEMP`. They were that module's own hat asks,
+        // built out of its damage prediction — novastorm's `totalDmgPot >= 100`
+        // plus its spike-ring tick. Glotus's heal makes no prediction and asks
+        // for no hat: it eats, and leaves the helmet to the hat modules. So
+        // both terms went with the module that produced them, and what is left
+        // is RYN's own soldier reasoning, unchanged.
+        if (Settings_default._antienemy && _isDanger || _isClose || _safeSoldier) {
           this.forceHat = 6;
           this.shouldEquipSoldier = true;
         } else if (this.shouldEquipSoldier) {
@@ -28414,12 +27506,11 @@ window.grbtp = 35;
     _antianimal: true,
     _antispike: true,
     _empDefense: true,
+    // Glotus's Autoheal, and the whole of what the heal is switchable on:
+    // its module has no tiers, no helmet decisions and nothing to tune. The
+    // two switches that stood here — EMP Anti and Sensitive Healing — were
+    // the Falcon heal's, and went with it along with their menu rows.
     _autoheal: true,
-    // Falcons' soldierEMP and its heal priority ladder. Both default on: the
-    // EMP path only ever fires on a tick whose lethal half is turret damage,
-    // and the ladder is the existing heal with a hat decision in front of it.
-    _soldierEMP: true,
-    _sensitiveHealing: true,
     _autoSync: true,
     _adaptiveGearSwitching: false,
     _autoShield: true,
@@ -29039,12 +28130,15 @@ window.grbtp = 35;
           } catch (e) {}
         }, 50);
         // The heal line, on its own timer. The bars above are chasing a reload
-        // that moves every frame; the heal tier changes once a tick at most, so
-        // a quarter of a second is plenty and keeps this off the 50ms path.
+        // that moves every frame; the heal state changes once a tick at most,
+        // so a quarter of a second is plenty and keeps this off the 50ms path.
         //
-        // What it prints is the tier the heal module *acted* on, read off the
-        // module rather than recomputed here — a second opinion formed a frame
-        // later would disagree with the heal you just watched happen.
+        // Glotus's heal has two states and no ladder, so this prints two:
+        // FORCE is `forceHeal` — something dangerous is happening and it is
+        // eating through the shame — and SAFE is the quiet top-up outside the
+        // server's window. Both are read off the module rather than recomputed
+        // here; a second opinion formed a frame later would disagree with the
+        // heal you just watched happen.
         //
         // It rides the Autoheal switch rather than carrying one of its own:
         // with Autoheal off nothing eats for you, so a line reporting IDLE
@@ -29062,24 +28156,12 @@ window.grbtp = 35;
             var mp = ac.myPlayer;
             var mh = ac._ModuleHandler;
             var heal = mh && mh.staticModules ? mh.staticModules.antiInsta : null;
-            var priority = heal && typeof heal.healPriority === "number" ? heal.healPriority : 0;
-            var name = HEAL_PRIORITY_NAMES[priority] || "IDLE";
+            var forcing = !!(heal && heal.forceHeal);
             var hp = Math.max(0, Math.round(mp.tempHealth !== void 0 ? mp.tempHealth : mp.currentHealth));
-            var maxHp = mp.maxHealth || 100;
-            // Which hat the heal is happening behind, which is the decision the
-            // priority ladder actually makes — the tier says how much to eat,
-            // this says what is being worn while it lands. WAIT is the held
-            // food: a heal deliberately sitting out a tick so it does not cost
-            // shame.
-            var mode = "";
-            if (heal) {
-              if (heal.wantsEMP) mode = " | EMP";
-              else if (heal.healingDelay > 0) mode = " | WAIT";
-              else if (heal.wantsSoldier) mode = " | SOLDIER";
-            }
+            var name = forcing ? "FORCE" : hp < 100 ? "SAFE" : "IDLE";
             row.style.display = "";
-            el.textContent = "HEAL: " + priority + " " + name + mode + " | HP: " + hp + "/" + maxHp + " | SHAME: " + mp.shameCount;
-            el.style.color = heal && heal.wantsEMP ? "#6fd3f5" : priority >= 2 ? "#8ef0a8" : priority === 1 ? "#f0d24b" : "rgba(255,255,255,0.45)";
+            el.textContent = "HEAL: " + name + " | HP: " + hp + "/100 | SHAME: " + mp.shameCount;
+            el.style.color = forcing ? "#f0d24b" : name === "SAFE" ? "#8ef0a8" : "rgba(255,255,255,0.45)";
           } catch (e) {}
         }, 250);
       })();

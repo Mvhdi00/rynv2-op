@@ -57,6 +57,10 @@ const kiteSrc = between(find(/^  const BOT_KITE_BAND = /), find(/^  \/\/ The bot
 const missionSrc = between(find(/^  \/\/ The bot half\. Sits in botModules/), find(/^  class Automill \{/));
 const poolSrc = between(find(/^  const TURNSTILE_CF_LIFETIME_MS = /), find(/^  setInterval\(\(\) => \{/));
 const removeSrc = between(find(/^  const RYN_KILL_HOLD_MS = /), find(/^  \/\/ One press, the whole fleet\./));
+const healSrc = between(find(/^  const HEAL_FAST_KEY = /), find(/^  class Autohat \{/));
+// The heal reads the game's own food table for `restore`, so the table comes
+// out of the script rather than being written again here.
+const itemsSrc = between(find(/^  const Items = \[ \{/), find(/^  const WeaponVariants = \[ \{/));
 
 // Everything the slices reach for that lives elsewhere in the script, stubbed
 // at the same shape.
@@ -905,6 +909,237 @@ function testRemove() {
   ok("the hold is long enough not to be an accident", mod.HOLD >= 400, "hold=" + mod.HOLD);
 }
 
+// ── 8. the auto heal ───────────────────────────────────────────────────────
+//
+// Glotus 5.5.5's AntiInsta, lifted verbatim. Two decisions a tick:
+//
+//   something dangerous is happening  ->  eat below 95, spend the shame
+//   clear of the server's 120ms window ->  eat below 100, no shame spent
+//
+// Plus the thing worth pinning down in a test rather than in a comment:
+// `myPlayer.maxHealth` is `undefined` in both clients, so `needTimes` is NaN,
+// `needTimes || 1` is 1, and `for (i = 0; i <= 1; i++)` sends exactly two
+// foods. That is Glotus's real behaviour and the reason its `|| 1` matters.
+
+function buildHeal(env) {
+  const body = `
+    const Date = env.Date;
+    const Settings_default = env.Settings;
+    const IH = env.IH;
+    ${itemsSrc}
+    ${healSrc}
+    return { AntiInsta: AntiInsta, FULL: HEAL_FULL_HEALTH, BURST: HEAL_BURST_MAX,
+             COST: HEAL_PACKET_COST };
+  `;
+  return new Function("env", body)(env);
+}
+
+function healScenario(opts) {
+  const o = opts || {};
+  const now = 1e6;
+  const clock = { now: () => now };
+  const input = { fastHealPress: !!o.fastHeal };
+  const mod = buildHeal({
+    Date: clock,
+    Settings: { _autoheal: o.autoheal !== false },
+    IH: () => input
+  });
+  const mh = {
+    heals: 0,
+    healedOnce: false,
+    didAntiInsta: false,
+    shouldEquipSoldier: !!o.shouldEquipSoldier,
+    forceHat: o.forceHat === undefined ? null : o.forceHat,
+    packetLimit: 119,
+    packetCount: o.packetCount || 0,
+    heal() { this.heals++; }
+  };
+  const client = {
+    myPlayer: {
+      inGame: o.inGame !== false,
+      // Left undefined on purpose: this is what the shipped Player carries.
+      maxHealth: undefined,
+      tempHealth: o.health === undefined ? 100 : o.health,
+      shameActive: !!o.shameActive,
+      shameCount: o.shameCount || 0,
+      // The timestamp of the last hit. `lastHitMs` ago.
+      receivedDamage: o.lastHitMs === undefined ? 0 : now - o.lastHitMs,
+      getItemByType: () => (o.food === undefined ? 0 : o.food)
+    },
+    _ModuleHandler: mh,
+    EnemyManager: Object.assign({
+      velocityTickThreat: false,
+      reverseInsta: false,
+      toolHammerInsta: false,
+      rangedBowInsta: false,
+      detectedDangerEnemy: false,
+      detectedEnemy: false,
+      dangerWithoutSoldier: false
+    }, o.threats || {}),
+    SocketManager: { pong: o.pong || 0 }
+  };
+  return { mod: mod, mh: mh, client: client, input: input, m: new mod.AntiInsta(client) };
+}
+
+function testHeal() {
+  section("8. the auto heal (Glotus AntiInsta)");
+
+  // ── the undefined maxHealth, which is the whole of how much it eats ──────
+  {
+    const s = healScenario({ health: 40, lastHitMs: 5000 });
+    s.m.postTick();
+    ok("a safe top-up eats twice, not once and not to full", s.mh.heals === 2, "heals=" + s.mh.heals);
+    ok("and it is not flagged as the anti-insta heal", s.mh.didAntiInsta === false);
+    ok("and the tick is marked as having eaten", s.mh.healedOnce === true);
+  }
+  {
+    // The same arithmetic the module runs, stated on its own: this is why
+    // two, and why Falcon's `for (i = 0; i < needTimes; i++)` ran zero times.
+    const restore = 20;
+    const needTimes = Math.ceil((undefined - 40) / restore);
+    ok("needTimes is NaN, because maxHealth is undefined", Number.isNaN(needTimes));
+    let glotus = 0;
+    for (let i = 0; i <= (needTimes || 1); i++) glotus++;
+    ok("Glotus's `needTimes || 1` turns that into two sends", glotus === 2);
+    let falcon = 0;
+    for (let i = 0; i < needTimes; i++) falcon++;
+    ok("the outgoing heal's loop turned it into none", falcon === 0);
+  }
+
+  // ── the safe branch ──────────────────────────────────────────────────────
+  {
+    const s = healScenario({ health: 100, lastHitMs: 5000 });
+    s.m.postTick();
+    ok("at full health it does not eat", s.mh.heals === 0);
+  }
+  {
+    const s = healScenario({ health: 99, lastHitMs: 5000 });
+    s.m.postTick();
+    ok("one point down it does", s.mh.heals === 2);
+  }
+  {
+    // 100ms since the hit, no ping: inside the server's window.
+    const s = healScenario({ health: 60, lastHitMs: 100 });
+    s.m.postTick();
+    ok("inside the 120ms window it holds", s.mh.heals === 0);
+  }
+  {
+    const s = healScenario({ health: 60, lastHitMs: 100, pong: 40 });
+    s.m.postTick();
+    ok("the round trip counts towards the window", s.mh.heals === 2);
+  }
+  {
+    const s = healScenario({ health: 60, lastHitMs: 124 });
+    s.m.postTick();
+    ok("one millisecond short of 125 is still a hold", s.mh.heals === 0);
+    const t = healScenario({ health: 60, lastHitMs: 125 });
+    t.m.postTick();
+    ok("125 is the line", t.mh.heals === 2);
+  }
+
+  // ── the forced branch ────────────────────────────────────────────────────
+  {
+    const s = healScenario({ health: 60, lastHitMs: 0, threats: { detectedEnemy: true } });
+    s.m.postTick();
+    ok("a threat eats through the window", s.mh.heals === 2);
+    ok("and says so", s.mh.didAntiInsta === true);
+    ok("and forceHeal is the flag the rest of the client reads", s.m.forceHeal === true);
+  }
+  {
+    const s = healScenario({ health: 96, lastHitMs: 0, threats: { detectedEnemy: true } });
+    s.m.postTick();
+    ok("the forced branch stops at 95, not 100", s.mh.heals === 0);
+  }
+  {
+    const s = healScenario({ health: 60, lastHitMs: 0, shameCount: 7, threats: { detectedEnemy: true } });
+    s.m.postTick();
+    ok("with shame at 7 the forced branch is closed", s.mh.heals === 0);
+    ok("but forceHeal still reports the threat", s.m.forceHeal === true);
+  }
+  {
+    const s = healScenario({ health: 19, lastHitMs: 0 });
+    s.m.postTick();
+    ok("under 20 health is a threat by itself", s.mh.heals === 2 && s.m.forceHeal === true);
+  }
+  {
+    const s = healScenario({ health: 60, lastHitMs: 0, shouldEquipSoldier: true, forceHat: 22 });
+    s.m.postTick();
+    ok("a soldier ask that has not been served is a threat", s.m.forceHeal === true);
+    const t = healScenario({ health: 60, lastHitMs: 0, shouldEquipSoldier: true, forceHat: 6 });
+    t.m.postTick();
+    ok("one that has been served is not", t.m.forceHeal === false);
+  }
+  for (const flag of [ "velocityTickThreat", "reverseInsta", "toolHammerInsta", "rangedBowInsta", "detectedDangerEnemy", "detectedEnemy", "dangerWithoutSoldier" ]) {
+    const s = healScenario({ health: 60, lastHitMs: 0, threats: { [flag]: true } });
+    s.m.postTick();
+    ok("EnemyManager." + flag + " forces a heal", s.m.forceHeal === true && s.mh.heals === 2);
+  }
+
+  // ── the gates ────────────────────────────────────────────────────────────
+  {
+    const s = healScenario({ health: 40, lastHitMs: 5000, autoheal: false });
+    s.m.postTick();
+    ok("with Autoheal off nothing eats", s.mh.heals === 0);
+    ok("and forceHeal is cleared rather than left stale", s.m.forceHeal === false);
+  }
+  {
+    const s = healScenario({ health: 40, lastHitMs: 5000, shameActive: true });
+    s.m.postTick();
+    ok("while shame is locked in nothing eats", s.mh.heals === 0);
+  }
+  {
+    const s = healScenario({ health: 40, lastHitMs: 5000 });
+    s.m.postTick();
+    const first = s.mh.heals;
+    s.m.postTick();
+    ok("the module does not stand down after eating once", s.mh.heals === first * 2);
+  }
+
+  // ── the manual burst, which is RYN's and not Glotus's ────────────────────
+  {
+    const s = healScenario({ health: 40, lastHitMs: 5000, fastHeal: true, autoheal: false });
+    s.m.postTick();
+    ok("the burst works with Autoheal off", s.mh.heals === 3, "heals=" + s.mh.heals);
+    ok("and clears the deficit rather than sending two", s.mh.heals * 20 >= 100 - 40);
+  }
+  {
+    const s = healScenario({ health: 40, lastHitMs: 5000, fastHeal: true });
+    s.m.postTick();
+    ok("the burst does not stack on a tick the module already ate on", s.mh.heals === 2);
+  }
+  {
+    const s = healScenario({ health: 1, lastHitMs: 5000, fastHeal: true, autoheal: false });
+    s.m.postTick();
+    ok("the burst is capped", s.mh.heals === s.mod.BURST, "heals=" + s.mh.heals);
+  }
+  {
+    const s = healScenario({ health: 1, lastHitMs: 5000, fastHeal: true, autoheal: false, packetCount: 118 });
+    s.m.postTick();
+    ok("and it will not overspend the packet budget", s.mh.heals === 0, "heals=" + s.mh.heals);
+  }
+  {
+    const s = healScenario({ health: 100, lastHitMs: 5000, fastHeal: true, autoheal: false });
+    s.m.postTick();
+    ok("the burst does nothing at full health", s.mh.heals === 0);
+  }
+  {
+    const s = healScenario({ health: 40, lastHitMs: 5000, fastHeal: true, autoheal: false, inGame: false });
+    s.m.postTick();
+    ok("and nothing at the menu", s.mh.heals === 0);
+  }
+  {
+    const s = healScenario({ health: 40, lastHitMs: 5000, fastHeal: true, autoheal: false, shameActive: true });
+    s.m.postTick();
+    ok("and nothing while shame is locked in", s.mh.heals === 0);
+  }
+  {
+    // Cookie restores 40, so a 60-point hole is two rather than three.
+    const s = healScenario({ health: 40, lastHitMs: 5000, fastHeal: true, autoheal: false, food: 1 });
+    s.m.postTick();
+    ok("the burst counts in the food actually carried", s.mh.heals === 2, "heals=" + s.mh.heals);
+  }
+}
+
 // ── 5 and 6. the two bot modules ───────────────────────────────────────────
 
 function pt(x, y) {
@@ -1195,6 +1430,7 @@ function testMission() {
   testKite();
   testMission();
   testRemove();
+  testHeal();
   console.log("\n" + pass + " passed, " + fail + " failed\n");
   process.exit(fail === 0 ? 0 : 1);
 })();
