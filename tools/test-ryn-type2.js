@@ -56,6 +56,7 @@ const scanSrc = between(find(/^  const SCAN_STALE_MS = /), find(/^  class Player
 const kiteSrc = between(find(/^  const BOT_KITE_BAND = /), find(/^  \/\/ The bot half\. Sits in botModules/));
 const missionSrc = between(find(/^  \/\/ The bot half\. Sits in botModules/), find(/^  class Automill \{/));
 const poolSrc = between(find(/^  const TURNSTILE_CF_LIFETIME_MS = /), find(/^  setInterval\(\(\) => \{/));
+const removeSrc = between(find(/^  const RYN_KILL_HOLD_MS = /), find(/^  \/\/ One press, the whole fleet\./));
 
 // Everything the slices reach for that lives elsewhere in the script, stubbed
 // at the same shape.
@@ -79,7 +80,7 @@ const PRELUDE = `
 function build(env) {
   const body =
     PRELUDE + tables + ammoSrc + dexSrc + scanSrc + kiteSrc + missionSrc +
-    "\n  return { Weapons, Hats, botHasAmmoFor, RynPlayerDex, RynScan, RynScanPing, dexLabel," +
+    "\n  return { Weapons, Hats, botHasAmmoFor, RynPlayerDex, RynScan, dexLabel," +
     " BotRangedAttack, BotScanMission, SCAN_ENGAGE_RADIUS, SCAN_FINDER_RADIUS, SCAN_ARRIVE_RADIUS };\n";
   return new Function("env", body)(env);
 }
@@ -242,69 +243,111 @@ function testScan() {
   const m = build({});
   const scan = m.RynScan;
   scan.on = false;
-  scan.setTarget(null, "");
+  scan.clearTargets();
 
-  ok("scan will not switch on without a target", scan.toggle() === false && scan.on === false);
-  scan.setTarget(700, "Victim");
-  ok("scan switches on with a target", scan.toggle() === true && scan.on === true);
-  ok("with no sighting the fleet is searching", scan.searching === true);
-
+  const mk = (id, x, y, px, py, hp) => ({
+    id: id,
+    pos: { current: { x: x, y: y }, previous: { x: px === undefined ? x : px, y: py === undefined ? y : py } },
+    currentHealth: hp === undefined ? 100 : hp
+  });
   const finder = { isOwner: false, id: 4, myPlayer: { id: 604, inGame: true } };
   const helper = { isOwner: false, id: 5, myPlayer: { id: 605, inGame: true } };
-  const target = { id: 700, pos: { current: { x: 5000, y: 5000 }, previous: { x: 4960, y: 5000 } }, currentHealth: 88 };
 
-  scan.sighting(finder, target);
-  ok("a sighting is recorded", scan.found === true && scan.x === 5000);
-  ok("the step the target took last tick is kept", scan.vx === 40 && scan.vy === 0);
-  ok("the first bot to report becomes the finder", scan.finder === finder);
-  ok("a found target stops the fleet searching", scan.searching === false);
+  ok("scan will not switch on with nothing picked", scan.toggle() === false && scan.on === false);
 
-  scan.sighting(helper, target);
-  ok("a later sighting does not take the engagement off the finder", scan.finder === finder);
+  ok("picking a target returns true", scan.toggleTarget(700, "Victim") === true);
+  ok("it is counted", scan.count === 1 && scan.has(700));
+  ok("picking it again unpicks it", scan.toggleTarget(700, "Victim") === false && scan.count === 0);
+  scan.toggleTarget(700, "Victim");
+  scan.toggleTarget(701, "Second");
+  scan.toggleTarget(702, "Third");
+  ok("several can be picked at once", scan.count === 3);
 
-  scan.sighting(helper, { id: 999, pos: { current: { x: 1, y: 1 }, previous: { x: 1, y: 1 } }, currentHealth: 5 });
-  ok("a sighting of a different player is ignored", scan.x === 5000);
+  ok("scan switches on with targets picked", scan.toggle() === true && scan.on === true);
+  ok("with no sighting the fleet is searching", scan.searching === true);
+  ok("and nothing is found", scan.foundCount === 0);
 
-  let aim = scan.aimPoint({ x: 0, y: 0 });
+  scan.sighting(finder, mk(701, 5000, 5000, 4960, 5000));
+  ok("a sighting is recorded against its own target", scan.targets.get(701).found === true && scan.targets.get(701).x === 5000);
+  ok("the others are untouched", scan.targets.get(700).found === false && scan.targets.get(702).found === false);
+  ok("the step the target took last tick is kept", scan.targets.get(701).vx === 40 && scan.targets.get(701).vy === 0);
+  ok("the first bot to report becomes that target's finder", scan.targets.get(701).finder === finder);
+  ok("one found target stops the fleet searching", scan.searching === false && scan.foundCount === 1);
+
+  scan.sighting(helper, mk(701, 5000, 5000, 4960, 5000));
+  ok("a later sighting does not take the engagement off the finder", scan.targets.get(701).finder === finder);
+
+  scan.sighting(helper, mk(999, 1, 1));
+  ok("a sighting of an unpicked player is ignored", scan.foundCount === 1);
+
+  // A second target found at the same time is tracked independently.
+  scan.sighting(helper, mk(702, 9000, 1000));
+  ok("two targets can be tracked at once", scan.foundCount === 2);
+  ok("each keeps its own finder", scan.targets.get(701).finder === finder && scan.targets.get(702).finder === helper);
+
+  // Nearest-found is how the fleet divides itself.
+  ok("a bot near the first goes to the first", scan.nearestFound(5100, 5000).id === 701);
+  ok("a bot near the second goes to the second", scan.nearestFound(8900, 1100).id === 702);
+  {
+    // Nothing found at all: there is nothing to converge on, and nearestFound
+    // has to say so rather than hand back a target with a stale position.
+    const spare = build({}).RynScan;
+    spare.clearTargets();
+    spare.toggleTarget(900, "Unseen");
+    spare.on = true;
+    ok("with nothing found there is nothing to go to", spare.nearestFound(0, 0) === null);
+  }
+
+  // Prediction, per target.
+  let aim = scan.aimPoint(scan.targets.get(701), { x: 0, y: 0 });
   ok("a fresh sighting leads by exactly one tick", aim.x === 5040 && aim.y === 5000);
-  scan.at = Date.now() - 1000;
-  aim = scan.aimPoint({ x: 0, y: 0 });
+  scan.targets.get(701).at = Date.now() - 1000;
+  aim = scan.aimPoint(scan.targets.get(701), { x: 0, y: 0 });
   ok("a stale sighting uses the confirmed position, not the lead", aim.x === 5000 && aim.y === 5000);
 
+  // Expiry is per target too.
   scan.expire();
-  ok("a sighting inside the window is still live", scan.found === true);
-  scan.at = Date.now() - 1500;
+  ok("a sighting inside the window is still live", scan.targets.get(701).found === true);
+  scan.targets.get(701).at = Date.now() - 1500;
   scan.expire();
-  ok("a sighting past the window expires", scan.found === false);
+  ok("a sighting past the window expires", scan.targets.get(701).found === false);
+  ok("the other target is unaffected", scan.targets.get(702).found === true);
   ok("expiry does not switch the scan off", scan.on === true);
-  ok("expiry puts the fleet back to searching", scan.searching === true);
-  ok("expiry clears the finder", scan.finder === null);
-
-  scan.sighting(helper, target);
-  ok("the target can be re-acquired", scan.found === true);
-  ok("the bot that re-found them becomes the finder", scan.finder === helper);
+  ok("one still found keeps the fleet converging", scan.searching === false);
+  scan.targets.get(702).at = Date.now() - 1500;
   scan.expire();
-  ok("a fresh sighting survives expiry", scan.found === true);
+  ok("losing the last one puts the fleet back to searching", scan.searching === true && scan.foundCount === 0);
+
+  scan.sighting(helper, mk(700, 100, 100));
+  ok("a target can be acquired later", scan.targets.get(700).found === true);
+  ok("the bot that found it becomes its finder", scan.targets.get(700).finder === helper);
+
+  // Unpicking a target while the scan runs drops it and nothing else.
+  scan.toggleTarget(702);
+  ok("unpicking removes just that one", scan.count === 2 && !scan.has(702));
+  ok("the rest keep their state", scan.targets.get(700).found === true);
 
   scan.off();
-  ok("off clears the sighting", scan.found === false && scan.on === false);
-  scan.off();
-  ok("off is idempotent", scan.on === false);
+  ok("off clears every sighting", scan.foundCount === 0 && scan.on === false);
+  ok("but keeps the picks", scan.count === 2);
 
-  scan.setTarget(701, "Another");
-  scan.toggle();
-  scan.sighting(finder, target);
-  ok("a sighting of the old target is ignored after retargeting", scan.found === false);
-  scan.sighting(finder, { id: 701, pos: { current: { x: 10, y: 20 }, previous: { x: 10, y: 20 } }, currentHealth: 3 });
-  ok("a sighting of the new target lands", scan.found === true && scan.x === 10);
+  scan.clearTargets();
+  ok("clearing the picks empties the list", scan.count === 0);
+  ok("and switches the scan off", scan.on === false);
 
-  scan.x = 14395;
-  scan.vx = 50;
-  scan.vy = 0;
-  scan.at = Date.now();
-  aim = scan.aimPoint({ x: 0, y: 0 });
+  // The lead is clamped to the map.
+  scan.toggleTarget(800, "Edge");
+  scan.on = true;
+  const edge = scan.targets.get(800);
+  edge.found = true;
+  edge.x = 14395;
+  edge.y = 100;
+  edge.vx = 50;
+  edge.vy = 0;
+  edge.at = Date.now();
+  aim = scan.aimPoint(edge, { x: 0, y: 0 });
   ok("the lead is clamped to the map", aim.x === 14400, "aim.x=" + aim.x);
-  scan.off();
+  scan.clearTargets();
 }
 
 // ── 4. the token pool ──────────────────────────────────────────────────────
@@ -337,6 +380,11 @@ function poolHarness(opts) {
     requestIdleCallback: fn => { idleQueue.push(fn); },
     mint: () => new Promise((res, rej) => { minted++; inflight.push({ res: res, rej: rej }); })
   });
+  // The pool ships switched off — nothing is minted until the panel says so —
+  // so the harness switches it on, except where a test is checking the default.
+  if (!o.keepDisabled) {
+    built.TokenPool.enabled = true;
+  }
   // Run every challenge the pool has queued for idle time. Challenges are
   // started from an idle callback now, so nothing is in flight until this.
   const flushIdle = () => {
@@ -618,10 +666,18 @@ async function testPool() {
 
   // ── the manual switch ─────────────────────────────────────────────────────
   {
+    const off = poolHarness({ keepDisabled: true });
+    ok("the pool ships switched off", off.pool.enabled === false);
+    for (let i = 0; i < 5; i++) await off.tick();
+    ok("and mints nothing until it is switched on", off.minted === 0, "minted=" + off.minted);
+    off.pool.start();
+    off.flushIdle();
+    ok("switching it on starts it", off.minted > 0, "minted=" + off.minted);
+  }
+  {
     const hh = poolHarness();
     await hh.tick();
     const before = hh.minted;
-    ok("the pool starts enabled", hh.pool.enabled === true);
 
     hh.pool.stop();
     for (let i = 0; i < 10; i++) await hh.tick();
@@ -770,6 +826,82 @@ async function testPool() {
     ok("a spawn takes straight off a full shelf without waiting", typeof got === "string");
     ok("no challenge was needed for it", hh.pool.minting === 0);
   }
+}
+
+// ── the two-mode delete ────────────────────────────────────────────────────
+//
+// A tap takes out the bots that are not in the game; a hold takes out the ones
+// that are. A bot is only ever in one of the two halves, so between them the
+// gestures reach everything without either reaching what the other is for.
+
+function buildRemove(env) {
+  const body = `
+    const window = env.window;
+    const RYN = env.RYN;
+    ${removeSrc}
+    return { _rynRemoveBots: _rynRemoveBots, HOLD: RYN_KILL_HOLD_MS };
+  `;
+  return new Function("env", body)(env);
+}
+
+function testRemove() {
+  section("7. the two-mode delete");
+  // `_heldBots` is reassigned rather than spliced, so the object is what has
+  // to be inspected, not the array it started with.
+  const RYN = { _heldBots: [] };
+  const mod = buildRemove({ window: { _rynBotToast: null }, RYN: RYN });
+
+  const mkFleet = () => {
+    const owner = { clients: new Set() };
+    const add = (id, inGame) => {
+      const bot = { id: id, myPlayer: { id: 600 + id, inGame: inGame }, disconnect() { owner.clients.delete(bot); } };
+      owner.clients.add(bot);
+      return bot;
+    };
+    return { owner: owner, add: add };
+  };
+
+  {
+    const f = mkFleet();
+    f.add(1, true); f.add(2, true); f.add(3, false); f.add(4, false);
+    const gone = mod._rynRemoveBots(f.owner, false);
+    ok("a tap removes only the bots not in the game", gone === 2, "removed=" + gone);
+    ok("the live fleet is left standing", f.owner.clients.size === 2);
+    ok("and every survivor is in the game", [ ...f.owner.clients ].every(b => b.myPlayer.inGame));
+  }
+  {
+    const f = mkFleet();
+    f.add(1, true); f.add(2, true); f.add(3, false);
+    const gone = mod._rynRemoveBots(f.owner, true);
+    ok("a hold removes only the bots in the game", gone === 2, "removed=" + gone);
+    ok("the waiting ones are left alone", f.owner.clients.size === 1);
+    ok("and the survivor is not in the game", [ ...f.owner.clients ][0].myPlayer.inGame === false);
+  }
+  {
+    const f = mkFleet();
+    f.add(1, true); f.add(2, false);
+    ok("a tap then a hold clears the fleet", (mod._rynRemoveBots(f.owner, false), mod._rynRemoveBots(f.owner, true), f.owner.clients.size === 0));
+  }
+  {
+    const f = mkFleet();
+    const a = f.add(1, false);
+    const b = f.add(2, false);
+    RYN._heldBots = [ a, b ];
+    mod._rynRemoveBots(f.owner, false);
+    ok("held bots that were removed are dropped from the release list", RYN._heldBots.length === 0, "held=" + RYN._heldBots.length);
+    const f2 = mkFleet();
+    const c = f2.add(9, false);
+    RYN._heldBots = [ c ];
+    mod._rynRemoveBots(f2.owner, true);
+    ok("a hold does not touch the release list", RYN._heldBots.length === 1);
+  }
+  {
+    const f = mkFleet();
+    f.add(1, true);
+    ok("removing a half that is empty removes nothing", mod._rynRemoveBots(f.owner, false) === 0);
+  }
+  ok("a missing owner is survivable", mod._rynRemoveBots(null, true) === 0);
+  ok("the hold is long enough not to be an accident", mod.HOLD >= 400, "hold=" + mod.HOLD);
 }
 
 // ── 5 and 6. the two bot modules ───────────────────────────────────────────
@@ -939,16 +1071,30 @@ function missionScenario(opts) {
   };
   const bot = mkBot(mh, { id: opts.id || 1, x: opts.x, y: opts.y, owner: owner });
   if (opts.fleet) opts.fleet.push(bot);
-  m.RynScan.setTarget(700, "Victim");
+  m.RynScan.clearTargets();
+  m.RynScan.toggleTarget(700, "Victim");
   m.RynScan.on = true;
-  m.RynScan.found = true;
-  m.RynScan.x = opts.tx;
-  m.RynScan.y = opts.ty;
-  m.RynScan.vx = 0;
-  m.RynScan.vy = 0;
-  m.RynScan.at = Date.now();
-  m.RynScan.finder = opts.finder === "self" ? bot : null;
-  return { m: m, mh: mh, bot: bot, mod: new m.BotScanMission(bot) };
+  const target = m.RynScan.targets.get(700);
+  target.found = true;
+  target.x = opts.tx;
+  target.y = opts.ty;
+  target.vx = 0;
+  target.vy = 0;
+  target.at = Date.now();
+  target.finder = opts.finder === "self" ? bot : null;
+  // A second target, for the tests that check the fleet dividing by distance.
+  if (opts.second) {
+    m.RynScan.toggleTarget(701, "Other");
+    const t2 = m.RynScan.targets.get(701);
+    t2.found = true;
+    t2.x = opts.second.x;
+    t2.y = opts.second.y;
+    t2.vx = 0;
+    t2.vy = 0;
+    t2.at = Date.now();
+    t2.finder = null;
+  }
+  return { m: m, mh: mh, bot: bot, mod: new m.BotScanMission(bot), target: target };
 }
 
 function testMission() {
@@ -989,11 +1135,40 @@ function testMission() {
     s.mod.postTick();
     ok("a bot already kiting the target is left to kite", s.mh._scanMissionActive === false && s.mh.moves.length === 0);
   }
+
+  // With two targets on the board the fleet divides itself by distance rather
+  // than all piling onto one of them.
+  {
+    // Standing next to the first: heading should be +x, toward 5000,0.
+    const a = missionScenario({ x: 4000, y: 0, tx: 5000, ty: 0, second: { x: 0, y: 9000 } });
+    a.mod.postTick();
+    ok("a bot near one target goes to that one", Math.abs(a.mh.moves[0]) < 0.4, "heading=" + a.mh.moves[0]);
+
+    // Standing next to the second: heading should be +y, toward 0,9000.
+    const b = missionScenario({ x: 0, y: 8000, tx: 5000, ty: 0, second: { x: 0, y: 9000 } });
+    b.mod.postTick();
+    ok("a bot near the other goes to the other", Math.abs(b.mh.moves[0] - Math.PI / 2) < 0.4, "heading=" + b.mh.moves[0]);
+  }
+
+  // Losing one of two leaves the fleet on the one that is left.
+  {
+    const s = missionScenario({ x: 0, y: 8000, tx: 5000, ty: 0, second: { x: 0, y: 9000 } });
+    s.mod.postTick();
+    ok("claim taken with two targets", s.mh._scanMissionActive === true);
+    s.m.RynScan.targets.get(701).found = false;
+    s.mh.newTick();
+    s.mod.postTick();
+    ok("losing one keeps the mission on the other", s.mh._scanMissionActive === true);
+    s.target.found = false;
+    s.mh.newTick();
+    s.mod.postTick();
+    ok("losing both releases the claim", s.mh._scanMissionActive === false);
+  }
   {
     const s = missionScenario({ x: 0, y: 0, tx: 5000, ty: 0 });
     s.mod.postTick();
     ok("claim taken", s.mh._scanMissionActive === true);
-    s.m.RynScan.found = false;
+    s.target.found = false;
     s.mh.newTick();
     s.mod.postTick();
     ok("losing the target releases the claim", s.mh._scanMissionActive === false);
@@ -1018,6 +1193,7 @@ function testMission() {
   await testPool();
   testKite();
   testMission();
+  testRemove();
   console.log("\n" + pass + " passed, " + fail + " failed\n");
   process.exit(fail === 0 ? 0 : 1);
 })();

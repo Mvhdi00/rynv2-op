@@ -5,7 +5,7 @@ Changes to **`Ryn_Type_2.user.js`**, worked against the shipped game bundle in
 `drivers/game-drivers.json`.
 
 ```sh
-node tools/test-ryn-type2.js     # 180 behaviour tests
+node tools/test-ryn-type2.js     # 212 behaviour tests
 node --check Ryn_Type_2.user.js
 ```
 
@@ -147,8 +147,10 @@ of work, same server-side validation. Only the timing moves.
 | a spawn waits for one in flight for | 5s, then mints its own |
 | runs when | Turnstile loaded **and** `myPlayer.inGame` |
 
-**Bots → Spawn** carries the readout, and it is **hidden by default**. Type
-`!tk` in the game's own chat box to toggle it — the text is intercepted on blur,
+The whole **Spawn** section — heading, wording and all — is **hidden by
+default**, and the pool ships **switched off**: a fresh page does no
+verification work until it is asked to. Type `!tk` in the game's own chat box
+to reveal the section — the text is intercepted on blur,
 before `Possess.chat` is reached, so nothing is encoded, nothing is sent and
 nobody else sees it. The chat box is just the one place the game reliably hands
 the keyboard over.
@@ -176,6 +178,16 @@ It also keeps up once full even at the slower rate. Forty tokens expiring at
 240s is one to replace every 6 seconds; one challenge per 2.5s keeper tick is
 capacity for one every 2.5s. The rate limit only lengthens the initial fill —
 it never stops the pool holding its level.
+
+### One press, the whole fleet
+
+**Spawn Bot** connects as many bots as there are tokens ready to spend, so a
+full pool is a full fleet in one press. Each still goes through the same row and
+the same Connect button, so there is one connect path rather than two. With
+nothing pooled it falls back to a single bot, which is what the key did before
+and what the inline mint can serve; with **Hold** on they connect and wait at
+the menu exactly as they always have — the batch decides how many come, not what
+happens when they arrive.
 
 ### The standing cost, and what the gate buys
 
@@ -346,8 +358,15 @@ one tick before it learns its own id.
 
 ### The scan
 
-Pick a player, press **SCAN**. It is a toggle, and nothing switches it off but
-pressing it again.
+Tick **any number** of players, press **SCAN**. It is a toggle, and nothing
+switches it off but pressing it again.
+
+Each target carries its own sighting — position, last tick's step, when it was
+reported, which bot has eyes on it — so several are tracked at once without any
+of them sharing state. Picking and unpicking is per row and changes nothing
+about the others, including while the scan is running. One target found is
+enough to stop the search: the fleet converges, and any still missing are picked
+up again the moment that sighting is lost.
 
 **Searching.** Every bot roams. This is not new machinery: `BotExplorer`
 already scores all 36 map sectors on every destination choice, keeps no
@@ -380,6 +399,11 @@ The bot that found them holds the inside at 80 and keeps the engagement; a bot
 arriving later never displaces it. A bot already kiting the target is left to
 kite.
 
+With more than one target found, the fleet **divides itself by distance**: each
+bot goes to whichever it is nearest, so two on opposite sides of the map get
+half the fleet each without anything having to assign them. The bot that found
+one is nearest to it by definition, so it keeps the one it is engaging.
+
 **Tracking.** The confirmed server position always wins. The client's existing
 one-tick extrapolation is added as a lead only while the sighting is under
 170ms old, and never extends past the one tick the server itself moved them —
@@ -401,7 +425,7 @@ Found again, they converge again. Only pressing SCAN again stops it.
 | converge | ~10 arithmetic ops per bot per tick, off a cached fleet index |
 | search | BotExplorer's existing fleet-wide budget of 3 path plans per 100ms |
 | panel | 500ms timer, revision-gated, and only while its page is open |
-| minimap marker | a handful of draws, only while a target is found |
+| minimap marker | a handful of draws per found target |
 
 ### Arbitration
 
@@ -414,3 +438,30 @@ That is the order the three movement claims resolve in — a bot in range should
 be shooting rather than walking, a bot that knows where the target is should be
 walking to them rather than roaming, and roaming is what is left. Possession,
 frozen bots, duels, auto-farm and squad gating all still outrank the mission.
+
+---
+
+## 4. Fleet controls
+
+### Delete bots — two modes on one key
+
+A **tap** disconnects the bots that are **not** in the game: the ones still
+connecting, and the ones parked at the menu by Hold. A **hold** (600ms)
+disconnects the ones that **are** in the game.
+
+A bot is only ever in one of the two halves, so between them the gestures reach
+everything without either reaching what the other is for. Wired this way round
+on purpose: the accident you want to be cheap is the one that costs you a live
+fleet, so that is the one behind the deliberate gesture.
+
+A held bot that a tap disconnects is dropped from the release list, so Release
+cannot later try to spawn something that is gone.
+
+### Target Scan panel
+
+Built as the multi-select it now is: a tick per row rather than a tinted row,
+picked targets sorted to the top, and a **TRACKING** chip only on the ones with
+a live sighting. Colours come from the menu's own tokens — sky for picked, sage
+for live — so it sits in the existing design rather than beside it. The header
+carries a running count, and **Clear picks** empties the selection without
+touching the player index.
