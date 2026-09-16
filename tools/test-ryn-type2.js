@@ -101,6 +101,7 @@ function buildPool(env) {
     // Deterministic stand-in for the browser's idle queue, so a test can say
     // exactly when a deferred challenge is allowed to start.
     const requestIdleCallback = env.requestIdleCallback;
+    const localStorage = env.localStorage;
     // And for the stagger, which spaces the five starts apart. waitFor uses
     // the same pair for its own timeout, so both are stubbed together.
     const setTimeout = env.setTimeout;
@@ -108,7 +109,8 @@ function buildPool(env) {
     ${poolSrc}
     return { TokenPool: TokenPool, TTL: TURNSTILE_TTL_MS, CF: TURNSTILE_CF_LIFETIME_MS,
              SAFETY: TURNSTILE_SAFETY_MS,
-             CONCURRENT: TURNSTILE_CONCURRENT, STAGGER: TURNSTILE_STAGGER_MS,
+             MOVING: TURNSTILE_CONCURRENT_MOVING, STILL: TURNSTILE_CONCURRENT_STILL,
+             STILL_SPEED: TURNSTILE_STILL_SPEED, STILL_MS: TURNSTILE_STILL_MS,
              FPS_SLACK: TURNSTILE_FPS_SLACK, FPS_FLOOR: TURNSTILE_FPS_FLOOR_MS,
              TARGET: TURNSTILE_POOL_TARGET, KEEPER: TURNSTILE_KEEPER_MS,
              MINT_TIMEOUT: TURNSTILE_MINT_TIMEOUT_MS, WAIT: TURNSTILE_WAIT_MS };
@@ -362,7 +364,9 @@ function testScan() {
 
 function poolHarness(opts) {
   const o = opts || {};
-  let now = 1e6;
+  // A reload does not reset the wall clock, so a harness modelling the page
+  // after one has to carry the time forward from the harness before it.
+  let now = o.at === undefined ? 1e6 : o.at;
   let minted = 0;
   let inflight = [];
   // The two gates the pool checks before starting anything: Cloudflare's own
@@ -379,6 +383,14 @@ function poolHarness(opts) {
   const doc = { hidden: o.hidden === true };
   const rend = { _dtSmoothed: o.dt === undefined ? 16 : o.dt };
   let idleQueue = [];
+  // A stand-in for the browser's localStorage, shared between harnesses when a
+  // test wants to model a page reload. `throws` is the private-window case.
+  const store = o.store || {
+    data: {},
+    getItem(k) { if (o.storeThrows) throw new Error("denied"); return k in this.data ? this.data[k] : null; },
+    setItem(k, v) { if (o.storeThrows) throw new Error("denied"); this.data[k] = String(v); },
+    removeItem(k) { delete this.data[k]; }
+  };
   // The stagger's timers, held rather than run, so a test decides when each of
   // the five is allowed to begin.
   let timers = [];
@@ -388,6 +400,7 @@ function poolHarness(opts) {
     client: cl,
     document: doc,
     Renderer: rend,
+    localStorage: store,
     requestIdleCallback: fn => { idleQueue.push(fn); },
     setTimeout: (fn, ms) => { const t = { due: now + (ms || 0), fn: fn }; timers.push(t); return t; },
     clearTimeout: t => { const i = timers.indexOf(t); if (i >= 0) timers.splice(i, 1); },
@@ -418,6 +431,8 @@ function poolHarness(opts) {
     client: cl,
     doc: doc,
     rend: rend,
+    store: store,
+    get now() { return now; },
     flushIdle: flushIdle,
     get idlePending() { return idleQueue.length; },
     get timersPending() { return timers.length; },
@@ -426,17 +441,12 @@ function poolHarness(opts) {
     // tick amounts to once the browser has had an idle moment. Only the first
     // of the five starts here — the rest are behind the stagger.
     pump: () => { built.TokenPool.refill(); runTimers(); flushIdle(); },
-    // Top up and then wait out the whole stagger, so every slot the pool
-    // opened has actually begun.
+    // Kept as a name for "top up and let everything it started begin". With
+    // no stagger that is the same as a pump, but the call sites read better.
     pumpAll: () => {
       built.TokenPool.refill();
       runTimers();
       flushIdle();
-      for (let i = 0; i < built.CONCURRENT + 1; i++) {
-        now += built.STAGGER;
-        runTimers();
-        flushIdle();
-      }
     },
     get minted() { return minted; },
     get inflight() { return inflight.length; },
@@ -575,92 +585,43 @@ async function testPool() {
     ok("idle time is when it actually starts", h.minted > 0, "minted=" + h.minted);
   }
 
-  // ── five slots, started apart ─────────────────────────────────────────────
+  // ── the frame-rate guard ──────────────────────────────────────────────────
   //
-  // A Turnstile challenge is a cross-origin iframe doing proof of work. Five
-  // run at once now, whatever the player is doing, and what keeps that payable
-  // is the stagger: the expensive part of a challenge is its front end, and
-  // five of those in one frame is a stall the frame test can only notice
-  // afterwards. Spread apart, each lands in a frame of its own.
+  // A Turnstile challenge is a cross-origin iframe doing proof of work, and
+  // several at once costs the game frames. One while the player is moving,
+  // two once they have been standing still for a while.
   {
-    const h = poolHarness({ speed: 40 });          // moving
+    const h = poolHarness({ speed: 40 });          // running
     h.pump();
-    ok("only one challenge starts on the tick itself", h.minted === 1, "minted=" + h.minted);
-    ok("but all five slots are claimed straight away", h.pool.minting === h.k.CONCURRENT, "claimed=" + h.pool.minting);
-    ok("and the other four are waiting on the stagger", h.timersPending === h.k.CONCURRENT - 1, "timers=" + h.timersPending);
+    ok("one challenge at a time while moving", h.pool.minting === h.k.MOVING, "minting=" + h.pool.minting);
+    for (let i = 0; i < 10; i++) { h.advance(h.k.KEEPER); h.pump(); }
+    ok("still one after ten ticks of moving", h.pool.minting === h.k.MOVING, "minting=" + h.pool.minting);
+    ok("the panel reports the moving rate", h.pool.concurrency === h.k.MOVING);
 
-    h.advance(h.k.STAGGER);
-    ok("one more starts a stagger later", h.minted === 2, "minted=" + h.minted);
-    h.advance(h.k.STAGGER * (h.k.CONCURRENT - 2));
-    ok("and the rest follow in turn", h.minted === h.k.CONCURRENT, "minted=" + h.minted);
-    ok("nothing is left queued once they have all begun", h.timersPending === 0);
-  }
-  {
-    // A slot already committed to is not thrown away when frames dip.
-    //
-    // The version that shipped re-ran the frame test at the moment each
-    // staggered start fired, which sounds careful and is not: the first widget
-    // of a batch is itself what pushes the frame time up, so it cancelled the
-    // ones queued behind it. The batch spent its slots and its stagger and
-    // delivered a fraction of what it claimed.
-    const h = poolHarness({ speed: 0 });
+    h.client.myPlayer.speed = 0;                   // stopped
+    h.advance(h.k.KEEPER);
     h.pump();
-    const startedFirst = h.minted;
-    ok("the first of the batch is away", startedFirst === 1, "minted=" + startedFirst);
-    ok("and the rest are committed to", h.pool.minting === h.k.CONCURRENT, "claimed=" + h.pool.minting);
-    // Frames go long, exactly as a mounting widget makes them.
-    h.rend._dtSmoothed = 16 * h.k.FPS_SLACK + 20;
-    h.advance(h.k.STAGGER * (h.k.CONCURRENT + 1));
-    ok("a dip does not cancel what was already committed", h.minted === h.k.CONCURRENT, "minted=" + h.minted);
-    ok("and no slot is left stranded", h.pool.minting === h.k.CONCURRENT, "claimed=" + h.pool.minting);
-    // But nothing new is committed to while it lasts.
-    const after = h.minted;
-    for (let i = 0; i < 5; i++) h.pumpAll();
-    ok("while frames are bad nothing new is started", h.minted === after, "minted=" + h.minted);
-  }
-  {
-    // The gates that do still cancel a queued start, because finishing it
-    // would be pointless rather than merely expensive.
-    const h = poolHarness({ speed: 0 });
+    ok("stopping does not open the second slot immediately", h.pool.concurrency === h.k.MOVING);
+    h.advance(h.k.STILL_MS);
     h.pump();
-    const started = h.minted;
-    h.client.myPlayer.inGame = false;
-    h.advance(h.k.STAGGER * (h.k.CONCURRENT + 1));
-    ok("going back to the menu cancels the queued starts", h.minted === started, "minted=" + h.minted);
-    // The one that had already begun keeps its slot — it is real work in
-    // flight. Only the cancelled ones give theirs back.
-    ok("and gives back only the slots that were cancelled", h.pool.minting === started, "claimed=" + h.pool.minting + " started=" + started);
-  }
-  {
-    // Moving or standing still, the rate is the same — the speed test that
-    // used to open a second slot is gone.
-    const moving = poolHarness({ speed: 40 });
-    moving.pumpAll();
-    const still = poolHarness({ speed: 0 });
-    still.pumpAll();
-    ok("moving runs the full five", moving.minted === moving.k.CONCURRENT, "minted=" + moving.minted);
-    ok("standing still runs the same five", still.minted === still.k.CONCURRENT, "minted=" + still.minted);
-    ok("and the panel reports it", moving.pool.concurrency === moving.k.CONCURRENT);
-  }
-  {
-    // The gap is held across top-ups, not just within one. A keeper tick that
-    // opens a single slot still has to wait its turn behind the last start.
-    const h = poolHarness({ speed: 0 });
+    ok("standing still for long enough opens it", h.pool.concurrency === h.k.STILL);
+    ok("and a second challenge starts", h.pool.minting === h.k.STILL, "minting=" + h.pool.minting);
+
+    h.client.myPlayer.speed = 40;                  // moving again
+    h.advance(h.k.KEEPER);
     h.pump();
-    const startedFirst = h.minted;
-    h.pool.refill();
-    h.flushIdle();
-    ok("a second top-up in the same moment starts nothing extra", h.minted === startedFirst, "minted=" + h.minted);
-  }
-  {
-    // Five is five, not five per keeper tick: a slot still in flight is
-    // counted, so the pool does not stack challenges up.
-    const h = poolHarness({ speed: 0 });
-    h.pumpAll();
-    ok("the five in flight cap it", h.minted === h.k.CONCURRENT, "minted=" + h.minted);
-    h.pool.refill();
-    h.flushIdle();
-    ok("a top-up on top of a full slate starts nothing", h.minted === h.k.CONCURRENT, "minted=" + h.minted);
+    ok("moving again closes it", h.pool.concurrency === h.k.MOVING);
+
+    // Right on the threshold, and an unreadable speed.
+    h.client.myPlayer.speed = h.k.STILL_SPEED;
+    h.pump();                             // starts the stillness clock
+    h.advance(h.k.STILL_MS);
+    h.pump();
+    ok("the threshold itself counts as still", h.pool.concurrency === h.k.STILL);
+    h.client.myPlayer.speed = NaN;
+    h.advance(h.k.STILL_MS);
+    h.pump();
+    ok("an unreadable speed takes the quieter rate", h.pool.concurrency === h.k.MOVING);
   }
 
   // And nothing is started until the main player is actually in the game. A
@@ -694,9 +655,9 @@ async function testPool() {
   let h = poolHarness();
   h.pump();
   ok("the pool fills once you are in the game", h.minted > 0);
-  ok("it does not start ninety-nine challenges at once", h.minted === 1 && h.pool.minting === h.k.CONCURRENT, "started=" + h.minted + " claimed=" + h.pool.minting);
-  h.pumpAll();
-  ok("a refill does not double-mint what is already in flight", h.minted === h.k.CONCURRENT, "minted=" + h.minted);
+  ok("it does not start ninety-nine challenges at once", h.inflight === h.pool.concurrency && h.inflight <= h.k.STILL, "inflight=" + h.inflight);
+  h.pump();
+  ok("a refill does not double-mint what is already in flight", h.minted === h.pool.concurrency, "minted=" + h.minted);
 
   const rounds = await h.fill();
   ok("it fills to the full ninety-nine", h.pool.size === h.k.TARGET, "size=" + h.pool.size);
@@ -800,6 +761,82 @@ async function testPool() {
   ok("the target is fixed at ninety-nine", h.k.TARGET === 99, "target=" + h.k.TARGET);
   ok("the pool reports the same target it fills to", h.pool.target === h.k.TARGET);
 
+  // ── the shelf survives a page load ────────────────────────────────────────
+  //
+  // Switching server is a reload: the game's switchServer assigns
+  // window.location and generateHref keeps the origin and path, changing only
+  // the query string (src/game_index.js:3323). Same origin, so localStorage
+  // carries over and in-memory state does not — which is what threw the pool
+  // away on every server change.
+  {
+    const first = poolHarness();
+    await first.fill();
+    ok("the pool filled before the switch", first.pool.size === first.k.TARGET, "size=" + first.pool.size);
+    const before = [];
+    for (let i = 0; i < 5; i++) before.push(first.pool.take());
+
+    // The reload: a brand new pool, nothing in memory, same localStorage.
+    const after = poolHarness({ store: first.store, at: first.now });
+    ok("the shelf comes back on its own at startup", after.pool.size === first.k.TARGET - 5, "size=" + after.pool.size);
+    ok("and says how many it restored", after.pool.restored === first.k.TARGET - 5, "restored=" + after.pool.restored);
+    // Loading twice must not put the same tokens on the shelf again.
+    after.pool._load();
+    ok("a second load adds nothing", after.pool.size === first.k.TARGET - 5, "size=" + after.pool.size);
+    // A token is single-use. One handed out before the switch must not come
+    // back after it.
+    const back = [];
+    while (after.pool.size > 0) back.push(after.pool.take());
+    const clash = before.filter(t => back.indexOf(t) >= 0);
+    ok("a token already spent does not come back", clash.length === 0, "clashes=" + clash.length);
+  }
+  {
+    // Age is carried across, not restarted.
+    const first = poolHarness();
+    first.pump();
+    await first.settleAll();
+    ok("one token to carry", first.pool.size === 1, "size=" + first.pool.size);
+    const bornAt = first.now;
+    const after = poolHarness({ store: first.store, at: bornAt + first.k.TTL - 1 });
+    ok("a token still inside its window comes back", after.pool.size === 1, "size=" + after.pool.size);
+
+    const later = poolHarness({ store: first.store, at: bornAt + first.k.TTL + 1 });
+    ok("one that aged out while the page was gone does not", later.pool.size === 0, "size=" + later.pool.size);
+  }
+  {
+    // A stored birth time in the future — a clock that went backwards — must
+    // not park a token that never ages out.
+    const store = {
+      data: { _ryn_token_pool: JSON.stringify([ { token: "future", born: 9e15 } ]) },
+      getItem(k) { return k in this.data ? this.data[k] : null; },
+      setItem(k, v) { this.data[k] = String(v); },
+      removeItem(k) { delete this.data[k]; }
+    };
+    const h = poolHarness({ store: store });
+    ok("a token born in the future is refused", h.pool.size === 0, "size=" + h.pool.size);
+    ok("and is not left in the store to be read again", JSON.parse(store.data._ryn_token_pool).length === 0);
+  }
+  {
+    // Junk in the store is not a crash.
+    const bad = [ "not json", "{}", "[1,2,3]", JSON.stringify([ { token: 5 } ]), JSON.stringify([ null ]) ];
+    let survived = 0;
+    for (const raw of bad) {
+      const store = { data: { _ryn_token_pool: raw }, getItem(k) { return this.data[k] ?? null; },
+                      setItem(k, v) { this.data[k] = String(v); }, removeItem(k) { delete this.data[k]; } };
+      const h = poolHarness({ store: store });
+      try { h.pool._load(); survived++; } catch (_) {}   // already loaded; must be a no-op
+      if (h.pool.size !== 0) survived = -99;
+    }
+    ok("junk in the store is survivable and ignored", survived === bad.length, "survived=" + survived);
+  }
+  {
+    // A private window throws on every access. The pool must not care.
+    const h = poolHarness({ storeThrows: true });
+    let threw = false;
+    try { h.pump(); } catch (_) { threw = true; }
+    ok("a storage that throws does not break the pool", threw === false);
+    ok("and it still mints", h.minted > 0, "minted=" + h.minted);
+  }
+
   // ── the pool must not be able to wedge ────────────────────────────────────
   //
   // In-flight mints are subtracted from what the pool may start, so a
@@ -811,20 +848,17 @@ async function testPool() {
     hh.pumpAll();
     const rate = hh.pool.concurrency;
     ok("every concurrency slot is running", hh.minted === rate, "minted=" + hh.minted);
-    // None of them ever settle. `pump` rather than `pumpAll` so the clock does
-    // not move: the reaper is what this is about, and it reads the clock.
+    // None of them ever settle, and the clock does not move: the reaper is
+    // what this is about, and it reads the clock.
     for (let i = 0; i < 10; i++) hh.pump();
     ok("a wedged pool starts nothing new", hh.minted === rate, "minted=" + hh.minted);
     ok("and has nothing to show for it", hh.pool.size === 0);
 
-    // pumpAll already spent (CONCURRENT + 1) staggers getting them all started.
-    hh.advance(hh.k.MINT_TIMEOUT - (hh.k.CONCURRENT + 1) * hh.k.STAGGER - 1);
+    hh.advance(hh.k.MINT_TIMEOUT - 1);
     hh.pump();
     ok("a challenge inside its deadline is not written off", hh.pool.stalled === 0, "stalled=" + hh.pool.stalled);
 
-    // Past the deadline for every one of them, the last of which started a
-    // full stagger after the first.
-    hh.advance(hh.k.STAGGER * hh.k.CONCURRENT + 2);
+    hh.advance(2);
     hh.pump();
     ok("past the deadline the stuck ones are written off", hh.pool.stalled >= rate, "stalled=" + hh.pool.stalled);
     ok("and the pool starts minting again", hh.minted > rate, "minted=" + hh.minted);
@@ -887,13 +921,13 @@ async function testPool() {
     // Served one after another, because the rate limit still applies to them.
     // Each round: let the queued challenge start, then answer it. One waiter
     // is served per round, which is the point.
-    for (let i = 0; i < 6 && hh.pool.waiting > 0; i++) { await hh.settleAll(); hh.advance(hh.k.STAGGER); }
+    for (let i = 0; i < 6 && hh.pool.waiting > 0; i++) { await hh.settleAll(); hh.flushIdle(); }
     const got = await Promise.all(spawns);
     ok("all three are served rather than sent off to mint their own", got.every(t => typeof t === "string"), JSON.stringify(got));
     ok("with three different tokens", new Set(got).size === 3);
-    // Not one challenge per waiter, and not a burst either: the cap is on how
-    // many run at once, and it holds while the three are being served.
-    ok("and never more than the cap running at once", hh.pool.minting <= hh.k.CONCURRENT, "running=" + hh.pool.minting);
+    // Not one challenge per waiter: the rate limit still applies to them, so
+    // three waiters cost three challenges and no more.
+    ok("and no more challenges than tokens", hh.minted === 3, "minted=" + hh.minted);
   }
 
   // A waiter is released rather than left hanging when nothing comes back.

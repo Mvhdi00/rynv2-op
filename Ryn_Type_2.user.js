@@ -265,34 +265,44 @@ window.grbtp = 35;
   // oldest one the pool will ever serve still has the whole safety margin left
   // when it reaches the server.
   const TURNSTILE_TTL_MS = TURNSTILE_CF_LIFETIME_MS - TURNSTILE_SAFETY_MS;
+  // Where the shelf is parked across a page load.
+  //
+  // Switching server is a page reload — the game's own switchServer assigns
+  // window.location, and generateHref keeps the origin and path and changes
+  // only the query string (src/game_index.js:3323). Same origin means
+  // localStorage carries over; in-memory state does not. So without this the
+  // pool you spent two minutes filling is thrown away every time you change
+  // server, which is exactly when a full pool is most use.
+  //
+  // A token is bound to the sitekey, not to a server: RYN_SITEKEY is one
+  // constant used for every connection, and the game passes the token to
+  // Cloudflare's siteverify, which checks the sitekey rather than which host
+  // the socket went to. So a token minted on one server is good on the next —
+  // for as long as it has left.
+  const TURNSTILE_STORE_KEY = "_ryn_token_pool";
   // How many are kept ready, always. Ninety-nine is well past the fleet cap, so
   // a full pool is a full fleet spawned back to back with nothing waiting on
   // verification, and a deep reserve behind it for the ones that age out.
   const TURNSTILE_POOL_TARGET = 99;
-  // Challenges rendering at once. Two, whether moving or standing still.
+  // Challenges rendering at once.
   //
   // A Turnstile challenge is a cross-origin iframe that lays out, composites
-  // and runs proof of work. Five was tried and was slower than two, not
-  // faster: five widgets mounting inside one keeper cycle push the smoothed
-  // frame time up between themselves, and the frame test then refuses the
-  // starts behind them — so the batch spends its stagger and its slots and
-  // finishes with a fraction of what it claimed. Two mount without moving the
-  // frame time much, so both actually run.
-  const TURNSTILE_CONCURRENT = 2;
-  // How far apart the five are started.
+  // and runs proof of work, and several of them side by side is a frame-rate
+  // cost you can feel — the page is trying to render a game at the same time.
+  // So the default is one. The pool takes longer to fill and the game stays
+  // smooth, which is the right way round: a pool that is a minute behind costs
+  // nothing once it is full, and dropped frames cost something every second.
   //
-  // This is the part that makes five workable rather than five times worse.
-  // The expensive phase of a challenge is the front of it — inserting the
-  // iframe, the layout and composite that follow, and the first slice of proof
-  // of work — and five of those landing in the same frame is one long stall
-  // that the frame test can only notice after the fact. Spread across a second
-  // and a half, each front end lands in a frame of its own and the five still
-  // overlap for most of their life, which is where the throughput comes from.
+  // Standing still is the exception. Nothing about the game needs the frame
+  // budget at that moment, so a second challenge can run alongside and the
+  // pool catches up while you are not doing anything.
   //
-  // Five at once is also slower in wall-clock terms than five staggered: they
-  // contend for the same main thread, so each one's proof of work takes longer
-  // and they all finish late together.
-  const TURNSTILE_STAGGER_MS = 350;
+  // Five, started apart, was tried here and came back out. The widgets pushed
+  // the frame time up between themselves and the frame test then refused the
+  // starts behind them, so the pool claimed its slots and delivered a fraction
+  // of them. This is what worked.
+  const TURNSTILE_CONCURRENT_MOVING = 1;
+  const TURNSTILE_CONCURRENT_STILL = 2;
   // Frames the pool will not spend.
   //
   // The rate above is a guess at when there is room; this is the measurement.
@@ -452,6 +462,13 @@ window.grbtp = 35;
     } catch (_) {}
     setTimeout(fn, 0);
   };
+  // Entity.speed is the distance covered in the last server tick, and the rest
+  // of this client already calls anything under about this "not moving".
+  const TURNSTILE_STILL_SPEED = 8;
+  // How long still before the second slot opens. Longer than the keeper's own
+  // interval, so it takes two consecutive quiet ticks rather than catching the
+  // one frame between two steps of a fight.
+  const TURNSTILE_STILL_MS = 4e3;
   const TURNSTILE_KEEPER_MS = 2500;
   // A challenge that has been running this long is written off. Its own
   // timeout is 20s, so this only fires for one that never settled at all —
@@ -512,21 +529,38 @@ window.grbtp = 35;
     get running() {
       return this.enabled && this._ready() && this._inGame();
     }
-    // Five slots, always. What used to sit here read the player's speed and
-    // opened a second slot only once they had been standing still for four
-    // seconds. That is gone: the rate no longer depends on what the player is
-    // doing, because the two things that actually protect the frame rate — the
-    // frame test below and the stagger in `refill` — do not either.
-    _concurrency=TURNSTILE_CONCURRENT;
-    _sampleConcurrency() {
-      return TURNSTILE_CONCURRENT;
+    // When the player was first seen standing still. Zero means they are
+    // moving, so the second slot is closed.
+    _stillSince=0;
+    _concurrency=TURNSTILE_CONCURRENT_MOVING;
+    // Sampled once per top-up, and only there. The panel reads the result
+    // rather than taking its own sample, because this advances the stillness
+    // clock — a reading that moved with whether the menu happened to be open
+    // would be a different rate depending on where you were looking.
+    _sampleConcurrency(now) {
+      let speed = Infinity;
+      try {
+        const mp = client && client.myPlayer;
+        if (mp && typeof mp.speed === "number") {
+          speed = mp.speed;
+        }
+      } catch (_) {}
+      // Written as `!(speed <= x)` so an unreadable speed — Infinity, NaN —
+      // counts as moving and takes the quieter rate.
+      if (!(speed <= TURNSTILE_STILL_SPEED)) {
+        this._stillSince = 0;
+        this._concurrency = TURNSTILE_CONCURRENT_MOVING;
+        return this._concurrency;
+      }
+      if (this._stillSince === 0) {
+        this._stillSince = now;
+      }
+      this._concurrency = now - this._stillSince >= TURNSTILE_STILL_MS ? TURNSTILE_CONCURRENT_STILL : TURNSTILE_CONCURRENT_MOVING;
+      return this._concurrency;
     }
     get concurrency() {
       return this._concurrency;
     }
-    // When the next challenge may start. Held across top-ups, so five started
-    // in one pass and five started one per keeper tick are spaced the same.
-    _nextStartAt=0;
     // The machine's own best smoothed frame time lately. Drifts up slowly so a
     // single fast frame cannot hold the bar high for the rest of the session.
     _dtBest=0;
@@ -594,11 +628,16 @@ window.grbtp = 35;
     }
     _prune(now) {
       const ready = this.ready;
+      let dropped = 0;
       for (let i = ready.length - 1; i >= 0; i--) {
         if (now - ready[i].born >= TURNSTILE_TTL_MS) {
           ready.splice(i, 1);
           this.expired += 1;
+          dropped++;
         }
+      }
+      if (dropped !== 0) {
+        this._save();
       }
     }
     // Write off a challenge that never settled, so it stops counting against
@@ -625,6 +664,69 @@ window.grbtp = 35;
     // A fresh token, to whoever needs it most. A caller blocked on `waitFor`
     // is ahead of the pool: it has a bot to spawn now, and the pool is only
     // stocking a shelf.
+    // ── the shelf, across a page load ───────────────────────────────────────
+    // Written whenever the shelf changes and read once at startup. Every entry
+    // keeps its own birth time, so age is carried across the reload rather
+    // than restarting — a token that was 200 seconds old before the switch is
+    // 200 seconds old after it, and is pruned on the same rule as any other.
+    //
+    // Wrapped in try/catch throughout: localStorage throws outright in a
+    // private window and when site data is blocked, and this is a convenience,
+    // never something the pool depends on.
+    _save() {
+      try {
+        if (typeof localStorage === "undefined") {
+          return;
+        }
+        localStorage.setItem(TURNSTILE_STORE_KEY, JSON.stringify(this.ready));
+      } catch (_) {}
+    }
+    // Once and once only. A second call would read the same store again and
+    // append what it already holds, putting duplicate tokens on the shelf —
+    // and a token handed out twice is rejected by the server the second time.
+    _loaded=false;
+    _load() {
+      if (this._loaded) {
+        return;
+      }
+      this._loaded = true;
+      try {
+        if (typeof localStorage === "undefined") {
+          return;
+        }
+        const raw = localStorage.getItem(TURNSTILE_STORE_KEY);
+        if (!raw) {
+          return;
+        }
+        const saved = JSON.parse(raw);
+        if (!Array.isArray(saved)) {
+          return;
+        }
+        const now = Date.now();
+        for (const entry of saved) {
+          if (!entry || typeof entry.token !== "string" || typeof entry.born !== "number") {
+            continue;
+          }
+          // A clock that went backwards, or a stored birth time in the future,
+          // would otherwise park a token on the shelf that never ages out.
+          if (entry.born > now || now - entry.born >= TURNSTILE_TTL_MS) {
+            continue;
+          }
+          if (this.ready.length >= TURNSTILE_POOL_TARGET) {
+            break;
+          }
+          this.ready.push({
+            token: entry.token,
+            born: entry.born
+          });
+        }
+        this.restored = this.ready.length;
+      } catch (_) {}
+      // Whatever did not survive the filter should not be read again.
+      this._save();
+    }
+    // How many came back from the last page load. Read by the panel.
+    restored=0;
     _deliver(token) {
       this.made += 1;
       const waiter = this.waiters.shift();
@@ -637,6 +739,7 @@ window.grbtp = 35;
         token: token,
         born: Date.now()
       });
+      this._save();
     }
     // Nothing left running and nothing on the shelf. Before giving up on the
     // waiters, try to start something for them: at one challenge at a time a
@@ -710,6 +813,11 @@ window.grbtp = 35;
         return null;
       }
       this.spent += 1;
+      // Written back immediately. A token is single-use, so one that has been
+      // handed out must not come back from the store after a reload and be
+      // handed out a second time — the server would reject it as a duplicate
+      // and the bot would fail to connect for no visible reason.
+      this._save();
       return entry.token;
     }
     get size() {
@@ -731,16 +839,8 @@ window.grbtp = 35;
       const short = TURNSTILE_POOL_TARGET + this.waiters.length - this.ready.length - this.inflight.length;
       const want = Math.min(short, this._sampleConcurrency(now) - this.inflight.length);
       for (let i = 0; i < want; i++) {
-        // Spaced out rather than started together. `_nextStartAt` is carried
-        // between top-ups so the gap holds however the five are asked for —
-        // all in one pass here, or one per keeper tick.
-        const delay = Math.max(0, this._nextStartAt - now);
-        this._nextStartAt = now + delay + TURNSTILE_STAGGER_MS;
         const slot = {
-          // Dated from when the challenge will actually start, not from now,
-          // so a slot waiting its turn at the back of the stagger is not
-          // already eating into the reaper's patience.
-          at: now + delay
+          at: now
         };
         this.inflight.push(slot);
         // Started from idle rather than from here. Rendering the widget means
@@ -748,29 +848,7 @@ window.grbtp = 35;
         // follow are the part that shows up as a dropped frame — so they are
         // handed to the browser to place in a frame with room, instead of
         // landing in the middle of one the game needed.
-        const start = () => {
-          // Re-tested at the moment it actually begins, but only against the
-          // things that make starting pointless rather than merely expensive:
-          // the pool switched off, Turnstile gone, the player back at the menu.
-          //
-          // Deliberately not the frame test. That belongs in `refill`, where it
-          // decides whether to *commit* to a challenge — re-running it here
-          // throws away work already committed to, and it throws it away in
-          // batches: the first widget of a batch is itself what pushes the
-          // frame time up, so it cancels the ones queued behind it. Measured
-          // over two minutes that was 95 abandoned challenges at five slots and
-          // 48 at two, against none without it — a pool that claimed its slots,
-          // spent its stagger and delivered almost nothing.
-          //
-          // `_framesOk` is also not free to call: it keeps a running minimum of
-          // the frame time as its baseline, so sampling it once per start
-          // rather than once per top-up moves the bar it is measuring against.
-          // That is the same reason `_sampleConcurrency` is taken in one place.
-          if (!this.enabled || !this._ready() || !this._inGame()) {
-            this._release(slot);
-            return;
-          }
-          _turnstileIdle(() => generateTurnstileToken().then(token => {
+        _turnstileIdle(() => generateTurnstileToken().then(token => {
           this._release(slot);
           // Delivered even if the slot was reaped on the way: a token that
           // arrives late is still a token, and throwing it away would waste a
@@ -786,15 +864,15 @@ window.grbtp = 35;
           this._release(slot);
           this._wakeIfDry();
         }));
-        };
-        if (delay === 0) {
-          start();
-        } else {
-          setTimeout(start, delay);
-        }
       }
     }
   };
+  // The shelf from before the last page load, brought back before anything
+  // asks for a token. Switching server is a reload, so this is what stops a
+  // full pool being thrown away every time you change server.
+  try {
+    TokenPool._load();
+  } catch (_) {}
   setInterval(() => {
     try {
       TokenPool.refill();
@@ -29836,6 +29914,7 @@ window.grbtp = 35;
       let concurrency = 1;
       let frames = -1;
       let enabled = true;
+      let restored = 0;
       try {
         ready = TokenPool.size;
         minting = TokenPool.minting;
@@ -29848,6 +29927,7 @@ window.grbtp = 35;
         concurrency = TokenPool.concurrency;
         frames = TokenPool.frames;
         enabled = TokenPool.enabled;
+        restored = TokenPool.restored;
       } catch (_) {
         return;
       }
@@ -29857,6 +29937,12 @@ window.grbtp = 35;
         toggle.classList.toggle("primary", !enabled);
       }
       const bits = [ ready + " of " + target + " ready" ];
+      // Where the shelf came from, when some of it came back rather than being
+      // solved: a server switch is a page reload, and this is what says the
+      // pool was carried over instead of started again.
+      if (restored > 0 && spent < restored) {
+        bits.push(restored + " carried over");
+      }
       if (!enabled) {
         bits.push("stopped");
       } else if (!running) {
