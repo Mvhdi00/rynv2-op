@@ -5,7 +5,7 @@ Changes to **`Ryn_Type_2.user.js`**, worked against the shipped game bundle in
 `drivers/game-drivers.json`.
 
 ```sh
-node tools/test-ryn-type2.js     # 332 behaviour tests
+node tools/test-ryn-type2.js     # 343 behaviour tests
 node --check Ryn_Type_2.user.js
 ```
 
@@ -685,34 +685,59 @@ Left at 60s, because what it prevents is a bot that silently fails to connect.
 
 ---
 
-## 8. The shelf sizes itself to what actually gets used
+## 8. A token nobody used comes back
 
-The pool filled to 99 and stayed there. That is right only if the tokens get
-used. They are **single-use and die at 240s**, so a shelf bigger than the demand
-is not a reserve — it is a treadmill, re-solving the same tokens over and over
-as they age out, and paying frames for every one.
+The pool keeps filling to 99 and does not stop. What changed is what happens to
+a token when the bot it was taken for never gets on.
 
-That is what a connection limit looks like from inside the client. If only one
-bot can get on, ninety-nine tokens is ninety-eight solved for nothing.
+A spawn takes a token off the shelf **before** it knows whether the connection
+will be accepted. Press Spawn with a full shelf against a connection that will
+only carry one bot, and the rest of the fleet each took a token on the way to
+being refused. Those are the tokens that went missing — not expired, *spent* on
+connections that never happened.
 
-Nothing in the browser can find out what the limit is, so the shelf is sized by
-what happens to the tokens instead. Two pieces of evidence, one step each:
+The server checks the token **during the handshake**, so a connection that never
+opened at all had nothing checked and the token is still good. So it goes back
+on the shelf:
 
-| observed | meaning | move |
-|---|---|---|
-| a token aged out unused | too many | shrink by 2 |
-| a spawn had to wait | too few | grow by 2 |
+```js
+socket.addEventListener("close", () => {
+  if (!opened && socket._rynTokenEntry) {
+    TokenPool.giveBack(socket._rynTokenEntry);
+    socket._rynTokenEntry = null;
+  }
+  …
+```
 
-It starts at the **floor (4)** rather than the ceiling, and settles wherever
-supply meets demand — near the floor on a capped connection, near the **ceiling
-(99)** if the fleet really does spawn that fast. The step is small because the
-evidence arrives one token at a time; a shelf that lurched would spend its life
-overshooting in both directions.
+`opened` is the discriminator, and it is the same line the retry logic already
+drew: a socket that **opens** and then closes without `io-init` is a token the
+server looked at and declined — that one is genuinely gone. A socket that
+**never opens** was turned away before the token was read.
 
-One deliberate exception: **a shelf restored from a page load is not trimmed to
-the live target.** Those tokens are already solved and still inside their
-window, so keeping them costs nothing, and throwing them away to satisfy a size
-is exactly the waste this exists to stop.
+Returned tokens keep their real birth time, so they age on the same clock as
+everything else, and they go back at the **front** of the shelf — the shelf is
+served oldest first, so a returned token is spent before ones with longer left.
+They are not counted as newly `made`, because nothing was minted; the shelf just
+gets back what it lent out.
 
-The panel says `sized to what you use, up to 99` once it has seen a token expire,
-so `4 of 4 ready` reads as having found its level rather than having stopped.
+**Only once each.** If the guess is wrong and the server did burn it, the token
+fails on its next use and is dropped there. A token allowed to bounce between
+the shelf and a failing connection would be a spawn that never succeeds and
+never stops trying. The flag travels with the entry in both directions —
+carrying it out of `takeEntry` as well as into `giveBack` — or a token that had
+already been handed back once would look fresh on its way out.
+
+Measured as a batch in the tests: ten spawns take ten tokens, one connects and
+nine are refused before opening — **the shelf ends one token down, not ten.**
+
+The panel says `N returned unused`.
+
+### What was tried and removed
+
+A version of this sized the shelf adaptively instead — shrink on an expiry, grow
+on a wait, floor of 4. It was the wrong answer to the question (the ask was for
+the pool to keep generating, not to back off), and writing the revert turned up
+that its shrink half had never been wired to anything: `_prune` never called
+`_wantFewer`. The test that was supposed to cover it asserted
+`target <= started`, which is true of a number that never moves. Gone, along
+with the assertion that was not checking anything.

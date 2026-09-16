@@ -404,14 +404,6 @@ window.grbtp = 35;
   // oldest one the pool will ever serve still has the whole safety margin left
   // when it reaches the server.
   const TURNSTILE_TTL_MS = TURNSTILE_CF_LIFETIME_MS - TURNSTILE_SAFETY_MS;
-  // The smallest the shelf ever shrinks to. Enough to spawn a couple of bots
-  // back to back without waiting, which is the case even a capped connection
-  // still has.
-  const TURNSTILE_POOL_FLOOR = 4;
-  // How far the shelf moves on one piece of evidence. Small, because the
-  // evidence arrives one token at a time and a shelf that lurches would spend
-  // its life overshooting in both directions.
-  const TURNSTILE_POOL_STEP = 2;
   // Where the shelf is parked across a page load.
   //
   // Switching server is a page reload — the game's own switchServer assigns
@@ -641,6 +633,8 @@ window.grbtp = 35;
     // panel readout.
     made=0;
     spent=0;
+    // Tokens handed back by a connection that was refused before it opened.
+    returned=0;
     expired=0;
     stalled=0;
     get minting() {
@@ -649,39 +643,11 @@ window.grbtp = 35;
     get waiting() {
       return this.waiters.length;
     }
-    // ── how many to keep ────────────────────────────────────────────────────
-    //
-    // The shelf used to fill to TURNSTILE_POOL_TARGET and stay there, which is
-    // right only if the tokens get used. They are single-use and die at 240s,
-    // so a shelf bigger than the demand is not a reserve — it is a treadmill,
-    // re-solving the same tokens over and over as they age out, and paying
-    // frames for every one.
-    //
-    // That is what a connection limit looks like from in here. If only one bot
-    // can get on, ninety-nine tokens is ninety-eight solved for nothing.
-    //
-    // So the shelf is sized by what actually happens to the tokens. Two pieces
-    // of evidence, each worth one step:
-    //
-    //   a token aged out unused  ->  too many, shrink
-    //   a spawn had to wait      ->  too few, grow
-    //
-    // It settles wherever supply meets demand — near the floor on a capped
-    // connection, near the ceiling if the fleet really does spawn that fast —
-    // without being told what the limit is, because nothing in the browser can
-    // find that out.
-    _target=TURNSTILE_POOL_FLOOR;
     get target() {
-      return this._target;
+      return TURNSTILE_POOL_TARGET;
     }
     get targetCeiling() {
       return TURNSTILE_POOL_TARGET;
-    }
-    _wantMore() {
-      this._target = Math.min(TURNSTILE_POOL_TARGET, this._target + TURNSTILE_POOL_STEP);
-    }
-    _wantFewer() {
-      this._target = Math.max(TURNSTILE_POOL_FLOOR, this._target - TURNSTILE_POOL_STEP);
     }
     // The manual switch, and it starts off. Nothing is minted until the pool
     // is switched on from the panel, which is itself hidden until `!tk` asks
@@ -973,9 +939,6 @@ window.grbtp = 35;
         };
         waiter.timer = setTimeout(() => waiter.settle(null), ms || TURNSTILE_WAIT_MS);
         this.waiters.push(waiter);
-        // Someone wanted a token and the shelf had none. That is the only
-        // evidence that the shelf is too small, and it is worth one step up.
-        this._wantMore();
         // Do not sit on the keeper's 2.5s cadence when someone is waiting.
         this.refill();
         this._wakeIfDry();
@@ -993,6 +956,15 @@ window.grbtp = 35;
     take() {
       const now = Date.now();
       this._prune(now);
+      const entry = this.takeEntry();
+      return entry === null ? null : entry.token;
+    }
+    // The same, but with the birth time attached. A caller that might hand the
+    // token back needs it: a returned token keeps its real age rather than
+    // being treated as newly minted, or it would outlive Cloudflare's window.
+    takeEntry() {
+      const now = Date.now();
+      this._prune(now);
       const entry = this.ready.shift();
       if (entry === undefined) {
         return null;
@@ -1003,7 +975,54 @@ window.grbtp = 35;
       // handed out a second time — the server would reject it as a duplicate
       // and the bot would fail to connect for no visible reason.
       this._save();
-      return entry.token;
+      return {
+        token: entry.token,
+        born: entry.born,
+        // Carried out with it, or a token that has already been handed back
+        // once would look fresh on its way out and could bounce forever.
+        returned: entry.returned === true
+      };
+    }
+    // ── a token that nobody used ────────────────────────────────────────────
+    //
+    // A spawn takes a token off the shelf before it knows whether the bot can
+    // actually get on. When the connection is refused outright — the socket
+    // never opens at all — that token was almost certainly never redeemed: the
+    // handshake is where the server checks it, and a connection that never got
+    // that far had nothing to check. Press Spawn with a full shelf and a
+    // connection that will only carry one bot, and the rest of the fleet used
+    // to take a token each on the way to being refused. Those are the tokens
+    // that went missing.
+    //
+    // So they come back. Not `made` again, because nothing was minted — the
+    // shelf simply gets back what it lent out.
+    //
+    // Only once each. If the guess is wrong and the server did burn it, the
+    // token fails on its next use and is dropped there; a token allowed to
+    // bounce between the shelf and a failing connection forever would be a
+    // spawn that never succeeds and never stops trying.
+    giveBack(entry) {
+      if (!entry || typeof entry.token !== "string" || entry.returned) {
+        return false;
+      }
+      const now = Date.now();
+      if (typeof entry.born !== "number" || now - entry.born >= TURNSTILE_TTL_MS) {
+        return false;
+      }
+      if (this.ready.length >= TURNSTILE_POOL_TARGET) {
+        return false;
+      }
+      this.spent -= 1;
+      this.returned += 1;
+      // Back at the front: it is the oldest thing on the shelf, and the shelf
+      // is served oldest first so it is spent before the ones with longer left.
+      this.ready.unshift({
+        token: entry.token,
+        born: entry.born,
+        returned: true
+      });
+      this._save();
+      return true;
     }
     get size() {
       this._prune(Date.now());
@@ -1021,7 +1040,7 @@ window.grbtp = 35;
       }
       // Anyone waiting is demand on top of the shelf, so the pool keeps
       // minting for them even when it is otherwise full.
-      const short = this._target + this.waiters.length - this.ready.length - this.inflight.length;
+      const short = TURNSTILE_POOL_TARGET + this.waiters.length - this.ready.length - this.inflight.length;
       const want = Math.min(short, this._sampleConcurrency(now) - this.inflight.length);
       for (let i = 0; i < want; i++) {
         const slot = {
@@ -1075,8 +1094,10 @@ window.grbtp = 35;
     if (/moomoo/.test(href)) {
       const origin = new URL(href).origin;
       let token = null;
+      let entry = null;
       if (!fresh) {
-        let ready = TokenPool.take();
+        entry = TokenPool.takeEntry();
+        let ready = entry === null ? null : entry.token;
         // Empty, but the pool already has challenges running. Starting another
         // one beside them is what made a manual spawn fail while the pool was
         // busy: five widgets stacked up the edge of the screen, and no way to
@@ -1085,6 +1106,16 @@ window.grbtp = 35;
         // pool's own shelf, so the spawn gets the first token out.
         if (ready === null && TokenPool.minting > 0) {
           ready = await TokenPool.waitFor(TURNSTILE_WAIT_MS);
+          // A token served straight out of a waiter never sat on the shelf, so
+          // there is no entry to hand back. Dated from now, which is the
+          // closest thing to its real age available here and errs towards
+          // discarding it rather than over-keeping it.
+          if (ready !== null) {
+            entry = {
+              token: ready,
+              born: Date.now()
+            };
+          }
         }
         if (ready !== null) {
           token = "cf:" + ready;
@@ -1134,6 +1165,9 @@ window.grbtp = 35;
     const ws = new WebSocket(url);
     ws.binaryType = "arraybuffer";
     ws._rynPooledToken = pooled;
+    // Kept on the socket so a connection that is refused before it opens can
+    // put its token back rather than burning it.
+    ws._rynTokenEntry = pooled ? entry : null;
     return ws;
   };
   const createSocket_default = createSocket;
@@ -29481,7 +29515,22 @@ window.grbtp = 35;
           const socket = await createSocket_default(ws.url, fresh);
           let verified = false;
           let retried = false;
+          let opened = false;
+          socket.addEventListener("open", () => {
+            opened = true;
+          });
           socket.addEventListener("close", () => {
+            // Refused before the handshake ever completed. The server checks
+            // the token during the handshake, so one that never got there had
+            // nothing checked — most often this is the connection limit
+            // turning the rest of a batch away. Put the token back instead of
+            // losing it.
+            if (!opened && socket._rynTokenEntry) {
+              try {
+                TokenPool.giveBack(socket._rynTokenEntry);
+              } catch (_) {}
+              socket._rynTokenEntry = null;
+            }
             if (!verified && socket._rynPooledToken && !retried && !fresh) {
               retried = true;
               try {
@@ -30103,7 +30152,7 @@ window.grbtp = 35;
       let frames = -1;
       let enabled = true;
       let restored = 0;
-      let ceiling = 99;
+      let returned = 0;
       try {
         ready = TokenPool.size;
         minting = TokenPool.minting;
@@ -30117,7 +30166,7 @@ window.grbtp = 35;
         frames = TokenPool.frames;
         enabled = TokenPool.enabled;
         restored = TokenPool.restored;
-        ceiling = TokenPool.targetCeiling;
+        returned = TokenPool.returned;
       } catch (_) {
         return;
       }
@@ -30126,12 +30175,12 @@ window.grbtp = 35;
         toggle.textContent = enabled ? "Stop" : "Start";
         toggle.classList.toggle("primary", !enabled);
       }
-      // The target moves now, so it is worth saying what it settled on and
-      // that there is room above it — otherwise "4 of 4 ready" reads like the
-      // pool has stopped rather than like it has found its level.
       const bits = [ ready + " of " + target + " ready" ];
-      if (expired > 0 && target < ceiling) {
-        bits.push("sized to what you use, up to " + ceiling);
+      // Tokens a refused connection handed back rather than burning. Worth
+      // showing, because it is the difference between a batch costing one
+      // token and costing forty.
+      if (returned > 0) {
+        bits.push(returned + " returned unused");
       }
       // Where the shelf came from, when some of it came back rather than being
       // solved: a server switch is a page reload, and this is what says the

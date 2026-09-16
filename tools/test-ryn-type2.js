@@ -110,7 +110,6 @@ function buildPool(env) {
     ${poolSrc}
     return { TokenPool: TokenPool, TTL: TURNSTILE_TTL_MS, CF: TURNSTILE_CF_LIFETIME_MS,
              SAFETY: TURNSTILE_SAFETY_MS,
-             FLOOR: TURNSTILE_POOL_FLOOR, STEP: TURNSTILE_POOL_STEP,
              MOVING: TURNSTILE_CONCURRENT_MOVING, STILL: TURNSTILE_CONCURRENT_STILL,
              STILL_SPEED: TURNSTILE_STILL_SPEED, STILL_MS: TURNSTILE_STILL_MS,
              FPS_SLACK: TURNSTILE_FPS_SLACK, FPS_FLOOR: TURNSTILE_FPS_FLOOR_MS,
@@ -764,51 +763,72 @@ async function testPool() {
   ok("the ceiling is ninety-nine", h.k.TARGET === 99, "ceiling=" + h.k.TARGET);
   ok("the pool reports the ceiling it may grow to", h.pool.targetCeiling === h.k.TARGET);
 
-  // ── the shelf sizes itself to what gets used ──────────────────────────────
+  // ── a token nobody used comes back ───────────────────────────────────────
   //
-  // Tokens are single-use and die at 240s, so a shelf bigger than the demand
-  // is not a reserve — it is a treadmill, re-solving the same tokens as they
-  // age out and paying frames for every one. That is what a connection limit
-  // looks like from in here: if only one bot can get on, ninety-nine tokens is
-  // ninety-eight solved for nothing.
+  // A spawn takes a token before it knows whether the bot can get on. Press
+  // Spawn with a full shelf against a connection that will only carry one bot
+  // and the rest of the fleet used to take a token each on the way to being
+  // refused. The server checks the token during the handshake, so a connection
+  // that never opened had nothing checked — the token is still good.
   {
-    const h = poolHarness();
-    ok("it starts at the floor, not the ceiling", h.pool.target === h.k.FLOOR, "target=" + h.pool.target);
-    ok("and the ceiling is still there to grow into", h.pool.targetCeiling === h.k.TARGET);
-  }
-  {
-    // Nobody takes anything: the shelf fills, ages out, and shrinks.
     const h = poolHarness();
     await h.fill();
-    const started = h.pool.target;
-    for (let i = 0; i < 40; i++) await h.tick();
-    ok("tokens ageing out unused shrink the shelf", h.pool.target <= started, "target=" + h.pool.target + " started=" + started);
-    ok("but never below the floor", h.pool.target >= h.k.FLOOR, "target=" + h.pool.target);
+    const size = h.pool.size;
+    const entry = h.pool.takeEntry();
+    ok("taking gives the token and its age", typeof entry.token === "string" && typeof entry.born === "number");
+    ok("and it is off the shelf", h.pool.size === size - 1, "size=" + h.pool.size);
+    ok("counted as spent for now", h.pool.spent === 1);
+
+    ok("handing it back is accepted", h.pool.giveBack(entry) === true);
+    ok("the shelf has it again", h.pool.size === size, "size=" + h.pool.size);
+    ok("and it is no longer counted as spent", h.pool.spent === 0, "spent=" + h.pool.spent);
+    ok("the return is counted", h.pool.returned === 1);
+    ok("it is served next, being the oldest", h.pool.take() === entry.token);
   }
   {
-    // Spawns that have to wait grow it.
+    // Only once. If the server did burn it, it fails on its next use and is
+    // dropped there rather than bouncing between shelf and failing spawn.
     const h = poolHarness();
-    const started = h.pool.target;
-    for (let i = 0; i < 3; i++) h.pool.waitFor(5000);
-    ok("a spawn that had to wait grows the shelf", h.pool.target > started, "target=" + h.pool.target + " started=" + started);
-    h.advance(6000);
+    await h.fill();
+    const entry = h.pool.takeEntry();
+    h.pool.giveBack(entry);
+    const again = h.pool.takeEntry();
+    ok("the same token comes back out", again.token === entry.token);
+    ok("but cannot be handed back a second time", h.pool.giveBack(again) === false);
   }
   {
-    // And it cannot run away: the ceiling holds.
     const h = poolHarness();
-    for (let i = 0; i < 200; i++) h.pool.waitFor(5000);
-    ok("demand cannot push it past the ceiling", h.pool.target === h.k.TARGET, "target=" + h.pool.target);
-    h.advance(6000);
+    await h.fill();
+    const entry = h.pool.takeEntry();
+    h.advance(h.k.TTL + 1);
+    ok("one that aged out while the spawn failed is not put back", h.pool.giveBack(entry) === false);
   }
   {
-    // Tokens already solved are kept even when the shelf has shrunk — they
-    // cost nothing to hold and throwing them away is the waste being fixed.
-    const first = poolHarness();
-    await first.fill();
-    const saved = first.pool.size;
-    const after = poolHarness({ store: first.store, at: first.now });
-    ok("a restored shelf is not trimmed to the live target",
-       after.pool.size === saved, "size=" + after.pool.size + " saved=" + saved);
+    const h = poolHarness();
+    await h.fill();
+    const entry = h.pool.takeEntry();
+    await h.fill();
+    ok("the shelf refilled behind it", h.pool.size === h.pool.target, "size=" + h.pool.size);
+    ok("so there is no room to put it back", h.pool.giveBack(entry) === false);
+  }
+  {
+    const h = poolHarness();
+    ok("junk is refused rather than shelved", h.pool.giveBack(null) === false && h.pool.giveBack({}) === false);
+    ok("and nothing lands on the shelf", h.pool.size === 0);
+  }
+  {
+    // The whole point, as a batch: a shelf-full of spawns where only one gets
+    // on should cost one token, not all of them.
+    const h = poolHarness();
+    await h.fill();
+    const full = h.pool.size;
+    const taken = [];
+    for (let i = 0; i < 10; i++) taken.push(h.pool.takeEntry());
+    ok("ten spawns took ten tokens", h.pool.size === full - 10, "size=" + h.pool.size);
+    // One connects; nine are refused before their socket ever opens.
+    for (let i = 1; i < 10; i++) h.pool.giveBack(taken[i]);
+    ok("the nine refused hand theirs back", h.pool.size === full - 1, "size=" + h.pool.size);
+    ok("and only the one that got on is spent", h.pool.spent === 1, "spent=" + h.pool.spent);
   }
 
   // ── the shelf survives a page load ────────────────────────────────────────
