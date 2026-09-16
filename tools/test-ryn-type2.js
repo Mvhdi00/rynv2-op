@@ -942,7 +942,7 @@ function healScenario(opts) {
   const input = { fastHealPress: !!o.fastHeal };
   const mod = buildHeal({
     Date: clock,
-    Settings: { _autoheal: o.autoheal !== false },
+    Settings: { _autoheal: o.autoheal !== false, _predictHeal: !!o.predict },
     IH: () => input
   });
   const mh = {
@@ -975,7 +975,10 @@ function healScenario(opts) {
       rangedBowInsta: false,
       detectedDangerEnemy: false,
       detectedEnemy: false,
-      dangerWithoutSoldier: false
+      detectedEnemyByProximity: false,
+      dangerWithoutSoldier: false,
+      potentialDamage: o.incoming || 0,
+      potentialSpikeDamage: o.incomingSpike || 0
     }, o.threats || {}),
     SocketManager: { pong: o.pong || 0 }
   };
@@ -1074,6 +1077,93 @@ function testHeal() {
     const s = healScenario({ health: 60, lastHitMs: 0, threats: { [flag]: true } });
     s.m.postTick();
     ok("EnemyManager." + flag + " forces a heal", s.m.forceHeal === true && s.mh.heals === 2);
+  }
+
+  // ── proximity is not a threat ────────────────────────────────────────────
+  // The forced branch eats inside the server's 120ms window and is charged a
+  // shame point for it. RYN raises `detectedEnemy` for an enemy merely standing
+  // within 200px, where Glotus raises it only when their damage is lethal — so
+  // without this the branch fired from the first hit of every fight and paid
+  // every time. `detectedEnemyByProximity` is what tells the two apart.
+  {
+    const s = healScenario({ health: 60, lastHitMs: 0, threats: { detectedEnemy: true, detectedEnemyByProximity: true } });
+    s.m.postTick();
+    ok("an enemy who is merely near does not force a heal", s.m.forceHeal === false, "forceHeal=" + s.m.forceHeal);
+    ok("and nothing is eaten inside the window for them", s.mh.heals === 0, "heals=" + s.mh.heals);
+  }
+  {
+    const s = healScenario({ health: 60, lastHitMs: 5000, threats: { detectedEnemy: true, detectedEnemyByProximity: true } });
+    s.m.postTick();
+    ok("outside the window the same tick still tops up", s.mh.heals === 2);
+  }
+  {
+    const s = healScenario({ health: 60, lastHitMs: 0, threats: { detectedEnemy: true, detectedEnemyByProximity: false } });
+    s.m.postTick();
+    ok("a real lethal reading still forces", s.m.forceHeal === true && s.mh.heals === 2);
+  }
+  {
+    // Proximity must not mask a genuine threat arriving on the same tick.
+    const s = healScenario({ health: 60, lastHitMs: 0, threats: { detectedEnemy: true, detectedEnemyByProximity: true, reverseInsta: true } });
+    s.m.postTick();
+    ok("proximity does not suppress a real insta on the same tick", s.m.forceHeal === true);
+  }
+
+  // ── the predictive top-up ────────────────────────────────────────────────
+  // src/game_index.js:2454 — the shame block runs only `if (this.hitTime)`, and
+  // sets `hitTime = 0` inside itself. So food is free when no hit is pending,
+  // only the first food after a hit is ever charged, and the way to never pay
+  // is to already be at full when the hit lands. This eats before, not after.
+  {
+    const s = healScenario({ health: 40, lastHitMs: 5000, incoming: 35, predict: true });
+    s.m.postTick();
+    ok("with damage coming it closes the whole gap, not two foods", s.mh.heals === 3, "heals=" + s.mh.heals);
+    ok("and it counts what the Glotus branch already sent", s.m._sentThisTick === 3);
+  }
+  {
+    const s = healScenario({ health: 40, lastHitMs: 5000, incoming: 35, predict: false });
+    s.m.postTick();
+    ok("switched off it is the plain two foods again", s.mh.heals === 2, "heals=" + s.mh.heals);
+  }
+  {
+    const s = healScenario({ health: 40, lastHitMs: 0, incoming: 35, predict: true });
+    s.m.postTick();
+    ok("it never eats inside the window, which is the whole point", s.mh.heals === 0, "heals=" + s.mh.heals);
+  }
+  {
+    const s = healScenario({ health: 40, lastHitMs: 5000, incoming: 0, predict: true });
+    s.m.postTick();
+    ok("with nothing coming it leaves the ordinary top-up alone", s.mh.heals === 2);
+  }
+  {
+    const s = healScenario({ health: 40, lastHitMs: 5000, incoming: 0, incomingSpike: 45, predict: true });
+    s.m.postTick();
+    ok("a spike alone is damage coming", s.mh.heals === 3, "heals=" + s.mh.heals);
+  }
+  {
+    const s = healScenario({ health: 100, lastHitMs: 5000, incoming: 90, predict: true });
+    s.m.postTick();
+    ok("already at full there is nothing to top up", s.mh.heals === 0);
+  }
+  {
+    // Glotus's own branch carries no budget check — that is verbatim, and its
+    // two foods still go out. What has to hold is that the predictor adds
+    // nothing on top when there is no budget for it.
+    const s = healScenario({ health: 40, lastHitMs: 5000, incoming: 35, predict: true, packetCount: 118 });
+    s.m.postTick();
+    ok("the predictor adds nothing when the budget is spent", s.mh.heals === 2, "heals=" + s.mh.heals);
+    const t = healScenario({ health: 40, lastHitMs: 5000, incoming: 35, predict: true, packetCount: 0 });
+    t.m.postTick();
+    ok("and does add when there is budget", t.mh.heals === 3, "heals=" + t.mh.heals);
+  }
+  {
+    const s = healScenario({ health: 40, lastHitMs: 5000, incoming: 35, predict: true, autoheal: false });
+    s.m.postTick();
+    ok("and rides the Autoheal switch", s.mh.heals === 0);
+  }
+  {
+    const s = healScenario({ health: 40, lastHitMs: 5000, incoming: 35, predict: true, shameActive: true });
+    s.m.postTick();
+    ok("and stands down while shame is locked in", s.mh.heals === 0);
   }
 
   // ── the gates ────────────────────────────────────────────────────────────

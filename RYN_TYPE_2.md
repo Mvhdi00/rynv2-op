@@ -5,7 +5,7 @@ Changes to **`Ryn_Type_2.user.js`**, worked against the shipped game bundle in
 `drivers/game-drivers.json`.
 
 ```sh
-node tools/test-ryn-type2.js     # 275 behaviour tests
+node tools/test-ryn-type2.js     # 291 behaviour tests
 node --check Ryn_Type_2.user.js
 ```
 
@@ -586,35 +586,70 @@ Section 9 of the test suite pins the whole set down: every flag the heal treats
 as a threat has to put soldier on, so the next module that moves cannot take a
 flag's only path with it. Reverting the one word fails two of them.
 
-### Why shame climbs on every hit
+### Why shame climbs on every hit — and the fix
 
-Worth knowing, because it is not the burst and it is not the port.
-
-The `FORCE` branch eats **inside** the 120ms window on purpose — that is what
-anti-insta is, +1 shame to survive the tick. `SAFE` never does. So how often
-shame climbs is entirely a question of how often `forceHeal` is true, and that
-is decided by `EnemyManager`, not by the heal.
-
-RYN's `EnemyManager` carries a rule Glotus's does not
-(`Ryn_Type_2.user.js:3907`):
+The server's rule is in the game's own `buildItem` (`src/game_index.js:2454`):
 
 ```js
-if (nearestClose !== null && !detectedEnemy && !detectedDangerEnemy) {
-  if (closeDist <= 200) this.detectedEnemy = true;
+if (f.consume) {
+  if (this.hitTime) {                       // only with a hit pending
+    const W = Date.now() - this.hitTime;
+    this.hitTime = 0;                       // and only the first food
+    W <= 120 ? (shameCount++, shameCount >= 8 && (shameTimer = 3e4, shameCount = 0))
+             : (shameCount -= 2, ...)
+  }
+  this.shameTimer <= 0 && (V = f.consume(this))
 }
 ```
 
-Any enemy within 200px raises `detectedEnemy`, whatever their damage. In Glotus
-that flag means "their predicted damage kills me". So in a fight here the heal
-sits in `FORCE` from the first hit at full health, and pays a shame per hit.
+`hitTime` is set by `changeHealth` on any negative change — melee, spike, bull
+drain, poison, turret. Three things follow, and the heal is now built on all
+three:
 
-Running ten 30-damage hits through the lifted module, the difference is exact:
+1. Shame is charged for **eating after a hit**, never for eating. With no hit
+   pending the block does not run, so food is free.
+2. `hitTime = 0` sits *inside* the block, so only the **first** food after a hit
+   is ever charged. Five foods cost the same as one.
+3. So the way to never pay is to **already be at full when the hit lands** —
+   eat before it, not after.
 
-| threat rule | shame after 10 hits |
-|---|---|
-| Glotus's, damage-based | **0** |
-| RYN's 200px proximity rule | **7** |
+**The cause.** `FORCE` eats inside the window on purpose; that is what
+anti-insta is. It fires on `detectedEnemy`, which in Glotus means "their
+predicted damage kills me". RYN's `EnemyManager` also raised the same flag for
+an enemy merely standing within 200px (`Ryn_Type_2.user.js:3907`), whatever
+their damage — so in any fight the branch fired from the first hit at full
+health and paid a shame point every time.
 
-Both eat the same 20 foods. Only the branch differs. Left as it is for now —
-it is a pre-existing divergence in the anti layer, not part of the heal swap —
-but it is the answer to why the count moves.
+The flag is right for the hat (soldier early costs nothing) and wrong for the
+heal, so it now records which of the two raised it. `detectedEnemyByProximity`
+is read by the heal only; the hat modules see exactly what they saw before.
+
+**The predictive top-up** (`_predictHeal`, on by default) is point 3 built out.
+It runs only outside the window, where food is free and in fact takes 2 off the
+count, and it closes the whole gap rather than Glotus's two foods. What it eats
+against is `EnemyManager`'s own sum, which is already everything the client
+knows is coming — enemy primary and secondary in range and off cooldown, +25
+for a loaded turret, the worst enemy spike being touched or about to be pushed
+onto, every projectile already in flight, and the bull helmet's own −5. Those
+are the numbers, not an estimate of them.
+
+**Measured**, by lifting the module and running it against the server rule
+above, including `hitTime` semantics. Twenty hits, enemy 150px away:
+
+| | shame | peak | food | ended |
+|---|---|---|---|---|
+| before | 7 | 7 | 40 | 100 hp |
+| after | **0** | **0** | 40 | 100 hp |
+
+The predictor earns its place under time pressure, where two foods cannot keep
+up. Twenty 70-damage hits:
+
+| breathing room | predictor | shame | peak | ended |
+|---|---|---|---|---|
+| 5 ticks | off / on | 0 / 0 | 0 / 0 | 100 / 100 hp |
+| 2 ticks | off | 1 | 2 | 81 hp |
+| 2 ticks | **on** | **0** | **0** | **100 hp** |
+
+And when the damage genuinely is lethal, the shame-paying branch still does its
+job — 5 shame, peaking at 7, never reaching the lockout at 8, ending at full
+health. That is the trade it exists to make.
