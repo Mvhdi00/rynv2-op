@@ -306,16 +306,17 @@ window.grbtp = 35;
   // instead of in the middle of one the game needed. The timeout is the
   // backstop for a page that never goes idle.
   const TURNSTILE_IDLE_TIMEOUT_MS = 2e3;
-  // How long the delete key has to be held before it reaches the bots that are
-  // actually in the game. Long enough not to happen by accident, short enough
-  // not to feel like waiting.
+  // How long the delete key has to be held before it reaches the bots waiting
+  // at the menu. Long enough not to happen by accident, short enough not to
+  // feel like waiting.
   const RYN_KILL_HOLD_MS = 600;
   // Disconnect one half of the fleet.
   //
-  // `inGame` picks which half: true for the bots that are playing, false for
-  // the ones that are not — still connecting, or parked at the menu by Hold.
-  // A bot is only ever in one of the two, so the two gestures between them
-  // reach everything without either reaching what the other is for.
+  // `inGame` picks which half: true for the bots that are playing — the tap —
+  // and false for the ones that are not, still connecting or parked at the
+  // menu by Hold, which is what the hold reaches. A bot is only ever in one of
+  // the two, so the two gestures between them reach everything without either
+  // reaching what the other is for.
   function _rynRemoveBots(owner, inGame) {
     if (!owner || !owner.clients) {
       return 0;
@@ -9846,14 +9847,10 @@ window.grbtp = 35;
         } catch (_) {}
       }
       if (event.code === Settings_default._killAllBots) {
-        // Two modes on one key. A tap disconnects the bots that are not in the
-        // game — the ones still connecting, and the ones parked at the menu by
-        // Hold — and leaves the fleet you are actually playing with alone.
-        // Holding the key disconnects the ones that are in the game.
-        //
-        // Wiring it this way round is deliberate: the accident you want to be
-        // cheap is the one that costs you a live fleet, so that is the one
-        // behind the deliberate gesture.
+        // Two modes on one key. A tap disconnects the bots that are in the
+        // game, which is the one you reach for mid-fight. Holding the key
+        // reaches the rest — the ones still connecting and the ones parked at
+        // the menu by Hold — which is the tidy-up, not the panic button.
         try {
           if (this._killHoldTimer !== null) {
             clearTimeout(this._killHoldTimer);
@@ -9862,7 +9859,7 @@ window.grbtp = 35;
           this._killHoldTimer = setTimeout(() => {
             this._killHeld = true;
             this._killHoldTimer = null;
-            _rynRemoveBots(this.client, true);
+            _rynRemoveBots(this.client, false);
           }, RYN_KILL_HOLD_MS);
         } catch (_) {}
       }
@@ -10087,15 +10084,15 @@ window.grbtp = 35;
         this.fastHealPress = false;
       }
       // The delete key's tap half. Released before the hold fired, so the
-      // gesture was a tap: take out the bots that are not in the game and
-      // leave the live fleet standing.
+      // gesture was a tap: pull the bots that are in the game and leave the
+      // ones still waiting at the menu where they are.
       if (event.code === Settings_default._killAllBots) {
         try {
           if (this._killHoldTimer !== null) {
             clearTimeout(this._killHoldTimer);
             this._killHoldTimer = null;
             if (!this._killHeld) {
-              _rynRemoveBots(this.client, false);
+              _rynRemoveBots(this.client, true);
             }
           }
           this._killHeld = false;

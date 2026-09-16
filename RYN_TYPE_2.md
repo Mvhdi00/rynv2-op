@@ -445,16 +445,14 @@ frozen bots, duels, auto-farm and squad gating all still outrank the mission.
 
 ### Delete bots — two modes on one key
 
-A **tap** disconnects the bots that are **not** in the game: the ones still
-connecting, and the ones parked at the menu by Hold. A **hold** (600ms)
-disconnects the ones that **are** in the game.
+A **tap** disconnects the bots that **are** in the game. A **hold** (600ms)
+disconnects the ones that are **not**: the ones still connecting, and the ones
+parked at the menu by Hold.
 
 A bot is only ever in one of the two halves, so between them the gestures reach
-everything without either reaching what the other is for. Wired this way round
-on purpose: the accident you want to be cheap is the one that costs you a live
-fleet, so that is the one behind the deliberate gesture.
+everything without either reaching what the other is for.
 
-A held bot that a tap disconnects is dropped from the release list, so Release
+A held bot that a hold disconnects is dropped from the release list, so Release
 cannot later try to spawn something that is gone.
 
 ### Target Scan panel

@@ -830,9 +830,10 @@ async function testPool() {
 
 // ── the two-mode delete ────────────────────────────────────────────────────
 //
-// A tap takes out the bots that are not in the game; a hold takes out the ones
-// that are. A bot is only ever in one of the two halves, so between them the
-// gestures reach everything without either reaching what the other is for.
+// A tap takes out the bots that are in the game; a hold takes out the rest —
+// the ones still connecting and the ones parked at the menu. A bot is only ever
+// in one of the two halves, so between them the gestures reach everything
+// without either reaching what the other is for.
 
 function buildRemove(env) {
   const body = `
@@ -864,23 +865,23 @@ function testRemove() {
   {
     const f = mkFleet();
     f.add(1, true); f.add(2, true); f.add(3, false); f.add(4, false);
-    const gone = mod._rynRemoveBots(f.owner, false);
-    ok("a tap removes only the bots not in the game", gone === 2, "removed=" + gone);
-    ok("the live fleet is left standing", f.owner.clients.size === 2);
-    ok("and every survivor is in the game", [ ...f.owner.clients ].every(b => b.myPlayer.inGame));
+    const gone = mod._rynRemoveBots(f.owner, true);
+    ok("a tap removes only the bots in the game", gone === 2, "removed=" + gone);
+    ok("the ones waiting at the menu are left standing", f.owner.clients.size === 2);
+    ok("and no survivor is in the game", [ ...f.owner.clients ].every(b => !b.myPlayer.inGame));
   }
   {
     const f = mkFleet();
     f.add(1, true); f.add(2, true); f.add(3, false);
-    const gone = mod._rynRemoveBots(f.owner, true);
-    ok("a hold removes only the bots in the game", gone === 2, "removed=" + gone);
-    ok("the waiting ones are left alone", f.owner.clients.size === 1);
-    ok("and the survivor is not in the game", [ ...f.owner.clients ][0].myPlayer.inGame === false);
+    const gone = mod._rynRemoveBots(f.owner, false);
+    ok("a hold removes only the bots that are not in the game", gone === 1, "removed=" + gone);
+    ok("the live fleet is left alone", f.owner.clients.size === 2);
+    ok("and every survivor is in the game", [ ...f.owner.clients ].every(b => b.myPlayer.inGame));
   }
   {
     const f = mkFleet();
     f.add(1, true); f.add(2, false);
-    ok("a tap then a hold clears the fleet", (mod._rynRemoveBots(f.owner, false), mod._rynRemoveBots(f.owner, true), f.owner.clients.size === 0));
+    ok("a tap then a hold clears the fleet", (mod._rynRemoveBots(f.owner, true), mod._rynRemoveBots(f.owner, false), f.owner.clients.size === 0));
   }
   {
     const f = mkFleet();
@@ -888,12 +889,12 @@ function testRemove() {
     const b = f.add(2, false);
     RYN._heldBots = [ a, b ];
     mod._rynRemoveBots(f.owner, false);
-    ok("held bots that were removed are dropped from the release list", RYN._heldBots.length === 0, "held=" + RYN._heldBots.length);
+    ok("a hold drops the bots it removed from the release list", RYN._heldBots.length === 0, "held=" + RYN._heldBots.length);
     const f2 = mkFleet();
     const c = f2.add(9, false);
     RYN._heldBots = [ c ];
     mod._rynRemoveBots(f2.owner, true);
-    ok("a hold does not touch the release list", RYN._heldBots.length === 1);
+    ok("a tap does not touch the release list", RYN._heldBots.length === 1);
   }
   {
     const f = mkFleet();
