@@ -5,7 +5,7 @@ Changes to **`Ryn_Type_2.user.js`**, worked against the shipped game bundle in
 `drivers/game-drivers.json`.
 
 ```sh
-node tools/test-ryn-type2.js     # 291 behaviour tests
+node tools/test-ryn-type2.js     # 277 behaviour tests
 node --check Ryn_Type_2.user.js
 ```
 
@@ -466,190 +466,112 @@ touching the player index.
 
 ---
 
-## 5. Auto heal — replaced with Glotus's
+## 5. Auto heal — back to Falcon's
 
-The heal that was here was a port of Falcon V2's: a damage-identification
-pipeline that took the number which had just landed, worked backwards to the
-weapon that produced it, summed what its owner still had loaded, and only then
-chose a helmet and a tick to eat on. It is gone. In its place is **Glotus
-Client 5.5.5's `AntiInsta`**, whole.
-
-### It was not working
-
-`Player.maxHealth` is declared `Math.LN1`. There is no such constant on `Math`,
-so the field is `undefined`, and nothing in the client ever assigns it — that is
-true of Glotus and it was true here.
-
-Falcon's heal took a value, and the ladder handed it
-`maxHealth - currentHealth`:
+Glotus's `AntiInsta` is out and **Falcon V2's system is back**, which is the one
+that predicts. It heals against damage that has already landed and works
+backwards from the number:
 
 ```
-maxHealth         = undefined
-value passed in   = NaN
+a damage number arrives  ->  which weapon produces exactly that number?
+                         ->  whose weapon is it?
+                         ->  what else does that player still have loaded?
+                         ->  can that finish me?
+                         ->  which hat survives it, and when do I eat?
+```
+
+Everything that went with it the first time came back with it: `wantsSoldier`
+and `wantsEMP` in `ModuleHandler`'s hat block, `ShameReset` reading
+`shouldResetShame`, the `Player.damages` push it reads as the tick's damage
+bucket, and the priority-ladder HUD line.
+
+### The bug that made it a no-op
+
+It never worked. `Player.maxHealth` was declared `Math.LN1` — there is no such
+constant on `Math`, so the field was `undefined` — and nothing ever assigned it.
+The ladder calls `heal(maxHealth - currentHealth)`, so:
+
+```
+maxHealth       = undefined
+value passed in = NaN
 for (let i = 0; i < NaN; i++)  ->  zero iterations
 ```
 
-Lifting `heal(value)` verbatim out of the previous commit and calling it the way
-the ladder called it sends **zero packets**. Autoheal had not eaten one apple
-since it was written. The test suite pins that arithmetic down so it cannot come
-back.
+Autoheal had not eaten a single apple for as long as the system was installed.
+`maxHealth` is now `100`, the game's own player health. Its only readers are the
+heal and a HUD line that already defaulted it to 100.
 
-### What Glotus does instead
-
-It identifies nothing. Once a tick it asks two questions:
-
-| | condition | result |
-|---|---|---|
-| **FORCE** | a threat is live, shame under 7, health under 95 | eat, spend the shame |
-| **SAFE** | 125ms clear of the last hit, health under 100 | eat, no shame spent |
-
-"A threat is live" is `EnemyManager`'s whole surface — `velocityTickThreat`,
-`reverseInsta`, `toolHammerInsta`, `rangedBowInsta`, `detectedDangerEnemy`,
-`detectedEnemy`, `dangerWithoutSoldier` — plus being at or under 20 health, plus
-a soldier ask the hat picker has not served yet. The 125 is the server's 120ms
-shame window with the round trip added back in.
-
-Nothing is forecast and nothing is deferred: no held food, no forced helmet, no
-queue, no second opinion about what the damage was.
-
-### How much it eats
-
-The same undefined `maxHealth` reaches Glotus's `needTimes`, and this is why it
-survives there:
-
-```js
-const needTimes = Math.ceil((myPlayer.maxHealth - myPlayer.tempHealth) / restore);  // NaN
-healingTimes = needTimes || 1;                                                      // 1
-for (let i = 0; i <= healingTimes; i++) ModuleHandler.heal();                       // 2 foods
-```
-
-`|| 1` catches the NaN, and the inclusive `<=` makes it two. So a heal is always
-exactly two foods, and because the module runs every tick a deeper hole closes
-over consecutive ticks rather than in one send. That is Glotus's real behaviour
-in the field, and it is left exactly as it is.
-
-### What went with it
+Lifting the restored module and running twenty 30-damage hits through
+`postTick`, against the server's own shame rule:
 
 | | |
 |---|---|
-| `wantsSoldier` / `wantsEMP` | Falcon's own hat asks, read by `ModuleHandler`'s soldier block. Glotus's heal asks for no hat, so both terms are gone; RYN's own soldier reasoning below them is untouched. See **the hat it was covering for** below. |
-| **EMP Anti** (`_soldierEMP`) | Falcon's EMP branch. No consumer left — switch and menu row removed. |
-| **Sensitive Healing** (`_sensitiveHealing`) | Already had no consumer. Removed with it. |
-| `Player.damages` push | Filled only for Falcon's damage identification. The array is back to what the base client leaves it as: declared, cleared, never written. |
-| `ShameReset.shouldReset` | Still refuses to put bull on into an incoming hit, but reads `AntiInsta.forceHeal` — Glotus's own signal, computed one module earlier — instead of Falcon's `shouldResetShame`. |
-| HUD heal line | Two states now, FORCE and SAFE, because that is all the module has. |
+| foods eaten | **40** (was 0) |
+| ended at | 100 hp |
+| shame | 0, peak 0, no lockouts |
 
-### What is kept, and is not Glotus's
+Falcon's hold-then-eat design is why the shame count stays flat: a heal that is
+not urgent waits two ticks rather than landing inside the server's 120ms window.
 
-The **manual burst** on `HEAL_FAST_KEY` (Q). Held, it clears the bar on the tick
-it is held, capped at five foods and at the packet budget, and skipped on a tick
-the module already ate on. It is fenced off in `_fastHeal()` and marked as RYN's
-rather than part of the port — `_glotusTick()` is the port, verbatim.
+### The manual burst
 
-It also stops at the shame limit, which the version first written here did not.
-The server's rule is in `src/game_index.js:2464`:
+`HEAL_FAST_KEY` (Q) now stops at the shame limit, which it did not before. The
+rule is the game's own `buildItem` (`src/game_index.js:2454`):
 
 ```js
-W <= 120 ? (this.shameCount++, this.shameCount >= 8 && (this.shameTimer = 3e4, this.shameCount = 0)) : ...
+if (this.hitTime) {
+  const W = Date.now() - this.hitTime;
+  this.hitTime = 0;
+  W <= 120 ? (shameCount++, shameCount >= 8 && (shameTimer = 3e4, shameCount = 0))
+           : (shameCount -= 2, ...)
+}
 this.shameTimer <= 0 && (V = f.consume(this))
 ```
 
 At 8 the count resets and `shameTimer` runs for thirty seconds, during which
-food is not consumed at all. Every other heal in the client stops at 7 — the
-module, and the Placer — but a key held through a fight was counting nothing,
-and each send inside the 120ms window is +1. Simulated over ten hits it reached
-10 and would have crossed into the lockout; it now stops at 7. Only the
-dangerous half is blocked: at 7 and clear of the window, eating takes 2 back off
-the count, so that stays allowed.
+food is not consumed at all. The ladder stops at 7 and so does the Placer; a key
+held through a fight was counting nothing. Only the dangerous half is blocked —
+at 7 and clear of the window, eating takes 2 back off the count.
 
-### The hat it was covering for
+### Switches
 
-Removing `wantsSoldier` meant every threat flag now has to reach the helmet
-through `DefaultHat` alone. One of them did not.
+Autoheal is the only row on the menu. `_soldierEMP` and `_sensitiveHealing` are
+kept as defaults with no rows of their own: the heal page is better without a
+switch per branch.
 
-RYN's copy of Glotus's threat line had dropped `velocityTickThreat`:
+---
 
-```js
-// Glotus, DefaultHat.getBestCurrentHat
-detectedDangerEnemy || detectedEnemy || velocityTickThreat || reverseInsta || toolHammerInsta || rangedBowInsta
-// RYN, before this change
-detectedDangerEnemy || detectedEnemy ||                      reverseInsta || toolHammerInsta || rangedBowInsta
-```
+## 6. Token pool — 99, five at a time, started apart
 
-It never showed, because Falcon's `velSoldier` was a straight read of the same
-flag and reached `forceHat` by the other route. With that module gone the flag
-had no soldier path left at all — and an enemy set up for a diamond-polearm
-turret tick is the case where the helmet matters most. The line now matches
-Glotus's.
+Target raised from 40 to 99, and the rate no longer depends on what the player
+is doing: **five challenges run at once**, moving or standing still. The speed
+test that opened a second slot only after four seconds of standing still is
+gone, along with the two constants behind it.
 
-Section 9 of the test suite pins the whole set down: every flag the heal treats
-as a threat has to put soldier on, so the next module that moves cannot take a
-flag's only path with it. Reverting the one word fails two of them.
+What makes five payable is the **stagger**. The expensive part of a Turnstile
+challenge is its front end — inserting the cross-origin iframe, the layout and
+composite that follow, and the first slice of proof of work — and five of those
+in one frame is a single long stall that the frame test can only notice
+afterwards. Started 350ms apart they each land in a frame of their own and still
+overlap for most of their life, which is where the throughput comes from.
 
-### Why shame climbs on every hit — and the fix
+Five at once is also slower in wall-clock terms than five staggered: they
+contend for the same main thread, so each one's proof of work takes longer and
+they all finish late together.
 
-The server's rule is in the game's own `buildItem` (`src/game_index.js:2454`):
+`_nextStartAt` is held across top-ups, so five asked for in one pass and five
+asked for one per keeper tick are spaced the same.
 
-```js
-if (f.consume) {
-  if (this.hitTime) {                       // only with a hit pending
-    const W = Date.now() - this.hitTime;
-    this.hitTime = 0;                       // and only the first food
-    W <= 120 ? (shameCount++, shameCount >= 8 && (shameTimer = 3e4, shameCount = 0))
-             : (shameCount -= 2, ...)
-  }
-  this.shameTimer <= 0 && (V = f.consume(this))
-}
-```
+A staggered start also **re-tests the gates when it actually begins**, not only
+when it was scheduled. A slot at the back of the stagger was committed to over a
+second earlier, and the point of the frame test is not to spend frames *now*, so
+a challenge queued while things were calm is abandoned if they no longer are —
+and gives its slot back rather than holding one until the reaper comes for it.
 
-`hitTime` is set by `changeHealth` on any negative change — melee, spike, bull
-drain, poison, turret. Three things follow, and the heal is now built on all
-three:
+### A test that was passing by sleeping
 
-1. Shame is charged for **eating after a hit**, never for eating. With no hit
-   pending the block does not run, so food is free.
-2. `hitTime = 0` sits *inside* the block, so only the **first** food after a hit
-   is ever charged. Five foods cost the same as one.
-3. So the way to never pay is to **already be at full when the hit lands** —
-   eat before it, not after.
-
-**The cause.** `FORCE` eats inside the window on purpose; that is what
-anti-insta is. It fires on `detectedEnemy`, which in Glotus means "their
-predicted damage kills me". RYN's `EnemyManager` also raised the same flag for
-an enemy merely standing within 200px (`Ryn_Type_2.user.js:3907`), whatever
-their damage — so in any fight the branch fired from the first hit at full
-health and paid a shame point every time.
-
-The flag is right for the hat (soldier early costs nothing) and wrong for the
-heal, so it now records which of the two raised it. `detectedEnemyByProximity`
-is read by the heal only; the hat modules see exactly what they saw before.
-
-**The predictive top-up** (`_predictHeal`, on by default) is point 3 built out.
-It runs only outside the window, where food is free and in fact takes 2 off the
-count, and it closes the whole gap rather than Glotus's two foods. What it eats
-against is `EnemyManager`'s own sum, which is already everything the client
-knows is coming — enemy primary and secondary in range and off cooldown, +25
-for a loaded turret, the worst enemy spike being touched or about to be pushed
-onto, every projectile already in flight, and the bull helmet's own −5. Those
-are the numbers, not an estimate of them.
-
-**Measured**, by lifting the module and running it against the server rule
-above, including `hitTime` semantics. Twenty hits, enemy 150px away:
-
-| | shame | peak | food | ended |
-|---|---|---|---|---|
-| before | 7 | 7 | 40 | 100 hp |
-| after | **0** | **0** | 40 | 100 hp |
-
-The predictor earns its place under time pressure, where two foods cannot keep
-up. Twenty 70-damage hits:
-
-| breathing room | predictor | shame | peak | ended |
-|---|---|---|---|---|
-| 5 ticks | off / on | 0 / 0 | 0 / 0 | 100 / 100 hp |
-| 2 ticks | off | 1 | 2 | 81 hp |
-| 2 ticks | **on** | **0** | **0** | **100 hp** |
-
-And when the damage genuinely is lethal, the shame-paying branch still does its
-job — 5 shame, peaking at 7, never reaching the lockout at 8, ending at full
-health. That is the trade it exists to make.
+Stubbing `setTimeout` on the harness clock exposed one: *"a waiter is released as
+soon as the pool runs dry"* had been resolving on a real five-second timer while
+asserting the opposite of what was happening — the pool had in fact re-armed a
+challenge and kept the waiter. It now advances the clock and asserts both
+halves. The suite went from about five seconds to 0.1s.

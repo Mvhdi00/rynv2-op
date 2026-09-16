@@ -57,7 +57,7 @@ const kiteSrc = between(find(/^  const BOT_KITE_BAND = /), find(/^  \/\/ The bot
 const missionSrc = between(find(/^  \/\/ The bot half\. Sits in botModules/), find(/^  class Automill \{/));
 const poolSrc = between(find(/^  const TURNSTILE_CF_LIFETIME_MS = /), find(/^  setInterval\(\(\) => \{/));
 const removeSrc = between(find(/^  const RYN_KILL_HOLD_MS = /), find(/^  \/\/ One press, the whole fleet\./));
-const healSrc = between(find(/^  const HEAL_FAST_KEY = /), find(/^  class Autohat \{/));
+const healSrc = between(find(/^  const HEAL_SOLDIER_HAT = /), find(/^  class Autohat \{/));
 // The heal reads the game's own food table for `restore`, so the table comes
 // out of the script rather than being written again here.
 const itemsSrc = between(find(/^  const Items = \[ \{/), find(/^  const WeaponVariants = \[ \{/));
@@ -969,336 +969,262 @@ function testRemove() {
 
 // ── 8. the auto heal ───────────────────────────────────────────────────────
 //
-// Glotus 5.5.5's AntiInsta, lifted verbatim. Two decisions a tick:
+// Falcon V2's system. It heals against damage that has *already landed* and
+// works backwards from the number: which weapon produces exactly that, whose
+// weapon is it, what else does that player still have loaded, can that finish
+// me, which hat survives it and when do I eat.
 //
-//   something dangerous is happening  ->  eat below 95, spend the shame
-//   clear of the server's 120ms window ->  eat below 100, no shame spent
-//
-// Plus the thing worth pinning down in a test rather than in a comment:
-// `myPlayer.maxHealth` is `undefined` in both clients, so `needTimes` is NaN,
-// `needTimes || 1` is 1, and `for (i = 0; i <= 1; i++)` sends exactly two
-// foods. That is Glotus's real behaviour and the reason its `|| 1` matters.
+// What these pin down is the ladder's order, and the arithmetic bug that made
+// the whole system a no-op the first time it was here.
 
 function buildHeal(env) {
   const body = `
     const Date = env.Date;
     const Settings_default = env.Settings;
     const IH = env.IH;
+    const hyp = (a, b) => Math.sqrt(a * a + b * b);
+    const Config_default = { playerScale: 35 };
+    const PlayerObject = function () {};
+    const WeaponVariants = [ { val: 1 }, { val: 1.1 }, { val: 1.18 }, { val: 1.18 } ];
+    ${tables}
     ${itemsSrc}
+    const DataHandler_default = {
+      getWeapon: id => Weapons[id],
+      isShootable: id => !!(Weapons[id] && Weapons[id].projectile !== undefined),
+      getProjectile: id => ({ damage: 25 })
+    };
     ${healSrc}
-    return { AntiInsta: AntiInsta, FULL: HEAL_FULL_HEALTH, BURST: HEAL_BURST_MAX,
-             COST: HEAL_PACKET_COST };
+    return { FalconHeal: FalconHeal, SHAME_LIMIT: HEAL_SHAME_LIMIT,
+             WINDOW: HEAL_SHAME_WINDOW_MS, MAX_PER_TICK: HEAL_MAX_PER_TICK,
+             PACKET_COST: HEAL_PACKET_COST, PRIORITY: HEAL_PRIORITY_NAMES,
+             SOLDIER: HEAL_FORCE_SOLDIER, EMP: HEAL_FORCE_EMP };
   `;
   return new Function("env", body)(env);
 }
 
 function healScenario(opts) {
   const o = opts || {};
-  const now = 1e6;
-  const clock = { now: () => now };
-  const input = { fastHealPress: !!o.fastHeal };
+  const now = 2e6;
   const mod = buildHeal({
-    Date: clock,
-    Settings: { _autoheal: o.autoheal !== false, _predictHeal: !!o.predict },
-    IH: () => input
+    Date: { now: () => now },
+    Settings: { _autoheal: o.autoheal !== false, _soldierEMP: o.soldierEMP !== false },
+    IH: () => ({ fastHealPress: !!o.fastHeal })
   });
   const mh = {
     heals: 0,
     healedOnce: false,
-    didAntiInsta: false,
-    shouldEquipSoldier: !!o.shouldEquipSoldier,
-    forceHat: o.forceHat === undefined ? null : o.forceHat,
     packetLimit: 119,
     packetCount: o.packetCount || 0,
-    heal() { this.heals++; }
+    forceHat: null,
+    selectItem() {},
+    attack() {},
+    stopAttack() {},
+    whichWeapon() {},
+    _getPredictWeapon: () => 0,
+    canBuy: (type, id) => (o.owns ? o.owns.indexOf(id) >= 0 : true)
+  };
+  // heal() is four sends; count foods rather than packets.
+  const realSelect = mh.selectItem;
+  mh.selectItem = function (t) { mh.heals++; realSelect.call(mh, t); };
+  const pos = { x: 0, y: 0, distance: () => 9999 };
+  const myPlayer = {
+    id: 1,
+    inGame: o.inGame !== false,
+    currentHealth: o.health === undefined ? 100 : o.health,
+    maxHealth: 100,
+    tempHealth: o.health === undefined ? 100 : o.health,
+    hatID: o.hat === undefined ? 0 : o.hat,
+    accessoryID: 0,
+    shameCount: o.shameCount || 0,
+    receivedDamage: o.lastHitMs === undefined ? null : now - o.lastHitMs,
+    trappedIn: null,
+    isSandbox: false,
+    tickCount: 5,
+    damages: o.damages ? o.damages.slice() : [],
+    pos: { current: pos, future: pos },
+    weapon: { primary: 0, secondary: null },
+    reload: [ { current: 1, max: 1 }, { current: 1, max: 1 }, { current: 1, max: 1 } ],
+    getItemByType: t => (t === 2 ? 0 : 0),
+    getWeaponVariant: () => ({ current: 0 })
   };
   const client = {
-    myPlayer: {
-      inGame: o.inGame !== false,
-      // Left undefined on purpose: this is what the shipped Player carries.
-      maxHealth: undefined,
-      tempHealth: o.health === undefined ? 100 : o.health,
-      shameActive: !!o.shameActive,
-      shameCount: o.shameCount || 0,
-      // The timestamp of the last hit. `lastHitMs` ago.
-      receivedDamage: o.lastHitMs === undefined ? 0 : now - o.lastHitMs,
-      getItemByType: () => (o.food === undefined ? 0 : o.food)
-    },
+    myPlayer: myPlayer,
     _ModuleHandler: mh,
-    EnemyManager: Object.assign({
-      velocityTickThreat: false,
-      reverseInsta: false,
-      toolHammerInsta: false,
-      rangedBowInsta: false,
-      detectedDangerEnemy: false,
-      detectedEnemy: false,
-      detectedEnemyByProximity: false,
-      dangerWithoutSoldier: false,
-      potentialDamage: o.incoming || 0,
-      potentialSpikeDamage: o.incomingSpike || 0
-    }, o.threats || {}),
-    SocketManager: { pong: o.pong || 0 }
+    SocketManager: { pong: o.pong || 0 },
+    EnemyManager: { velocityTickThreat: !!o.velThreat },
+    PlayerManager: { enemies: [], isEnemyByID: () => true },
+    ObjectManager: { grid2D: { query: () => {} }, objects: new Map() }
   };
-  return { mod: mod, mh: mh, client: client, input: input, m: new mod.AntiInsta(client) };
+  const m = new mod.FalconHeal(client);
+  // What _refresh does at the top of a real tick: the module's damage bucket
+  // is a reference to the player's, not a copy of it.
+  m.damages = myPlayer.damages;
+  return { mod: mod, mh: mh, mp: myPlayer, client: client, m: m };
 }
 
 function testHeal() {
-  section("8. the auto heal (Glotus AntiInsta)");
+  section("8. the auto heal (Falcon V2)");
 
-  // ── the undefined maxHealth, which is the whole of how much it eats ──────
+  // ── the arithmetic that made it a no-op ─────────────────────────────────
+  //
+  // `Player.maxHealth` was declared `Math.LN1` — there is no such constant on
+  // Math, so the field was `undefined` — and nothing assigned it. Every
+  // `heal(maxHealth - currentHealth)` was therefore `heal(NaN)`, and
+  // `for (i = 0; i < NaN; i++)` runs zero times. The system sent no packets at
+  // all for as long as it was installed.
   {
-    const s = healScenario({ health: 40, lastHitMs: 5000 });
-    s.m.postTick();
-    ok("a safe top-up eats twice, not once and not to full", s.mh.heals === 2, "heals=" + s.mh.heals);
-    ok("and it is not flagged as the anti-insta heal", s.mh.didAntiInsta === false);
-    ok("and the tick is marked as having eaten", s.mh.healedOnce === true);
+    ok("maxHealth is a number now, not Math.LN1", typeof Math.LN1 === "undefined");
+    let none = 0;
+    for (let i = 0; i < (undefined - 40); i++) none++;
+    ok("the old expression ran zero times", none === 0);
+    const s = healScenario({ health: 40 });
+    ok("and a heal for the real deficit now sends food", s.m.heal(100 - 40) === 3, "times=" + s.m.heal(100 - 40));
   }
   {
-    // The same arithmetic the module runs, stated on its own: this is why
-    // two, and why Falcon's `for (i = 0; i < needTimes; i++)` ran zero times.
-    const restore = 20;
-    const needTimes = Math.ceil((undefined - 40) / restore);
-    ok("needTimes is NaN, because maxHealth is undefined", Number.isNaN(needTimes));
-    let glotus = 0;
-    for (let i = 0; i <= (needTimes || 1); i++) glotus++;
-    ok("Glotus's `needTimes || 1` turns that into two sends", glotus === 2);
-    let falcon = 0;
-    for (let i = 0; i < needTimes; i++) falcon++;
-    ok("the outgoing heal's loop turned it into none", falcon === 0);
-  }
-
-  // ── the safe branch ──────────────────────────────────────────────────────
-  {
-    const s = healScenario({ health: 100, lastHitMs: 5000 });
-    s.m.postTick();
-    ok("at full health it does not eat", s.mh.heals === 0);
+    const s = healScenario({ health: 40 });
+    ok("a heal covers the deficit it is given", s.m.heal(60) === 3);
+    ok("and each food is a send", s.mh.heals === 3, "heals=" + s.mh.heals);
+    ok("the tick is marked as having eaten", s.mh.healedOnce === true);
+    ok("and the shame reset stands down for it", s.m.shouldResetShame === false);
   }
   {
-    const s = healScenario({ health: 99, lastHitMs: 5000 });
-    s.m.postTick();
-    ok("one point down it does", s.mh.heals === 2);
+    const s = healScenario({ health: 100 });
+    ok("nothing to heal sends nothing", s.m.heal(0) === 0 && s.mh.heals === 0);
+    ok("a negative deficit sends nothing", s.m.heal(-20) === 0);
   }
   {
-    // 100ms since the hit, no ping: inside the server's window.
-    const s = healScenario({ health: 60, lastHitMs: 100 });
-    s.m.postTick();
-    ok("inside the 120ms window it holds", s.mh.heals === 0);
+    const s = healScenario({ health: 1 });
+    ok("a full bar is capped per tick", s.m.heal(99) === s.mod.MAX_PER_TICK, "times=" + s.m.heal(99));
   }
   {
-    const s = healScenario({ health: 60, lastHitMs: 100, pong: 40 });
-    s.m.postTick();
-    ok("the round trip counts towards the window", s.mh.heals === 2);
+    const s = healScenario({ health: 1, packetCount: 118 });
+    ok("and bounded by the packet budget", s.m.heal(99) === 0, "times=" + s.m.heal(99));
   }
   {
-    const s = healScenario({ health: 60, lastHitMs: 124 });
-    s.m.postTick();
-    ok("one millisecond short of 125 is still a hold", s.mh.heals === 0);
-    const t = healScenario({ health: 60, lastHitMs: 125 });
-    t.m.postTick();
-    ok("125 is the line", t.mh.heals === 2);
+    const s = healScenario({ health: 40, inGame: false });
+    ok("nothing is eaten at the menu", s.m.heal(60) === 0);
   }
 
-  // ── the forced branch ────────────────────────────────────────────────────
+  // ── the ladder ───────────────────────────────────────────────────────────
+  //
+  // Nothing has landed, so nothing is decided: `main` only runs when the tick
+  // brought a damage number.
   {
-    const s = healScenario({ health: 60, lastHitMs: 0, threats: { detectedEnemy: true } });
-    s.m.postTick();
-    ok("a threat eats through the window", s.mh.heals === 2);
-    ok("and says so", s.mh.didAntiInsta === true);
-    ok("and forceHeal is the flag the rest of the client reads", s.m.forceHeal === true);
+    const s = healScenario({ health: 60 });
+    s.m.main();
+    ok("a tick with no damage decides nothing", s.mh.heals === 0);
+    ok("and reports no tier", s.m.healPriority === 0);
   }
   {
-    const s = healScenario({ health: 96, lastHitMs: 0, threats: { detectedEnemy: true } });
-    s.m.postTick();
-    ok("the forced branch stops at 95, not 100", s.mh.heals === 0);
-  }
-  {
-    const s = healScenario({ health: 60, lastHitMs: 0, shameCount: 7, threats: { detectedEnemy: true } });
-    s.m.postTick();
-    ok("with shame at 7 the forced branch is closed", s.mh.heals === 0);
-    ok("but forceHeal still reports the threat", s.m.forceHeal === true);
-  }
-  {
-    const s = healScenario({ health: 19, lastHitMs: 0 });
-    s.m.postTick();
-    ok("under 20 health is a threat by itself", s.mh.heals === 2 && s.m.forceHeal === true);
-  }
-  {
-    const s = healScenario({ health: 60, lastHitMs: 0, shouldEquipSoldier: true, forceHat: 22 });
-    s.m.postTick();
-    ok("a soldier ask that has not been served is a threat", s.m.forceHeal === true);
-    const t = healScenario({ health: 60, lastHitMs: 0, shouldEquipSoldier: true, forceHat: 6 });
-    t.m.postTick();
-    ok("one that has been served is not", t.m.forceHeal === false);
-  }
-  for (const flag of [ "velocityTickThreat", "reverseInsta", "toolHammerInsta", "rangedBowInsta", "detectedDangerEnemy", "detectedEnemy", "dangerWithoutSoldier" ]) {
-    const s = healScenario({ health: 60, lastHitMs: 0, threats: { [flag]: true } });
-    s.m.postTick();
-    ok("EnemyManager." + flag + " forces a heal", s.m.forceHeal === true && s.mh.heals === 2);
+    // A number landed, but nobody is in reach — Falcon holds and eats on the
+    // next tick rather than inside the server's window.
+    const s = healScenario({ health: 60, damages: [ 35 ] });
+    ok("the tick really did bring a damage number", s.m.damages.length === 1);
+    s.m.main();
+    ok("a hit with nobody near is queued, not eaten now", s.mh.heals === 0, "heals=" + s.mh.heals);
+    ok("the bucket is cleared behind it", s.m.damages.length === 0);
+    s.m._runQueues();
+    ok("and lands on the following tick", s.mh.heals === 2, "heals=" + s.mh.heals);
   }
 
-  // ── proximity is not a threat ────────────────────────────────────────────
-  // The forced branch eats inside the server's 120ms window and is charged a
-  // shame point for it. RYN raises `detectedEnemy` for an enemy merely standing
-  // within 200px, where Glotus raises it only when their damage is lethal — so
-  // without this the branch fired from the first hit of every fight and paid
-  // every time. `detectedEnemyByProximity` is what tells the two apart.
+  // ── the forced hats ──────────────────────────────────────────────────────
   {
-    const s = healScenario({ health: 60, lastHitMs: 0, threats: { detectedEnemy: true, detectedEnemyByProximity: true } });
-    s.m.postTick();
-    ok("an enemy who is merely near does not force a heal", s.m.forceHeal === false, "forceHeal=" + s.m.forceHeal);
-    ok("and nothing is eaten inside the window for them", s.mh.heals === 0, "heals=" + s.mh.heals);
+    const s = healScenario({ health: 60 });
+    ok("no hat is asked for on a quiet tick", s.m.wantsSoldier === false && s.m.wantsEMP === false);
+    s.m.addForcedAddOnValue(s.mod.SOLDIER, 2);
+    ok("a forced soldier is an ask", s.m.wantsSoldier === true);
+    ok("and is not an EMP ask", s.m.wantsEMP === false);
+    s.m.addForcedAddOnValue(s.mod.EMP, 2);
+    ok("a forced EMP is its own ask", s.m.wantsEMP === true);
+    s.m.resetForcedAddOn(s.mod.SOLDIER);
+    s.m.resetForcedAddOn(s.mod.EMP);
+    ok("clearing them clears both asks", s.m.wantsSoldier === false && s.m.wantsEMP === false);
   }
   {
-    const s = healScenario({ health: 60, lastHitMs: 5000, threats: { detectedEnemy: true, detectedEnemyByProximity: true } });
-    s.m.postTick();
-    ok("outside the window the same tick still tops up", s.mh.heals === 2);
+    const s = healScenario({ health: 60, autoheal: false });
+    s.m.addForcedAddOnValue(s.mod.SOLDIER, 2);
+    ok("with Autoheal off no hat is asked for", s.m.wantsSoldier === false);
   }
   {
-    const s = healScenario({ health: 60, lastHitMs: 0, threats: { detectedEnemy: true, detectedEnemyByProximity: false } });
-    s.m.postTick();
-    ok("a real lethal reading still forces", s.m.forceHeal === true && s.mh.heals === 2);
-  }
-  {
-    // Proximity must not mask a genuine threat arriving on the same tick.
-    const s = healScenario({ health: 60, lastHitMs: 0, threats: { detectedEnemy: true, detectedEnemyByProximity: true, reverseInsta: true } });
-    s.m.postTick();
-    ok("proximity does not suppress a real insta on the same tick", s.m.forceHeal === true);
+    const s = healScenario({ health: 60, velThreat: true });
+    s.m._updateSpikeSoldier();
+    ok("a velocity tick is a standing soldier reason", s.m.wantsSoldier === true);
   }
 
-  // ── the predictive top-up ────────────────────────────────────────────────
-  // src/game_index.js:2454 — the shame block runs only `if (this.hitTime)`, and
-  // sets `hitTime = 0` inside itself. So food is free when no hit is pending,
-  // only the first food after a hit is ever charged, and the way to never pay
-  // is to already be at full when the hit lands. This eats before, not after.
+  // ── validate: a hat that does not save you is not an answer ──────────────
   {
-    const s = healScenario({ health: 40, lastHitMs: 5000, incoming: 35, predict: true });
-    s.m.postTick();
-    ok("with damage coming it closes the whole gap, not two foods", s.mh.heals === 3, "heals=" + s.mh.heals);
-    ok("and it counts what the Glotus branch already sent", s.m._sentThisTick === 3);
+    const s = healScenario({ health: 40 });
+    ok("soldier is refused when it still leaves you dead", s.m.validate("soldier", 39) === false);
+    ok("and taken when it does not", s.m.validate("soldier", 20) === true);
   }
   {
-    const s = healScenario({ health: 40, lastHitMs: 5000, incoming: 35, predict: false });
-    s.m.postTick();
-    ok("switched off it is the plain two foods again", s.mh.heals === 2, "heals=" + s.mh.heals);
+    const s = healScenario({ health: 40, owns: [] });
+    ok("a hat you do not own is not an option", s.m.validate("soldier", 20) === false);
   }
   {
-    const s = healScenario({ health: 40, lastHitMs: 0, incoming: 35, predict: true });
-    s.m.postTick();
-    ok("it never eats inside the window, which is the whole point", s.mh.heals === 0, "heals=" + s.mh.heals);
-  }
-  {
-    const s = healScenario({ health: 40, lastHitMs: 5000, incoming: 0, predict: true });
-    s.m.postTick();
-    ok("with nothing coming it leaves the ordinary top-up alone", s.mh.heals === 2);
-  }
-  {
-    const s = healScenario({ health: 40, lastHitMs: 5000, incoming: 0, incomingSpike: 45, predict: true });
-    s.m.postTick();
-    ok("a spike alone is damage coming", s.mh.heals === 3, "heals=" + s.mh.heals);
-  }
-  {
-    const s = healScenario({ health: 100, lastHitMs: 5000, incoming: 90, predict: true });
-    s.m.postTick();
-    ok("already at full there is nothing to top up", s.mh.heals === 0);
-  }
-  {
-    // Glotus's own branch carries no budget check — that is verbatim, and its
-    // two foods still go out. What has to hold is that the predictor adds
-    // nothing on top when there is no budget for it.
-    const s = healScenario({ health: 40, lastHitMs: 5000, incoming: 35, predict: true, packetCount: 118 });
-    s.m.postTick();
-    ok("the predictor adds nothing when the budget is spent", s.mh.heals === 2, "heals=" + s.mh.heals);
-    const t = healScenario({ health: 40, lastHitMs: 5000, incoming: 35, predict: true, packetCount: 0 });
-    t.m.postTick();
-    ok("and does add when there is budget", t.mh.heals === 3, "heals=" + t.mh.heals);
-  }
-  {
-    const s = healScenario({ health: 40, lastHitMs: 5000, incoming: 35, predict: true, autoheal: false });
-    s.m.postTick();
-    ok("and rides the Autoheal switch", s.mh.heals === 0);
-  }
-  {
-    const s = healScenario({ health: 40, lastHitMs: 5000, incoming: 35, predict: true, shameActive: true });
-    s.m.postTick();
-    ok("and stands down while shame is locked in", s.mh.heals === 0);
+    const s = healScenario({ health: 60, hat: 0 });
+    ok("EMP is only ever swapped in from soldier", s.m.validate("emp", 50) === false);
+    const t = healScenario({ health: 60, hat: 6 });
+    ok("from soldier it is allowed", t.m.validate("emp", 50) === true);
+    const u = healScenario({ health: 30, hat: 6 });
+    ok("unless what is left still kills you", u.m.validate("emp", 60) === false);
   }
 
-  // ── the gates ────────────────────────────────────────────────────────────
+  // ── the manual burst ─────────────────────────────────────────────────────
+  //
+  // src/game_index.js:2454 — eating within 120ms of damage is shameCount++,
+  // and at 8 the count resets and shameTimer runs for thirty seconds during
+  // which food is not consumed at all. The ladder stops at 7 and so does the
+  // Placer; a key held through a fight was counting nothing.
   {
-    const s = healScenario({ health: 40, lastHitMs: 5000, autoheal: false });
+    const s = healScenario({ health: 40, fastHeal: true, lastHitMs: 5000 });
     s.m.postTick();
-    ok("with Autoheal off nothing eats", s.mh.heals === 0);
-    ok("and forceHeal is cleared rather than left stale", s.m.forceHeal === false);
+    ok("the burst clears the bar", s.mh.heals === 3, "heals=" + s.mh.heals);
   }
   {
-    const s = healScenario({ health: 40, lastHitMs: 5000, shameActive: true });
+    const s = healScenario({ health: 40, fastHeal: true, lastHitMs: 0, shameCount: 7 });
     s.m.postTick();
-    ok("while shame is locked in nothing eats", s.mh.heals === 0);
+    ok("the burst stops at the shame limit inside the window", s.mh.heals === 0, "heals=" + s.mh.heals);
   }
   {
-    const s = healScenario({ health: 40, lastHitMs: 5000 });
+    const s = healScenario({ health: 40, fastHeal: true, lastHitMs: 5000, shameCount: 7 });
     s.m.postTick();
-    const first = s.mh.heals;
-    s.m.postTick();
-    ok("the module does not stand down after eating once", s.mh.heals === first * 2);
-  }
-
-  // ── the manual burst, which is RYN's and not Glotus's ────────────────────
-  {
-    const s = healScenario({ health: 40, lastHitMs: 5000, fastHeal: true, autoheal: false });
-    s.m.postTick();
-    ok("the burst works with Autoheal off", s.mh.heals === 3, "heals=" + s.mh.heals);
-    ok("and clears the deficit rather than sending two", s.mh.heals * 20 >= 100 - 40);
+    ok("but not outside it, where eating takes the count back down", s.mh.heals === 3, "heals=" + s.mh.heals);
   }
   {
-    const s = healScenario({ health: 40, lastHitMs: 5000, fastHeal: true });
+    const s = healScenario({ health: 40, fastHeal: true, lastHitMs: 0, shameCount: 6 });
     s.m.postTick();
-    ok("the burst does not stack on a tick the module already ate on", s.mh.heals === 2);
+    ok("and under the limit the window does not stop it", s.mh.heals === 3, "heals=" + s.mh.heals);
   }
   {
-    const s = healScenario({ health: 1, lastHitMs: 5000, fastHeal: true, autoheal: false });
+    const s = healScenario({ health: 40, fastHeal: true, lastHitMs: 60, pong: 100 });
     s.m.postTick();
-    ok("the burst is capped", s.mh.heals === s.mod.BURST, "heals=" + s.mh.heals);
+    ok("the round trip counts towards the window", s.mh.heals === 3, "heals=" + s.mh.heals);
   }
   {
-    const s = healScenario({ health: 1, lastHitMs: 5000, fastHeal: true, autoheal: false, packetCount: 118 });
-    s.m.postTick();
-    ok("and it will not overspend the packet budget", s.mh.heals === 0, "heals=" + s.mh.heals);
-  }
-  {
-    const s = healScenario({ health: 100, lastHitMs: 5000, fastHeal: true, autoheal: false });
+    const s = healScenario({ health: 100, fastHeal: true, lastHitMs: 5000 });
     s.m.postTick();
     ok("the burst does nothing at full health", s.mh.heals === 0);
   }
   {
-    // src/game_index.js:2464 — shameCount >= 8 sets shameTimer = 3e4 and food
-    // stops being consumed for thirty seconds. A held key must not be able to
-    // walk there, and inside the window each send is +1.
-    const s = healScenario({ health: 40, lastHitMs: 0, shameCount: 7, fastHeal: true, autoheal: false });
+    const s = healScenario({ health: 40, fastHeal: false, lastHitMs: 5000 });
     s.m.postTick();
-    ok("the burst stops at the shame limit inside the window", s.mh.heals === 0, "heals=" + s.mh.heals);
-    const t = healScenario({ health: 40, lastHitMs: 5000, shameCount: 7, fastHeal: true, autoheal: false });
-    t.m.postTick();
-    ok("but not outside it, where eating takes the count back down", t.mh.heals === 3, "heals=" + t.mh.heals);
-    const u = healScenario({ health: 40, lastHitMs: 0, shameCount: 6, fastHeal: true, autoheal: false });
-    u.m.postTick();
-    ok("and under the limit the window does not stop it", u.mh.heals === 3, "heals=" + u.mh.heals);
+    ok("and nothing when the key is not held", s.mh.heals === 0);
+  }
+
+  // ── the switch ───────────────────────────────────────────────────────────
+  {
+    const s = healScenario({ health: 40, autoheal: false, damages: [ 35 ] });
+    s.m.postTick();
+    ok("with Autoheal off the ladder decides nothing", s.mh.heals === 0);
+    ok("and a held delay is not left to fire later", s.m.healingDelay === 0);
   }
   {
-    const s = healScenario({ health: 40, lastHitMs: 5000, fastHeal: true, autoheal: false, inGame: false });
+    const s = healScenario({ health: 40, inGame: false });
+    s.m.healingDelay = 2;
     s.m.postTick();
-    ok("and nothing at the menu", s.mh.heals === 0);
-  }
-  {
-    const s = healScenario({ health: 40, lastHitMs: 5000, fastHeal: true, autoheal: false, shameActive: true });
-    s.m.postTick();
-    ok("and nothing while shame is locked in", s.mh.heals === 0);
-  }
-  {
-    // Cookie restores 40, so a 60-point hole is two rather than three.
-    const s = healScenario({ health: 40, lastHitMs: 5000, fastHeal: true, autoheal: false, food: 1 });
-    s.m.postTick();
-    ok("the burst counts in the food actually carried", s.mh.heals === 2, "heals=" + s.mh.heals);
+    ok("leaving the game clears a held heal", s.m.healingDelay === 0);
+    ok("and lets the shame reset run again", s.m.shouldResetShame === true);
   }
 }
 
