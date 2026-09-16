@@ -1124,6 +1124,20 @@ function testHeal() {
     ok("the burst does nothing at full health", s.mh.heals === 0);
   }
   {
+    // src/game_index.js:2464 — shameCount >= 8 sets shameTimer = 3e4 and food
+    // stops being consumed for thirty seconds. A held key must not be able to
+    // walk there, and inside the window each send is +1.
+    const s = healScenario({ health: 40, lastHitMs: 0, shameCount: 7, fastHeal: true, autoheal: false });
+    s.m.postTick();
+    ok("the burst stops at the shame limit inside the window", s.mh.heals === 0, "heals=" + s.mh.heals);
+    const t = healScenario({ health: 40, lastHitMs: 5000, shameCount: 7, fastHeal: true, autoheal: false });
+    t.m.postTick();
+    ok("but not outside it, where eating takes the count back down", t.mh.heals === 3, "heals=" + t.mh.heals);
+    const u = healScenario({ health: 40, lastHitMs: 0, shameCount: 6, fastHeal: true, autoheal: false });
+    u.m.postTick();
+    ok("and under the limit the window does not stop it", u.mh.heals === 3, "heals=" + u.mh.heals);
+  }
+  {
     const s = healScenario({ health: 40, lastHitMs: 5000, fastHeal: true, autoheal: false, inGame: false });
     s.m.postTick();
     ok("and nothing at the menu", s.mh.heals === 0);

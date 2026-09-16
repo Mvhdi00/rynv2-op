@@ -19916,6 +19916,19 @@ window.grbtp = 35;
       if (!input || !input.fastHealPress) {
         return;
       }
+      // The one thing a held key must not be allowed to do. The server's rule
+      // (src/game_index.js:2464) is `shameCount >= 8 -> shameTimer = 3e4`: food
+      // stops being consumed at all for thirty seconds. Every other heal in the
+      // client stops at 7 — the module above, and the Placer — and a key held
+      // through a fight would otherwise walk straight past it, because eating
+      // inside the 120ms window is +1 each time and nothing here was counting.
+      //
+      // Only the dangerous half is blocked: at 7 and clear of the window,
+      // eating costs nothing and in fact takes 2 back off the count, so that
+      // stays allowed.
+      if (myPlayer.shameCount >= 7 && !this.isSaveHeal()) {
+        return;
+      }
       const health = myPlayer.tempHealth;
       if (!(health < HEAL_FULL_HEALTH)) {
         return;

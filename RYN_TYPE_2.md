@@ -5,7 +5,7 @@ Changes to **`Ryn_Type_2.user.js`**, worked against the shipped game bundle in
 `drivers/game-drivers.json`.
 
 ```sh
-node tools/test-ryn-type2.js     # 272 behaviour tests
+node tools/test-ryn-type2.js     # 275 behaviour tests
 node --check Ryn_Type_2.user.js
 ```
 
@@ -546,6 +546,22 @@ it is held, capped at five foods and at the packet budget, and skipped on a tick
 the module already ate on. It is fenced off in `_fastHeal()` and marked as RYN's
 rather than part of the port — `_glotusTick()` is the port, verbatim.
 
+It also stops at the shame limit, which the version first written here did not.
+The server's rule is in `src/game_index.js:2464`:
+
+```js
+W <= 120 ? (this.shameCount++, this.shameCount >= 8 && (this.shameTimer = 3e4, this.shameCount = 0)) : ...
+this.shameTimer <= 0 && (V = f.consume(this))
+```
+
+At 8 the count resets and `shameTimer` runs for thirty seconds, during which
+food is not consumed at all. Every other heal in the client stops at 7 — the
+module, and the Placer — but a key held through a fight was counting nothing,
+and each send inside the 120ms window is +1. Simulated over ten hits it reached
+10 and would have crossed into the lockout; it now stops at 7. Only the
+dangerous half is blocked: at 7 and clear of the window, eating takes 2 back off
+the count, so that stays allowed.
+
 ### The hat it was covering for
 
 Removing `wantsSoldier` meant every threat flag now has to reach the helmet
@@ -569,3 +585,36 @@ Glotus's.
 Section 9 of the test suite pins the whole set down: every flag the heal treats
 as a threat has to put soldier on, so the next module that moves cannot take a
 flag's only path with it. Reverting the one word fails two of them.
+
+### Why shame climbs on every hit
+
+Worth knowing, because it is not the burst and it is not the port.
+
+The `FORCE` branch eats **inside** the 120ms window on purpose — that is what
+anti-insta is, +1 shame to survive the tick. `SAFE` never does. So how often
+shame climbs is entirely a question of how often `forceHeal` is true, and that
+is decided by `EnemyManager`, not by the heal.
+
+RYN's `EnemyManager` carries a rule Glotus's does not
+(`Ryn_Type_2.user.js:3907`):
+
+```js
+if (nearestClose !== null && !detectedEnemy && !detectedDangerEnemy) {
+  if (closeDist <= 200) this.detectedEnemy = true;
+}
+```
+
+Any enemy within 200px raises `detectedEnemy`, whatever their damage. In Glotus
+that flag means "their predicted damage kills me". So in a fight here the heal
+sits in `FORCE` from the first hit at full health, and pays a shame per hit.
+
+Running ten 30-damage hits through the lifted module, the difference is exact:
+
+| threat rule | shame after 10 hits |
+|---|---|
+| Glotus's, damage-based | **0** |
+| RYN's 200px proximity rule | **7** |
+
+Both eat the same 20 foods. Only the branch differs. Left as it is for now —
+it is a pre-existing divergence in the anti layer, not part of the heal swap —
+but it is the answer to why the count moves.
