@@ -177,3 +177,109 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# Ryn Type 2 — bot protection, exclusion, clans and formations
+
+A second artifact in this repo: **`Ryn_Type_2.user.js`**, the Ryn Type 2
+userscript with four pieces of work added on top of its existing bot
+architecture. It is a separate client from ReUp Mix and shares nothing with it
+except the game bundles in `src/`, which the uploaded `moomoo_1.js` /
+`moomoo_2.js` match byte for byte (whitespace aside), so `drivers/` is a valid
+reference for both.
+
+Tests: `node tools/test-ryn-protection.js`. The suites slice the blocks under
+test straight out of the userscript and run them against stubs built from the
+game's own constants, so they exercise the shipped code rather than a copy.
+
+## 1. Friendly fire, at the decision level
+
+The game's only protection between two players is the clan: the server skips a
+melee hit, an arrow and a spike's contact damage exactly when
+`owner.team == target.team` (`src/game_index.js`, the three
+`!(x.team && x.team == y.team)` tests). Everything in the client that decided
+"enemy" was reading `clanName`, directly or through `PlayerManager.isEnemy` —
+correct only while the whole fleet shares one tribe, which the individual-clan
+feature deliberately breaks. **That is why bots could be turned on each
+other.**
+
+`RynAllegiance` answers by ownership instead: the main player and every bot of
+the fleet, by sid, from a set rebuilt only when the fleet changes. It is
+consulted at the targeting chokepoints — `ClientPlayer.isTeammateByID`,
+`PlayerManager.updatePlayer` (which is what fills the `enemies` array every
+other module reads), `isEnemy` / `isEnemyByID` / `isEnemyTarget` / `canShoot`,
+`EnemyManager.handleEnemies` and `handleNearest` — so a protected player never
+becomes a target in the first place.
+
+Behind that, `RynSafeAim` is the last gate. Nothing in moomoo aims at a player:
+a swing damages *every* non-teammate inside `gatherAngle` of the direction it
+was sent at, and an arrow damages the first body its flight line crosses. So
+"do not attack X" cannot be answered by choosing a different target. The gate
+in `ModuleHandler.attack` re-aims to a direction that still contains the
+intended target and does not contain anyone protected, and holds the frame when
+no such direction exists. `requestPlace` refuses a spike or trap whose
+footprint would touch one. Clan mates are exempt — the server already refuses
+that damage, so there is nothing to dodge and no output to give up.
+
+## 2. Player exclusion
+
+`EXCLUDE` sits next to `SCAN` on every row of the Target Scan list. The two are
+independent: a player can be scanned and excluded at once, which tracks them
+without any bot ever attacking them. Exclusions are stored by sid, carry the
+name so the same person stays excluded after respawning onto a new sid, and
+persist across reloads. The exclusion feeds the same chokepoints as ownership,
+so it applies everywhere, not only inside SCAN — including the case in the
+brief, an excluded player standing between a bot and a legitimate enemy.
+
+## 3. One tribe per bot
+
+The old `_individualClanTick` had three independent faults, each fatal:
+
+| | |
+|---|---|
+| It asked for the bot's whole player name | Tribe names are capped at **7** characters (`maxLength: 7` on the alliance input, sliced to 7 before sending), so a longer name could never come back equal to what was asked for and the bot left and re-created forever |
+| Every bot asked for the same name | They all carry the same base name; one got a tribe, the rest asked for one that was taken |
+| A taken name was answered with `joinClan` | That is a *request* the tribe's owner must accept — against a stranger it was a packet every third tick for the life of the bot |
+
+It is now a state machine over the transitions the server actually has, graded
+against the `setPlayerTeam` frame (s2c `3`), which nothing previously read —
+`clanName` was left to arrive with the next player update a tick later, so the
+old code could not tell "not landed yet" from "refused". Each bot derives its
+own name from its fleet slot, cut to seven characters with the number kept, so
+`GG1` over five bots gives GG11…GG15. A contested name rotates instead of being
+asked for again; the whole fleet shares one action token. Measured by the
+tests: five bots, five packets; twenty bots, twenty packets, twenty unique
+tribes.
+
+## 4. Bot protection and the formation engine
+
+`RynProtect` + `BotProtection` put the first *N* bots of the fleet in front of
+the rest as a screen — bots only, not the main player. Everything expensive is
+worked out once per owner per server tick and read by every guard: the merged
+enemy picture, the grouping, the projectile tracking, the anchor and the sector
+split. A guard's own tick is a cache read, one vector and a state machine.
+
+- **Grouping** requires proximity *plus* at least one of a shared name stem, a
+  shared tribe, or a shared direction of travel. A name alone is never enough,
+  and neither is standing near someone.
+- **Slots** come from the fleet index and nothing else, so a direction change
+  rotates the shape and leaves every bot where it was. `RynFormations` holds
+  the geometry in formation-local coordinates and rotates in one place, which
+  is what makes that hold by construction — the tests assert it for every
+  shape, every size and every facing.
+- **Weapons** run a state machine with hysteresis: daggers and move when safe,
+  shield and face the threat when a bow, crossbow, repeater or musket is in
+  range or an arrow is already in the air, back to daggers when it passes.
+  Guards choose daggers, wooden shield and boost pad through the existing
+  upgrade patch rather than by pretending to hold them.
+- **Boost pads** are laid on a ring around the formation and never on a heading
+  with a friendly on it — the server's booster branch has no team test at all,
+  so a pad shoves whoever steps on it.
+- **Advance** moves the screen's origin forward *and* deepens the ranks, so it
+  changes the geometry rather than the speed.
+- Eleven new military formations — wedge, V, arrow, diamond, cross, wall,
+  double line, spearhead, arc, crescent, staggered line — are added to the
+  existing formation picker as well as the guard screen, from one table. Rank
+  spacing is held between 72 and 104 units: under 70 the game's own collision
+  shoves neighbours apart, over 105 a 35-radius body walks through the line.
