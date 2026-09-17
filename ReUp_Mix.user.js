@@ -1613,38 +1613,6 @@ window.grbtp = 35;
     const rectEnd = rectPos.copy().add(screen);
     return pointInsideRect(target, rectStart, rectEnd);
   };
-  const findPlacementAngles = angles => {
-    const output = new Set;
-    for (let i = 0; i < angles.length; i++) {
-      const [angle, offset] = angles[i];
-      const start = angle - offset;
-      const end = angle + offset;
-      let startIntersects = false;
-      let endIntersects = false;
-      for (let j = 0; j < angles.length; j++) {
-        if (startIntersects && endIntersects) {
-          break;
-        }
-        if (i === j) {
-          continue;
-        }
-        const [angle2, offset2] = angles[j];
-        if (getAngleDist(start, angle2) <= offset2) {
-          startIntersects = true;
-        }
-        if (getAngleDist(end, angle2) <= offset2) {
-          endIntersects = true;
-        }
-      }
-      if (!startIntersects) {
-        output.add(start);
-      }
-      if (!endIntersects) {
-        output.add(end);
-      }
-    }
-    return [ ...output ];
-  };
   const createAction = (callback, time = 0) => {
     let state = false;
     const timeoutID = setTimeout(() => {
@@ -1691,7 +1659,7 @@ window.grbtp = 35;
   const Commands_default = _buildCommandsHtml(window._translations_cache || {});
   const Home_default = '<div class="menu-page opened" data-id="0">\r\n\r\n  <div style="margin-bottom:16px;">\r\n    <div class="page-title">RYN CLIENT</div>\r\n    <div class="page-description">The full automation suite for moomoo.io — combat, bots, and total customization.</div>\r\n  </div>\r\n\r\n</div>';
   const Keybinds_default = '<div class="menu-page" data-id="1">\r\n    <div class="page-title">Keybinds</div>\r\n    <p class="page-description">Setup keybinds for items, weapons and hats</p>\r\n\r\n    \x3c!-- Items & Weapons --\x3e\r\n    <div class="section">\r\n        <div class="section-title">Items & Weapons</div>\r\n        <div class="section-content split">\r\n\r\n            <div class="content-split">\r\n                <div class="content-option">\r\n                    <span class="option-title">Food</span>\r\n                    <button id="_food" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Wall</span>\r\n                    <button id="_wall" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Spike</span>\r\n                    <button id="_spike" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Windmill</span>\r\n                    <button id="_windmill" class="hotkeyInput"></button>\r\n                </div>\r\n            </div>\r\n\r\n            <div class="content-split">\r\n                <div class="content-option">\r\n                    <span class="option-title">Farm</span>\r\n                    <button id="_farm" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Trap</span>\r\n                    <button id="_trap" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Turret</span>\r\n                    <button id="_turret" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Spawn</span>\r\n                    <button id="_spawn" class="hotkeyInput"></button>\r\n                </div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    \x3c!-- Controls & Movement --\x3e\r\n    <div class="section">\r\n        <div class="section-title">Controls & Movement</div>\r\n        <div class="section-content">\r\n\r\n            <div class="content-split">\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Lock bot position</span>\r\n                    <button id="_lockBotPosition" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Toggle Shop</span>\r\n                    <button id="_toggleShop" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Toggle Clan</span>\r\n                    <button id="_toggleClan" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Toggle Menu</span>\r\n                    <button id="_toggleMenu" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Instakill</span>\r\n                    <button id="_instakill" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    \x3c!-- Bot Controls --\x3e\r\n    <div class="section">\r\n        <div class="section-title">Bot Controls</div>\r\n        <div class="section-content">\r\n            <div class="content-split">\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Auto Farm</span>\r\n                    <button id="_botAutoFarm" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Bot Auto-Attack</span>\r\n                    <button id="_botAutoAttack" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Spawn Bot</span>\r\n                    <button id="_spawnBot" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Kill All Bots</span>\r\n                    <button id="_killAllBots" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Repel Alts</span>\r\n                    <button id="_repelAlts" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Scatter Bots</span>\r\n                    <button id="_scatterBots" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Freeze Bots</span>\r\n                    <button id="_freezeBots" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                \r\n                \r\n                \r\n                \r\n                \r\n                \r\n                \r\n                \r\n                \r\n                \r\n                \r\n                \r\n                \r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    \x3c!-- Spectate --\x3e\r\n    <div class="section">\r\n        <div class="section-title">Spectate</div>\r\n        <div class="section-content">\r\n            <div class="content-split">\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Camera Up</span>\r\n                    <button id="_spectateCamUp" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Camera Down</span>\r\n                    <button id="_spectateCamDown" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Camera Left</span>\r\n                    <button id="_spectateCamLeft" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Camera Right</span>\r\n                    <button id="_spectateCamRight" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Next Player</span>\r\n                    <button id="_spectateNext" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Previous Player</span>\r\n                    <button id="_spectatePrev" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Respawn</span>\r\n                    <button id="_spectateRespawn" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class="section">\r\n        <div class="section-title">Quick Actions</div>\r\n        <div class="section-content">\r\n            <div class="content-split">\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Quad Spikes</span>\r\n                    <button id="_fourSpikes" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Quad Traps</span>\r\n                    <button id="_fourTraps" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Toggle Automill</span>\r\n                    <button id="_autoMillKey" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Boost Spike Rush</span>\r\n                    <button id="_boostSpikes" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Toggle Dash Movement</span>\r\n                    <button id="_dashMovementKey" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Toggle Auto Grind</span>\r\n                    <button id="_autoGrindKey" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Toggle Autoplacer</span>\r\n                    <button id="_autoplacerKey" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Name Song &#127926;</span>\r\n                    <button id="_nameSong" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n            </div>\r\n        </div>\r\n    </div>\r\n</div>';
-  const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\r\n    <div class=\"page-title\">Combat</div>\r\n    <p class=\"page-description\">Grouped by what each option actually does. Click a name to flip it \u2014 you do not have to hit the switch.</p>\r\n\r\n    <!-- Master -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Master<span class=\"sec-sub\">One switch that silences every automatic action below.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_disableAutoTickCombat\">Manual Mode</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_disableAutoTickCombat\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Instakills -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Instakills<span class=\"sec-sub\">Timed weapon and hat sequences that try to finish a kill.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_normalInstakill\">Normal Instakill</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_normalInstakill\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_velocityTick\">Velocity tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_velocityTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Attacks using turret + diamond polearm in one tick</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_comboApproach\">Combo Approach</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_comboApproach\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Walks you to velocity tick range and parks you there, instead of waiting for the enemy to cross the 25px window. Brakes with Tank Gear for fine adjustment and Emp Helmet for medium. Yields movement to any other module.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTick\">Spike tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTick_breakTrap\">Spike tick: break trap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTick_breakTrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">When the enemy stands on their own trap: breaks it with a Great Hammer one-shot, places a spike on the closest open angle, then follows up with Bull Helmet.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_knockbackTick\">Knockback tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_knockbackTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_knockbackTickHammer\">Knockback tick hammer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_knockbackTickHammer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_knockbackTickTrap\">Knockback tick trap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_knockbackTickTrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_kbPredictInsta\">KB Predict Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_kbPredictInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_toolSpearInsta\">Tool Spear Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_toolSpearInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeGearInsta\">Spike Gear Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeGearInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_musketBowInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_turretSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Spikes & Traps -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Spikes & Traps<span class=\"sec-sub\">Where things get placed and how enemies get pinned.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoplacer\">Autoplacer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoplacer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_glotusPlacer\">Glotus Placer Mode</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_glotusPlacer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Swaps the placer for the original Glotus one, ported line for line. Much simpler: it takes the best placement angles then keeps a spike only if the enemy was trapped, or the spike touches them or their trap, or knockback would throw them onto an existing spike. Turn it off to go back to the RYN placer.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_preplacer\">Pre Placer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_preplacer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Pre-places spikes and traps on the angles the enemy would escape or get knocked into, before they move. Needs Auto Retrap on.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_replacer\">Re Placer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_replacer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Bans an angle for 18 ticks after a successful place, so it stops re-placing in the same spot. Needs Auto Retrap on.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_lunaExactPlacer\">Exact Placer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_lunaExactPlacer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Strict spike acceptance. When ON it skips 6 placement rules (seals exit, double spike, bounce onto spike, touching a trapped enemy...). Turn it OFF for the original permissive placing.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_placementDefense\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Autoplacer radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoplacerRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Placement accuracy</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_placeAttempts\" type=\"range\" min=\"1\" max=\"10\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoRetrap\">Auto Retrap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoRetrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Re-traps an enemy the moment they break out. 627 lines of placement logic that shipped disabled. Try it on its own first.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_placerRetrapCombo\">Retrap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_placerRetrapCombo\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapRebuild\">Trap Rebuild</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapRebuild\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">\u00d9\u0084\u00d9\u0088 \u00d8\u00a7\u00d9\u0086\u00d9\u0083\u00d8\u00b3\u00d8\u00b1 \u00d9\u0081\u00d8\u00ae\u00d9\u0083 \u00d9\u0088\u00d8\u00a7\u00d9\u0084\u00d8\u00a7\u00d8\u00b3\u00d8\u00aa\u00d8\u00a8\u00d8\u00a7\u00d9\u0082 \u00d9\u0085\u00d8\u00a7 \u00d8\u00ba\u00d8\u00b7\u00d8\u00a7\u00d9\u0087\u00d8\u008c \u00d9\u008a\u00d8\u00b9\u00d9\u008a\u00d8\u00af \u00d8\u00a8\u00d9\u0086\u00d8\u00a7\u00d8\u00a1\u00d9\u0087 \u00d8\u00a8\u00d9\u0086\u00d9\u0081\u00d8\u00b3 \u00d8\u00a7\u00d9\u0084\u00d9\u0085\u00d9\u0083\u00d8\u00a7\u00d9\u0086. \u00d8\u00b4\u00d8\u00a8\u00d9\u0083\u00d8\u00a9 \u00d8\u00a7\u00d8\u00ad\u00d8\u00aa\u00d9\u008a\u00d8\u00a7\u00d8\u00b7\u00d9\u008a\u00d8\u00a9.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeSync\">Spike sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeSyncHammer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapKB\">Trap KB</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapKB\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_lockTrappedEnemy\">Lock Trapped Enemy</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_lockTrappedEnemy\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Skips the knockback tick while the enemy is already trapped by you. Turn it OFF to always knockback tick.</span>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Defense -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Staying alive: healing, shielding and reading threats.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoheal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoShield\">Auto Shield</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_rangedShield\">Ranged Shield</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_rangedShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antienemy\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antianimal\">Anti animal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antianimal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antispike\">Anti spike</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antispike\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSpikePush\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_empDefense\">Emp Defense</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_empDefense\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoemp\">Auto emp</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoemp\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_soldierDefault\">Soldier default</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_soldierDefault\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiRetrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSync\">Anti Sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Watches for incoming sync damage and answers with Bull Helmet.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiTrapProtect\">Anti Trap Protect</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiTrapProtect\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiTrapStar\">Anti Trap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiTrapStar\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_safeWalk\">Safe walk</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_safeWalk\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Gear -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you are wearing, and when.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_biomehats\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_adaptiveGearSwitching\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Swaps gear by combat distance instead of a fixed choice.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_tailPriority\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_cowboyWhenSafe\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Movement -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoPush\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Pushes a trapped enemy onto a nearby spike using your body. Sends no packets.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Auto Push Range</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\r\n                </label>\r\n                <span class=\"option-description\">Distance used by auto push before activating</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_dashMovement\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_lunaSafeWalk\">SafeWalk</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_lunaSafeWalk\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">RYN SAFEWALK: \u00d9\u008a\u00d8\u00aa\u00d9\u0081\u00d8\u00a7\u00d8\u00af\u00d9\u0089 \u00d8\u00b3\u00d8\u00a8\u00d8\u00a7\u00d9\u008a\u00d9\u0083\u00d8\u00a7\u00d8\u00aa \u00d8\u00a7\u00d9\u0084\u00d8\u00b9\u00d8\u00af\u00d9\u0088 \u00d9\u0088\u00d8\u00a7\u00d9\u0084\u00d8\u00b5\u00d8\u00a8\u00d8\u00a7\u00d8\u00b1 \u00d8\u00a7\u00d8\u00ab\u00d9\u0086\u00d8\u00a7\u00d8\u00a1 \u00d8\u00a7\u00d9\u0084\u00d8\u00ad\u00d8\u00b1\u00d9\u0083\u00d8\u00a9</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_lunaPathfinder\">Pathfinder</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_lunaPathfinder\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">A* \u00d8\u00a8\u00d9\u0080Web Worker. \u00d9\u008a\u00d8\u00ad\u00d8\u00aa\u00d8\u00a7\u00d8\u00ac AutoPlay \u00d8\u00b4\u00d8\u00ba\u00d8\u00a7\u00d9\u0084.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_pathBreak\">Path Break</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_pathBreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">\u00d9\u008a\u00d9\u0083\u00d8\u00b3\u00d8\u00b1 \u00d9\u0081\u00d8\u00ae\u00d9\u0088\u00d8\u00ae\u00d9\u0083/\u00d8\u00b3\u00d8\u00a8\u00d8\u00a7\u00d9\u008a\u00d9\u0083\u00d8\u00a7\u00d8\u00aa\u00d9\u0083 \u00d8\u00a8\u00d8\u00b3 \u00d9\u0084\u00d9\u0085\u00d8\u00a7 \u00d8\u00a7\u00d9\u0084\u00d8\u00b6\u00d8\u00b1\u00d8\u00a8\u00d8\u00a9 \u00d8\u00aa\u00d9\u0082\u00d8\u00aa\u00d9\u0084\u00d9\u0087\u00d8\u00a7 \u00e2\u0080\u0094 \u00d9\u0081\u00d8\u00a7\u00d9\u0084\u00d8\u00a7\u00d8\u00b3\u00d8\u00aa\u00d8\u00a8\u00d8\u00a7\u00d9\u0082 \u00d9\u008a\u00d8\u00ad\u00d8\u00b7 \u00d8\u00a8\u00d8\u00af\u00d9\u008a\u00d9\u0084 \u00d8\u00a8\u00d9\u0086\u00d9\u0081\u00d8\u00b3 \u00d8\u00a7\u00d9\u0084\u00d8\u00aa\u00d9\u008a\u00d9\u0083. \u00d9\u008a\u00d8\u00ad\u00d8\u00aa\u00d8\u00a7\u00d8\u00ac Autobreak + Preplacer.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_lunaMode\">Luna Mode</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_lunaMode\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Luna placement system. When ON it disables the classic modules: Spike Trap, Teammate Spike Trap, Placement Defense, Trap Animal, Anti Trap Protect, Anti Trap Star and Dash Movement. Turn it OFF to get the original spike placing behaviour back.</span>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Shame -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Shame<span class=\"sec-sub\">Forcing the enemy heal counter up until it kills them.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_shameGrind\">Shame Grind</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_shameGrind\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_shameTick\">Shame Tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_shameTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoShame\">Auto Hit to Shame</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoShame\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Max Shame</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoShameLimit\" type=\"range\" min=\"1\" max=\"8\" step=\"1\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_shameSpam\">Shame Spam</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_shameSpam\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Utility -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autobreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoGather\">Auto Gather</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoGather\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">RYN: \u00d9\u0088\u00d8\u00b6\u00d8\u00b9 \u00d8\u00a7\u00d9\u0084\u00d8\u00b6\u00d8\u00b1\u00d8\u00a8 \u00d8\u00a7\u00d9\u0084\u00d8\u00aa\u00d9\u0084\u00d9\u0082\u00d8\u00a7\u00d8\u00a6\u00d9\u008a \u00d9\u0088\u00d9\u0082\u00d8\u00aa \u00d8\u00a7\u00d9\u0084\u00d9\u0083\u00d8\u00b3\u00d8\u00b1 \u00d8\u00a8\u00d8\u00af\u00d9\u0084 \u00d8\u00a7\u00d8\u00b1\u00d8\u00b3\u00d8\u00a7\u00d9\u0084 \u00d8\u00b6\u00d8\u00b1\u00d8\u00a8\u00d8\u00a7\u00d8\u00aa = \u00d9\u008a\u00d9\u0088\u00d9\u0081\u00d9\u0091\u00d8\u00b1 \u00d8\u00a8\u00d8\u00a7\u00d9\u0083\u00d9\u008a\u00d8\u00aa\u00d8\u00a7\u00d8\u00aa \u00d9\u0084\u00d9\u0084\u00d9\u0081\u00d8\u00ae\u00d9\u0088\u00d8\u00ae \u00d9\u0081\u00d8\u00aa\u00d8\u00b5\u00d9\u008a\u00d8\u00b1 \u00d8\u00a7\u00d8\u00b3\u00d8\u00b1\u00d8\u00b9. \u00d9\u008a\u00d8\u00ad\u00d8\u00aa\u00d8\u00a7\u00d8\u00ac Autobreak.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_automill\">Automill</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_automill\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoGrind\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoPlay\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">RYN autoPlay: \u00d9\u008a\u00d8\u00af\u00d9\u0088\u00d8\u00b1 \u00d8\u00ad\u00d9\u0088\u00d9\u0084 \u00d8\u00a7\u00d9\u0084\u00d8\u00b9\u00d8\u00af\u00d9\u0088 \u00d8\u00a8\u00d9\u0086\u00d8\u00b5\u00d9\u0081 \u00d9\u0082\u00d8\u00b7\u00d8\u00b1 80 \u00d9\u0088\u00d9\u008a\u00d8\u00b9\u00d9\u0083\u00d8\u00b3 \u00d8\u00a7\u00d9\u0084\u00d8\u00a7\u00d8\u00aa\u00d8\u00ac\u00d8\u00a7\u00d9\u0087 \u00d9\u0084\u00d9\u0088 \u00d8\u00a7\u00d9\u0086\u00d8\u00b3\u00d8\u00af. \u00d9\u008a\u00d9\u0085\u00d8\u00b3\u00d9\u0083 \u00d8\u00ad\u00d8\u00b1\u00d9\u0083\u00d8\u00aa\u00d9\u0083.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoSteal\">Autosteal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoSteal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_turretSteal\">Turret steal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_turretSteal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapAnimal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
+  const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\r\n    <div class=\"page-title\">Combat</div>\r\n    <p class=\"page-description\">Grouped by what each option actually does. Click a name to flip it \u2014 you do not have to hit the switch.</p>\r\n\r\n    <!-- Master -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Master<span class=\"sec-sub\">One switch that silences every automatic action below.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_disableAutoTickCombat\">Manual Mode</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_disableAutoTickCombat\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Instakills -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Instakills<span class=\"sec-sub\">Timed weapon and hat sequences that try to finish a kill.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_normalInstakill\">Normal Instakill</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_normalInstakill\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_velocityTick\">Velocity tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_velocityTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Attacks using turret + diamond polearm in one tick</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_comboApproach\">Combo Approach</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_comboApproach\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Walks you to velocity tick range and parks you there, instead of waiting for the enemy to cross the 25px window. Brakes with Tank Gear for fine adjustment and Emp Helmet for medium. Yields movement to any other module.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTick\">Spike tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTick_breakTrap\">Spike tick: break trap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTick_breakTrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">When the enemy stands on their own trap: breaks it with a Great Hammer one-shot, places a spike on the closest open angle, then follows up with Bull Helmet.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_knockbackTick\">Knockback tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_knockbackTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_knockbackTickHammer\">Knockback tick hammer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_knockbackTickHammer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_knockbackTickTrap\">Knockback tick trap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_knockbackTickTrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_kbPredictInsta\">KB Predict Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_kbPredictInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_toolSpearInsta\">Tool Spear Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_toolSpearInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeGearInsta\">Spike Gear Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeGearInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_musketBowInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_turretSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Spikes & Traps -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Spikes & Traps<span class=\"sec-sub\">Where things get placed and how enemies get pinned.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoplacer\">Autoplacer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoplacer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_glotusPlacer\">Glotus Placer Mode</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_glotusPlacer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Swaps the placer for the original Glotus one, ported line for line. Much simpler: it takes the best placement angles then keeps a spike only if the enemy was trapped, or the spike touches them or their trap, or knockback would throw them onto an existing spike. Turn it off to go back to the RYN placer.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_preplacer\">Pre Placer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_preplacer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Pre-places spikes and traps on the angles the enemy would escape or get knocked into, before they move. Needs Auto Retrap on.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_replacer\">Re Placer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_replacer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Rebuilds the moment a building of yours disappears, off the destroy packet itself rather than on the next tick. Also bans a direction for 18 ticks when a placement there produced nothing, so refused angles stop costing packets.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spamPreplace\">Spam Pre Place</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spamPreplace\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Adds a second placement attempt inside the same server tick and lets the destroy-packet fast path fire on its own, without Re Placer. Costs more packets.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_lunaExactPlacer\">Exact Placer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_lunaExactPlacer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Strict spike acceptance. When ON it skips 6 placement rules (seals exit, double spike, bounce onto spike, touching a trapped enemy...). Turn it OFF for the original permissive placing.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_placementDefense\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Autoplacer radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoplacerRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Placement accuracy</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_placeAttempts\" type=\"range\" min=\"1\" max=\"10\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoRetrap\">Auto Retrap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoRetrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Re-traps an enemy the moment they break out. 627 lines of placement logic that shipped disabled. Try it on its own first.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_placerRetrapCombo\">Retrap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_placerRetrapCombo\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapRebuild\">Trap Rebuild</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapRebuild\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">\u00d9\u0084\u00d9\u0088 \u00d8\u00a7\u00d9\u0086\u00d9\u0083\u00d8\u00b3\u00d8\u00b1 \u00d9\u0081\u00d8\u00ae\u00d9\u0083 \u00d9\u0088\u00d8\u00a7\u00d9\u0084\u00d8\u00a7\u00d8\u00b3\u00d8\u00aa\u00d8\u00a8\u00d8\u00a7\u00d9\u0082 \u00d9\u0085\u00d8\u00a7 \u00d8\u00ba\u00d8\u00b7\u00d8\u00a7\u00d9\u0087\u00d8\u008c \u00d9\u008a\u00d8\u00b9\u00d9\u008a\u00d8\u00af \u00d8\u00a8\u00d9\u0086\u00d8\u00a7\u00d8\u00a1\u00d9\u0087 \u00d8\u00a8\u00d9\u0086\u00d9\u0081\u00d8\u00b3 \u00d8\u00a7\u00d9\u0084\u00d9\u0085\u00d9\u0083\u00d8\u00a7\u00d9\u0086. \u00d8\u00b4\u00d8\u00a8\u00d9\u0083\u00d8\u00a9 \u00d8\u00a7\u00d8\u00ad\u00d8\u00aa\u00d9\u008a\u00d8\u00a7\u00d8\u00b7\u00d9\u008a\u00d8\u00a9.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeSync\">Spike sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeSyncHammer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapKB\">Trap KB</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapKB\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_lockTrappedEnemy\">Lock Trapped Enemy</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_lockTrappedEnemy\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Skips the knockback tick while the enemy is already trapped by you. Turn it OFF to always knockback tick.</span>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Defense -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Staying alive: healing, shielding and reading threats.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoheal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoShield\">Auto Shield</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_rangedShield\">Ranged Shield</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_rangedShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antienemy\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antianimal\">Anti animal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antianimal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antispike\">Anti spike</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antispike\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSpikePush\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_empDefense\">Emp Defense</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_empDefense\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoemp\">Auto emp</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoemp\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_soldierDefault\">Soldier default</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_soldierDefault\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiRetrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSync\">Anti Sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Watches for incoming sync damage and answers with Bull Helmet.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiTrapProtect\">Anti Trap Protect</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiTrapProtect\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiTrapStar\">Anti Trap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiTrapStar\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_safeWalk\">Safe walk</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_safeWalk\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Gear -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you are wearing, and when.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_biomehats\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_adaptiveGearSwitching\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Swaps gear by combat distance instead of a fixed choice.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_tailPriority\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_cowboyWhenSafe\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Movement -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoPush\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Pushes a trapped enemy onto a nearby spike using your body. Sends no packets.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Auto Push Range</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\r\n                </label>\r\n                <span class=\"option-description\">Distance used by auto push before activating</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_dashMovement\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_lunaSafeWalk\">SafeWalk</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_lunaSafeWalk\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">RYN SAFEWALK: \u00d9\u008a\u00d8\u00aa\u00d9\u0081\u00d8\u00a7\u00d8\u00af\u00d9\u0089 \u00d8\u00b3\u00d8\u00a8\u00d8\u00a7\u00d9\u008a\u00d9\u0083\u00d8\u00a7\u00d8\u00aa \u00d8\u00a7\u00d9\u0084\u00d8\u00b9\u00d8\u00af\u00d9\u0088 \u00d9\u0088\u00d8\u00a7\u00d9\u0084\u00d8\u00b5\u00d8\u00a8\u00d8\u00a7\u00d8\u00b1 \u00d8\u00a7\u00d8\u00ab\u00d9\u0086\u00d8\u00a7\u00d8\u00a1 \u00d8\u00a7\u00d9\u0084\u00d8\u00ad\u00d8\u00b1\u00d9\u0083\u00d8\u00a9</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_lunaPathfinder\">Pathfinder</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_lunaPathfinder\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">A* \u00d8\u00a8\u00d9\u0080Web Worker. \u00d9\u008a\u00d8\u00ad\u00d8\u00aa\u00d8\u00a7\u00d8\u00ac AutoPlay \u00d8\u00b4\u00d8\u00ba\u00d8\u00a7\u00d9\u0084.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_pathBreak\">Path Break</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_pathBreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">\u00d9\u008a\u00d9\u0083\u00d8\u00b3\u00d8\u00b1 \u00d9\u0081\u00d8\u00ae\u00d9\u0088\u00d8\u00ae\u00d9\u0083/\u00d8\u00b3\u00d8\u00a8\u00d8\u00a7\u00d9\u008a\u00d9\u0083\u00d8\u00a7\u00d8\u00aa\u00d9\u0083 \u00d8\u00a8\u00d8\u00b3 \u00d9\u0084\u00d9\u0085\u00d8\u00a7 \u00d8\u00a7\u00d9\u0084\u00d8\u00b6\u00d8\u00b1\u00d8\u00a8\u00d8\u00a9 \u00d8\u00aa\u00d9\u0082\u00d8\u00aa\u00d9\u0084\u00d9\u0087\u00d8\u00a7 \u00e2\u0080\u0094 \u00d9\u0081\u00d8\u00a7\u00d9\u0084\u00d8\u00a7\u00d8\u00b3\u00d8\u00aa\u00d8\u00a8\u00d8\u00a7\u00d9\u0082 \u00d9\u008a\u00d8\u00ad\u00d8\u00b7 \u00d8\u00a8\u00d8\u00af\u00d9\u008a\u00d9\u0084 \u00d8\u00a8\u00d9\u0086\u00d9\u0081\u00d8\u00b3 \u00d8\u00a7\u00d9\u0084\u00d8\u00aa\u00d9\u008a\u00d9\u0083. \u00d9\u008a\u00d8\u00ad\u00d8\u00aa\u00d8\u00a7\u00d8\u00ac Autobreak + Preplacer.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_lunaMode\">Luna Mode</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_lunaMode\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Luna placement system. When ON it disables the classic modules: Spike Trap, Teammate Spike Trap, Placement Defense, Trap Animal, Anti Trap Protect, Anti Trap Star and Dash Movement. Turn it OFF to get the original spike placing behaviour back.</span>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Shame -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Shame<span class=\"sec-sub\">Forcing the enemy heal counter up until it kills them.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_shameGrind\">Shame Grind</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_shameGrind\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_shameTick\">Shame Tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_shameTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoShame\">Auto Hit to Shame</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoShame\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Max Shame</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoShameLimit\" type=\"range\" min=\"1\" max=\"8\" step=\"1\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_shameSpam\">Shame Spam</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_shameSpam\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Utility -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autobreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoGather\">Auto Gather</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoGather\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">RYN: \u00d9\u0088\u00d8\u00b6\u00d8\u00b9 \u00d8\u00a7\u00d9\u0084\u00d8\u00b6\u00d8\u00b1\u00d8\u00a8 \u00d8\u00a7\u00d9\u0084\u00d8\u00aa\u00d9\u0084\u00d9\u0082\u00d8\u00a7\u00d8\u00a6\u00d9\u008a \u00d9\u0088\u00d9\u0082\u00d8\u00aa \u00d8\u00a7\u00d9\u0084\u00d9\u0083\u00d8\u00b3\u00d8\u00b1 \u00d8\u00a8\u00d8\u00af\u00d9\u0084 \u00d8\u00a7\u00d8\u00b1\u00d8\u00b3\u00d8\u00a7\u00d9\u0084 \u00d8\u00b6\u00d8\u00b1\u00d8\u00a8\u00d8\u00a7\u00d8\u00aa = \u00d9\u008a\u00d9\u0088\u00d9\u0081\u00d9\u0091\u00d8\u00b1 \u00d8\u00a8\u00d8\u00a7\u00d9\u0083\u00d9\u008a\u00d8\u00aa\u00d8\u00a7\u00d8\u00aa \u00d9\u0084\u00d9\u0084\u00d9\u0081\u00d8\u00ae\u00d9\u0088\u00d8\u00ae \u00d9\u0081\u00d8\u00aa\u00d8\u00b5\u00d9\u008a\u00d8\u00b1 \u00d8\u00a7\u00d8\u00b3\u00d8\u00b1\u00d8\u00b9. \u00d9\u008a\u00d8\u00ad\u00d8\u00aa\u00d8\u00a7\u00d8\u00ac Autobreak.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_automill\">Automill</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_automill\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoGrind\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoPlay\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">RYN autoPlay: \u00d9\u008a\u00d8\u00af\u00d9\u0088\u00d8\u00b1 \u00d8\u00ad\u00d9\u0088\u00d9\u0084 \u00d8\u00a7\u00d9\u0084\u00d8\u00b9\u00d8\u00af\u00d9\u0088 \u00d8\u00a8\u00d9\u0086\u00d8\u00b5\u00d9\u0081 \u00d9\u0082\u00d8\u00b7\u00d8\u00b1 80 \u00d9\u0088\u00d9\u008a\u00d8\u00b9\u00d9\u0083\u00d8\u00b3 \u00d8\u00a7\u00d9\u0084\u00d8\u00a7\u00d8\u00aa\u00d8\u00ac\u00d8\u00a7\u00d9\u0087 \u00d9\u0084\u00d9\u0088 \u00d8\u00a7\u00d9\u0086\u00d8\u00b3\u00d8\u00af. \u00d9\u008a\u00d9\u0085\u00d8\u00b3\u00d9\u0083 \u00d8\u00ad\u00d8\u00b1\u00d9\u0083\u00d8\u00aa\u00d9\u0083.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoSteal\">Autosteal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoSteal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_turretSteal\">Turret steal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_turretSteal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapAnimal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
   const Visuals_default = "<div class=\"menu-page\" data-id=\"3\">\r\n    <div class=\"page-title\">Visuals</div>\r\n    <p class=\"page-description\">Choose what gets drawn on screen. Turn off anything you do not need for a cleaner view.</p>\r\n\r\n    <!-- Tracers -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Tracers</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Enemies</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_enemyTracersColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_enemyTracers\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Teammates</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_teammateTracersColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_teammateTracers\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Animals</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_animalTracersColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_animalTracers\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Notifications</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_notificationTracersColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_notificationTracers\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Markers -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Markers</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Items</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_itemMarkersColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_itemMarkers\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Teammates</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_teammateMarkersColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_teammateMarkers\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Enemies</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_enemyMarkersColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_enemyMarkers\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Names -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Names</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">My Name</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_myNameColorValue\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_myNameColor\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Player HUD -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Player HUD</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Weapon Reload Bar</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_weaponReloadBarColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_weaponReloadBar\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">My Turret Reload Bar</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_playerTurretReloadBarColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_playerTurretReloadBar\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Render HP</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_renderHP\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Position Prediction</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_positionPrediction\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Structures -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Structures</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Placed Turret Reload Bar</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_objectTurretReloadBarColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_objectTurretReloadBar\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Item Health Bar (Mine/Clan)</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_itemHealthBarColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_itemHealthBar\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Chat Log</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_chatLog\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Item Health Bar (Enemy)</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_itemHealthBarEnemyColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_itemHealthBarEnemy\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- myPlayer -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">myPlayer</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Display player angle</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_displayPlayerAngle\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Hitboxes -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Hitboxes</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Weapon hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_weaponHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Collision hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_collisionHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Placement hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_placementHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Possible placement</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_possiblePlacement\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
   const Misc_default = "<div class=\"menu-page\" data-id=\"4\">\r\n    <div class=\"page-title\">Misc</div>\r\n    <p class=\"page-description\">Customize misc settings, add autochat messages, reset settings</p>\r\n\r\n    <!-- Legit Mode -->\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Legit Mode</h2>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Legit Mode</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_legitMode\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">يطفي كل ميزات الهاك دفعة وحدة (أوتوماتيك/إنستاكِل/تريسرز/بليسر...) وتلعب كلاعب عادي 100%. يحفظ حالة كل ميزة ويرجّعها بالضبط لما تطفيه.</span>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Other -->\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Other</h2>\r\n\r\n        <div class=\"section-content\">\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Kill Message</span>\r\n                <div class=\"option-content\">\r\n                    <input id=\"_killMessageText\" class=\"input\" type=\"text\" maxlength=\"30\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_killMessage\" type=\"checkbox\">\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Provoke on Kill</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_deathProvoke\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Autospawn</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autospawn\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Spectate on Death</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spectate\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Ghost Mode</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_ghostMode\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">On death, instantly respawn and play as a faded ghost. You keep full vision and can roam anywhere. WARNING: you are a live player — others still see you and can kill you. Overrides Spectate.</span>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Ghost Mode Opacity</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_ghostOpacity\" type=\"range\" step=\"0.05\" min=\"0.1\" max=\"1\">\r\n                </label>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Spectate Hide HUD</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spectateHideHUD\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Hides resources, gold, item bar, age and leaderboard while spectating. Restored on respawn.</span>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Ghost Body</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spectateGhost\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Draws your dead body as a transparent ghost while spectating.</span>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Ghost Opacity</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_spectateGhostOpacity\" type=\"range\" step=\"0.05\" min=\"0.1\" max=\"1\">\r\n                </label>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Autoaccept</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoaccept\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Hide game HUD</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_hideHUD\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Low Quality Mode</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_lowQuality\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Auto Chat</h2>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Enable</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoChat\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Interval</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoChatInterval\" type=\"range\" step=\"1\" min=\"1\" max=\"60\">\r\n                </label>\r\n            </div>\r\n            <div id=\"autoChatMsgList\">\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <button id=\"addAutoChatMsg\" class=\"option-button\">+ Add Message</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Bot Auto Chat</h2>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Enable Player Chat</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoBotChat\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div id=\"autoBotChatMsgList\">\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <button id=\"addAutoBotChatMsg\" class=\"option-button\">+ Add Player Message</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- ReUp Mix -->\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">ReUp Mix</h2>\r\n\r\n        <div class=\"section-content\">\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Username Cycler</span>\r\n                <div class=\"option-content\">\r\n                    <input id=\"_usernameList\" class=\"input\" type=\"text\" maxlength=\"120\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_usernameCycler\" type=\"checkbox\">\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n                <span class=\"option-description\">Uses the next name in the comma separated list every time you spawn.</span>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Spike Rotation</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeRotation\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Off freezes spinning spikes so their hitbox is easier to read.</span>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Mill Rotation</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_millRotation\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Off freezes windmills and power mills.</span>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Menu Theme</span>\r\n                <div class=\"option-content reup-theme-row\">\r\n                    <button class=\"reup-theme\" data-theme=\"ryn\" title=\"Ryn\"></button>\r\n                    <button class=\"reup-theme\" data-theme=\"nvg\" title=\"NVG\"></button>\r\n                    <button class=\"reup-theme\" data-theme=\"ice\" title=\"Ice\"></button>\r\n                    <button class=\"reup-theme\" data-theme=\"red\" title=\"Red\"></button>\r\n                    <button class=\"reup-theme\" data-theme=\"void\" title=\"Void\"></button>\r\n                </div>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n\r\n\r\n    <!-- Menu -->\r\n    <!-- <div class=\"section\">\r\n        <h2 class=\"section-title\">Menu</h2>\r\n\r\n        <div class=\"section-content\">\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Transparency</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_menuTransparency\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n        </div>\r\n    </div> -->\r\n\r\n</div>";
   const Bots_default = '<div class="menu-page" data-id="5">\r\n    <div class="page-title">Bots</div>\r\n    <p class="page-description">Create bots, control them and dominate the entire server</p>\r\n\r\n    <div class="section">\r\n        <div class="section-title">Controller</div>\r\n        <div class="section-content">\r\n            <div class="content-option">\r\n                <span class="option-title">Follow cursor</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_followCursor" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class="content-option">\r\n                <span class="option-title">Stop movement radius</span>\r\n                <label class="slider">\r\n                    <span class="slider-value"></span>\r\n                    <input id="_movementRadius" type="range" step="25" min="25" max="250">\r\n                </label>\r\n            </div>\r\n            <div class="content-option" style="flex-direction:column;align-items:flex-start;gap:8px;">\r\n                <span class="option-title" style="margin-bottom:2px;">Formation</span>\r\n                <div id="_formationGrid" style="display:flex;flex-wrap:wrap;gap:6px;width:100%;"></div>\r\n            </div>\r\n            <div class="content-option">\r\n                <span class="option-title">Circle rotation</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_circleRotation" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class="content-option">\r\n                <span class="option-title">Circle radius</span>\r\n                <label class="slider">\r\n                    <span class="slider-value"></span>\r\n                    <input id="_circleRadius" type="range" step="25" min="50" max="600">\r\n                </label>\r\n            </div>\r\n            <div class="content-option">\r\n                <span class="option-title">Bots own clan</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_botIndividualClans" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class="content-option">\r\n                <span class="option-title">Auto random bot names</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_autoRandomBotNames" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class="content-option">\r\n                <span class="option-title">Attack Sync Delay</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_botAttackStagger" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div><div class="content-option">\r\n                <span class="option-title">Sync Delay Step</span>\r\n                <label class="slider">\r\n                    <span class="slider-value"></span>\r\n                    <input id="_botAttackStaggerMs" type="range" step="5" min="5" max="250">\r\n                </label>\r\n            </div>\r\n                                                        </div>\r\n        <div id="bot-container" class="section-content"></div>\r\n        <div id="dynamic-bot-list" style="display:flex;flex-direction:column;gap:8px;margin-top:8px;"></div>\r\n        <div class="content-option" style="margin-top:10px;justify-content:center;">\r\n            <button id="add-bot-dynamic" class="option-button" style="display:flex;align-items:center;gap:8px;padding:10px 28px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:1.1em;font-weight:800;letter-spacing:0.04em;transition:all 200ms;cursor:pointer;">\r\n                + Add Bots\r\n            </button>\r\n        </div>\r\n    </div>\r\n\r\n    <div class="section">\r\n        <div class="section-title">Bot Weapons</div>\r\n        <div class="section-content" style="padding:14px 16px;gap:16px;display:flex;flex-direction:column;">\r\n\r\n            <style>\r\n                .wpn-label{font-size:0.68em;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:rgba(122,66,244,0.6);margin-bottom:8px;display:flex;align-items:center;gap:6px;}\r\n                .wpn-label::before{content:\'\';width:3px;height:3px;background:var(--accent);border-radius:50%;box-shadow:0 0 5px var(--accent);flex-shrink:0;}\r\n                .wpn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:10px;}\r\n                .bot-weapon-btn,.bot-sec-weapon-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;height:82px;background:rgba(255,255,255,0.03);border:1.5px solid rgba(255,255,255,0.07);border-radius:10px;cursor:pointer;font-size:0.78em;font-weight:600;color:rgba(200,200,220,0.65);transition:all 180ms;text-align:center;gap:7px;padding:8px 4px;}\r\n                .bot-weapon-btn:hover,.bot-sec-weapon-btn:hover{background:rgba(122,66,244,0.1);border-color:rgba(122,66,244,0.4);color:#fff;}\r\n                .bot-weapon-btn.wpn-active,.bot-sec-weapon-btn.wpn-active{background:rgba(122,66,244,0.18);border-color:rgba(122,66,244,0.7);color:#fff;box-shadow:0 0 12px rgba(122,66,244,0.2);}\r\n                .bot-weapon-btn[data-wid="-1"],.bot-sec-weapon-btn[data-swid="-1"]{background:rgba(122,66,244,0.08);border-color:rgba(122,66,244,0.35);color:rgba(160,122,244,0.9);}\r\n                .wpn-name{line-height:1.25;font-size:0.95em;}\r\n                .wpn-selected-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:7px;margin-top:4px;}\r\n                .wpn-selected-dot{width:6px;height:6px;background:#7A42F4;border-radius:50%;box-shadow:0 0 6px rgba(122,66,244,0.7);flex-shrink:0;}\r\n                .wpn-selected-text{font-size:0.8em;color:rgba(200,200,220,0.75);font-weight:500;}\r\n            </style>\r\n\r\n            \x3c!-- Primary --\x3e\r\n            <div>\r\n                <div class="wpn-label">Primary Weapon</div>\r\n                <div class="wpn-grid" id="bot-weapon-selector">\r\n                    <div class="bot-weapon-btn" data-wid="-1" title="Copy from me"><span class="wpn-name">Copy from me</span></div>\r\n                    <div class="bot-weapon-btn" data-wid="0" title="Tool Hammer"><span class="wpn-name">Tool Hammer</span></div>\r\n                    <div class="bot-weapon-btn" data-wid="1" title="Hand Axe"><span class="wpn-name">Hand Axe</span></div>\r\n                    <div class="bot-weapon-btn" data-wid="2" title="Great Axe"><span class="wpn-name">Great Axe</span></div>\r\n                    <div class="bot-weapon-btn" data-wid="3" title="Short Sword"><span class="wpn-name">Short Sword</span></div>\r\n                    <div class="bot-weapon-btn" data-wid="4" title="Katana"><span class="wpn-name">Katana</span></div>\r\n                    <div class="bot-weapon-btn" data-wid="5" title="Polearm"><span class="wpn-name">Polearm</span></div>\r\n                    <div class="bot-weapon-btn" data-wid="6" title="Bat"><span class="wpn-name">Bat</span></div>\r\n                    <div class="bot-weapon-btn" data-wid="7" title="Daggers"><span class="wpn-name">Daggers</span></div>\r\n                    <div class="bot-weapon-btn" data-wid="8" title="Stick"><span class="wpn-name">Stick</span></div>\r\n                    </div>\r\n                <div class="wpn-selected-bar"><div class="wpn-selected-dot"></div><span class="wpn-selected-text" id="bot-weapon-label">Copy from me (default)</span></div>\r\n            </div>\r\n\r\n            \x3c!-- Secondary --\x3e\r\n            <div>\r\n                <div class="wpn-label">Secondary Weapon</div>\r\n                <div class="wpn-grid" id="bot-sec-weapon-selector">\r\n                    <div class="bot-sec-weapon-btn" data-swid="-1" title="Copy from me"><span class="wpn-name">Copy from me</span></div>\r\n                    <div class="bot-sec-weapon-btn" data-swid="9" title="Hunting Bow"><span class="wpn-name">Hunting Bow</span></div>\r\n                    <div class="bot-sec-weapon-btn" data-swid="10" title="Great Hammer"><span class="wpn-name">Great Hammer</span></div>\r\n                    <div class="bot-sec-weapon-btn" data-swid="11" title="Wooden Shield"><span class="wpn-name">Wooden Shield</span></div>\r\n                    <div class="bot-sec-weapon-btn" data-swid="12" title="Crossbow"><span class="wpn-name">Crossbow</span></div>\r\n                    <div class="bot-sec-weapon-btn" data-swid="13" title="Repeater Crossbow"><span class="wpn-name">Repeater Crossbow</span></div>\r\n                    <div class="bot-sec-weapon-btn" data-swid="14" title="Mc Grabby"><span class="wpn-name">Mc Grabby</span></div>\r\n                    <div class="bot-sec-weapon-btn" data-swid="15" title="Musket"><span class="wpn-name">Musket</span></div>\r\n                    </div>\r\n                <div class="wpn-selected-bar"><div class="wpn-selected-dot"></div><span class="wpn-selected-text" id="bot-sec-weapon-label">Copy from me (default)</span></div>\r\n            </div>\r\n\r\n            <div class="content-option" style="margin-top:2px;">\r\n                <span class="option-title">Platform w/ Musket</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_platformMusket" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class="option-description">When bots have Musket equipped, they build a platform right before firing instead of shooting from the ground.</span>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n\r\n    <div class="section">\r\n        <div class="section-title">Age 4 Building</div>\r\n        <div class="section-content" style="padding:14px 16px;gap:16px;display:flex;flex-direction:column;">\r\n            <div>\r\n                <div class="wpn-label">Age 4 Building</div>\r\n                <div class="wpn-grid" id="bot-age4-selector">\r\n                    <div class="bot-weapon-btn" data-age4id="0" title="Trap"><span class="wpn-name">Trap</span></div>\r\n                    <div class="bot-weapon-btn" data-age4id="1" title="Boost Pad"><span class="wpn-name">Boost Pad</span></div>\r\n                </div>\r\n                <div class="wpn-selected-bar"><div class="wpn-selected-dot"></div><span class="wpn-selected-text" id="bot-age4-label">Trap (default)</span></div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class="section">\r\n        <div class="section" style="margin-top:6px;">\r\n        <div class="section" style="margin-top:6px;background:rgba(0,0,0,0);border:none;padding:0;">\r\n        <div class="section-title" style="font-size:0.75em;letter-spacing:0.18em;color:rgba(160,122,244,0.75);text-transform:uppercase;margin-bottom:14px;">Auto Farm</div>\r\n\r\n        <div style="display:flex;flex-direction:column;gap:10px;">\r\n\r\n            \x3c!-- Farm Mode card --\x3e\r\n            <div style="background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;">\r\n                <span style="font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;">Farm Mode</span>\r\n                <p style="font-size:0.82em;color:rgba(200,195,220,0.6);margin:0;line-height:1.5;">Bots automatically gather resources. In <b style="color:rgba(200,195,220,0.85);">Single</b> mode they target one resource type. In <b style="color:rgba(200,195,220,0.85);">Nearest</b> mode they pick the closest available resource.</p>\r\n                <div style="display:flex;gap:8px;margin-top:2px;">\r\n                    <button id="_farmModeSingle" style="flex:1;padding:9px 0;border-radius:8px;border:1.5px solid rgba(122,66,244,0.6);background:rgba(122,66,244,0.28);color:#fff;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.9em;letter-spacing:0.04em;transition:all 0.15s;">Single</button>\r\n                    <button id="_farmModeNearest" style="flex:1;padding:9px 0;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#888;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.9em;letter-spacing:0.04em;transition:all 0.15s;">Nearest</button>\r\n                </div>\r\n            </div>\r\n\r\n            \x3c!-- Resource Type card --\x3e\r\n            <div id="_farmTypeRow" style="background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;">\r\n                <span style="font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;">Resource Type</span>\r\n                <div style="display:flex;gap:8px;">\r\n                    <button data-farm-type="0" class="farm-type-btn" style="flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;">Wood</button>\r\n                    <button data-farm-type="1" class="farm-type-btn" style="flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;">Food</button>\r\n                    <button data-farm-type="2" class="farm-type-btn" style="flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;">Stone</button>\r\n                    <button data-farm-type="3" class="farm-type-btn" style="flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;">Gold</button>\r\n                </div>\r\n                <input id="_botFarmType" type="hidden" value="0">\r\n            </div>\r\n\r\n            \x3c!-- Limit card --\x3e\r\n            <div style="background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;">\r\n                <span style="font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;">Limit</span>\r\n                <div style="display:flex;align-items:center;gap:12px;">\r\n                    <input id="_botFarmLimit" class="input" type="number" min="0" max="9999" step="50" value="0" style="width:110px;height:40px;font-size:1em;padding:0 12px;border-radius:8px;flex-shrink:0;">\r\n                    <span style="font-size:0.83em;color:rgba(200,195,220,0.5);line-height:1.5;">Bots stop and return to you when they reach this amount. Set to <b style="color:rgba(200,195,220,0.7);">0</b> for no limit.</span>\r\n                </div>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n    </div>\r\n    </div>\r\n\r\n</div>';
@@ -5744,6 +5712,1220 @@ window.grbtp = 35;
     }
   }
   const Sorting_default = Sorting;
+  /* ══════════════════════════════════════════════════════════════════════════
+   * UNIFIED PLACEMENT ENGINE
+   *
+   * One engine behind auto place, preplace, replace, spam preplace and retrap.
+   * Every constant below is read out of the shipped game bundle rather than
+   * taken from another client, and every geometric claim is a consequence of
+   * the two functions the game actually validates placement with:
+   *
+   *   Player.buildItem
+   *     w = this.scale + f.scale + (f.placeOffset || 0)
+   *     T = this.x + w * cos(this.dir);  A = this.y + w * sin(this.dir)
+   *     ... checkItemLocation(T, A, f.scale, 0.6, f.id, false, this)
+   *
+   *   ObjectManager.checkItemLocation
+   *     for every active object o:
+   *       R = o.blocker ? o.blocker : o.getScale(0.6, o.isItem)
+   *       if (getDistance(T, A, o.x, o.y) < f.scale + R) return false
+   *     return !(id != 18 && y inside the river band)
+   *
+   * Three facts follow, and the engine is built on them:
+   *
+   *   1. Placement is CIRCLE-CIRCLE ONLY. There is no rectangle, capsule or
+   *      polygon anywhere in the test, and no line-of-sight term. Every
+   *      rectangle test in the old placer was tactical reasoning, never
+   *      legality.
+   *   2. The candidate point is constrained to a CIRCLE of radius
+   *      w = playerScale + item.scale + placeOffset centred on the player.
+   *      Placement is therefore a one-dimensional problem in the angle, not a
+   *      two-dimensional search, which is what makes an exact solution cheap.
+   *   3. checkItemLocation takes the player as its last argument AND NEVER
+   *      READS IT. Players — ours, friendly or enemy — do not block placement.
+   *      Any check against a player body is a self-inflicted restriction.
+   *
+   * From (2), for one blocking circle at distance d from the player with
+   * combined radius R = item.scale + T, the candidate at angle t is illegal iff
+   *
+   *   w^2 + d^2 - 2*w*d*cos(t - phi) < R^2      (law of cosines)
+   *   <=>  cos(t - phi) > (w^2 + d^2 - R^2) / (2*w*d)
+   *   <=>  |t - phi| < acos( (w^2 + d^2 - R^2) / (2*w*d) )
+   *
+   * so each blocker removes exactly one closed arc [phi - a, phi + a], and the
+   * legal set is the complement of their union. That set is computed here in
+   * closed form. It is not sampled, so there is no resolution to raise and no
+   * gap to miss: a 36/72/144/200-angle table is an approximation of this set,
+   * and this is the set itself.
+   * ══════════════════════════════════════════════════════════════════════════ */
+  const UPE_TAU = Math.PI * 2;
+  const UPE_EPS = 1e-9;
+  /* Two candidate angles closer than this put the item within 0.16px of the
+   * same ground at the widest placement ring, so they are the same candidate. */
+  const UPE_DEDUP = 2e-3;
+  /* config.serverUpdateRate is 9, so the server steps and broadcasts every
+   * 111.11ms. Every literal 111 in the older placer is this number rounded
+   * down; the engine uses the quotient. */
+  const UPE_TICK_MS = 1e3 / Config_default.serverUpdateRate;
+  /* Item 21 carries blocker: 300 and checkItemLocation reads that in place of
+   * the object's scale, so it is the one blocker that reaches further than any
+   * scale on the map. Kept in its own list rather than widening every query. */
+  const UPE_BLOCKER_RADIUS = 300;
+  /* Largest placementScale of anything that is not item 21: the sapling, whose
+   * scale is 110 and which is an item, so getScale returns it unreduced. */
+  const UPE_MAX_SCALE = 110;
+  /* ModuleHandler.place costs 4 packets (z, F-down, F-up, z). The old code
+   * reserved 5 before each place and that headroom is kept. */
+  const UPE_PLACE_PACKETS = 5;
+  /* Pull a candidate this far inside its aperture edge before committing to it.
+   * The server tests with a strict <, so the exact tangent angle is legal in
+   * principle, but it is legal by zero margin against a position we predicted.
+   * 0.02rad is 1.6px of arc at the spike ring. */
+  const UPE_EDGE_INSET = .02;
+  /* The coarse sweep is a *supplement*, not the candidate source: every
+   * aperture already contributes its two tangents and its midpoint, so legal
+   * ground is never missed without it. It exists so that a wide gap nothing
+   * aimed at still offers interior angles to score. 24 is enough for that job
+   * because it only has to land one sample inside a gap the tangents already
+   * bound — unlike a table placer, where the sweep is the only source and a
+   * missed sample is a missed placement. */
+  const UPE_COARSE_RING = 24;
+  /* Two placements whose angles differ by less than this are the same attempt
+   * as far as the ban list is concerned. 0.03rad is 2.4px at the spike ring,
+   * comfortably below one item width. */
+  const UPE_BAN_TOLERANCE = .03;
+  const UPEGeom = {
+    norm(a) {
+      a %= UPE_TAU;
+      return a < 0 ? a + UPE_TAU : a;
+    },
+    dist(a, b) {
+      const d = Math.abs(this.norm(a) - this.norm(b));
+      return d > Math.PI ? UPE_TAU - d : d;
+    },
+    /* The arc one circular blocker removes from the placement ring, or null
+     * when it removes nothing. The three early exits are the degenerate cases
+     * that a bare acos would clamp into a wrong answer:
+     *   d >= ring + reach   blocker is past the far side of the ring
+     *   d + ring <= reach   ring is entirely swallowed -> nothing is legal
+     *   d + reach <= ring   blocker sits wholly inside the ring and misses it */
+    occlusion(ox, oy, ring, foot, bx, by, blockR) {
+      const dx = bx - ox, dy = by - oy;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      const reach = foot + blockR;
+      if (d >= ring + reach) return null;
+      if (d + ring <= reach) return "full";
+      if (d + reach <= ring) return null;
+      if (d < UPE_EPS) return "full";
+      let k = (d * d + ring * ring - reach * reach) / (2 * d * ring);
+      if (k <= -1) return "full";
+      if (k >= 1) return null;
+      const half = Math.acos(k);
+      const centre = Math.atan2(dy, dx);
+      return [ centre - half, centre + half ];
+    },
+    /* The river is a horizontal band, so the angles it removes are the exact
+     * solutions of ylo <= oy + ring*sin(t) <= yhi. Solving it as an arc rather
+     * than rejecting candidates afterwards is what lets a legal angle beside
+     * the river be found instead of found and then thrown away. */
+    riverOcclusion(oy, ring) {
+      const mid = Config_default.mapScale / 2, half = Config_default.riverWidth / 2;
+      const sLo = (mid - half - oy) / ring, sHi = (mid + half - oy) / ring;
+      if (sHi < -1 || sLo > 1) return null;
+      if (sLo <= -1 && sHi >= 1) return [ "full" ];
+      const clamp1 = v => v < -1 ? -1 : v > 1 ? 1 : v;
+      if (sLo <= -1) {
+        const b = Math.asin(clamp1(sHi));
+        return [ [ Math.PI - b, UPE_TAU + b ] ];
+      }
+      const a = Math.asin(clamp1(sLo));
+      if (sHi >= 1) return [ [ a, Math.PI - a ] ];
+      const b = Math.asin(clamp1(sHi));
+      return [ [ a, b ], [ Math.PI - b, Math.PI - a ] ];
+    },
+    /* Union of blocked arcs, wrap-aware. Anything crossing 0 is split first so
+     * the sort is meaningful; that split is why there is no seam at 0/2pi for a
+     * candidate to fall through, which is exactly the blind spot the sampled
+     * placers carry (their "perfect angle" pass compares index i against i-1
+     * and never compares the last index against the first). */
+    merge(arcs) {
+      const flat = [];
+      for (let i = 0; i < arcs.length; i++) {
+        const arc = arcs[i];
+        if (arc === "full") return [ [ 0, UPE_TAU ] ];
+        const span = (arc[1] - arc[0] + UPE_TAU) % UPE_TAU;
+        if (span >= UPE_TAU - UPE_EPS) return [ [ 0, UPE_TAU ] ];
+        const s = this.norm(arc[0]), e = this.norm(arc[1]);
+        if (s <= e) flat.push([ s, e ]); else flat.push([ s, UPE_TAU ], [ 0, e ]);
+      }
+      if (flat.length === 0) return [];
+      flat.sort((a, b) => a[0] - b[0]);
+      const out = [ flat[0] ];
+      for (let i = 1; i < flat.length; i++) {
+        const last = out[out.length - 1];
+        if (flat[i][0] <= last[1] + UPE_EPS) {
+          if (flat[i][1] > last[1]) last[1] = flat[i][1];
+        } else {
+          out.push(flat[i]);
+        }
+      }
+      return out;
+    },
+    /* Blocked arcs in, free apertures out as [start, end, span]. An aperture
+     * may wrap, in which case end < start and span is still the true width. */
+    invert(merged) {
+      if (merged.length === 0) return [ [ 0, UPE_TAU, UPE_TAU ] ];
+      if (merged.length === 1 && merged[0][0] <= UPE_EPS && merged[0][1] >= UPE_TAU - UPE_EPS) return [];
+      const free = [];
+      for (let i = 0; i < merged.length; i++) {
+        const start = merged[i][1];
+        const end = i < merged.length - 1 ? merged[i + 1][0] : merged[0][0] + UPE_TAU;
+        const span = end - start;
+        if (span > UPE_EPS) free.push([ this.norm(start), this.norm(end), span ]);
+      }
+      return free;
+    },
+    inAperture(apertures, angle) {
+      const a = this.norm(angle);
+      for (let i = 0; i < apertures.length; i++) {
+        const ap = apertures[i];
+        if (ap[0] <= ap[1]) {
+          if (a >= ap[0] - UPE_EPS && a <= ap[1] + UPE_EPS) return ap;
+        } else if (a >= ap[0] - UPE_EPS || a <= ap[1] + UPE_EPS) {
+          return ap;
+        }
+      }
+      return null;
+    },
+    /* Radians from an angle to the nearer edge of the aperture holding it.
+     * Doubles as the collision margin: multiplied by the ring radius it is the
+     * arc length the item can slide before it touches something. */
+    edgeMargin(aperture, angle) {
+      if (!aperture) return 0;
+      /* A full circle has no edges. Measuring to the seam at 0 would report a
+       * margin of zero for a direction with nothing anywhere near it, which
+       * would then read as a knife-edge placement and score as unplaceable. */
+      if (aperture[2] >= UPE_TAU - UPE_EPS) return Math.PI;
+      const a = this.norm(angle);
+      let toStart = a - aperture[0];
+      if (toStart < 0) toStart += UPE_TAU;
+      let toEnd = aperture[1] - a;
+      if (toEnd < 0) toEnd += UPE_TAU;
+      return Math.min(toStart, toEnd);
+    },
+    mid(aperture) {
+      return this.norm(aperture[0] + aperture[2] / 2);
+    },
+    /* The closest legal angle to a wanted one: the angle itself when it is
+     * already legal, otherwise the nearest aperture edge pulled inside by
+     * `inset`. This is the reason the engine never needs to round a solved
+     * direction onto a table — the answer it gives is already the nearest real
+     * angle that the server will accept. */
+    nearestFree(apertures, angle, inset = UPE_EDGE_INSET) {
+      if (apertures.length === 0) return null;
+      if (this.inAperture(apertures, angle)) return this.norm(angle);
+      let best = null, bestD = Infinity;
+      for (let i = 0; i < apertures.length; i++) {
+        const ap = apertures[i];
+        const usable = Math.min(inset, ap[2] / 3);
+        const lo = this.norm(ap[0] + usable), hi = this.norm(ap[1] - usable);
+        let d = this.dist(lo, angle);
+        if (d < bestD) { bestD = d; best = lo; }
+        d = this.dist(hi, angle);
+        if (d < bestD) { bestD = d; best = hi; }
+      }
+      return best;
+    },
+    /* The two angles at which the item's footprint exactly touches a circle.
+     * Same law of cosines as occlusion, asked the other way round: used to aim
+     * a spike so it just reaches an enemy rather than guessing a step size. */
+    contactAngles(ox, oy, ring, foot, tx, ty, targetR) {
+      const dx = tx - ox, dy = ty - oy;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      const reach = foot + targetR;
+      if (d < UPE_EPS || d >= ring + reach || d + ring <= reach || d + reach <= ring) return null;
+      let k = (d * d + ring * ring - reach * reach) / (2 * d * ring);
+      if (k < -1 || k > 1) return null;
+      const half = Math.acos(k);
+      const centre = Math.atan2(dy, dx);
+      return [ this.norm(centre - half), this.norm(centre + half) ];
+    },
+    /* Shortest distance from a point to a segment. Tactical scoring only —
+     * legality never needs it. */
+    segmentDistance(px, py, ax, ay, bx, by) {
+      const vx = bx - ax, vy = by - ay;
+      const len2 = vx * vx + vy * vy;
+      if (len2 < UPE_EPS) return Math.hypot(px - ax, py - ay);
+      let t = ((px - ax) * vx + (py - ay) * vy) / len2;
+      if (t < 0) t = 0; else if (t > 1) t = 1;
+      return Math.hypot(px - (ax + t * vx), py - (ay + t * vy));
+    }
+  };
+  /* ── Clock ───────────────────────────────────────────────────────────────
+   * Client time, server time and network time kept apart.
+   *
+   * What is actually known:
+   *   - the local time each "a" (server tick broadcast) arrived;
+   *   - the round trip, measured by the "0" echo in SocketManager.handlePing;
+   *   - that the server steps every 1000/9 ms.
+   *
+   * What follows: the server emitted the tick we just received at
+   * t_recv - rtt/2 in its own clock, and will emit the next one at
+   * t_recv + TICK. A placement packet is evaluated by Player.buildItem the
+   * moment it arrives — buildItem is not called from Player.update anywhere in
+   * the bundle — so it is tested against the position the server last stepped
+   * to. The useful window is therefore "after a tick lands, before the next one
+   * moves us", and its two ends are:
+   *
+   *   emit now                      -> arrives t_recv + rtt/2, freshest state
+   *   emit TICK - rtt/2 - guard     -> arrives just before the next step
+   *
+   * The old code used setTimeout(111 - pingTime), which subtracts a round trip
+   * where a one-way delay belongs and measures from an arbitrary moment in the
+   * tick rather than from the tick itself. Both ends are computed here instead.
+   */
+  class PlacementClock {
+    lastTickAt=0;
+    tickCount=0;
+    _samples=[];
+    _jitter=0;
+    client;
+    constructor(client2) {
+      this.client = client2;
+    }
+    onServerTick() {
+      const now = performance.now();
+      if (this.lastTickAt) {
+        const gap = now - this.lastTickAt;
+        /* Only gaps near one tick say anything about jitter; a gap of two ticks
+         * is a dropped broadcast, not late delivery. */
+        if (gap > UPE_TICK_MS * .4 && gap < UPE_TICK_MS * 1.8) {
+          const dev = Math.abs(gap - UPE_TICK_MS);
+          this._samples.push(dev);
+          if (this._samples.length > 24) this._samples.shift();
+          let sum = 0;
+          for (let i = 0; i < this._samples.length; i++) sum += this._samples[i];
+          this._jitter = sum / this._samples.length;
+        }
+      }
+      this.lastTickAt = now;
+      this.tickCount++;
+    }
+    get rtt() {
+      const sm = this.client.SocketManager;
+      const p = sm && sm.pong;
+      return Number.isFinite(p) && p >= 0 ? Math.min(p, 600) : 0;
+    }
+    get owd() {
+      return this.rtt / 2;
+    }
+    get jitter() {
+      return this._jitter;
+    }
+    get sinceTick() {
+      return this.lastTickAt ? performance.now() - this.lastTickAt : 0;
+    }
+    /* Delay, from right now, that lands a packet as late as possible inside the
+     * tick the server is currently sitting on. Never negative, never past the
+     * tick: a late packet is evaluated against a position we no longer
+     * predicted, which is worse than an early one. */
+    lateEmitDelay() {
+      const guard = 6 + this.jitter;
+      const target = UPE_TICK_MS - this.owd - guard;
+      const d = target - this.sinceTick;
+      return d > 1 ? d : 0;
+    }
+    /* Horizon, in server ticks, between the state we last heard about and the
+     * moment a packet emitted `delayMs` from now is evaluated. */
+    horizonTicks(delayMs = 0) {
+      const ms = this.sinceTick + delayMs + this.owd + this.rtt / 2;
+      return Math.max(0, Math.min(4, ms / UPE_TICK_MS));
+    }
+  }
+  /* ── Prediction ──────────────────────────────────────────────────────────
+   * Present and future kept as one object with a confidence, because a
+   * prediction without one cannot be used to set a safety margin.
+   *
+   * Velocity is measured over the last two server ticks rather than assumed:
+   * the client only ever learns a foreign player's position at tick
+   * boundaries, so a per-tick delta is the finest real sample there is.
+   * A third sample is kept so that direction and speed *stability* can be
+   * measured, which is what confidence is made of.
+   *
+   * The one place the model is exact rather than statistical is lockMove:
+   * Player.update zeroes xVel and yVel outright while lockMove is set, and
+   * checkCollision sets it for any trap that is not the victim's own. A trapped
+   * player is therefore not "probably slow", it is stationary, and the
+   * prediction says so with confidence 1.
+   */
+  class PlacementPredictor {
+    _hist=new Map;
+    client;
+    constructor(client2) {
+      this.client = client2;
+    }
+    observe(entity, tick) {
+      if (!entity || entity.id === undefined || !entity.pos) return;
+      let h = this._hist.get(entity.id);
+      const p = entity.pos.current;
+      if (!h) {
+        this._hist.set(entity.id, { tick: tick, x: [ p.x, p.x, p.x ], y: [ p.y, p.y, p.y ] });
+        return;
+      }
+      if (h.tick === tick) return;
+      h.tick = tick;
+      h.x[2] = h.x[1]; h.x[1] = h.x[0]; h.x[0] = p.x;
+      h.y[2] = h.y[1]; h.y[1] = h.y[0]; h.y[0] = p.y;
+    }
+    forget(id) {
+      this._hist.delete(id);
+    }
+    prune(liveIds) {
+      if (this._hist.size < 64) return;
+      for (const id of this._hist.keys()) if (!liveIds.has(id)) this._hist.delete(id);
+    }
+    /* { x, y, vx, vy, speed, dir, confidence } in px and px-per-tick. */
+    state(entity) {
+      if (!entity || !entity.pos) return { x: 0, y: 0, vx: 0, vy: 0, speed: 0, dir: 0, confidence: 0 };
+      const p = entity.pos.current;
+      const out = { x: p.x, y: p.y, vx: 0, vy: 0, speed: 0, dir: 0, confidence: .35 };
+      if (entity.isTrapped || entity.lockMove) {
+        out.confidence = 1;
+        return out;
+      }
+      const h = this._hist.get(entity.id);
+      if (!h) {
+        const q = entity.pos.previous;
+        out.vx = p.x - q.x;
+        out.vy = p.y - q.y;
+        out.speed = Math.hypot(out.vx, out.vy);
+        out.dir = Math.atan2(out.vy, out.vx);
+        return out;
+      }
+      const v1x = h.x[0] - h.x[1], v1y = h.y[0] - h.y[1];
+      const v2x = h.x[1] - h.x[2], v2y = h.y[1] - h.y[2];
+      out.vx = v1x;
+      out.vy = v1y;
+      const s1 = Math.hypot(v1x, v1y), s2 = Math.hypot(v2x, v2y);
+      out.speed = s1;
+      out.dir = s1 > .01 ? Math.atan2(v1y, v1x) : 0;
+      if (s1 < .05 && s2 < .05) {
+        out.confidence = .95;
+        return out;
+      }
+      const dirStab = s1 > .05 && s2 > .05 ? 1 - UPEGeom.dist(Math.atan2(v1y, v1x), Math.atan2(v2y, v2x)) / Math.PI : .4;
+      const spdStab = 1 - Math.abs(s1 - s2) / Math.max(s1, s2, .5);
+      const engine = this.client.PlacementEngine;
+      const jitter = engine ? engine.clock.jitter : 0;
+      const latStab = 1 - Math.min(1, jitter / Math.max(UPE_TICK_MS * .5, 1));
+      /* Direction multiplies rather than adds. What is being predicted is an
+       * angle on the placement ring, so a target that just turned is the least
+       * predictable state there is and no amount of steady speed redeems it:
+       * added in, a full reversal still scored 0.55. Multiplied, a 90 degree
+       * turn halves the confidence and a reversal floors it. */
+      out.confidence = Math.max(.05, Math.min(1, dirStab * (.55 + .25 * spdStab + .2 * latStab)));
+      return out;
+    }
+    /* Position `ticks` server ticks ahead.
+     *
+     * The first tick is never decayed: the sample already is one tick of real
+     * displacement, so repeating it is the measurement, not an assumption.
+     * Past that the input becomes a guess, and how much of the velocity to
+     * carry is exactly what confidence measures — a target that has held one
+     * direction for two ticks is holding a key and keeps its speed, while one
+     * that just turned is blended toward the server's own decay, which is
+     * playerDecel 0.993 compounded over a tick. Low confidence therefore
+     * shortens the prediction instead of running away with it. */
+    at(state, ticks) {
+      if (ticks <= 0 || state.vx === 0 && state.vy === 0) return { x: state.x, y: state.y };
+      const decay = Math.pow(Config_default.playerDecel, UPE_TICK_MS);
+      const persist = decay + (1 - decay) * state.confidence;
+      let x = state.x, y = state.y, vx = state.vx, vy = state.vy, remaining = ticks;
+      while (remaining > 0) {
+        const step = Math.min(1, remaining);
+        x += vx * step;
+        y += vy * step;
+        if (remaining > 1) {
+          vx *= persist;
+          vy *= persist;
+        }
+        remaining -= step;
+      }
+      return { x: x, y: y };
+    }
+  }
+  /* ── Reservation ledger ──────────────────────────────────────────────────
+   * Auto place, preplace, replace, spam and retrap all draw from one aperture
+   * set, so without a shared record of what has been claimed they would
+   * happily spend five placements on the same piece of ground. Every path
+   * writes its footprint here before sending and reads it before choosing.
+   */
+  class PlacementLedger {
+    entries=[];
+    expire(tick) {
+      for (let i = this.entries.length - 1; i >= 0; i--) {
+        if (this.entries[i].expires <= tick) removeFast(this.entries, i);
+      }
+    }
+    clear() {
+      this.entries.length = 0;
+    }
+    /* Free when nothing already claimed overlaps the footprint, or when
+     * everything that does was claimed at a lower priority. */
+    free(x, y, r, priority) {
+      for (let i = 0; i < this.entries.length; i++) {
+        const e = this.entries[i];
+        if (e.priority < priority) continue;
+        const dx = x - e.x, dy = y - e.y, rr = r + e.r;
+        if (dx * dx + dy * dy < rr * rr) return false;
+      }
+      return true;
+    }
+    reserve(x, y, r, priority, owner, tick, ttl) {
+      this.entries.push({ x: x, y: y, r: r, priority: priority, owner: owner, expires: tick + ttl });
+    }
+    /* Extend a claim already made this tick instead of stacking a second one. */
+    touch(x, y, owner, tick, ttl) {
+      for (let i = 0; i < this.entries.length; i++) {
+        const e = this.entries[i];
+        if (e.owner !== owner) continue;
+        const dx = x - e.x, dy = y - e.y;
+        if (dx * dx + dy * dy < 1) {
+          e.expires = tick + ttl;
+          return;
+        }
+      }
+    }
+  }
+  const UPE_PRIORITY = {
+    retrap: 5,
+    replace: 4,
+    preplace: 3,
+    spam: 3,
+    autoplace: 2,
+    defense: 1,
+    util: 0
+  };
+  class PlacementEngine {
+    client;
+    clock;
+    predict;
+    ledger;
+    tick=-1;
+    /* Objects whose placementScale exceeds any ordinary item scale. Item 21 is
+     * the only one, and it is rare, so keeping it in a side list lets every
+     * ordinary query shrink from an 11x11 cell box to 7x7. */
+    wideBlockers=new Set;
+    /* One solve per (origin, ring, foot, exclusion) per tick, shared by every
+     * module. Small enough that invalidation is a linear scan. */
+    _solves=[];
+    _harvests=[];
+    _breaks=[];
+    _bulkRemoval=false;
+    _stats={ solves: 0, harvests: 0, candidates: 0, cacheHits: 0, fastPaths: 0 };
+    constructor(client2) {
+      this.client = client2;
+      this.clock = new PlacementClock(client2);
+      this.predict = new PlacementPredictor(client2);
+      this.ledger = new PlacementLedger;
+    }
+    beginTick(tick) {
+      this.tick = tick;
+      this._solves.length = 0;
+      this._harvests.length = 0;
+      this.ledger.expire(tick);
+      for (let i = this._breaks.length - 1; i >= 0; i--) {
+        if (tick - this._breaks[i].tick > 3) removeFast(this._breaks, i);
+      }
+      this._stats.solves = 0;
+      this._stats.harvests = 0;
+      this._stats.candidates = 0;
+      this._stats.cacheHits = 0;
+      /* AutoRetrap claims a quarter of the ring each tick and AutoPlacer stays
+       * out of it. Clearing it here means a retrap that stops running — module
+       * disabled, no trap in inventory, early return — cannot leave auto place
+       * permanently blind to one quadrant. */
+      this.client._retrapQuadrant = -1;
+      const PM = this.client.PlayerManager;
+      if (PM) {
+        const live = new Set;
+        for (let i = 0; i < PM.players.length; i++) {
+          const p = PM.players[i];
+          if (!p) continue;
+          this.predict.observe(p, tick);
+          live.add(p.id);
+        }
+        if ((tick & 63) === 0) this.predict.prune(live);
+      }
+    }
+    /* Spatially local invalidation. Only cached work whose own geometry could
+     * have touched the changed region is dropped; everything else survives,
+     * which is what keeps a busy fight from re-solving the whole ring every
+     * time a wall somewhere loses a hitpoint. */
+    markDirty(x, y, radius) {
+      for (let i = this._solves.length - 1; i >= 0; i--) {
+        const s = this._solves[i];
+        const dx = x - s.ox, dy = y - s.oy, rr = radius + s.reach;
+        if (dx * dx + dy * dy <= rr * rr) removeFast(this._solves, i);
+      }
+      for (let i = this._harvests.length - 1; i >= 0; i--) {
+        const h = this._harvests[i];
+        const dx = x - h.ox, dy = y - h.oy, rr = radius + h.reach;
+        if (dx * dx + dy * dy <= rr * rr) removeFast(this._harvests, i);
+      }
+    }
+    onObjectAdded(object) {
+      if (object.placementScale > UPE_MAX_SCALE) this.wideBlockers.add(object);
+      this.markDirty(object.pos.current.x, object.pos.current.y, object.placementScale);
+    }
+    /* The whole point of the fast path. "Q" is the only signal the server gives
+     * that a building is gone, and it arrives on the socket, not on a tick. The
+     * old placer pushed the sid onto an array and waited for postTick, which
+     * costs up to a full 111ms tick before anything is even considered. Here
+     * the occupancy dies with the packet. */
+    onObjectRemoved(object) {
+      this.wideBlockers.delete(object);
+      const p = object.pos.current;
+      this.markDirty(p.x, p.y, object.placementScale);
+      /* A player leaving takes every building they own with it. That is not a
+       * building breaking in front of us, and firing the fast path once per
+       * object would empty the packet budget on ground nobody is fighting
+       * over. The caches still drop; only the event is suppressed. */
+      if (this._bulkRemoval) return;
+      const my = this.client.myPlayer;
+      this._breaks.push({
+        x: p.x,
+        y: p.y,
+        r: object.placementScale,
+        scale: object.scale,
+        type: object.type,
+        itemGroup: object.itemGroup,
+        ownerID: object.ownerID,
+        mine: my && my.isMyPlayerByID ? my.isMyPlayerByID(object.ownerID) : false,
+        tick: this.tick,
+        at: performance.now()
+      });
+      if (this._breaks.length > 24) this._breaks.shift();
+      this._dispatchBreak(this._breaks[this._breaks.length - 1]);
+    }
+    /* Hands the break straight to whichever modules want to act on it, in the
+     * same turn of the event loop as the packet. Nothing is queued and nothing
+     * waits for postTick, which is the entire difference between this and the
+     * old window._rynBrokenSids array. */
+    _dispatchBreak(info) {
+      const mh = this.client._ModuleHandler;
+      if (!mh || !mh.onPlacementBreak) return;
+      try {
+        mh.onPlacementBreak(info);
+      } catch (e) {}
+    }
+    /* ── scheduling ───────────────────────────────────────────────────────
+     * Preplace and spam share one emitter so there is exactly one path from a
+     * decided candidate to a packet.
+     *
+     * Two things changed against the old setTimeout(111 - pingTime) pair.
+     * The delay now comes from the clock, which measures from the tick that
+     * actually arrived and subtracts a one-way delay rather than a round trip.
+     * And every candidate is re-tested immediately before it is sent: preplace
+     * aims at ground a named object is expected to vacate, so the test is
+     * "legal once that object is gone", and anything else that moved in
+     * meanwhile now costs nothing instead of four wasted packets. */
+    schedulePreplace(spec) {
+      const objects = spec.objects;
+      if (!objects || objects.length === 0) return;
+      const engine = this;
+      const mh = this.client._ModuleHandler;
+      const pm = this.client.PacketManager;
+      if (!mh || !pm) return;
+      const trapId = spec.trapId;
+      const exclude = spec.exclude || null;
+      const owner = spec.owner || "preplace";
+      const priority = spec.priority === undefined ? UPE_PRIORITY.preplace : spec.priority;
+      const aim = () => {
+        if (mh._autoBreakActive && mh._lastBreakAngle != null) return mh._lastBreakAngle;
+        return mh._currentAngle != null ? mh._currentAngle : 0;
+      };
+      /* Restate the aim once, not once per candidate — the old loop sent the
+       * same value N times for no benefit. */
+      setTimeout(() => {
+        try {
+          pm.updateAngle(aim());
+        } catch (e) {}
+      }, 1);
+      const emit = () => {
+        try {
+          const my = this.client.myPlayer;
+          if (!my || !my.inGame) return;
+          for (let i = 0; i < objects.length; i++) {
+            const obj = objects[i];
+            if (mh.packetCount + UPE_PLACE_PACKETS > mh.packetLimit) break;
+            /* No ledger check here: these candidates were vetted against it and
+             * reserved when they were chosen, earlier in this same tick. What
+             * can still have changed is the world, and that is what legalAt
+             * above answers. */
+            if (!engine.legalAt(obj.id, obj.x, obj.y, exclude)) continue;
+            const type = obj.id === trapId ? 7 : 4;
+            mh.place(type, obj.angle);
+            mh.placedOnce = true;
+            mh.placeAngles[0] = type;
+            mh.placeAngles[1].push(obj.angle);
+            mh.moduleActive = true;
+            engine.ledger.touch(obj.x, obj.y, owner, engine.tick, 1);
+            if (spec.onPlaced) spec.onPlaced(obj);
+            pm.updateAngle(aim());
+          }
+        } catch (e) {}
+      };
+      const late = this.clock.lateEmitDelay();
+      setTimeout(emit, Math.max(1, late));
+      /* Spam buys one extra attempt, placed inside the same tick window rather
+       * than at a second guessed offset, so that if jitter carries the late
+       * packet past the boundary one attempt is still evaluated against the
+       * position we predicted. */
+      if (spec.spam && late > 10) setTimeout(emit, Math.max(1, late * .55));
+    }
+    /* Breaks recorded at or after the given tick, freshest first. */
+    recentBreaks(sinceTick) {
+      const out = [];
+      for (let i = this._breaks.length - 1; i >= 0; i--) {
+        if (this._breaks[i].tick >= sinceTick) out.push(this._breaks[i]);
+      }
+      return out;
+    }
+    /* ── spatial harvest ──────────────────────────────────────────────────
+     * OVERLAPPING CHECKERS.
+     *
+     * Window A alone is the correctness guarantee: a blocker of radius R at
+     * distance d removes an arc only when |ring - d| < foot + R, so nothing
+     * beyond ring + foot + R can matter, and A is sized to exactly that.
+     *
+     * The rest exist because the grid itself is not a perfect oracle. Cell
+     * indices are computed with `| 0`, which truncates toward zero rather than
+     * flooring, so cell 0 is twice as wide as every other cell on both axes;
+     * an object can therefore sit in a cell whose nominal bounds do not contain
+     * it. Windows that share ground catch what a seam would drop.
+     *
+     * The overlap is deliberate and sized, not incidental. Each satellite
+     * window is 5x5 cells (500px wide) centred one ring radius out, and A is at
+     * least 7x7 (700px) centred on the player; with a spike ring of 79px the
+     * two share 421 of the satellite's 500px, so a satellite overlaps A across
+     * roughly four fifths of itself and its two neighbours across about half.
+     * There is no direction in which two adjacent windows merely touch. */
+    harvest(ox, oy, reach, aimAngle, ring) {
+      for (let i = 0; i < this._harvests.length; i++) {
+        const h = this._harvests[i];
+        if (h.reach >= reach && Math.abs(h.ox - ox) < .01 && Math.abs(h.oy - oy) < .01) {
+          this._stats.cacheHits++;
+          return h.list;
+        }
+      }
+      const OM = this.client.ObjectManager;
+      const grid = OM.grid2D;
+      const cell = grid.cellSize;
+      const seen = new Set;
+      const list = [];
+      const push = id => {
+        if (seen.has(id)) return;
+        seen.add(id);
+        const o = OM.objects.get(id);
+        if (o !== undefined) list.push(o);
+      };
+      grid.query(ox, oy, Math.ceil(reach / cell), push);
+      grid.query(ox, oy, 1, push);
+      if (ring > 0) {
+        grid.query(ox + ring, oy, 2, push);
+        grid.query(ox - ring, oy, 2, push);
+        grid.query(ox, oy + ring, 2, push);
+        grid.query(ox, oy - ring, 2, push);
+        if (aimAngle !== null && aimAngle !== undefined) {
+          const ca = Math.cos(aimAngle), sa = Math.sin(aimAngle);
+          grid.query(ox + ring * ca, oy + ring * sa, 2, push);
+          grid.query(ox + (ring + UPE_MAX_SCALE) * ca, oy + (ring + UPE_MAX_SCALE) * sa, 1, push);
+        }
+      }
+      for (const o of this.wideBlockers) {
+        if (!o.pos) continue;
+        const dx = o.pos.current.x - ox, dy = o.pos.current.y - oy;
+        const lim = reach + UPE_BLOCKER_RADIUS;
+        if (dx * dx + dy * dy <= lim * lim) push(o.id);
+      }
+      const entry = { ox: ox, oy: oy, reach: reach, list: list };
+      this._harvests.push(entry);
+      if (this._harvests.length > 12) this._harvests.shift();
+      this._stats.harvests++;
+      return list;
+    }
+    /* Exact free apertures on the placement ring for one item at one origin.
+     * `exclude` drops a single object from the world — this is how preplace
+     * asks "where could I build if that wall were already gone", and how the
+     * destruction fast path asks the same question before the server has told
+     * anyone. */
+    apertures(itemId, ox, oy, exclude, extraBlockers) {
+      const item = Items[itemId];
+      if (!item) return [];
+      const ring = Config_default.playerScale + item.scale + (item.placeOffset || 0);
+      const foot = item.scale;
+      const exId = exclude ? exclude.id : -1;
+      const extraKey = extraBlockers && extraBlockers.length ? extraBlockers.length : 0;
+      for (let i = 0; i < this._solves.length; i++) {
+        const s = this._solves[i];
+        if (s.itemId === itemId && s.exId === exId && s.extraKey === extraKey && Math.abs(s.ox - ox) < .01 && Math.abs(s.oy - oy) < .01) {
+          this._stats.cacheHits++;
+          return s.apertures;
+        }
+      }
+      const reach = ring + foot + UPE_MAX_SCALE;
+      const blockers = this.harvest(ox, oy, reach, this._aimHint(), ring);
+      const arcs = [];
+      for (let i = 0; i < blockers.length; i++) {
+        const o = blockers[i];
+        if (o.id === exId) continue;
+        const p = o.pos.current;
+        const occ = UPEGeom.occlusion(ox, oy, ring, foot, p.x, p.y, o.placementScale);
+        if (occ !== null) arcs.push(occ);
+      }
+      if (extraBlockers) {
+        for (let i = 0; i < extraBlockers.length; i++) {
+          const b = extraBlockers[i];
+          const occ = UPEGeom.occlusion(ox, oy, ring, foot, b.x, b.y, b.r);
+          if (occ !== null) arcs.push(occ);
+        }
+      }
+      if (itemId !== 18) {
+        const river = UPEGeom.riverOcclusion(oy, ring);
+        if (river) for (let i = 0; i < river.length; i++) arcs.push(river[i]);
+      }
+      const apertures = UPEGeom.invert(UPEGeom.merge(arcs));
+      this._solves.push({
+        itemId: itemId,
+        exId: exId,
+        extraKey: extraKey,
+        ox: ox,
+        oy: oy,
+        reach: reach,
+        ring: ring,
+        foot: foot,
+        apertures: apertures
+      });
+      if (this._solves.length > 16) this._solves.shift();
+      this._stats.solves++;
+      return apertures;
+    }
+    _aimHint() {
+      const mh = this.client._ModuleHandler;
+      if (!mh) return null;
+      if (mh._autoBreakActive && mh._lastBreakAngle != null) return mh._lastBreakAngle;
+      return mh._currentAngle != null ? mh._currentAngle : null;
+    }
+    ringOf(itemId) {
+      const item = Items[itemId];
+      if (!item) return 0;
+      return Config_default.playerScale + item.scale + (item.placeOffset || 0);
+    }
+    pointAt(itemId, ox, oy, angle) {
+      const ring = this.ringOf(itemId);
+      return { x: ox + ring * Math.cos(angle), y: oy + ring * Math.sin(angle) };
+    }
+    /* Exact final validation, in the same terms the server uses. Kept separate
+     * from the aperture solve so that a candidate carried across a tick can be
+     * re-tested on its own without rebuilding anything. */
+    legalAt(itemId, x, y, exclude, addRadius = 0) {
+      const item = Items[itemId];
+      if (!item) return false;
+      if (itemId !== 18) {
+        const mid = Config_default.mapScale / 2, half = Config_default.riverWidth / 2;
+        if (y >= mid - half && y <= mid + half) return false;
+      }
+      const exId = exclude ? exclude.id : -1;
+      const blockers = this.harvest(x, y, item.scale + UPE_MAX_SCALE + Math.max(0, addRadius), null, 0);
+      for (let i = 0; i < blockers.length; i++) {
+        const o = blockers[i];
+        if (o.id === exId) continue;
+        const p = o.pos.current;
+        const rr = item.scale + o.placementScale + addRadius;
+        if (rr <= 0) continue;
+        const dx = x - p.x, dy = y - p.y;
+        if (dx * dx + dy * dy < rr * rr) return false;
+      }
+      for (const o of this.wideBlockers) {
+        if (o.id === exId || !o.pos) continue;
+        const p = o.pos.current;
+        const rr = item.scale + o.placementScale + addRadius;
+        if (rr <= 0) continue;
+        const dx = x - p.x, dy = y - p.y;
+        if (dx * dx + dy * dy < rr * rr) return false;
+      }
+      return true;
+    }
+    canPlaceAngle(itemId, ox, oy, angle, exclude) {
+      const p = this.pointAt(itemId, ox, oy, angle);
+      return this.legalAt(itemId, p.x, p.y, exclude);
+    }
+    /* Smallest slack, in px, between the footprint at (x,y) and anything that
+     * could reject it. Negative means illegal. Feeds the acceptance model: a
+     * candidate that clears by 1px against a position we predicted is not the
+     * same bet as one that clears by 30. */
+    slackAt(itemId, x, y, exclude, ox, oy) {
+      const item = Items[itemId];
+      if (!item) return 0;
+      let slack = Infinity;
+      const exId = exclude ? exclude.id : -1;
+      /* Given the ring origin, reuse the harvest the aperture solve already
+       * took: every candidate sits on that ring, so a blocker within
+       * foot + R of any candidate is within ring + foot + R of the origin,
+       * which is exactly what that window covers. Scoring forty candidates
+       * then costs one spatial query in total instead of forty. */
+      const ring = ox === undefined ? 0 : this.ringOf(itemId);
+      const blockers = ox === undefined
+        ? this.harvest(x, y, item.scale + UPE_MAX_SCALE, null, 0)
+        : this.harvest(ox, oy, ring + item.scale + UPE_MAX_SCALE, this._aimHint(), ring);
+      for (let i = 0; i < blockers.length; i++) {
+        const o = blockers[i];
+        if (o.id === exId) continue;
+        const p = o.pos.current;
+        const d = Math.hypot(x - p.x, y - p.y) - (item.scale + o.placementScale);
+        if (d < slack) slack = d;
+      }
+      for (const o of this.wideBlockers) {
+        if (o.id === exId || !o.pos) continue;
+        const p = o.pos.current;
+        const d = Math.hypot(x - p.x, y - p.y) - (item.scale + o.placementScale);
+        if (d < slack) slack = d;
+      }
+      if (itemId !== 18) {
+        const mid = Config_default.mapScale / 2, half = Config_default.riverWidth / 2;
+        const d = Math.max(mid - half - y, y - (mid + half));
+        if (d < slack) slack = d;
+      }
+      return slack === Infinity ? 999 : slack;
+    }
+    /* How far our own position may have drifted from the prediction by the time
+     * the server tests the placement. Our inputs are known exactly and
+     * MovementSimulation reproduces the server's integration, so the residual
+     * is jitter and unseen collisions, not ignorance of our own movement. */
+    selfUncertainty(delayMs) {
+      const my = this.client.myPlayer;
+      if (!my) return 6;
+      const perTick = my.speed || 0;
+      const drift = perTick * (this.clock.jitter / UPE_TICK_MS);
+      return 1.5 + drift + (this.clock.horizonTicks(delayMs) > 1 ? perTick * .35 : 0);
+    }
+    /* ── candidates ───────────────────────────────────────────────────────
+     * ADAPTIVE GENERATION.
+     *
+     * Not a table. The set is assembled from points the geometry itself names,
+     * and then refined only where refinement can pay:
+     *
+     *   aim angles      every direction a caller actually wants, kept exactly
+     *                   when legal and snapped to the nearest legal real when
+     *                   not. A fixed table cannot preserve a wanted angle; it
+     *                   can only round it, which moves aim without adding any
+     *                   candidate.
+     *   aperture edges  the exact tangent angles, pulled inside by
+     *                   UPE_EDGE_INSET. These are the tight-packing angles the
+     *                   sampled placers approximate with their "perfect" flag.
+     *   aperture mids   maximum geometric clearance inside each gap.
+     *   coarse ring     a uniform sweep, filtered through the apertures, so
+     *                   that a gap no caller pointed at still contributes.
+     *   refinement      hill climb on the score inside the winning aperture:
+     *                   coarse step, then half, then a quarter.
+     *
+     * Because every aperture always contributes at least its two edges and its
+     * midpoint, the generator cannot return empty while legal ground exists.
+     * That is the property no sample count can buy. */
+    candidates(opts) {
+      const itemId = opts.itemId;
+      const item = Items[itemId];
+      if (!item) return [];
+      const ox = opts.x, oy = opts.y;
+      const apertures = this.apertures(itemId, ox, oy, opts.exclude, opts.extraBlockers);
+      if (apertures.length === 0) return [];
+      const ring = this.ringOf(itemId);
+      const foot = item.scale;
+      const coarse = opts.coarse === undefined ? 32 : opts.coarse;
+      const inset = opts.inset === undefined ? UPE_EDGE_INSET : opts.inset;
+      const out = [];
+      const seen = [];
+      const add = (angle, kind) => {
+        if (angle === null || angle === undefined || !Number.isFinite(angle)) return;
+        const a = UPEGeom.norm(angle);
+        for (let i = 0; i < seen.length; i++) {
+          if (UPEGeom.dist(seen[i], a) < UPE_DEDUP) return;
+        }
+        const ap = UPEGeom.inAperture(apertures, a);
+        if (!ap) return;
+        seen.push(a);
+        out.push({
+          id: itemId,
+          angle: a,
+          x: ox + ring * Math.cos(a),
+          y: oy + ring * Math.sin(a),
+          scale: foot,
+          aperture: ap,
+          margin: UPEGeom.edgeMargin(ap, a),
+          kind: kind,
+          placeable: true,
+          perfect: false,
+          score: 0
+        });
+      };
+      const aims = opts.aims;
+      if (aims) {
+        for (let i = 0; i < aims.length; i++) {
+          const want = aims[i];
+          if (want === null || want === undefined || !Number.isFinite(want)) continue;
+          if (UPEGeom.inAperture(apertures, want)) add(want, "aim"); else add(UPEGeom.nearestFree(apertures, want, inset), "snap");
+        }
+      }
+      for (let i = 0; i < apertures.length; i++) {
+        const ap = apertures[i];
+        /* A full circle has no tangents and no meaningful midpoint; in an open
+         * field the aims and the sweep are the whole set. */
+        if (ap[2] >= UPE_TAU - UPE_EPS) continue;
+        const usable = Math.min(inset, ap[2] / 3);
+        add(UPEGeom.norm(ap[0] + usable), "edge");
+        add(UPEGeom.norm(ap[1] - usable), "edge");
+        if (ap[2] > usable * 4) add(UPEGeom.mid(ap), "mid");
+      }
+      if (coarse > 0) {
+        const step = UPE_TAU / coarse;
+        for (let i = 0; i < coarse; i++) add(i * step, "ring");
+      }
+      /* An edge candidate is exactly the tight-packing angle the old placer
+       * called "perfect"; here it is the tangent itself rather than whichever
+       * table sample happened to fall beside it. */
+      for (let i = 0; i < out.length; i++) {
+        out[i].perfect = out[i].kind === "edge" || out[i].margin <= inset * 1.5;
+      }
+      this._stats.candidates += out.length;
+      if (!opts.score) return out;
+      const ctx = opts.context || {};
+      for (let i = 0; i < out.length; i++) out[i].score = opts.score(out[i], ctx);
+      /* Refinement, only where it can pay: the best few candidates are walked
+       * inward with a shrinking step, three levels deep. This is the whole
+       * reason a coarse ring is enough — resolution is spent where the score is
+       * already high instead of spread evenly over directions nothing wants. */
+      const depth = opts.refine === undefined ? 3 : opts.refine;
+      if (depth > 0) {
+        out.sort((a, b) => b.score - a.score);
+        const top = Math.min(opts.refineTop || 3, out.length);
+        for (let i = 0; i < top; i++) {
+          const base = out[i];
+          let step = Math.min(base.aperture[2] / 4, UPE_TAU / (coarse > 0 ? coarse : 32) / 2);
+          for (let level = 0; level < depth; level++) {
+            let improved = false;
+            for (let s = 0; s < 2; s++) {
+              const a = UPEGeom.norm(base.angle + (s === 0 ? step : -step));
+              const ap = UPEGeom.inAperture(apertures, a);
+              if (!ap) continue;
+              const probe = {
+                id: itemId,
+                angle: a,
+                x: ox + ring * Math.cos(a),
+                y: oy + ring * Math.sin(a),
+                scale: foot,
+                aperture: ap,
+                margin: UPEGeom.edgeMargin(ap, a),
+                kind: base.kind,
+                placeable: true,
+                perfect: false,
+                score: 0
+              };
+              probe.score = opts.score(probe, ctx);
+              if (probe.score > base.score + UPE_EPS) {
+                base.angle = probe.angle;
+                base.x = probe.x;
+                base.y = probe.y;
+                base.aperture = probe.aperture;
+                base.margin = probe.margin;
+                base.score = probe.score;
+                improved = true;
+                break;
+              }
+            }
+            step *= .5;
+            if (!improved && step < UPE_DEDUP) break;
+          }
+        }
+        /* Refinement moves candidates after the dedup pass, so two of them can
+         * land on the same ground. Drop the loser rather than offer the same
+         * placement twice under two names. */
+        out.sort((a, b) => b.score - a.score);
+        for (let i = out.length - 1; i > 0; i--) {
+          for (let j = 0; j < i; j++) {
+            if (UPEGeom.dist(out[i].angle, out[j].angle) < UPE_DEDUP) {
+              removeFast(out, i);
+              break;
+            }
+          }
+        }
+      }
+      out.sort((a, b) => b.score - a.score);
+      return out;
+    }
+    /* ── scoring ──────────────────────────────────────────────────────────
+     * Every component is normalised to [0,1] and every weight is a stated
+     * number of points, so a score can be read back as a sentence rather than
+     * treated as a magic number.
+     *
+     *   S = accept * ( w.alignNow    * alignNow
+     *                + w.alignFuture * alignFuture
+     *                + w.clearance   * clearance
+     *                + w.containment * containment
+     *                + w.escape      * escapeDenial
+     *                + w.tactical    * tactical
+     *                + w.timing      * timing )
+     *       - ( w.selfBlock * selfBlock
+     *         + w.friendly  * friendlyRisk
+     *         + w.latency   * latencyRisk
+     *         + w.uncertain * uncertainty )
+     *
+     * `accept` multiplies rather than adds because a placement the server will
+     * reject is worth nothing at all, however good its tactics — an additive
+     * term would let a brilliant angle outrank a legal one. The penalties stay
+     * outside the product because they are costs we pay whether or not the
+     * placement lands.
+     *
+     * alignFuture outweighs alignNow because the server tests the placement at
+     * the end of the horizon, not at the instant we read the enemy's position. */
+    static WEIGHTS={
+      alignNow: 1,
+      alignFuture: 1.2,
+      clearance: .55,
+      containment: .7,
+      escape: .9,
+      tactical: 2,
+      timing: .4,
+      selfBlock: .8,
+      friendly: .6,
+      latency: .7,
+      uncertain: .5
+    };
+    /* accept in [0,1]: how likely the server is to take this placement given
+     * that it will test it against its own copy of our position.
+     *   m = the smaller of the angular slack (as arc length) and the radial
+     *       slack to the nearest blocker surface
+     *   e = predicted drift of our own position over the scheduling horizon
+     * m/(m+e+1) is 0 at a knife edge, 1/2 when slack equals drift, and tends to
+     * 1 when slack dominates. The +1 keeps it finite when both are zero. */
+    acceptance(candidate, ring, delayMs, exclude, ox, oy) {
+      const arc = candidate.margin * ring;
+      const radial = this.slackAt(candidate.id, candidate.x, candidate.y, exclude, ox, oy);
+      if (radial < 0) return 0;
+      const m = Math.min(arc, radial);
+      const e = this.selfUncertainty(delayMs);
+      return m / (m + e + 1);
+    }
+    /* Build the standard scorer for a placement role. Callers supply only the
+     * tactical term, which is the part that actually differs between auto
+     * place, preplace, replace, spam and retrap. */
+    makeScorer(spec) {
+      const engine = this;
+      const W = spec.weights || PlacementEngine.WEIGHTS;
+      const ring = this.ringOf(spec.itemId);
+      const delayMs = spec.delayMs || 0;
+      const exclude = spec.exclude || null;
+      const aimNow = spec.aimNow;
+      const aimFuture = spec.aimFuture;
+      const moveDir = spec.moveDir;
+      const confidence = spec.confidence === undefined ? .5 : spec.confidence;
+      const foot = Items[spec.itemId].scale;
+      /* A footprint this wide blocks its own ring for this many radians, so it
+       * is the natural unit for "one item's worth of clearance". */
+      const clearRef = Math.max(1e-3, Math.asin(Math.min(1, foot / ring)));
+      const halfWidth = clearRef;
+      const ox = spec.x, oy = spec.y;
+      return (cand, ctx) => {
+        const accept = engine.acceptance(cand, ring, delayMs, exclude, ox, oy);
+        if (accept <= 0) return -1e3;
+        let positive = 0;
+        if (aimNow !== null && aimNow !== undefined) {
+          positive += W.alignNow * (1 - UPEGeom.dist(cand.angle, aimNow) / Math.PI);
+        }
+        if (aimFuture !== null && aimFuture !== undefined) {
+          positive += W.alignFuture * (1 - UPEGeom.dist(cand.angle, aimFuture) / Math.PI);
+        }
+        positive += W.clearance * Math.min(1, cand.margin / clearRef);
+        if (spec.tactical) {
+          const t = spec.tactical(cand, ctx);
+          if (t) positive += W.tactical * Math.max(0, Math.min(1, t));
+        }
+        if (spec.containment) {
+          positive += W.containment * Math.max(0, Math.min(1, spec.containment(cand, ctx)));
+        }
+        if (spec.escape) {
+          positive += W.escape * Math.max(0, Math.min(1, spec.escape(cand, ctx)));
+        }
+        positive += W.timing * (delayMs <= 1 ? 1 : Math.max(0, 1 - delayMs / UPE_TICK_MS));
+        let penalty = W.uncertain * (1 - confidence);
+        /* Walking into our own build costs a tick of movement, so an angle
+         * inside the movement direction is discounted by how much of the
+         * footprint sits across it. */
+        if (moveDir !== null && moveDir !== undefined && spec.selfBlock !== false) {
+          const d = UPEGeom.dist(cand.angle, moveDir);
+          if (d < halfWidth) penalty += W.selfBlock * (1 - d / halfWidth);
+        }
+        if (spec.friendly) {
+          penalty += W.friendly * Math.max(0, Math.min(1, spec.friendly(cand, ctx)));
+        }
+        penalty += W.latency * Math.min(1, engine.selfUncertainty(delayMs) / Math.max(foot, 1));
+        return accept * positive - penalty;
+      };
+    }
+    /* The scorer both placers use. The geometric, timing and uncertainty terms
+     * are the engine's; the tactical and escape terms are the combat objective
+     * they share. Living here rather than on each module is the difference
+     * between one scoring model and two that drift apart.
+     *
+     * Score decides the ORDER candidates are offered in. Whether a candidate is
+     * taken at all is still the module's own isAutoPlaceAngle /
+     * isPrePlaceAngle, so the tactical rules are unchanged — they are just now
+     * applied best-first instead of in table-index order. */
+    combatScorer(itemId, myPos, enemy, delayMs, exclude) {
+      if (enemy && !enemy.pos) enemy = null;
+      const st = enemy ? this.predict.state(enemy) : null;
+      const fut = st ? this.predict.at(st, this.clock.horizonTicks(delayMs || 0)) : null;
+      const foot = Items[itemId].scale;
+      const enemyR = enemy ? enemy.collisionScale : 0;
+      const mh = this.client._ModuleHandler;
+      return this.makeScorer({
+        itemId: itemId,
+        x: myPos.x,
+        y: myPos.y,
+        delayMs: delayMs || 0,
+        exclude: exclude || null,
+        confidence: st ? st.confidence : .5,
+        moveDir: mh ? mh.move_dir : null,
+        aimNow: st ? Math.atan2(st.y - myPos.y, st.x - myPos.x) : null,
+        aimFuture: fut ? Math.atan2(fut.y - myPos.y, fut.x - myPos.x) : null,
+        /* Tactical: how much of the item lands on the target where the server
+         * will see it. 1 when the footprint covers them, falling off over one
+         * footprint width, 0 once it cannot reach at all. */
+        tactical: cand => {
+          if (!fut) return 0;
+          const d = Math.hypot(cand.x - fut.x, cand.y - fut.y);
+          const touch = foot + enemyR;
+          if (d <= touch) return 1;
+          if (d >= touch + foot) return 0;
+          return 1 - (d - touch) / foot;
+        },
+        /* Escape denial: how much of the target's own ring of escape
+         * directions this footprint removes. */
+        escape: cand => {
+          if (!fut) return 0;
+          const dx = cand.x - fut.x, dy = cand.y - fut.y;
+          const d = Math.hypot(dx, dy);
+          const reach = foot + enemyR;
+          if (d >= reach * 2 || d < UPE_EPS) return 0;
+          return Math.min(1, (reach * 2 - d) / (reach * 2));
+        }
+      });
+    }
+    stats() {
+      return this._stats;
+    }
+  }
+  const PlacementEngine_default = PlacementEngine;
   class ObjectManager {
     objects=new Map;
     grid2D=new SpatialHashGrid2D(100);
@@ -5756,6 +6938,9 @@ window.grbtp = 35;
     insertObject(object) {
       this.grid2D.insert(object.pos.current.x, object.pos.current.y, object.collisionScale, object.id);
       this.objects.set(object.id, object);
+      /* New occupancy: drop only the cached placement work whose own ring could
+       * reach this object. Nothing else is touched. */
+      if (this.client.PlacementEngine) this.client.PlacementEngine.onObjectAdded(object);
       if (object instanceof PlayerObject) {
         const {PlayerManager: PlayerManager, myPlayer: myPlayer} = this.client;
         const owner = PlayerManager.playerData.get(object.ownerID) || PlayerManager.createPlayer({
@@ -5785,6 +6970,10 @@ window.grbtp = 35;
     removeObject(object) {
       this.grid2D.remove(object.pos.current.x, object.pos.current.y, object.collisionScale, object.id);
       this.objects.delete(object.id);
+      /* The occupancy is gone the instant the packet lands, not at the next
+       * tick. The engine drops the affected caches here and records the break
+       * so the spam / replace / retrap fast paths can act on it immediately. */
+      if (this.client.PlacementEngine) this.client.PlacementEngine.onObjectRemoved(object);
       if (object instanceof PlayerObject) {
         const player = this.client.PlayerManager.playerData.get(object.ownerID);
         if (player !== void 0) {
@@ -5815,8 +7004,14 @@ window.grbtp = 35;
       }
     }
     removePlayerObjects(player) {
-      for (const object of player.objects) {
-        this.removeObject(object);
+      const engine = this.client.PlacementEngine;
+      if (engine) engine._bulkRemoval = true;
+      try {
+        for (const object of player.objects) {
+          this.removeObject(object);
+        }
+      } finally {
+        if (engine) engine._bulkRemoval = false;
       }
     }
     resetTurret(id) {
@@ -5848,18 +7043,16 @@ window.grbtp = 35;
         }
       }
     }
+    /* Routed through the engine. The old body queried the grid with search = 1,
+     * which reaches only 100-200px from the point, while a blocker can reject a
+     * placement from item.scale + 300 away (item 21) and a sapling from
+     * item.scale + 110. Anything in between was invisible, so this returned
+     * true for ground the server then refused. The engine sizes its window from
+     * the geometry instead. */
     canPlaceItem(id, position, addRadius = 0) {
-      if (id !== 18 && pointInRiver(position)) {
-        return false;
-      }
-      const item = Items[id];
-      return !this.grid2D.query(position.x, position.y, 1, id2 => {
-        const object = this.objects.get(id2);
-        const scale = item.scale + object.placementScale + addRadius;
-        if (position.distance(object.pos.current) < scale) {
-          return true;
-        }
-      });
+      const engine = this.client.PlacementEngine;
+      if (!engine) return false;
+      return engine.legalAt(id, position.x, position.y, null, addRadius);
     }
     inPlacementRange(object) {
       const owner = this.client.PlayerManager.playerData.get(object.ownerID);
@@ -5872,51 +7065,70 @@ window.grbtp = 35;
       const range = owner.scale * 2 + item.scale + item.placeOffset;
       return a0.distance(b0) <= range || a1.distance(b0) <= range || a2.distance(b0) <= range;
     }
+    /* Routed through the engine, keeping the same contract: an array of raw
+     * angles, nearest-to-targetAngle first.
+     *
+     * Two defects went with the old body. It queried the grid with search = 1,
+     * so a blocker more than ~100-200px from the player simply did not produce
+     * an arc and the angle it covers was offered as legal; and findPlacementAngles
+     * returned the exact tangent angles, which clear by zero margin against a
+     * position the server holds its own copy of. The engine solves the same
+     * arcs over a correctly sized window, and hands back angles pulled inside
+     * their aperture so there is real slack to absorb the difference. */
     getBestPlacementAngles(options) {
-      const {position: position, id: id, targetAngle: targetAngle, ignoreID: ignoreID, reduce: reduce, preplace: preplace, fill: fill} = options;
+      const {position: position, id: id, targetAngle: targetAngle, ignoreID: ignoreID, reduce: reduce, fill: fill} = options;
       const item = DataHandler_default.getItem(id);
-      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
-      const length = myPlayer.getItemPlaceScale(id);
-      const angles = [];
-      this.grid2D.query(position.x, position.y, 1, id2 => {
-        const object = this.objects.get(id2);
-        if (ignoreID !== null && ignoreID === object.id) {
-          return;
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler, PlacementEngine: engine} = this.client;
+      if (!engine || !item) return [];
+      const length = engine.ringOf(id);
+      const exclude = ignoreID !== null && ignoreID !== undefined ? {
+        id: ignoreID
+      } : null;
+      const apertures = engine.apertures(id, position.x, position.y, exclude);
+      if (apertures.length === 0) return [];
+      const wholeRingFree = apertures.length === 1 && apertures[0][2] >= UPE_TAU - 1e-6;
+      if (wholeRingFree && fill) {
+        /* Nothing on the ring at all. Spikes are not worth spending in the
+         * open, and everything else fans out around the aim the way it did
+         * before. */
+        if (item.itemType === 4) return [];
+        const offset = Math.asin(Math.min(1, (2 * item.scale + 1) / (2 * length))) * 2;
+        return [ targetAngle, targetAngle - offset, targetAngle + offset, reverseAngle(targetAngle) ].slice(0, Settings_default._placeAttempts);
+      }
+      const out = [];
+      const push = a => {
+        if (a === null || a === undefined || !Number.isFinite(a)) return;
+        const n = UPEGeom.norm(a);
+        for (let i = 0; i < out.length; i++) {
+          if (UPEGeom.dist(out[i], n) < UPE_DEDUP) return;
         }
-        const pos1 = object.pos.current;
-        const angle = position.angle(pos1);
-        const a = object.placementScale + item.scale + 1;
-        const b = position.distance(pos1);
-        const c = length;
-        const cosArg = (b * b + c * c - a * a) / (2 * b * c);
-        if (cosArg < -1) {
-          angles.push([ angle, Math.PI ]);
-        } else if (cosArg <= 1) {
-          const offset = Math.acos(cosArg);
-          angles.push([ angle, offset ]);
-        }
-      });
-      const finalAngles = findPlacementAngles(angles);
-      const targetAngleOverlaps = angles.some(([angle, offset]) => getAngleDist(targetAngle, angle) <= offset);
-      if (!targetAngleOverlaps) {
-        finalAngles.push(targetAngle);
-        if (finalAngles.length === 1 && fill) {
-          if (item.itemType === 4) {
-            return [];
-          }
-          const offset = Math.asin((2 * item.scale + 1) / (2 * length)) * 2;
-          finalAngles.push(targetAngle - offset);
-          finalAngles.push(targetAngle + offset);
-          finalAngles.push(reverseAngle(targetAngle));
-          return finalAngles.slice(0, Settings_default._placeAttempts);
+        out.push(n);
+      };
+      /* The aim itself when it is legal, otherwise the nearest legal real to
+       * it — never a rounded table sample. */
+      push(UPEGeom.nearestFree(apertures, targetAngle));
+      for (let i = 0; i < apertures.length; i++) {
+        const ap = apertures[i];
+        const usable = Math.min(UPE_EDGE_INSET, ap[2] / 3);
+        const lo = UPEGeom.norm(ap[0] + usable), hi = UPEGeom.norm(ap[1] - usable);
+        push(lo);
+        push(hi);
+        if (ap[2] > usable * 4) push(UPEGeom.mid(ap));
+        /* the point of this aperture closest to the aim, so an enumerating
+         * caller sees the best each gap can offer rather than only its ends */
+        if (!UPEGeom.inAperture([ ap ], targetAngle)) {
+          push(UPEGeom.dist(lo, targetAngle) <= UPEGeom.dist(hi, targetAngle) ? lo : hi);
         }
       }
-      let anglesSorted = finalAngles.sort(Sorting_default.byAngleDistance(targetAngle));
+      let anglesSorted = out.sort(Sorting_default.byAngleDistance(targetAngle));
       if (reduce) {
         if (!DataHandler_default.canMoveOnTop(id) && ModuleHandler.move_dir !== null && myPlayer.speed !== 0) {
-          const scale = item.scale;
-          const offset = Math.asin(2 * scale / (2 * length));
-          anglesSorted = anglesSorted.filter(angle => getAngleDist(angle, ModuleHandler.move_dir) > offset);
+          const offset = Math.asin(Math.min(1, item.scale / length));
+          const kept = anglesSorted.filter(angle => getAngleDist(angle, ModuleHandler.move_dir) > offset);
+          /* Only drop the walk-into-it angles when something survives; losing
+           * every candidate to a movement filter is worse than building where
+           * we were about to step. */
+          if (kept.length) anglesSorted = kept;
         }
         return anglesSorted.slice(0, Settings_default._placeAttempts);
       }
@@ -7484,6 +8696,9 @@ window.grbtp = 35;
         }
 
        case "a":
+        /* The one moment the server's clock is observable from here. Everything
+         * the engine schedules is measured from it. */
+        if (this.client.PlacementEngine) this.client.PlacementEngine.clock.onServerTick();
         PlayerManager2.updatePlayer(temp[1]);
         for (let i = 0; i < this.PacketQueue.length; i++) {
           this.PacketQueue[i]();
@@ -7508,7 +8723,11 @@ window.grbtp = 35;
         break;
 
        case "Q":
-        if (window._rynBrokenSids) window._rynBrokenSids.push(temp[1]);
+        /* The destroy packet. removeObjectByID reaches the placement engine,
+         * which drops the caches this object touched and hands the break to
+         * every module that wants it — all before this switch returns. The
+         * window._rynBrokenSids array that used to be filled here was read once
+         * a tick by TrapRebuild and is gone with it. */
         ObjectManager2.removeObjectByID(temp[1]);
         break;
 
@@ -11070,8 +12289,6 @@ window.grbtp = 35;
       }
     }
   }
-  const _prePlaceAngleCache = new WeakMap;
-  const PRE_PLACE_ROTATION = 2;
   class AutoPush {
     moduleName="autoPush";
     client;
@@ -11284,75 +12501,76 @@ window.grbtp = 35;
     }
   }
   const AutoGatherBreak_default = AutoGatherBreak;
+  /* Traps of ours that were destroyed get rebuilt where they stood.
+   *
+   * The old module kept its own copy of every nearby trap, read a global array
+   * of broken sids that the socket handler pushed into, and then acted on the
+   * next tick — up to 111ms after the trap was already gone, and only if the
+   * one angle straight at the old position happened to be legal.
+   *
+   * It now works off the engine's break feed, which is written the instant the
+   * destroy packet lands, and asks the engine for the nearest legal direction
+   * instead of testing exactly one. AutoPlacer's own fast path handles the
+   * trap-that-held-an-enemy case, so this stays out of the way when the ledger
+   * says that ground is already claimed. */
   class TrapRebuild {
     moduleName="trapRebuild";
     client;
-    _mine=new Map;
-    _tolerance=20;
+    _tolerance=26;
+    _lastHandled=-1;
     constructor(client2) {
       this.client = client2;
-      if (!window._rynBrokenSids) window._rynBrokenSids = [];
     }
     reset() {
-      this._mine.clear();
+      this._lastHandled = -1;
     }
-    postTick() {
-      const {myPlayer: myPlayer, ObjectManager: OM, EnemyManager: EM, _ModuleHandler: MH} = this.client;
-      const broken = window._rynBrokenSids || [];
-      if (!Settings_default._trapRebuild || !myPlayer || !myPlayer.inGame) {
-        this._mine.clear();
-        broken.length = 0;
-        return;
-      }
-      const ap = MH.staticModules.autoPlacer;
+    onBreak(info) {
+      if (!Settings_default._trapRebuild) return;
+      if (info.type !== 15 || !info.mine) return;
+      this._rebuild(info);
+    }
+    _rebuild(info) {
+      const {myPlayer: myPlayer, _ModuleHandler: MH, PlacementEngine: engine, EnemyManager: EM} = this.client;
+      if (!myPlayer || !myPlayer.inGame || !engine || !MH) return;
+      if (MH.packetCount + UPE_PLACE_PACKETS > MH.packetLimit) return;
       const trapId = myPlayer.getItemByType(7);
+      if (trapId === null || trapId === undefined) return;
+      const {count: count, limit: limit} = myPlayer.getItemCount(Items[trapId].itemGroup);
+      if (count >= limit) return;
+      const enemy = EM ? EM.nearestEnemy : null;
       const myPos = myPlayer.pos.current;
-      if (broken.length && ap && trapId != null) {
-        const enemy = EM.nearestEnemy;
-        const near = enemy && myPos.distance(enemy.pos.current) < 300;
-        if (near && !ap._isItemLimit(trapId, myPlayer)) {
-          const item = Items[trapId];
-          const dist = 35 + item.scale + (item.placeOffset || 0);
-          for (const sid of broken) {
-            const rec = this._mine.get(sid);
-            if (!rec) continue;
-            if (rec.type !== 15) continue;
-            if (MH.packetCount + 5 > MH.packetLimit) break;
-            const angle = Math.atan2(rec.y - myPos.y, rec.x - myPos.x);
-            const px = myPos.x + dist * Math.cos(angle);
-            const py = myPos.y + dist * Math.sin(angle);
-            if (Math.hypot(px - rec.x, py - rec.y) > this._tolerance) continue;
-            let banned = false;
-            if (ap._bannedAngles) {
-              for (const ba of ap._bannedAngles.keys()) {
-                if (Math.abs(ba - angle) < .01) {
-                  banned = true;
-                  break;
-                }
-              }
-            }
-            if (banned) continue;
-            if (!ap._canPlace(trapId, angle, myPos, OM, null)) continue;
-            MH.place(7, angle);
-            MH.placeAngles[0] = 7;
-            MH.placeAngles[1].push(angle);
-          }
-        }
+      if (!enemy || myPos.distance(enemy.pos.current) >= 300) return;
+      const apertures = engine.apertures(trapId, myPos.x, myPos.y, null);
+      if (apertures.length === 0) return;
+      const want = Math.atan2(info.y - myPos.y, info.x - myPos.x);
+      const angle = UPEGeom.nearestFree(apertures, want);
+      if (angle === null) return;
+      const p = engine.pointAt(trapId, myPos.x, myPos.y, angle);
+      if (Math.hypot(p.x - info.x, p.y - info.y) > this._tolerance) return;
+      const foot = Items[trapId].scale;
+      if (!engine.ledger.free(p.x, p.y, foot, UPE_PRIORITY.replace)) return;
+      if (!engine.legalAt(trapId, p.x, p.y, null)) return;
+      MH.place(7, angle);
+      MH.placeAngles[0] = 7;
+      MH.placeAngles[1].push(angle);
+      engine.ledger.reserve(p.x, p.y, foot, UPE_PRIORITY.replace, this.moduleName, engine.tick, 1);
+      engine._stats.fastPaths++;
+    }
+    /* Catch-up pass: a break that arrived while the packet budget was spent,
+     * or before the module was enabled, is retried once on the tick. */
+    postTick() {
+      if (!Settings_default._trapRebuild) return;
+      const engine = this.client.PlacementEngine;
+      if (!engine) return;
+      const tick = engine.tick;
+      if (tick === this._lastHandled) return;
+      this._lastHandled = tick;
+      const breaks = engine.recentBreaks(tick - 1);
+      for (let i = 0; i < breaks.length; i++) {
+        const info = breaks[i];
+        if (info.type !== 15 || !info.mine) continue;
+        this._rebuild(info);
       }
-      broken.length = 0;
-      this._mine.clear();
-      OM.grid2D.query(myPos.x, myPos.y, 4, id => {
-        const obj = OM.objects.get(id);
-        if (!obj || !(obj instanceof PlayerObject)) return;
-        if (obj.type !== 15) return;
-        if (!myPlayer.isMyPlayerByID(obj.ownerID)) return;
-        const p = obj.pos.current;
-        this._mine.set(obj.id, {
-          x: p.x,
-          y: p.y,
-          type: obj.type
-        });
-      });
     }
   }
   const TrapRebuild_default = TrapRebuild;
@@ -12009,58 +13227,159 @@ window.grbtp = 35;
       };
     }
   };
-  function _getCachedPrePlaceAngles(client, tickCount, cacheKey, computeAngle, forceFull = false, rotationGroups = PRE_PLACE_ROTATION, priorityIndex = -1) {
-    let clientCache = _prePlaceAngleCache.get(client);
-    if (!clientCache) {
-      clientCache = new Map;
-      _prePlaceAngleCache.set(client, clientCache);
-    }
-    let entry = clientCache.get(cacheKey);
-    if (!entry) {
-      entry = {
-        angles: new Array(72).fill(null),
-        lastTick: -1,
-        wasFull: false
-      };
-      clientCache.set(cacheKey, entry);
-    }
-    const isNewTick = entry.lastTick !== tickCount;
-    if (isNewTick) {
-      entry.lastTick = tickCount;
-      entry.wasFull = false;
-    }
-    if (forceFull && !entry.wasFull) {
-      for (let i = 0; i < 72; i++) {
-        entry.angles[i] = computeAngle(i);
-      }
-      entry.wasFull = true;
-    } else if (isNewTick) {
-      const phase = tickCount % rotationGroups;
-      for (let i = phase; i < 72; i += rotationGroups) {
-        entry.angles[i] = computeAngle(i);
-      }
-      for (let i = 0; i < 72; i++) {
-        if (entry.angles[i] === null) entry.angles[i] = computeAngle(i);
-      }
-    }
-    if (priorityIndex >= 0 && priorityIndex < 72) {
-      entry.angles[priorityIndex] = computeAngle(priorityIndex);
-    }
-    return entry.angles;
-  }
   class AutoPlacer {
     moduleName="autoPlacer";
+    _enableSetting="_autoplacer";
     _glotusAngles=new Map;
     _glotusCount=0;
     client;
-    _bannedAngles=new Map;
+    /* Angles are real numbers now, not table indices, so a ban cannot be a Map
+     * keyed on an exact float — two attempts at "the same" direction never
+     * produce the same bits. It is an angular interval list instead, matched
+     * with a wrap-aware distance. */
+    _bannedAngles=[];
     _predictObjects=[];
-    _placedAngles=[];
+    _placedSlots=[];
     _tick=0;
     _lastPrePlaceObj=null;
     _spamPrePlacer=false;
     constructor(client2) {
       this.client = client2;
+    }
+    _isBanned(angle) {
+      for (let i = 0; i < this._bannedAngles.length; i++) {
+        if (UPEGeom.dist(this._bannedAngles[i].angle, angle) < UPE_BAN_TOLERANCE) return true;
+      }
+      return false;
+    }
+    _ban(angle, ticks) {
+      for (let i = 0; i < this._bannedAngles.length; i++) {
+        if (UPEGeom.dist(this._bannedAngles[i].angle, angle) < UPE_BAN_TOLERANCE) {
+          this._bannedAngles[i].expiry = this._tick + ticks;
+          return;
+        }
+      }
+      this._bannedAngles.push({ angle: UPEGeom.norm(angle), expiry: this._tick + ticks });
+    }
+    /* A placement we sent last tick either produced an object or was refused.
+     * The old check re-derived the angle from this tick's position and asked
+     * whether it was still placeable, which moves the point it is asking about;
+     * this asks about the exact ground the item was aimed at. Still empty means
+     * the server refused it, so stop spending packets on that direction. */
+    _reviewPlacedSlots() {
+      const engine = this.client.PlacementEngine;
+      if (!engine) {
+        this._placedSlots.length = 0;
+        return;
+      }
+      for (let i = this._placedSlots.length - 1; i >= 0; i--) {
+        const slot = this._placedSlots[i];
+        if (slot.tick >= this._tick) continue;
+        if (engine.legalAt(slot.id, slot.x, slot.y, null)) this._ban(slot.angle, 18);
+        removeFast(this._placedSlots, i);
+      }
+    }
+    _notePlaced(obj) {
+      this._placedSlots.push({ id: obj.id, angle: obj.angle, x: obj.x, y: obj.y, tick: this._tick });
+      if (this._placedSlots.length > 24) this._placedSlots.shift();
+    }
+    _breakTolerance=30;
+    /* ── destruction fast path ────────────────────────────────────────────
+     * Runs on the "Q" packet itself, in the same turn of the event loop, not on
+     * the next tick. The chain is exactly the one the redesign asked for:
+     *
+     *   object destroyed -> local occupancy invalidated (the engine dropped
+     *   only the cached solves whose ring could reach it) -> candidate
+     *   revalidated against a fresh local solve -> legal place sent.
+     *
+     * There is no world scan anywhere in it. The solve reads one harvest window
+     * sized from the geometry, which is about fifty grid cells, and the
+     * aperture set it produces is the exact legal set — so "bypassing the
+     * checker" here means not repeating analysis the state already answers,
+     * never sending a placement the server will refuse. The final legalAt call
+     * below is mandatory and is not skipped on any path. */
+    onBreak(info) {
+      if (!Settings_default[this._enableSetting]) return;
+      if (!Settings_default._replacer && !Settings_default._preplacer && !Settings_default._spamPreplace) return;
+      const {myPlayer: myPlayer, _ModuleHandler: mh, PlacementEngine: engine, EnemyManager: em} = this.client;
+      if (!myPlayer || !myPlayer.inGame || !engine || !mh) return;
+      if (mh.packetCount + UPE_PLACE_PACKETS > mh.packetLimit) return;
+      const myPos = myPlayer.pos.current;
+      const trapId = myPlayer.getItemByType(7);
+      const spikeId = myPlayer.getItemByType(4);
+      /* A trap that died wants a trap back; anything else wants a spike. */
+      let id = null, type = 4;
+      if (info.type === 15 && trapId !== null && !this._isItemLimit(trapId, myPlayer)) {
+        id = trapId;
+        type = 7;
+      } else if (spikeId !== null && !this._isItemLimit(spikeId, myPlayer)) {
+        id = spikeId;
+        type = 4;
+      }
+      if (id === null) return;
+      const item = Items[id];
+      const ring = engine.ringOf(id);
+      const foot = item.scale;
+      const enemy = em ? em.nearestEnemy : null;
+      const st = enemy ? engine.predict.state(enemy) : null;
+      const fut = st ? engine.predict.at(st, engine.clock.horizonTicks(0)) : null;
+      /* Two objectives, one solve. Re-trapping aims at where the enemy will be
+       * when the server reads the packet; rebuilding aims at the ground that
+       * just came free. */
+      const retrap = type === 7 && enemy !== null && fut !== null && Math.hypot(fut.x - myPos.x, fut.y - myPos.y) < ring + foot + enemy.collisionScale + 30;
+      const aimAt = retrap ? fut : info;
+      const apertures = engine.apertures(id, myPos.x, myPos.y, null);
+      if (apertures.length === 0) return;
+      const wants = [ Math.atan2(aimAt.y - myPos.y, aimAt.x - myPos.x) ];
+      if (retrap) {
+        const tc = UPEGeom.contactAngles(myPos.x, myPos.y, ring, foot, fut.x, fut.y, enemy.collisionScale);
+        if (tc) {
+          wants.push(tc[0]);
+          wants.push(tc[1]);
+        }
+      }
+      let best = null, bestD = Infinity;
+      for (let i = 0; i < wants.length; i++) {
+        const a = UPEGeom.nearestFree(apertures, wants[i]);
+        if (a === null) continue;
+        const p = engine.pointAt(id, myPos.x, myPos.y, a);
+        const d = Math.hypot(p.x - aimAt.x, p.y - aimAt.y);
+        if (d < bestD) {
+          bestD = d;
+          best = { angle: a, x: p.x, y: p.y };
+        }
+      }
+      if (best === null) return;
+      /* Only act when the placement really reclaims what it is aiming at —
+       * a trap that reaches the enemy, or a build that lands on the ground that
+       * just opened. Otherwise this would be an ordinary auto place and the
+       * tick can have it. */
+      const tol = retrap ? foot + enemy.collisionScale : Math.max(this._breakTolerance, info.r * .6);
+      if (bestD > tol) return;
+      if (this._isBanned(best.angle)) return;
+      const priority = retrap ? UPE_PRIORITY.retrap : UPE_PRIORITY.replace;
+      if (!engine.ledger.free(best.x, best.y, foot, priority)) return;
+      if (!engine.legalAt(id, best.x, best.y, null)) return;
+      mh.place(type, best.angle);
+      mh.placedOnce = true;
+      mh.placeAngles[0] = type;
+      mh.placeAngles[1].push(best.angle);
+      engine.ledger.reserve(best.x, best.y, foot, priority, this.moduleName, engine.tick, 1);
+      this._notePlaced({ id: id, angle: best.angle, x: best.x, y: best.y });
+      engine._stats.fastPaths++;
+    }
+    _schedulePreplace(objects, trapId, ModuleHandler, PacketManager2) {
+      const engine = this.client.PlacementEngine;
+      if (!engine) return;
+      engine.schedulePreplace({
+        objects: objects,
+        trapId: trapId,
+        exclude: this._lastPrePlaceObj,
+        spam: this._spamPrePlacer,
+        owner: this.moduleName,
+        priority: this._retrapRole ? UPE_PRIORITY.retrap : UPE_PRIORITY.preplace,
+        onPlaced: obj => this._notePlaced(obj)
+      });
     }
     _lineInRect(x1, y1, x2, y2, ax, ay, bx, by) {
       let minX = ax, maxX = bx;
@@ -12090,83 +13409,124 @@ window.grbtp = 35;
       return true;
     }
     _getConfig(id, myPos) {
-      return angle => {
-        const item = Items[id];
-        const dist = 35 + item.scale + (item.placeOffset || 0);
-        return {
-          id: id,
-          angle: angle,
-          x: myPos.x + dist * Math.cos(angle),
-          y: myPos.y + dist * Math.sin(angle),
-          scale: item.scale
-        };
-      };
+      const engine = this.client.PlacementEngine;
+      const item = Items[id];
+      const dist = engine ? engine.ringOf(id) : Config_default.playerScale + item.scale + (item.placeOffset || 0);
+      return angle => ({
+        id: id,
+        angle: angle,
+        x: myPos.x + dist * Math.cos(angle),
+        y: myPos.y + dist * Math.sin(angle),
+        scale: item.scale
+      });
     }
     _canPlace(id, angle, myPos, ObjectManager2, excludeObj) {
-      const cfg = this._getConfig(id, myPos)(angle);
-      const cx = cfg.x, cy = cfg.y, cs = cfg.scale;
-      let collision = false;
-      ObjectManager2.grid2D.query(cx, cy, 4, objId => {
-        if (collision) return;
-        const obj = ObjectManager2.objects.get(objId);
-        if (!obj) return;
-        if (excludeObj && obj === excludeObj) return;
-        const blockS = obj.placementScale;
-        if (Math.hypot(cx - obj.pos.current.x, cy - obj.pos.current.y) < cs + blockS) collision = true;
-      });
-      if (collision) return false;
-      if (id !== 18) {
-        const mid = Config_default.mapScale / 2;
-        const riverHalf = Config_default.riverWidth / 2;
-        if (cy >= mid - riverHalf && cy <= mid + riverHalf) return false;
-      }
-      return true;
+      const engine = this.client.PlacementEngine;
+      if (!engine) return false;
+      return engine.canPlaceAngle(id, myPos.x, myPos.y, angle, excludeObj || null);
     }
     _isItemLimit(id, myPlayer) {
       const {count: count, limit: limit} = myPlayer.getItemCount(Items[id].itemGroup);
       return count >= limit;
     }
+    /* Every direction this module has a reason to want, handed to the engine as
+     * seeds. The engine keeps each one exactly when it is legal and replaces it
+     * with the nearest legal real when it is not; it never rounds one onto a
+     * table. Horizons come from the clock, so the "future" seeds are the enemy
+     * where the server will see it when it evaluates the packet, not where it
+     * is on screen now. */
+    _seedAims(id, myPos, enemy, engine, delayMs) {
+      const aims = [];
+      const mh = this.client._ModuleHandler;
+      if (mh && mh._currentAngle != null) aims.push(mh._currentAngle);
+      if (mh && mh._autoBreakActive && mh._lastBreakAngle != null) aims.push(mh._lastBreakAngle);
+      if (enemy) {
+        const st = engine.predict.state(enemy);
+        const now = Math.atan2(st.y - myPos.y, st.x - myPos.x);
+        aims.push(now);
+        const horizon = engine.clock.horizonTicks(delayMs || 0);
+        for (const h of [ horizon * .5, horizon, horizon + 1 ]) {
+          const f = engine.predict.at(st, h);
+          aims.push(Math.atan2(f.y - myPos.y, f.x - myPos.x));
+        }
+        /* The two angles at which the footprint exactly grazes the enemy: the
+         * extremes of "this build touches them", which a sampled table can only
+         * straddle. */
+        const ring = engine.ringOf(id);
+        const foot = Items[id].scale;
+        const touch = UPEGeom.contactAngles(myPos.x, myPos.y, ring, foot, st.x, st.y, enemy.collisionScale);
+        if (touch) {
+          aims.push(touch[0]);
+          aims.push(touch[1]);
+        }
+        const fut = engine.predict.at(st, engine.clock.horizonTicks(delayMs || 0));
+        const touchF = UPEGeom.contactAngles(myPos.x, myPos.y, ring, foot, fut.x, fut.y, enemy.collisionScale);
+        if (touchF) {
+          aims.push(touchF[0]);
+          aims.push(touchF[1]);
+        }
+        if (enemy.trappedIn) {
+          const t = enemy.trappedIn.pos.current;
+          aims.push(Math.atan2(t.y - myPos.y, t.x - myPos.x));
+        }
+      }
+      /* Ground that just came free: the direction of every break the engine has
+       * seen this tick and last, so rebuilding does not wait to be rediscovered
+       * by a sweep. */
+      const breaks = engine.recentBreaks(this._tick - 1);
+      for (let i = 0; i < breaks.length; i++) {
+        aims.push(Math.atan2(breaks[i].y - myPos.y, breaks[i].x - myPos.x));
+      }
+      const my = this.client.myPlayer;
+      if (my && my.trappedIn) {
+        const t = my.trappedIn.pos.current;
+        aims.push(Math.atan2(my.pos.current.y - t.y, my.pos.current.x - t.x));
+      }
+      return aims;
+    }
+    /* Candidate set for one item. Same contract as before — an array of
+     * { id, angle, x, y, scale, placeable, perfect } — but every entry is legal
+     * by construction instead of 72 fixed directions of which most are not, and
+     * the angles are real rather than multiples of 5 degrees. */
     _getPrePlaceAngles(id, myPos, myPlayer, ObjectManager2, excludeObj) {
       if (this._isItemLimit(id, myPlayer)) return [];
-      const tickCount = this.client._ModuleHandler.tickCount;
-      const cacheKey = this.moduleName + "_" + id + "_" + (excludeObj ? excludeObj.id : "n");
-      const getConfig = this._getConfig(id, myPos);
-      const retrapQuadrant = this.client._retrapQuadrant ?? -1;
-      const computeAngle = i => {
-        if (retrapQuadrant >= 0 && Math.floor(i / 18) === retrapQuadrant) {
-          return {
-            angle: i * (Math.PI * 2 / 72),
-            placeable: false,
-            perfect: false
-          };
-        }
-        const angle = i * (Math.PI * 2 / 72);
-        const cfg = getConfig(angle);
-        return {
-          ...cfg,
-          placeable: this._canPlace(id, angle, myPos, ObjectManager2, excludeObj),
-          perfect: false
-        };
-      };
-      const forceFull = tickCount < (this.client._focusUntilTick || -1);
-      const angles = _getCachedPrePlaceAngles(this.client, tickCount, cacheKey, computeAngle, forceFull, 1);
-      for (let i = 1; i < angles.length; i++) {
-        angles[i].perfect = false;
+      const engine = this.client.PlacementEngine;
+      if (!engine) return [];
+      const enemy = this.client.EnemyManager.nearestEnemy;
+      const cands = engine.candidates({
+        itemId: id,
+        x: myPos.x,
+        y: myPos.y,
+        exclude: excludeObj || null,
+        aims: this._seedAims(id, myPos, enemy, engine, 0),
+        coarse: UPE_COARSE_RING,
+        score: engine.combatScorer(id, myPos, enemy, 0, excludeObj || null),
+        refine: 3,
+        refineTop: 3
+      });
+      /* The retrap combo reserves one quarter of the ring for AutoRetrap; auto
+       * place stays out of it so the two do not spend the same ground. */
+      const q = this.client._retrapQuadrant;
+      if (q !== undefined && q !== null && q >= 0) {
+        return cands.filter(c => Math.floor(UPEGeom.norm(c.angle) / (Math.PI / 2)) !== q);
       }
-      if (angles[0]) angles[0].perfect = false;
-      for (let i = 1; i < angles.length; i++) {
-        if (angles[i].placeable && !angles[i - 1].placeable) angles[i].perfect = true;
-        if (!angles[i].placeable && angles[i - 1].placeable) angles[i - 1].perfect = true;
-      }
-      return angles;
+      return cands;
     }
     _addPredictObject(id, angle, preplace, myPos) {
       const item = Items[id];
-      const dist = 35 + item.scale + (item.placeOffset || 0);
+      const engine = this.client.PlacementEngine;
+      const dist = engine ? engine.ringOf(id) : Config_default.playerScale + item.scale + (item.placeOffset || 0);
       const x = myPos.x + dist * Math.cos(angle);
       const y = myPos.y + dist * Math.sin(angle);
       for (const obj of this._predictObjects) {
         if (obj.id !== 17 && Math.hypot(x - obj.x, y - obj.y) < item.scale + obj.scale) return;
+      }
+      /* One ledger across every placement path, so auto place cannot spend the
+       * ground preplace or retrap has already claimed this tick. */
+      if (engine) {
+        const priority = preplace ? this._retrapRole ? UPE_PRIORITY.retrap : UPE_PRIORITY.preplace : UPE_PRIORITY.autoplace;
+        if (!engine.ledger.free(x, y, item.scale, priority)) return;
+        engine.ledger.reserve(x, y, item.scale, priority, this.moduleName, engine.tick, 1);
       }
       this._predictObjects.push({
         id: id,
@@ -12424,8 +13784,8 @@ window.grbtp = 35;
       const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2, PacketManager: PacketManager2} = this.client;
       if (!myPlayer || !myPlayer.inGame) return;
       this._tick = this.client._ModuleHandler.tickCount;
-      for (const [angle, expiry] of this._bannedAngles) {
-        if (this._tick > expiry) this._bannedAngles.delete(angle);
+      for (let i = this._bannedAngles.length - 1; i >= 0; i--) {
+        if (this._tick > this._bannedAngles[i].expiry) removeFast(this._bannedAngles, i);
       }
       const enemy = EnemyManager2.nearestEnemy;
       if (!enemy) return;
@@ -12437,9 +13797,6 @@ window.grbtp = 35;
       const trapId = myPlayer.getItemByType(7);
       const spikeId = myPlayer.getItemByType(4);
       if (!spikeId && !trapId) return;
-      const _sm = this.client.SocketManager;
-      const pingTime = _sm?.pong ?? 0;
-      const minPingTime = _sm?.minPingTime ?? 0;
       const spikesOur = [];
       ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 5, id => {
         const obj = ObjectManager2.objects.get(id);
@@ -12455,10 +13812,6 @@ window.grbtp = 35;
         trapsOur.push(obj);
       });
       const enemyTrapped = trapsOur.find(t => t.pos.current.distance(enemyPos) < Items[t.type].scale) || null;
-      if (enemyTrapped && !this.client._wasEnemyTrapped) {
-        this.client._focusUntilTick = this.client._ModuleHandler.tickCount + 3;
-      }
-      this.client._wasEnemyTrapped = !!enemyTrapped;
       const imTrapped = !!myPlayer.isTrapped;
       const predictMoveAngle = getAngleFromBitmask(this.client.InputHandler.move, false) ?? 0;
       const canTrapTick = () => false;
@@ -12548,6 +13901,9 @@ window.grbtp = 35;
         const bestScore = Math.min(...validKb.map(v => v.alignment));
         return validKb.filter(v => v.alignment === bestScore).sort((a, b) => Math.hypot(enemyFut.x - a.angle.x, enemyFut.y - a.angle.y) - Math.hypot(enemyFut.x - b.angle.x, enemyFut.y - b.angle.y))[0]?.angle || null;
       };
+      /* The object last preplace was betting on is gone, so the bet came in:
+       * spam this tick. This was computed and then never read — the flag it
+       * was meant to set was only ever driven off the Re Placer toggle. */
       let forcedSpam = false;
       if (this._lastPrePlaceObj) {
         const stillExists = ObjectManager2.objects.has(this._lastPrePlaceObj.id);
@@ -12557,25 +13913,14 @@ window.grbtp = 35;
       }
       this._predictObjects = [];
       this._lastPrePlaceObj = null;
-      this._spamPrePlacer = false;
+      this._spamPrePlacer = forcedSpam;
       if (ModuleHandler.packetCount >= ModuleHandler.packetLimit) {
         return;
       }
-      if (Settings_default._replacer) {
+      if (Settings_default._replacer || Settings_default._spamPreplace) {
         this._spamPrePlacer = true;
       }
-      if (this._placedAngles && this._placedAngles.length > 0) {
-        const _chkS = spikeId ? this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null) : [];
-        const _chkT = trapId ? this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null) : [];
-        const _allChk = [ ..._chkS, ..._chkT ];
-        for (const pa of this._placedAngles) {
-          const _m = _allChk.find(a => Math.abs(a.angle - pa) < 0.01);
-          if (_m && _m.placeable) {
-            this._bannedAngles.set(pa, this._tick + 18);
-          }
-        }
-      }
-      this._placedAngles = [];
+      this._reviewPlacedSlots();
       if (Settings_default._preplacer && myPos.distance(enemyPos) < 300 && !(imTrapped && myPlayer.spikeDamage > 0)) {
         const findObject = this._getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2);
         if (findObject) {
@@ -12649,7 +13994,7 @@ window.grbtp = 35;
       {
         const spikeAngles2 = spikeId ? this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null) : [];
         const trapAngles2 = trapId ? this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null) : [];
-        const filterBanned = a => !this._bannedAngles.has(a.angle);
+        const filterBanned = a => !this._isBanned(a.angle);
         const validSpike = spikeAngles2.filter(a => filterBanned(a) && (a.placeable || a.perfect));
         const validTrap = trapAngles2.filter(a => filterBanned(a) && (a.placeable || a.perfect));
         const validAngles = [ ...validSpike, ...validTrap ];
@@ -12747,10 +14092,13 @@ window.grbtp = 35;
           }
           return false;
         };
-        for (const obj of validAngles.filter(a => a.perfect)) {
-          if (isAutoPlaceAngle(obj)) this._addPredictObject(obj.id, obj.angle, false, myPos);
-        }
-        for (const obj of validAngles.filter(a => a.placeable && !a.perfect)) {
+        /* The engine returns these ranked, so walk them in that order. The old
+         * code took every "perfect" (tangent) angle before any other, which
+         * put tight packing ahead of everything the score measures — including
+         * how likely the server is to accept it. Tight packing is still
+         * rewarded, through the escape-denial and tactical terms, but it no
+         * longer outranks a placement that actually lands on the target. */
+        for (const obj of validAngles) {
           if (isAutoPlaceAngle(obj)) this._addPredictObject(obj.id, obj.angle, false, myPos);
         }
       }
@@ -12764,49 +14112,10 @@ window.grbtp = 35;
         ModuleHandler.placeAngles[0] = type;
         ModuleHandler.placeAngles[1].push(obj.angle);
         ModuleHandler.moduleActive = true;
-        this._placedAngles.push(obj.angle);
+        this._notePlaced(obj);
       }
       if (preObjects.length > 0) {
-        const _aimAngle = () => {
-          const mh = ModuleHandler;
-          if (mh._autoBreakActive && mh._lastBreakAngle != null) return mh._lastBreakAngle;
-          return mh._currentAngle ?? 0;
-        };
-        setTimeout(() => {
-          try {
-            for (const obj of preObjects) {
-              PacketManager2.updateAngle(_aimAngle());
-            }
-          } catch (_) {}
-        }, 1);
-        setTimeout(() => {
-          try {
-            for (const obj of preObjects) {
-              if (ModuleHandler.packetCount + 5 > ModuleHandler.packetLimit) break;
-              const type = obj.id === trapId ? 7 : 4;
-              ModuleHandler.place(type, obj.angle);
-              ModuleHandler.placedOnce = true;
-              ModuleHandler.placeAngles[0] = type;
-              ModuleHandler.placeAngles[1].push(obj.angle);
-              ModuleHandler.moduleActive = true;
-              this._placedAngles.push(obj.angle);
-              PacketManager2.updateAngle(_aimAngle());
-            }
-          } catch (_) {}
-        }, Math.max(1, 111 - pingTime));
-        setTimeout(() => {
-          if (!this._spamPrePlacer) return;
-          try {
-            for (const obj of preObjects) {
-              if (ModuleHandler.packetCount + 5 > ModuleHandler.packetLimit) break;
-              const type = obj.id === trapId ? 7 : 4;
-              ModuleHandler.place(type, obj.angle);
-              ModuleHandler.placeAngles[1].push(obj.angle);
-              this._placedAngles.push(obj.angle);
-              PacketManager2.updateAngle(_aimAngle());
-            }
-          } catch (_) {}
-        }, Math.max(1, 111 - minPingTime));
+        this._schedulePreplace(preObjects, trapId, ModuleHandler, PacketManager2);
       }
     }
   }
@@ -12907,15 +14216,156 @@ window.grbtp = 35;
   const AutoPlacer_default = AutoPlacer;
   class AutoRetrap {
     moduleName="autoRetrap";
+    _retrapRole=true;
+    _enableSetting="_autoRetrap";
     client;
-    _bannedAngles=new Map;
+    /* Angles are real numbers now, not table indices, so a ban cannot be a Map
+     * keyed on an exact float — two attempts at "the same" direction never
+     * produce the same bits. It is an angular interval list instead, matched
+     * with a wrap-aware distance. */
+    _bannedAngles=[];
     _predictObjects=[];
-    _placedAngles=[];
+    _placedSlots=[];
     _tick=0;
     _lastPrePlaceObj=null;
     _spamPrePlacer=false;
     constructor(client2) {
       this.client = client2;
+    }
+    _isBanned(angle) {
+      for (let i = 0; i < this._bannedAngles.length; i++) {
+        if (UPEGeom.dist(this._bannedAngles[i].angle, angle) < UPE_BAN_TOLERANCE) return true;
+      }
+      return false;
+    }
+    _ban(angle, ticks) {
+      for (let i = 0; i < this._bannedAngles.length; i++) {
+        if (UPEGeom.dist(this._bannedAngles[i].angle, angle) < UPE_BAN_TOLERANCE) {
+          this._bannedAngles[i].expiry = this._tick + ticks;
+          return;
+        }
+      }
+      this._bannedAngles.push({ angle: UPEGeom.norm(angle), expiry: this._tick + ticks });
+    }
+    /* A placement we sent last tick either produced an object or was refused.
+     * The old check re-derived the angle from this tick's position and asked
+     * whether it was still placeable, which moves the point it is asking about;
+     * this asks about the exact ground the item was aimed at. Still empty means
+     * the server refused it, so stop spending packets on that direction. */
+    _reviewPlacedSlots() {
+      const engine = this.client.PlacementEngine;
+      if (!engine) {
+        this._placedSlots.length = 0;
+        return;
+      }
+      for (let i = this._placedSlots.length - 1; i >= 0; i--) {
+        const slot = this._placedSlots[i];
+        if (slot.tick >= this._tick) continue;
+        if (engine.legalAt(slot.id, slot.x, slot.y, null)) this._ban(slot.angle, 18);
+        removeFast(this._placedSlots, i);
+      }
+    }
+    _notePlaced(obj) {
+      this._placedSlots.push({ id: obj.id, angle: obj.angle, x: obj.x, y: obj.y, tick: this._tick });
+      if (this._placedSlots.length > 24) this._placedSlots.shift();
+    }
+    _breakTolerance=30;
+    /* ── destruction fast path ────────────────────────────────────────────
+     * Runs on the "Q" packet itself, in the same turn of the event loop, not on
+     * the next tick. The chain is exactly the one the redesign asked for:
+     *
+     *   object destroyed -> local occupancy invalidated (the engine dropped
+     *   only the cached solves whose ring could reach it) -> candidate
+     *   revalidated against a fresh local solve -> legal place sent.
+     *
+     * There is no world scan anywhere in it. The solve reads one harvest window
+     * sized from the geometry, which is about fifty grid cells, and the
+     * aperture set it produces is the exact legal set — so "bypassing the
+     * checker" here means not repeating analysis the state already answers,
+     * never sending a placement the server will refuse. The final legalAt call
+     * below is mandatory and is not skipped on any path. */
+    onBreak(info) {
+      if (!Settings_default[this._enableSetting]) return;
+      if (!Settings_default._replacer && !Settings_default._preplacer && !Settings_default._spamPreplace) return;
+      const {myPlayer: myPlayer, _ModuleHandler: mh, PlacementEngine: engine, EnemyManager: em} = this.client;
+      if (!myPlayer || !myPlayer.inGame || !engine || !mh) return;
+      if (mh.packetCount + UPE_PLACE_PACKETS > mh.packetLimit) return;
+      const myPos = myPlayer.pos.current;
+      const trapId = myPlayer.getItemByType(7);
+      const spikeId = myPlayer.getItemByType(4);
+      /* A trap that died wants a trap back; anything else wants a spike. */
+      let id = null, type = 4;
+      if (info.type === 15 && trapId !== null && !this._isItemLimit(trapId, myPlayer)) {
+        id = trapId;
+        type = 7;
+      } else if (spikeId !== null && !this._isItemLimit(spikeId, myPlayer)) {
+        id = spikeId;
+        type = 4;
+      }
+      if (id === null) return;
+      const item = Items[id];
+      const ring = engine.ringOf(id);
+      const foot = item.scale;
+      const enemy = em ? em.nearestEnemy : null;
+      const st = enemy ? engine.predict.state(enemy) : null;
+      const fut = st ? engine.predict.at(st, engine.clock.horizonTicks(0)) : null;
+      /* Two objectives, one solve. Re-trapping aims at where the enemy will be
+       * when the server reads the packet; rebuilding aims at the ground that
+       * just came free. */
+      const retrap = type === 7 && enemy !== null && fut !== null && Math.hypot(fut.x - myPos.x, fut.y - myPos.y) < ring + foot + enemy.collisionScale + 30;
+      const aimAt = retrap ? fut : info;
+      const apertures = engine.apertures(id, myPos.x, myPos.y, null);
+      if (apertures.length === 0) return;
+      const wants = [ Math.atan2(aimAt.y - myPos.y, aimAt.x - myPos.x) ];
+      if (retrap) {
+        const tc = UPEGeom.contactAngles(myPos.x, myPos.y, ring, foot, fut.x, fut.y, enemy.collisionScale);
+        if (tc) {
+          wants.push(tc[0]);
+          wants.push(tc[1]);
+        }
+      }
+      let best = null, bestD = Infinity;
+      for (let i = 0; i < wants.length; i++) {
+        const a = UPEGeom.nearestFree(apertures, wants[i]);
+        if (a === null) continue;
+        const p = engine.pointAt(id, myPos.x, myPos.y, a);
+        const d = Math.hypot(p.x - aimAt.x, p.y - aimAt.y);
+        if (d < bestD) {
+          bestD = d;
+          best = { angle: a, x: p.x, y: p.y };
+        }
+      }
+      if (best === null) return;
+      /* Only act when the placement really reclaims what it is aiming at —
+       * a trap that reaches the enemy, or a build that lands on the ground that
+       * just opened. Otherwise this would be an ordinary auto place and the
+       * tick can have it. */
+      const tol = retrap ? foot + enemy.collisionScale : Math.max(this._breakTolerance, info.r * .6);
+      if (bestD > tol) return;
+      if (this._isBanned(best.angle)) return;
+      const priority = retrap ? UPE_PRIORITY.retrap : UPE_PRIORITY.replace;
+      if (!engine.ledger.free(best.x, best.y, foot, priority)) return;
+      if (!engine.legalAt(id, best.x, best.y, null)) return;
+      mh.place(type, best.angle);
+      mh.placedOnce = true;
+      mh.placeAngles[0] = type;
+      mh.placeAngles[1].push(best.angle);
+      engine.ledger.reserve(best.x, best.y, foot, priority, this.moduleName, engine.tick, 1);
+      this._notePlaced({ id: id, angle: best.angle, x: best.x, y: best.y });
+      engine._stats.fastPaths++;
+    }
+    _schedulePreplace(objects, trapId, ModuleHandler, PacketManager2) {
+      const engine = this.client.PlacementEngine;
+      if (!engine) return;
+      engine.schedulePreplace({
+        objects: objects,
+        trapId: trapId,
+        exclude: this._lastPrePlaceObj,
+        spam: this._spamPrePlacer,
+        owner: this.moduleName,
+        priority: this._retrapRole ? UPE_PRIORITY.retrap : UPE_PRIORITY.preplace,
+        onPlaced: obj => this._notePlaced(obj)
+      });
     }
     _lineInRect(x1, y1, x2, y2, ax, ay, bx, by) {
       let minX = ax, maxX = bx;
@@ -12945,91 +14395,103 @@ window.grbtp = 35;
       return true;
     }
     _getConfig(id, myPos) {
-      return angle => {
-        const item = Items[id];
-        const dist = 35 + item.scale + (item.placeOffset || 0);
-        return {
-          id: id,
-          angle: angle,
-          x: myPos.x + dist * Math.cos(angle),
-          y: myPos.y + dist * Math.sin(angle),
-          scale: item.scale
-        };
-      };
+      const engine = this.client.PlacementEngine;
+      const item = Items[id];
+      const dist = engine ? engine.ringOf(id) : Config_default.playerScale + item.scale + (item.placeOffset || 0);
+      return angle => ({
+        id: id,
+        angle: angle,
+        x: myPos.x + dist * Math.cos(angle),
+        y: myPos.y + dist * Math.sin(angle),
+        scale: item.scale
+      });
     }
     _canPlace(id, angle, myPos, ObjectManager2, excludeObj) {
-      const cfg = this._getConfig(id, myPos)(angle);
-      const cx = cfg.x, cy = cfg.y, cs = cfg.scale;
-      let collision = false;
-      ObjectManager2.grid2D.query(cx, cy, 4, objId => {
-        if (collision) return;
-        const obj = ObjectManager2.objects.get(objId);
-        if (!obj) return;
-        if (excludeObj && obj === excludeObj) return;
-        const blockS = obj.placementScale;
-        if (Math.hypot(cx - obj.pos.current.x, cy - obj.pos.current.y) < cs + blockS) collision = true;
-      });
-      if (collision) return false;
-      if (id !== 18) {
-        const mid = Config_default.mapScale / 2;
-        const riverHalf = Config_default.riverWidth / 2;
-        if (cy >= mid - riverHalf && cy <= mid + riverHalf) return false;
-      }
-      return true;
+      const engine = this.client.PlacementEngine;
+      if (!engine) return false;
+      return engine.canPlaceAngle(id, myPos.x, myPos.y, angle, excludeObj || null);
     }
     _isItemLimit(id, myPlayer) {
       const {count: count, limit: limit} = myPlayer.getItemCount(Items[id].itemGroup);
       return count >= limit;
     }
+    /* Retrap works the enemy-facing quarter of the ring and reserves it against
+     * auto place through _retrapQuadrant. Same engine, same apertures — only
+     * the tactical objective differs, which is the whole point of having one
+     * engine rather than a second angle table. */
     _getPrePlaceAngles(id, myPos, myPlayer, ObjectManager2, excludeObj, enemyPos = null) {
       if (this._isItemLimit(id, myPlayer)) return [];
-      const tickCount = this.client._ModuleHandler.tickCount;
-      const cacheKey = this.moduleName + "_" + id + "_" + (excludeObj ? excludeObj.id : "n");
-      const getConfig = this._getConfig(id, myPos);
-      let priorityIndex = -1;
+      const engine = this.client.PlacementEngine;
+      if (!engine) return [];
       let myQuadrant = -1;
       if (enemyPos) {
-        const dirAngle = Math.atan2(enemyPos.y - myPos.y, enemyPos.x - myPos.x);
-        const normalized = (dirAngle % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
-        priorityIndex = Math.round(normalized / (Math.PI * 2 / 72)) % 72;
-        myQuadrant = Math.floor(priorityIndex / 18);
+        const dirAngle = UPEGeom.norm(Math.atan2(enemyPos.y - myPos.y, enemyPos.x - myPos.x));
+        myQuadrant = Math.min(3, Math.floor(dirAngle / (Math.PI / 2)));
       }
       this.client._retrapQuadrant = myQuadrant;
-      const computeAngle = i => {
-        if (myQuadrant >= 0 && Math.floor(i / 18) !== myQuadrant) {
-          return {
-            angle: i * (Math.PI * 2 / 72),
-            placeable: false,
-            perfect: false
-          };
+      const enemy = this.client.EnemyManager.nearestEnemy;
+      const aims = [];
+      const mh = this.client._ModuleHandler;
+      if (mh && mh._currentAngle != null) aims.push(mh._currentAngle);
+      if (enemy) {
+        const st = engine.predict.state(enemy);
+        aims.push(Math.atan2(st.y - myPos.y, st.x - myPos.x));
+        const horizon = engine.clock.horizonTicks(0);
+        const f = engine.predict.at(st, horizon);
+        aims.push(Math.atan2(f.y - myPos.y, f.x - myPos.x));
+        /* Where the trap has to land to hold them: the footprint's contact
+         * angles against the enemy body, at both horizons. */
+        const ring = engine.ringOf(id), foot = Items[id].scale;
+        const t0 = UPEGeom.contactAngles(myPos.x, myPos.y, ring, foot, st.x, st.y, enemy.collisionScale);
+        if (t0) {
+          aims.push(t0[0]);
+          aims.push(t0[1]);
         }
-        const angle = i * (Math.PI * 2 / 72);
-        const cfg = getConfig(angle);
-        return {
-          ...cfg,
-          placeable: this._canPlace(id, angle, myPos, ObjectManager2, excludeObj),
-          perfect: false
-        };
-      };
-      const forceFull = tickCount < (this.client._focusUntilTick || -1);
-      const angles = _getCachedPrePlaceAngles(this.client, tickCount, cacheKey, computeAngle, forceFull, 1, priorityIndex);
-      for (let i = 1; i < angles.length; i++) {
-        angles[i].perfect = false;
+        const t1 = UPEGeom.contactAngles(myPos.x, myPos.y, ring, foot, f.x, f.y, enemy.collisionScale);
+        if (t1) {
+          aims.push(t1[0]);
+          aims.push(t1[1]);
+        }
       }
-      if (angles[0]) angles[0].perfect = false;
-      for (let i = 1; i < angles.length; i++) {
-        if (angles[i].placeable && !angles[i - 1].placeable) angles[i].perfect = true;
-        if (!angles[i].placeable && angles[i - 1].placeable) angles[i - 1].perfect = true;
+      if (enemyPos) aims.push(Math.atan2(enemyPos.y - myPos.y, enemyPos.x - myPos.x));
+      const breaks = engine.recentBreaks(this._tick - 1);
+      for (let i = 0; i < breaks.length; i++) {
+        if (breaks[i].type === 15) aims.push(Math.atan2(breaks[i].y - myPos.y, breaks[i].x - myPos.x));
       }
-      return angles;
+      const cands = engine.candidates({
+        itemId: id,
+        x: myPos.x,
+        y: myPos.y,
+        exclude: excludeObj || null,
+        aims: aims,
+        coarse: UPE_COARSE_RING,
+        score: engine.combatScorer(id, myPos, enemy, 0, excludeObj || null),
+        refine: 3,
+        refineTop: 3
+      });
+      if (myQuadrant >= 0) {
+        const kept = cands.filter(c => Math.floor(UPEGeom.norm(c.angle) / (Math.PI / 2)) === myQuadrant);
+        /* The quadrant is a preference, not a wall: with nothing legal inside
+         * it, a retrap anywhere beats no retrap. */
+        if (kept.length) return kept;
+      }
+      return cands;
     }
     _addPredictObject(id, angle, preplace, myPos) {
       const item = Items[id];
-      const dist = 35 + item.scale + (item.placeOffset || 0);
+      const engine = this.client.PlacementEngine;
+      const dist = engine ? engine.ringOf(id) : Config_default.playerScale + item.scale + (item.placeOffset || 0);
       const x = myPos.x + dist * Math.cos(angle);
       const y = myPos.y + dist * Math.sin(angle);
       for (const obj of this._predictObjects) {
         if (obj.id !== 17 && Math.hypot(x - obj.x, y - obj.y) < item.scale + obj.scale) return;
+      }
+      /* One ledger across every placement path, so auto place cannot spend the
+       * ground preplace or retrap has already claimed this tick. */
+      if (engine) {
+        const priority = preplace ? this._retrapRole ? UPE_PRIORITY.retrap : UPE_PRIORITY.preplace : UPE_PRIORITY.autoplace;
+        if (!engine.ledger.free(x, y, item.scale, priority)) return;
+        engine.ledger.reserve(x, y, item.scale, priority, this.moduleName, engine.tick, 1);
       }
       this._predictObjects.push({
         id: id,
@@ -13125,9 +14587,12 @@ window.grbtp = 35;
       // [مُصلَّح] كان هنا return; عارٍ يقتل ٦٢٧ سطر تحته
       if (!Settings_default._autoRetrap) return;
       if (!myPlayer.canPlace(7) && !myPlayer.canPlace(4)) return;
-      this._tick++;
-      for (const [angle, expiry] of this._bannedAngles) {
-        if (this._tick > expiry) this._bannedAngles.delete(angle);
+      /* Was a private counter that only advanced on ticks this module actually
+       * ran, so it drifted out of step with everything else. The ban expiries
+       * and the engine's break feed are both in real ticks, so this is too. */
+      this._tick = ModuleHandler.tickCount;
+      for (let i = this._bannedAngles.length - 1; i >= 0; i--) {
+        if (this._tick > this._bannedAngles[i].expiry) removeFast(this._bannedAngles, i);
       }
       const trapId = myPlayer.getItemByType(7);
       const spikeId = myPlayer.getItemByType(4);
@@ -13153,14 +14618,8 @@ window.grbtp = 35;
         trapsOur.push(obj);
       });
       const enemyTrapped = trapsOur.find(t => t.pos.current.distance(enemyPos) < t.collisionScale) || null;
-      if (enemyTrapped && !this.client._wasEnemyTrapped) {
-        this.client._focusUntilTick = this.client._ModuleHandler.tickCount + 3;
-      }
-      this.client._wasEnemyTrapped = !!enemyTrapped;
       const imTrapped = !!myPlayer.isTrapped;
       const predictMoveAngle = getAngleFromBitmask(this.client.InputHandler.move, false) ?? 0;
-      const pingTime = PacketManager2?.pong || 0;
-      const minPingTime = PacketManager2?.minPingTime || 0;
       const _tryShameHammerBreak = () => {
         if (!Settings_default._shameGrind) return false;
         if (ModuleHandler.moduleActive) return false;
@@ -13289,21 +14748,10 @@ window.grbtp = 35;
       this._predictObjects = [];
       this._lastPrePlaceObj = null;
       this._spamPrePlacer = forcedSpam;
-      if (Settings_default._replacer) {
+      if (Settings_default._replacer || Settings_default._spamPreplace) {
         this._spamPrePlacer = true;
       }
-      if (this._placedAngles && this._placedAngles.length > 0) {
-        const _chkS = spikeId ? this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null) : [];
-        const _chkT = trapId ? this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null) : [];
-        const _allChk = [ ..._chkS, ..._chkT ];
-        for (const pa of this._placedAngles) {
-          const _m = _allChk.find(a => Math.abs(a.angle - pa) < 0.01);
-          if (_m && _m.placeable) {
-            this._bannedAngles.set(pa, this._tick + 18);
-          }
-        }
-      }
-      this._placedAngles = [];
+      this._reviewPlacedSlots();
       if (Settings_default._preplacer && myPos.distance(enemyPos) < 300 && !(imTrapped && myPlayer.spikeDamage > 0)) {
         const findObject = this._getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2);
         if (findObject) {
@@ -13379,7 +14827,7 @@ window.grbtp = 35;
       if (Settings_default._autoplacer && enemy) {
         const spikeAngles2 = spikeId ? this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null, enemyTrapped ? enemyPos : null) : [];
         const trapAngles2 = trapId ? this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null, enemyTrapped ? enemyPos : null) : [];
-        const filterBanned = a => !this._bannedAngles.has(a.angle);
+        const filterBanned = a => !this._isBanned(a.angle);
         const validSpike = spikeAngles2.filter(a => filterBanned(a) && (a.placeable || a.perfect));
         const validTrap = trapAngles2.filter(a => filterBanned(a) && (a.placeable || a.perfect));
         const validAngles = [ ...validSpike, ...validTrap ];
@@ -13477,10 +14925,13 @@ window.grbtp = 35;
           }
           return false;
         };
-        for (const obj of validAngles.filter(a => a.perfect)) {
-          if (isAutoPlaceAngle(obj)) this._addPredictObject(obj.id, obj.angle, false, myPos);
-        }
-        for (const obj of validAngles.filter(a => a.placeable && !a.perfect)) {
+        /* The engine returns these ranked, so walk them in that order. The old
+         * code took every "perfect" (tangent) angle before any other, which
+         * put tight packing ahead of everything the score measures — including
+         * how likely the server is to accept it. Tight packing is still
+         * rewarded, through the escape-denial and tactical terms, but it no
+         * longer outranks a placement that actually lands on the target. */
+        for (const obj of validAngles) {
           if (isAutoPlaceAngle(obj)) this._addPredictObject(obj.id, obj.angle, false, myPos);
         }
       }
@@ -13494,41 +14945,10 @@ window.grbtp = 35;
         ModuleHandler.placeAngles[0] = type;
         ModuleHandler.placeAngles[1].push(obj.angle);
         ModuleHandler.moduleActive = true;
-        this._bannedAngles.set(obj.angle, this._tick + 18);
-        this._placedAngles.push(obj.angle);
+        this._notePlaced(obj);
       }
       if (preObjects.length > 0) {
-        setTimeout(() => {
-          try {
-            for (const obj of preObjects) {
-              PacketManager2.updateAngle(obj.angle);
-            }
-          } catch (_) {}
-        }, 1);
-        setTimeout(() => {
-          try {
-            for (const obj of preObjects) {
-              const type = obj.id === trapId ? 7 : 4;
-              ModuleHandler.place(type, obj.angle);
-              ModuleHandler.placedOnce = true;
-              ModuleHandler.placeAngles[0] = type;
-              ModuleHandler.placeAngles[1].push(obj.angle);
-              ModuleHandler.moduleActive = true;
-              PacketManager2.updateAngle(obj.angle);
-            }
-          } catch (_) {}
-        }, Math.max(1, 111 - pingTime));
-        setTimeout(() => {
-          if (!this._spamPrePlacer) return;
-          try {
-            for (const obj of preObjects) {
-              const type = obj.id === trapId ? 7 : 4;
-              ModuleHandler.place(type, obj.angle);
-              ModuleHandler.placeAngles[1].push(obj.angle);
-              PacketManager2.updateAngle(obj.angle);
-            }
-          } catch (_) {}
-        }, Math.max(1, 111 - minPingTime));
+        this._schedulePreplace(preObjects, trapId, ModuleHandler, PacketManager2);
       }
     }
   }
@@ -13627,26 +15047,14 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
+    /* Was a fourth private copy of the placement test, and the only one with a
+     * wrong river: it used a half width of 310 where config.riverWidth / 2 is
+     * 362, so it called two 52px strips of river placeable that the server
+     * refuses outright. Now the same engine as everything else. */
     _canPlace(id, angle, myPos, ObjectManager2) {
-      const item = Items[id];
-      if (!item) return false;
-      const dist = 35 + item.scale + (item.placeOffset || 0);
-      const cx = myPos.x + dist * Math.cos(angle);
-      const cy = myPos.y + dist * Math.sin(angle);
-      let collision = false;
-      ObjectManager2.grid2D.query(cx, cy, 4, objId => {
-        if (collision) return;
-        const obj = ObjectManager2.objects.get(objId);
-        if (!obj) return;
-        const blockS = obj.placementScale;
-        if (Math.hypot(cx - obj.pos.current.x, cy - obj.pos.current.y) < item.scale + blockS) {
-          collision = true;
-        }
-      });
-      if (collision) return false;
-      const mid = 14400 / 2, riverHalf = 310;
-      if (cy >= mid - riverHalf && cy <= mid + riverHalf) return false;
-      return true;
+      const engine = this.client.PlacementEngine;
+      if (!engine || !Items[id]) return false;
+      return engine.canPlaceAngle(id, myPos.x, myPos.y, angle, null);
     }
     postTick() {
       if (Settings_default._lunaMode) return;
@@ -13714,23 +15122,12 @@ window.grbtp = 35;
         tachyon: Math.acos(clamped)
       };
     }
+    /* Fifth private copy of the placement test, and the second with the wrong
+     * 310 river half width. Routed through the engine like the rest. */
     _canPlace(id, angle, myPos, ObjectManager2) {
-      const item = Items[id];
-      if (!item) return false;
-      const dist = 35 + item.scale + (item.placeOffset || 0);
-      const cx = myPos.x + dist * Math.cos(angle);
-      const cy = myPos.y + dist * Math.sin(angle);
-      let collision = false;
-      ObjectManager2.grid2D.query(cx, cy, 4, objId => {
-        if (collision) return;
-        const obj = ObjectManager2.objects.get(objId);
-        if (!obj) return;
-        if (Math.hypot(cx - obj.pos.current.x, cy - obj.pos.current.y) < item.scale + obj.placementScale) collision = true;
-      });
-      if (collision) return false;
-      const mid = 14400 / 2, riverHalf = 310;
-      if (cy >= mid - riverHalf && cy <= mid + riverHalf) return false;
-      return true;
+      const engine = this.client.PlacementEngine;
+      if (!engine || !Items[id]) return false;
+      return engine.canPlaceAngle(id, myPos.x, myPos.y, angle, null);
     }
     _protect(aim, agnes, myPos, ObjectManager2, ModuleHandler, spikeID) {
       if (!agnes.possible) return false;
@@ -18477,6 +19874,17 @@ window.grbtp = 35;
       this.stopAttack(angle);
       this.whichWeapon(this._getPredictWeapon());
     }
+    /* Called by the placement engine the instant a "Q" lands, before the tick
+     * that would otherwise notice the building is gone. Modules that want the
+     * fast path implement onBreak; the rest are untouched. */
+    onPlacementBreak(info) {
+      for (const module of this.modules) {
+        if (!module.onBreak) continue;
+        try {
+          module.onBreak(info);
+        } catch (e) {}
+      }
+    }
     _SHAME_GUARD_MARGIN=130;
     _shameHealQueue=0;
     _shameHealDeadline=null;
@@ -18542,6 +19950,10 @@ window.grbtp = 35;
       this._autoBreakActive = false;
       this._comboAttack = false;
       this.tickCount += 1;
+      /* Opens the engine's tick: per-tick caches are dropped, expired ledger
+       * reservations are released and one movement sample is taken per player.
+       * Runs before any module so every path this tick shares one world view. */
+      if (this.client.PlacementEngine) this.client.PlacementEngine.beginTick(this.tickCount);
       this.sentAngle = 0;
       this.sentHatEquip = false;
       this.sentAccEquip = false;
@@ -18613,6 +20025,7 @@ window.grbtp = 35;
     ownerClient;
     SocketManager;
     ObjectManager;
+    PlacementEngine;
     PlayerManager;
     ProjectileManager;
     LeaderboardManager;
@@ -18629,6 +20042,10 @@ window.grbtp = 35;
       this.ownerClient = owner || this;
       this.SocketManager = new SocketManager_default(this);
       this.ObjectManager = new ObjectManager_default(this);
+      /* One engine per client, shared by every placement path. Built right
+       * after the object manager because it reads that manager's grid, and
+       * before anything that can place. */
+      this.PlacementEngine = new PlacementEngine_default(this);
       this.PlayerManager = new PlayerManager_default(this);
       this.ProjectileManager = new ProjectileManager_default(this);
       this.LeaderboardManager = new LeaderboardManager_default(this);
@@ -20647,6 +22064,7 @@ window.grbtp = 35;
     _placementDefense: true,
     _preplacer: false,
     _replacer: false,
+    _spamPreplace: false,
     _lunaExactPlacer: false,
     _lunaMode: false,
     _autoPlay: false,
@@ -22018,7 +23436,7 @@ window.grbtp = 35;
   const win = window;
   /* Game drivers this build was verified against. See drivers/game-drivers.json. */
   const ReUpDrivers = {
-      "builtAt": "2026-08-01T00:04:56.759Z",
+      "builtAt": "2026-09-17T04:53:28.580Z",
       "extractedFrom": {
           "index": "src/game_index.js",
           "vendor": "src/game_vendor.js"

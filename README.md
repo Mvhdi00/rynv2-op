@@ -51,12 +51,9 @@ Luna features that were **not** ported, and why:
 
 ### The placer
 
-Luna's placer was already ported into RYN before this merge — `AutoPlacer`
-carries Luna's function set under RYN's naming (`getConfig` → `_getConfig`,
-`canPlace` → `_canPlace`, `addPredictObject` → `_addPredictObject`,
-`getPrePlaceAngles` → `_getPrePlaceAngles`, `getPrePlaceObject` →
-`_getPrePlaceObject`), rebuilt on RYN's spatial grid. Luna's whole placer menu
-is present and then some:
+Luna's placer was ported into RYN before this merge — `AutoPlacer` carried
+Luna's function set under RYN's naming, rebuilt on RYN's spatial grid. Luna's
+whole placer menu is present and then some:
 
 | Luna | ReUp Mix |
 |---|---|
@@ -64,11 +61,17 @@ is present and then some:
 | `placeRange` | `_autoplacerRadius` |
 | `prePlace` | `_preplacer` |
 | `prePlace2` (replace) | `_replacer` |
-| — | `_placeAttempts`, `_glotusPlacer`, `_placerRetrapCombo` |
+| — | `_spamPreplace`, `_placeAttempts`, `_glotusPlacer`, `_placerRetrapCombo` |
 
 `_lunaExactPlacer` picks between the two decision sets: **on** restricts spike
 placement to Luna's original conditions, **off** (the default) adds RYN's extra
 heuristics — seals-exit, double-spike, bounces-onto-spike, touches-enemy.
+
+Those tactical rules are unchanged. What sits underneath them is not: the
+geometry, timing and candidate generation now come from one shared
+**placement engine** (`PlacementEngine`, with `UPEGeom`, `PlacementClock`,
+`PlacementPredictor` and `PlacementLedger` beside it). See
+[The placement engine](#the-placement-engine).
 
 **Bug fixed in the placer.** `AutoPlacer._isItemLimit` read
 `group.sandboxLimit || 99` and never looked at `group.limit`. Outside sandbox
@@ -82,6 +85,62 @@ client already gets it right: `ClientPlayer.getItemCount` picks `sandboxLimit`
 only when actually in sandbox and falls back to `group.limit` otherwise, and
 `AutoRetrap._isItemLimit` is written against that. `AutoPlacer` now makes the
 same call, so all three agree.
+
+### The placement engine
+
+Auto place, preplace, replace, spam preplace and retrap used to carry five
+private copies of the same placement test and two different ways of finding
+angles. They now share one engine, built from the two functions the game
+actually validates placement with (`Player.buildItem` and
+`ObjectManager.checkItemLocation` in `src/game_index.js`).
+
+**Placement is one-dimensional.** `buildItem` puts the item at
+`playerScale + item.scale + placeOffset` from the player along `dir`, so every
+candidate lies on a circle and the only free variable is the angle.
+`checkItemLocation` is a plain circle-circle distance test plus a river band —
+no rectangles, no line of sight, and it never reads the player it is handed, so
+players do not block placement at all.
+
+**So the legal set is solvable in closed form.** A blocker at distance `d` with
+combined radius `R` removes exactly the arc `|θ − φ| < acos((d² + w² − R²)/(2dw))`
+from the ring. The engine builds those arcs, merges them wrap-aware, and
+inverts to get the free apertures. That set *is* the answer; a 36/72/144/200
+angle table is a sampling of it. Against the game's own test over 2.88M
+samples the apertures agree on every one.
+
+| | 36 | 72 (what RYN had) | 144 | 200 | engine |
+|---|---|---|---|---|---|
+| solvable scenes where it finds nothing | 2.72% | 1.36% | 0.38% | 0.38% | **0%** |
+| mean aim error vs the exact nearest legal angle | 5.92px | 3.26px | 1.92px | 1.18px | **0.91px** |
+| worst aim error | 202px | 146px | 146px | 145px | **1.58px** |
+| µs per solve, 80 buildings in range | — | 556 | 1101 | 1529 | **32** |
+
+Candidates are assembled from points the geometry names — the exact angles the
+caller wants, the aperture tangents, the gap midpoints — plus a coarse sweep
+and three levels of hill-climbing on the score. About 18 per target, all
+distinct, all legal, and never empty while legal ground exists.
+
+Other things that came out of building it:
+
+- **Destroy packets act immediately.** `"Q"` invalidates only the cached work
+  whose ring could reach the object, records the break, and hands it to
+  `onBreak` on every module that wants it — in the same turn of the event loop.
+  The old path pushed a sid onto `window._rynBrokenSids` and waited up to a
+  full 111ms tick.
+- **Timing comes from the clock, not a literal.** `config.serverUpdateRate` is
+  9, so the tick is 1000/9 = 111.11ms — that is where the `111` in Luna's
+  `setTimeout(111 - pingTime)` comes from. But that expression subtracts a
+  round trip where a one-way delay belongs and measures from an arbitrary
+  moment; `PlacementClock` measures from the tick that actually arrived.
+- **Two spatial blind spots are gone.** `ObjectManager.canPlaceItem` and
+  `getBestPlacementAngles` queried the grid with `search = 1`, which reaches
+  100–200px, while item 21 rejects a placement from `item.scale + 300` away.
+  Windows are now sized from the geometry, and they overlap on purpose.
+- **Two wrong river constants are gone.** `AntiTrapProtect` and `AntiTrapStar`
+  hardcoded a half-width of 310 where `config.riverWidth / 2` is 362, so they
+  called two 52px strips of river placeable that the server refuses.
+- **`forcedSpam` was dead in `AutoPlacer`** — computed every tick and never
+  read. It now drives the spam flag it was written for.
 
 ### Driver correction
 
