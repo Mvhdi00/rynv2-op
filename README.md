@@ -126,7 +126,89 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+src/Ryn_Type2.user.js     RYN Type 2 — the current production client
+tools/verify-placement.js placement geometry vs. the game's own placement rules
+tools/bench-placement.js  before/after comparison of the angle solver
 ```
+
+---
+
+## RYN Type 2 — placement
+
+`src/Ryn_Type2.user.js` is the current production client and carries the
+placement engine. It is a separate, later client from `src/RYN_Client_v4.js`;
+the ReUp Mix build above is not involved.
+
+### What the game actually does
+
+Read out of `src/game_index.js`, which is the shipped bundle and therefore
+authoritative:
+
+| | |
+|---|---|
+| placement point | `player + L * [cos dir, sin dir]`, `L = 35 + item.scale + item.placeOffset` (`buildItem`, :2454) |
+| legality | one circle test per object, `dist < item.scale + T` (`checkItemLocation`, :911) |
+| blocking radius `T` | `obj.blocker ?? obj.getScale(0.6, obj.isItem)` — for a placed building this is **`obj.scale` exactly, with `colDiv` not applied** (:1451) |
+| movement radius | the same call as `getScale()` — `obj.scale * colDiv`. Not the same number as the blocking radius |
+| players | not in the object list, so **a player body never blocks a placement** |
+| river | `y` in `[6838, 7562]` blocks everything except item 18 |
+| angle on the wire | `fixTo(atan2(...), 2)` — **rounded to 0.01 rad**, so there are exactly **629 distinct placements** available from one position |
+| tick | `1000 / serverUpdateRate(9)` = **111.11 ms**. This is where the 111 in the client comes from; it is not a guessed constant |
+| speed | `xVel += 0.0016 * C * dt`, `xVel *= 0.993^dt`. Holding a building sets `C *= 0.5` |
+
+`tools/verify-placement.js` asserts the client agrees with all of it, item by
+item and resource type by resource type, and cross-checks the analytic aperture
+solver against a brute-force application of the game's own circle test.
+
+### The angle count
+
+The client offers a resolution setting of 36/72/144/200. Measured against the
+629-angle ceiling above, those are 17.5, 8.7, 4.4 and 3.1 wire steps apart —
+so none of them is fine, and the setting was in any case **not reaching the
+predictive path at all**: `AngleSolver.propose` deduplicated candidates with
+`PlacementMemory`'s quantum, which for spikes is `2*asin(49/79)/2` = 38.3° and
+leaves 9.4 buckets on the whole circle. Every ring sample past the first few
+folded into one that a named proposal had already taken.
+
+The fix is not a bigger number. Proposal dedup moved to the wire quantum, where
+two angles collide only when they are the same packet; the lattice became a
+first pass rather than the answer, with bisection refining the directions that
+matter down to the wire; and a coverage pass spaces candidates across every
+free arc so no legal ground is unrepresented. `PlacementMemory` keeps its own
+quantum, which was right for remembering refusals and only wrong as a dedup.
+
+`node tools/bench-placement.js <before> <after>` over 1500 random worlds:
+
+| | before | after |
+|---|---|---|
+| candidates per world | 3.6 – 4.2 | 14.4 – 15.1 |
+| worst gap from legal ground to a candidate | 43.5° – 44.5° | 22.1° – 25.8° |
+| aim error, median | 1.59 units | 0.20 units |
+| aim error, 95th percentile | 23.3 – 25.1 units | 0.38 units |
+| candidates illegal once encoded | 2 – 7 | 0 |
+| solver cost | 10.0 µs/call | 19.6 µs/call (0.35 ms per second of play) |
+
+The old figures get *worse* as the resolution rises (4.2 candidates at 36 steps,
+3.6 at 200) because a finer lattice lands more samples in buckets already
+taken. The new ones are stable at every resolution. The 95th-percentile aim
+error is the one that shows up in play: 25 units is half a spike radius, which
+is the difference between a build that touches its target and one that does not.
+
+`slivers` in the benchmark counts worlds whose only free arc is narrower than
+the wire can address — one in 1500, 0.26° wide. The new build declines those
+instead of spending five packets on a refusal.
+
+### Verification
+
+```sh
+node --check src/Ryn_Type2.user.js
+node tools/verify-drivers.js src/Ryn_Type2.user.js
+node tools/verify-placement.js
+node tools/check-hooks.js src/Ryn_Type2.user.js   # needs: npm i --no-save terser
+```
+
+Current state: 124/124 placement checks, driver tables match the bundle, 53/53
+bundle-rewrite hooks bind.
 
 ## Build
 
