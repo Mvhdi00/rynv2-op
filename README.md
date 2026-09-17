@@ -1,14 +1,122 @@
-# ReUp Mix (Luna × Ryn)
+# RYN
 
-A merged moomoo.io userscript: the RYN Client v4 core with the Luna Client
-features RYN never had, built against the game bundles in `src/` and verified
+moomoo.io userscripts built against the game bundles in `src/` and verified
 against them.
 
-Build output: **`ReUp_Mix.user.js`**
+| Script | What it is |
+|---|---|
+| **`Ryn_Type_2.user.js`** | The current client. Ryn Type 2 v3.0 by Raptor, with the placement subsystem rebuilt — see [The placement engine](#the-placement-engine). |
+| `ReUp_Mix.user.js` | The earlier build: RYN Client v4 with the Luna Client features folded in. Kept because it is a different lineage, not a superseded version of the same one. |
 
 ---
 
-## Why RYN is the base
+## The placement engine
+
+Auto place, preplace, replace, spam pre-placement and retrap are five tactical
+objectives on **one** placement core in `Ryn_Type_2.user.js`. They share the
+geometry, the prediction, the clock, the occupancy model, the candidate
+generator, the scorer, the reservation ledger, the packet budget, the refusal
+memory and the executor. None of them looks at the world on its own and none of
+them reaches the socket on its own.
+
+```
+                         PLACEMENT CORE
+  ┌────────────┬───────────────┬──────────────┬──────────────────┐
+  │  Geometry  │  Prediction   │    Timing    │    Occupancy     │
+  │ apertures, │ TargetMotion, │ LatencyModel │ ObjectManager,   │
+  │ wire grid  │ StealForecast │ + jitter     │ PhantomTraps,    │
+  │            │               │              │ PlacementRefusals│
+  └────────────┴───────────────┴──────────────┴──────────────────┘
+                              │
+                     AngleSolver  (exact → binned sweep → bisection)
+                              │
+                     PlacementScorer   (one weighted sum)
+                              │
+             ConflictResolver → PlacementPlanner (beam search)
+                              │
+                     PlacementExecutor  (the only send path)
+                              │
+   ┌──────────┬───────────┬──────────┬──────────────┬────────────┐
+   AUTO     PREPLACE    REPLACE    SPAM PREPLACE   RETRAP
+```
+
+### What the game actually allows
+
+Every constant comes out of `src/game_index.js`, and
+`tools/verify-placement.js` prints them next to the engine's own so the two can
+be read against each other rather than against a comment.
+
+| Quantity | Game source | Value |
+|---|---|---|
+| Where a build lands | `Player.buildItem` | `playerScale + item.scale + item.placeOffset` |
+| What denies a build | `ObjectManager.checkItemLocation` | `item.scale + (obj.blocker ?? obj.getScale(0.6, isItem))`, plus the river band unless the item is the platform (id 18) |
+| What the collision uses instead | `ObjectManager.checkCollision` | `playerScale + obj.scale * obj.colDiv` — so a pit trap pins at 45, not at its 50 scale |
+| Knockback travel | impulse 1.5, then `xVel *= pow(0.993, f)` once per tick | `1.5 * f / (1 - 0.993^f)` = 307.6 units at `f` = 111.11ms |
+| Tick | `config.serverUpdateRate` 9 | 111.11ms |
+| **Angle quantum** | `fixTo(atan2(sin, cos), 2)` in the game's own build path | **0.01 rad — 628 distinct placement directions, and no more** |
+
+Players and animals are *not* in `checkItemLocation`, so they never deny a
+placement. Enemy pit traps are, and carry `hideFromEnemy`, so they deny
+placements the client cannot see — which is what `PhantomTraps` exists for.
+
+### The angle system
+
+The wire quantum is the ceiling on everything: two directions less than 0.01 rad
+apart are the same build, so a step count above 628 enumerates nothing and a
+solved angle that is not quantised is not the angle that gets sent.
+
+Candidates come from three stages, all in wire-exact angles:
+
+1. **Exact** — aperture edges (the tightest legal pack against a neighbour),
+   tangency angles where the footprint just touches the target, intent
+   directions, exit-sealing directions, both ends of the knockback chain, and
+   the direction that denies the most of the target's own placement ring. None
+   of these is findable by sampling; all of them are where the score changes
+   sharply.
+2. **Binned sweep**, anchored on the direction to the target. The arc facing the
+   fight is *enumerated* at the quantum — there is nothing finer — and binned two
+   slots wide. The rest of the ring is swept at the resolution setting and binned
+   ten ways. One candidate per bin, so the spacing between chosen candidates
+   cannot exceed one bin however the ranking falls. Bins overlap by a quarter of
+   their width, so a candidate on a boundary is offered by both sides.
+3. **Bisection** down to the quantum, around the far-tier and exact seeds.
+
+Measured over 4,000 generated fight boards (`tools/test-placement.js`), at the
+spike ring:
+
+| Coarse setting | Candidates | Finest spacing | Widest gap, near arc | Widest gap, far arc |
+|---|---|---|---|---|
+| 36 | 54.9 | 0.82u | 2.6u | 42.1u |
+| 72 | 50.5 | 0.82u | 2.6u | 69.8u |
+| 144 | 46.4 | 0.82u | 2.6u | 76.1u |
+| 200 | 43.1 | 0.84u | 2.6u | 80.0u |
+| *flat 200-step table* | *88.1* | *2.48u* | *2.48u* | *2.48u* |
+
+So against the table it replaces: three times the resolution where the score
+can change, the same coverage of the arc that matters at *half* the candidate
+count, the exact boundary angles no uniform table contains — and the near arc's
+coverage no longer depends on the setting at all. The setting decides the far
+tier and nothing else, which is why raising it from 144 to 200 was never going
+to be the answer.
+
+### Verification
+
+`tools/test-placement.js` lifts `GeometrySolver`, `RingScan`, `AngleSolver`,
+`LatencyModel`, `PlacementRefusals`, `PhantomTraps` and `PlacementLedger`
+straight out of the client and runs them — no mocks of the engine. 130 checks,
+including the analytic aperture solve against a brute-force sampled reference at
+3,600 samples per ring over 3,000 boards (10.8M points, zero disagreements) and
+the wire quantum against the client's own `wireAngle`.
+
+---
+
+## ReUp Mix (Luna × Ryn)
+
+The rest of this file is about the other script in the repo: `ReUp_Mix.user.js`,
+the RYN Client v4 core with the Luna Client features folded in. It is a separate
+lineage from Ryn Type 2 above, not an older version of it.
+
+### Why RYN is the base
 
 The two clients are not the same kind of thing:
 
@@ -27,9 +135,9 @@ connect to the current game at all.
 So Luna's code could not be merged in as code. Its features were ported across
 onto the RYN core instead, and everything else in RYN was left alone.
 
-## What the mix changes
+### What the mix changes
 
-### Ported from Luna
+#### Ported from Luna
 
 | Feature | Where it lives |
 |---|---|
@@ -49,7 +157,7 @@ Luna features that were **not** ported, and why:
 - *"ai hat predict" (`autsh1`) and "ai triangulation" (`triangle2`)* — these
   are menu entries in Luna with no implementation behind them. Nothing to port.
 
-### The placer
+#### The placer
 
 Luna's placer was already ported into RYN before this merge — `AutoPlacer`
 carries Luna's function set under RYN's naming (`getConfig` → `_getConfig`,
@@ -83,7 +191,7 @@ only when actually in sandbox and falls back to `group.limit` otherwise, and
 `AutoRetrap._isItemLimit` is written against that. `AutoPlacer` now makes the
 same call, so all three agree.
 
-### Driver correction
+#### Driver correction
 
 `ItemGroups[8]` — the platform group — carried `layer: -1` in RYN. The shipped
 bundle has `layer: 1`.
@@ -94,9 +202,9 @@ off, so a platform was being treated as a pass-under layer like traps and boost
 pads. Corrected to `1`.
 
 This was the only mismatch across item groups, weapons, items, hats,
-accessories, and config — see [Verification](#verification).
+accessories, and config — see [Verification](#verification-1).
 
-### Removed
+#### Removed
 
 RYN v4 opened with this:
 
@@ -116,14 +224,17 @@ but nothing in the client needs it. It is stripped from the build.
 ## Layout
 
 ```
-ReUp_Mix.user.js          the build output — this is the script to install
+Ryn_Type_2.user.js        the current client — this is the script to install
+ReUp_Mix.user.js          the earlier build, from src/RYN_Client_v4.js
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
-src/RYN_Client_v4.js      base client (input)
+src/RYN_Client_v4.js      base client for ReUp Mix (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
 src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
+tools/verify-placement.js the item fields the placement geometry is made of
+tools/test-placement.js   the placement geometry, run against brute force
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 ```
@@ -142,20 +253,29 @@ a newer RYN will surface as a build error rather than a half-merged script.
 ## Verification
 
 ```sh
-node tools/verify-drivers.js ReUp_Mix.user.js
-node tools/check-hooks.js ReUp_Mix.user.js     # needs: npm i --no-save terser
-node --check ReUp_Mix.user.js
+node --check                   Ryn_Type_2.user.js
+node tools/verify-drivers.js   Ryn_Type_2.user.js
+node tools/verify-placement.js Ryn_Type_2.user.js
+node tools/test-placement.js   Ryn_Type_2.user.js
+node tools/check-hooks.js      Ryn_Type_2.user.js   # needs: npm i --no-save terser
 ```
 
-Current state of the build:
+The same four run against `ReUp_Mix.user.js`.
+
+Current state:
 
 - **Drivers** — hats (46), accessories (21), weapons (16), items (23), item
   groups (14) and 42 scalar config keys all match `src/game_index.js`. The
   client also carries the right frame-signature width, transport mode, table
   salt, and both opcode alphabets.
-- **Hooks** — 36/36 bundle-rewrite hooks bind, including the new
-  `objectRotation` hook and the pre-existing `freezeTurnSpeed`, which now
-  resolves to the animal turn-rate site only.
+- **Placement fields** — every item field the placement geometry reads
+  (`scale`, `placeOffset`, `colDiv`, `blocker`, `health`, `dmg`, `pDmg`,
+  `trap`, `ignoreCollision`, `hideFromEnemy`, and the rest) matches the shipped
+  bundle. `verify-drivers.js` does not compare these; the four the geometry is
+  entirely made of were never checked before.
+- **Placement geometry** — 130 checks, all passing. See
+  [Verification](#verification) under the placement engine.
+- **Hooks** — 52/52 bundle-rewrite hooks bind in Ryn Type 2, 36/36 in ReUp Mix.
 
 `check-hooks.js` re-minifies `src/game_index.js` before matching, because the
 hook patterns are written against minified code and the bundle checked in here
