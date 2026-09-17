@@ -1,2 +1,4 @@
 node_modules/
 package-lock.json
+tools/chatlog/preview.html
+tools/chatlog/artifact.html

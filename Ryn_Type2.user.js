@@ -1700,7 +1700,7 @@ window.grbtp = 35;
   const Header_default = "";
   const Navbar_default = "<div id=\"navbar-container\">\n  <div class=\"rail-brand\">\n    <span class=\"rail-mark\">RYN</span>\n    <span class=\"rail-sub\">Type 2</span>\n  </div>\n\n  <div id=\"ryn-search-wrap\">\n    <input id=\"ryn-search-input\" type=\"text\" placeholder=\"Search settings\" autocomplete=\"off\" spellcheck=\"false\">\n    <span id=\"ryn-search-clear\" title=\"Clear\">&#10005;</span>\n    <div id=\"ryn-search-dropdown\"></div>\n  </div>\n\n  <div class=\"rail-label\">Categories</div>\n  <nav>\n    <button data-id=\"1\" class=\"open-menu active\"><span class=\"nav-index\">01</span><span class=\"nav-label\">Keybinds</span></button>\n    <button data-id=\"3\" class=\"open-menu\"><span class=\"nav-index\">02</span><span class=\"nav-label\">Visual</span></button>\n    <button data-id=\"2\" class=\"open-menu\"><span class=\"nav-index\">03</span><span class=\"nav-label\">Combat</span></button>\n    <button data-id=\"4\" class=\"open-menu\"><span class=\"nav-index\">04</span><span class=\"nav-label\">Misc</span></button>\n    <button data-id=\"7\" class=\"open-menu\"><span class=\"nav-index\">05</span><span class=\"nav-label\">Music</span></button>\n    <button data-id=\"5\" class=\"open-menu\"><span class=\"nav-index\">06</span><span class=\"nav-label\">Bots</span></button>\n  </nav>\n\n  <div class=\"rail-label\">In this category</div>\n  <div id=\"nav-outline\"></div>\n\n  <div class=\"rail-foot\">\n    <span id=\"ryn-version\">Ryn Type 2</span>\n    <svg id=\"close-button\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" title=\"Close menu\">\n      <line x1=\"5\" y1=\"5\" x2=\"19\" y2=\"19\" stroke-linecap=\"round\"/>\n      <line x1=\"19\" y1=\"5\" x2=\"5\" y2=\"19\" stroke-linecap=\"round\"/>\n    </svg>\n  </div>\n</div>";
   const Devtool_default = "";
-  const Keybinds_default = "<div class=\"menu-page opened\" data-id=\"1\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Keybinds</h1>\n        <p class=\"page-description\">Click a key to start editing, then press the key or mouse button you want. Backspace clears a binding. A key used twice is marked as a conflict on both rows.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Items &amp; Weapons<span class=\"sec-sub\">Hotbar placement and the weapon slots.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Food</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_food\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Wall</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_wall\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spike\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Windmill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_windmill\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Farm</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_farm\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Trap</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_trap\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Turret</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_turret\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spawn</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spawn\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Client<span class=\"sec-sub\">Opening this menu and firing the instakill sequence.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Menu</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_toggleMenu\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Instakill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_instakill\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Quick Actions<span class=\"sec-sub\">One-press build patterns and on/off switches for the automations.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Quad Spikes</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_fourSpikes\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Quad Traps</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_fourTraps\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Boost Spike Rush</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_boostSpikes\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Automill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoMillKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Dash</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_dashMovementKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Auto Grind</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoGrindKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Autoplacer</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoplacerKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Controls<span class=\"sec-sub\">Everything that commands the bots you have connected.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spawn Bot</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spawnBot\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Kill All Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_killAllBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Hold Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_holdBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Release Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_releaseBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Bot Auto-Attack</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAutoAttack\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Auto Farm</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAutoFarm\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Repel Alts</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_repelAlts\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Bot Random Movement</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_scatterBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Avoid Shield Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAvoidShieldKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Volley Fire</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botVolleyKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Freeze Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_freezeBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Lock bot position</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_lockBotPosition\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n    <div class=\"section\">\n        <div class=\"section-title\">Possession<span class=\"sec-sub\">Which of your characters you are controlling. These three keys are taken before anything else sees them &mdash; the game maps the arrows to movement, so letting one through would walk the character you just left.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Next character</span>\n                    <span class=\"opt-desc\">Steps forward through you and every bot that is in the game.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessNext\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Previous character</span>\n                    <span class=\"opt-desc\">The same ring, backwards.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessPrev\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Back to your own character</span>\n                    <span class=\"opt-desc\">Jumps straight back to you from wherever you are.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessMain\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n</div>";
+  const Keybinds_default = "<div class=\"menu-page opened\" data-id=\"1\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Keybinds</h1>\n        <p class=\"page-description\">Click a key to start editing, then press the key or mouse button you want. Backspace clears a binding. A key used twice is marked as a conflict on both rows.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Items &amp; Weapons<span class=\"sec-sub\">Hotbar placement and the weapon slots.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Food</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_food\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Wall</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_wall\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spike\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Windmill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_windmill\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Farm</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_farm\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Trap</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_trap\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Turret</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_turret\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spawn</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spawn\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Client<span class=\"sec-sub\">Opening this menu and firing the instakill sequence.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Menu</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_toggleMenu\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Instakill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_instakill\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Chat Log</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_chatLogKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Quick Actions<span class=\"sec-sub\">One-press build patterns and on/off switches for the automations.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Quad Spikes</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_fourSpikes\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Quad Traps</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_fourTraps\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Boost Spike Rush</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_boostSpikes\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Automill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoMillKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Dash</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_dashMovementKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Auto Grind</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoGrindKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Autoplacer</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoplacerKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Controls<span class=\"sec-sub\">Everything that commands the bots you have connected.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spawn Bot</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spawnBot\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Kill All Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_killAllBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Hold Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_holdBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Release Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_releaseBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Bot Auto-Attack</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAutoAttack\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Auto Farm</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAutoFarm\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Repel Alts</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_repelAlts\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Bot Random Movement</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_scatterBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Avoid Shield Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAvoidShieldKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Volley Fire</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botVolleyKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Freeze Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_freezeBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Lock bot position</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_lockBotPosition\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n    <div class=\"section\">\n        <div class=\"section-title\">Possession<span class=\"sec-sub\">Which of your characters you are controlling. These three keys are taken before anything else sees them &mdash; the game maps the arrows to movement, so letting one through would walk the character you just left.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Next character</span>\n                    <span class=\"opt-desc\">Steps forward through you and every bot that is in the game.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessNext\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Previous character</span>\n                    <span class=\"opt-desc\">The same ring, backwards.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessPrev\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Back to your own character</span>\n                    <span class=\"opt-desc\">Jumps straight back to you from wherever you are.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessMain\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n</div>";
   const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Combat</h1>\n        <p class=\"page-description\">Every automation the client runs during a fight, ordered by the moment it fires: the kill sequence first, then how it places, how it survives, and what it does with the rest of the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Kill Sequences<span class=\"sec-sub\">Timed weapon and hat chains that try to finish a target outright.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_toolSpearInsta\">Tool Spear Insta</label>\n                    <span class=\"opt-desc\">Tool hammer into polearm burst.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_toolSpearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeGearInsta\">Spike Gear Insta</label>\n                    <span class=\"opt-desc\">Spike placement combined with a gear swap on the same tick.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeGearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\n                    <span class=\"opt-desc\">Ranged finisher chaining musket and bow shots.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_musketBowInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Sync<span class=\"sec-sub\">Landing separate sources of damage on the same server tick.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\n                    <span class=\"opt-desc\">Lines up your hits with whatever else is about to damage the target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\n                    <span class=\"opt-desc\">Times your swing to a turret shot landing.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_velocityTick\">Velocity Tick</label>\n                    <span class=\"opt-desc\">Uses the target's movement to predict the tick worth hitting.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_velocityTick\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSync\">Spike sync</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSyncHammer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeSync2\">Spike Sync 2</label>\n                    <span class=\"opt-desc\">Runs with Autopush. While a shove is walking a trapped target onto a spike - the purple line - Spike KB is held, because its knockback moves them away from you, which is off the line the shove is walking them down. Then the tick they actually touch the spike, the swing goes out on that same tick: they are trapped, pinned against it and already taking its damage, so the hit lands with the spike's own. The turret shot follows on the next tick. Like Spike KB, but where Spike KB fires on a knockback that would put them in a spike, this waits until they are in it - and it needs the shove to have been live, so an enemy merely standing near a spike is still Spike KB's. Runs on this switch alone; Velocity Tick keeps its own conditions and turning it off does not affect this. Needs Autopush on, and a diamond polearm with the turret.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync2\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Placement<span class=\"sec-sub\">Where spikes and traps go, and how fast they get replaced.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacer\">Autoplacer</label>\n                    <span class=\"opt-desc\">Keeps spikes going down around you without holding the key.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoplacer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoplacer radius</span>\n                    <span class=\"opt-desc\">How far from you the autoplacer is allowed to build.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Placer scanners</span>\n                    <span class=\"opt-desc\">How many spots the autoplacer looks at once. The first one is aimed at the enemy; each of the others owns its own slice of the ring around you and never builds in another's, so the open ground on your other sides gets used instead of ignored. 1 is the enemy-facing scanner alone.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerScanners\" type=\"range\" step=\"1\" min=\"1\" max=\"6\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacerResolution\">Placer resolution</label>\n                    <span class=\"opt-desc\">How finely the autoplacer cuts the ring around you when it looks for ground. A spike on the ring blocks about 153 degrees of it, so what is left is a few arcs and the slots between builds are thin - finer steps find slots a coarser pass walks straight past. One step moves the landing point 13.8 units at 36, 6.9 at 72, 3.4 at 144 and 2.5 at 200, and the furthest a wanted direction can sit from a sample is half of that. 144 is the resolution this client shipped on and reproduces it exactly; 200 is the default. Nothing else changes between them - same validation, same collision solve, same scoring, same prediction, same scheduler. Legality is solved for the whole ring at once rather than asked one angle at a time, and the sin/cos table is built once for the whole session, so the finer settings cost no trigonometry and no allocation per tick. Preplace and replace draw candidates from this same table, so raising it makes the prediction finer as well as the placement. Used flat, every tick.</span>\n                </div>\n                <select id=\"_autoplacerResolution\" class=\"ryn-select\">\n                    <option value=\"36\">36 - coarse</option>\n                    <option value=\"72\">72 - balanced</option>\n                    <option value=\"144\">144 - original</option>\n                    <option value=\"200\">200 - default</option>\n                </select>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_prePlace\">Preplace</label>\n                    <span class=\"opt-desc\">Puts the next spike down before the target arrives at it.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_prePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spamPrePlace\">Spam Preplace</label>\n                    <span class=\"opt-desc\">Sends a preplace on its forecast rather than waiting for the break it is predicting, and lets one refused for being a tick early try the same slot again on the next tick instead of being locked out of it by its own send. This is what takes an enemy build's ground on the tick it falls: the placement is already at the server, instead of starting a round trip when the deletion packet arrives. Costs packets on the guesses that miss.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spamPrePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <span class=\"option-title\">Retrap Resend</span>\n                        <span class=\"opt-desc\">Extra sends of the same replacement while an enemy is breaking out of your trap, timed into the rest of the tick and offset for your ping. It starts early and gets louder: four swings out it is already holding the slot with one send, two swings out it spends half, and on the last tick all of them, swept back across the window from a ping-compensated anchor so the same claim exists at several moments rather than one. The trap they are standing in is also looked further ahead than any other build, so the replacement is booked - and the ground reserved - well before the break instead of arriving to contest it afterwards. It is the same claim sent again, not a second placement, so it takes no extra ground and files nothing; only the packets are new. Worth it here and nowhere else: a trapped enemy cannot walk away from the ground being fought over, so this is the one forecast their movement cannot spoil, and the trap they are breaking is the most valuable slot on the board. 0 turns it off. Needs Spam Preplace on.</span>\n                    </div>\n                    <label class=\"slider\">\n                        <span class=\"slider-value\"></span>\n                        <input id=\"_retrapResend\" type=\"range\" step=\"1\" min=\"0\" max=\"6\">\n                    </label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_replace\">Replace</label>\n                    <span class=\"opt-desc\">Rebuilds a broken spike the moment it goes down.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_replace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <span class=\"option-title\">Replace Burst</span>\n                        <span class=\"opt-desc\">How many builds one deletion may put down. A freed slot is ground, not a point, and one build is one thing to refuse - the enemy takes the slot beside it and the ground is theirs anyway. Several non-overlapping builds around the same opening cannot all be answered. This raises only the ceiling: the value floor, the reservation ledger, the per-item caps, the non-overlap rule and the packet budget still apply to every build in the burst, so an opening worth one build still gets one. Only a deletion plans this deep; an ordinary tick is unchanged.</span>\n                    </div>\n                    <label class=\"slider\">\n                        <span class=\"slider-value\"></span>\n                        <input id=\"_replaceBurst\" type=\"range\" step=\"1\" min=\"3\" max=\"6\">\n                    </label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\n                    <span class=\"opt-desc\">Builds to block an incoming placement against you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_placementDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapKB\">Trap KB</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapKB\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeKB\">Spike KB</label>\n                    <span class=\"opt-desc\">Swings the primary when the knockback would put them in one of your spikes, or when they are already standing in one. Katana or polearm.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeKB\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Healing, shielding and the hats that keep you alive.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\n                    <span class=\"opt-desc\">Predicts what can land this tick and eats before it does, not after.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoheal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_healPriority\">Heal Priority</label>\n                        <span class=\"opt-desc\">Decides which hat the heal happens behind, instead of only when to eat. On a tick the prediction says is lethal it forces soldier and eats behind it; when the count is already carrying shame and nothing lethal is coming it holds the food a tick or two so the server does not charge you for it. Off, the autoheal eats exactly as it did before.</span>\n                    </div>\n                    <label class=\"switch-checkbox\"><input id=\"_healPriority\" type=\"checkbox\"><span></span></label>\n                </div>\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_soldierEMP\">EMP Anti</label>\n                        <span class=\"opt-desc\">Wears the EMP helmet instead of soldier when the lethal half of the tick is turret fire. Turrets will not shoot someone wearing it, so it removes that damage rather than reducing it - but only that damage, which is why it is asked for only when every source that has hit you this tick is one it answers. It needs the helmet owned, soldier already on, and the tick to be survivable once the turret's 25 is taken out. Needs Heal Priority on.</span>\n                    </div>\n                    <label class=\"switch-checkbox\"><input id=\"_soldierEMP\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoShield\">Auto Shield</label>\n                    <span class=\"opt-desc\">Raises the shield against incoming melee.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_rangedShield\">Ranged Shield</label>\n                    <span class=\"opt-desc\">Also shields against projectiles.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_rangedShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_empDefense\">Emp Defense</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_empDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoemp\">Auto emp</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoemp\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_soldierDefault\">Soldier default</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_soldierDefault\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeSoldier\">Safe Soldier</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeSoldier\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeWalk\">Safe walk</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeWalk\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Anti Systems<span class=\"sec-sub\">Reactions to what other players and the world do to you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\n                    <span class=\"opt-desc\">Reacts to an enemy closing in on you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_antienemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antianimal\">Anti animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antianimal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antispike\">Anti spike</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antispike\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiSpikePush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiRetrap\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you wear, and when it changes.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\n                    <span class=\"opt-desc\">Swaps to the hat that suits the biome you are standing in.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_biomehats\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\n                    <span class=\"opt-desc\">Picks gear from the threat in front of you rather than a fixed set.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_adaptiveGearSwitching\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_tailPriority\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_cowboyWhenSafe\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\n                    <span class=\"opt-desc\">Pushes a target toward your own spikes.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto Push Range</span>\n                    <span class=\"opt-desc\">How close a target has to be before autopush engages.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_trapStandoff\">Trap Standoff</label>\n                    <span class=\"opt-desc\">Keeps you off an enemy held in your trap. Your body is the only thing that can push a trapped player out - a weapon hit cannot, because the trap zeroes their velocity, but walking into them moves their position directly. Blocks only the part of your movement that closes the gap, so you still circle and reposition normally. Auto Push does the opposite on purpose and takes priority when it is on.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_trapStandoff\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Trap Standoff Distance</span>\n                    <span class=\"opt-desc\">The closest you will get. The game starts pushing at 70, so 70 and up stops the push outright; under 70 you still overlap and still shove them, and the number only caps how deep the overlap gets. Holding a direction against the line orbits outward a little before turning back in, so you sit between this number and about 28 above it - and a melee swing reaches weapon range plus 63, which is 128 for the shortest primary in the game, so every weapon stays in reach across the whole slider.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_trapStandoffRange\" type=\"range\" step=\"1\" min=\"50\" max=\"90\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\n                    <span class=\"opt-desc\">Short burst movement instead of a steady walk.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_dashMovement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\n                    <span class=\"opt-desc\">Breaks the structures standing between you and a target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autobreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_breakPosition\">Break Position</label>\n                        <span class=\"opt-desc\">Which trap Autobreak takes. Inside: only the trap you are caught in. Outside: only traps you are not in. Spikes break the same either way.</span>\n                    </div>\n                    <select id=\"_breakPosition\" class=\"ryn-select\">\n                        <option value=\"inside\">Inside</option>\n                        <option value=\"outside\">Outside</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_automill\">Automill</label>\n                    <span class=\"opt-desc\">Leaves windmills behind you while you move.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_automill\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\n                    <span class=\"opt-desc\">Gathers resources on its own when nothing is threatening you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoGrind\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetPrimary\">Grind Until (primary)</label>\n                        <span class=\"opt-desc\">Which variant to take your primary weapon to. Grinding idles once both slots reach their target, and picks straight back up if you raise one.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetPrimary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                    </select>\n                </div>\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetSecondary\">Grind Until (secondary)</label>\n                        <span class=\"opt-desc\">The same for your secondary. Only the great hammer is ground here, so this does nothing while you carry anything else.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetSecondary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPlay\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_turretSteal\">Turret steal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSteal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapAnimal\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
   // ==========================================================================
   // Kill animation styles — the one list
@@ -1748,7 +1748,7 @@ window.grbtp = 35;
   const KILL_STYLE_OPTIONS = KILL_STYLES.map(style => `<option value="${style.id}">${style.label}</option>`).join("");
 
   const Visuals_default = "<div class=\"menu-page\" data-id=\"3\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Visual</h1>\n        <p class=\"page-description\">Everything the client draws over the game. Turn off what you do not read during a fight — the fewer overlays are on, the less there is between you and the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Names<span class=\"sec-sub\">How players are labelled on the field.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">My Name</span>\n                    <span class=\"opt-desc\">Draws your own nickname in a colour of your choosing.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_myNameColorValue\" type=\"color\" title=\"Select Color\">\n                    <label class=\"switch-checkbox\"><input id=\"_myNameColor\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Mark RYN Players</span>\n                    <span class=\"opt-desc\">Flags other players running this client.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_markRynPlayers\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Player ID</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_showPlayerID\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Player HUD<span class=\"sec-sub\">Readouts drawn on and around players.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Weapon Reload Ring</span>\n                    <span class=\"opt-desc\">Draws what is left of each weapon's cooldown as a white edge inside its own tile in the item bar.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_weaponReloadRing\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Render HP</span>\n                    <span class=\"opt-desc\">Draws a health value on players instead of a bar alone.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_renderHP\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Position Prediction</span>\n                    <span class=\"opt-desc\">Marks where a moving player is expected to be on the next tick.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_positionPrediction\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">My Turret Reload Bar</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_playerTurretReloadBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Display player angle</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_displayPlayerAngle\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">World<span class=\"sec-sub\">Tint and weather drawn over the map itself.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Purple Tint</span>\n                    <span class=\"opt-desc\">Recolours world objects so structures read faster.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_objectTint\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Tint Transparency</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_objectTintOpacity\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_weather\">Rain &amp; Snow</label>\n                    <span class=\"opt-desc\">Rain across the map, turning to snow inside the snow biome.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_weather\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Intensity</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_weatherAmount\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_deathCorpse\">Death Corpses</label>\n                    <span class=\"opt-desc\">Leaves a body where a player you killed died, wearing a halo and angel wings &mdash; or a cowboy hat and a devil tail if they were the one carrying the skull. It holds on the spot, then floats up and fades away. Local and visual only.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_deathCorpse\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_killAnimation\">Kill Animation</label>\n                        <span class=\"opt-desc\">Which animation the body goes out on. The choice holds until you change it; Random draws a new one for every kill.</span>\n                    </div>\n                    <select id=\"_killAnimation\" class=\"ryn-select\">" + KILL_STYLE_OPTIONS + "</select>\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Structures<span class=\"sec-sub\">Who owns a building, and how much of it is left.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Structure Readout (Mine/Clan)</span>\n                    <span class=\"opt-desc\">Owner name and a health bar over your own and your clan's structures, within 500 units.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_itemHealthBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Structure Readout (Enemy)</span>\n                    <span class=\"opt-desc\">The same over everything that is not yours.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_itemHealthBarEnemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Health Bar Colour</span>\n                    <span class=\"opt-desc\">The fill inside the bar, for every structure.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_itemHealthBarColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Structure Colours<span class=\"sec-sub\">Spikes and traps recoloured by who placed them.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_structureColors\">Structure Colours</label>\n                    <span class=\"opt-desc\">Tints every spike and trap by its owner, so an enemy build reads at a glance. Ownership is the client's own team detection. Purely visual.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_structureColors\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Colour Strength</span>\n                    <span class=\"opt-desc\">How much of the original sprite the tint covers.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_structureColorStrength\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Own Spike</span>\n                    <span class=\"opt-desc\">Spikes you placed.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_ownSpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Ally Spike</span>\n                    <span class=\"opt-desc\">Spikes placed by your clan.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_allySpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enemy Spike</span>\n                    <span class=\"opt-desc\">Everyone else's spikes.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_enemySpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Own Trap</span>\n                    <span class=\"opt-desc\">Traps you placed.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_ownTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Ally Trap</span>\n                    <span class=\"opt-desc\">Traps placed by your clan.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_allyTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enemy Trap</span>\n                    <span class=\"opt-desc\">Everyone else's traps.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_enemyTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Hitboxes<span class=\"sec-sub\">Debug outlines. Useful while learning a range, noisy otherwise.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Weapon hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_weaponHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Collision hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_collisionHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Placement hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_placementHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Possible placement</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_possiblePlacement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Interface<span class=\"sec-sub\">The game's own interface and how much it draws.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Hide game HUD</span>\n                    <span class=\"opt-desc\">Removes moomoo's own interface and leaves the map alone.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_hideHUD\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Melee Animation</span>\n                    <span class=\"opt-desc\">Grip-based swing, thrust and chop animations for melee weapons. Off restores moomoo's own spin. Shields, every bow and the musket are never touched either way.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_meleeAnimation\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_visualSmoothing\">Visual Smoothing</label>\n                    <span class=\"opt-desc\">Keeps motion even rather than dropping frames to keep up. Off lets Low Quality Mode skip every second frame when the rate collapses.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_visualSmoothing\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_renderOptimization\">Rendering Optimization</label>\n                    <span class=\"opt-desc\">Caches the canvas contexts and skips canvas state writes that would not change anything.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_renderOptimization\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_performanceOptimization\">Performance Optimization</label>\n                    <span class=\"opt-desc\">Skips per-object overlay work for overlays that are switched off. Never touches anything the modules act on.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_performanceOptimization\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Low Quality Mode</span>\n                    <span class=\"opt-desc\">Cuts rendering detail. Turn this on if the game drops frames.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_lowQuality\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
-  const Misc_default = "<div class=\"menu-page\" data-id=\"4\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Misc</h1>\n        <p class=\"page-description\">Everything around the fight: what happens on a kill, what gets typed into chat for you and for the bots, how this menu behaves, and the counters the client has kept since you installed it.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Match<span class=\"sec-sub\">What the client does when a round starts or ends.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Kill Message</span>\n                    <span class=\"opt-desc\">Sends this line in chat every time you get a kill.</span>\n                </div>\n                <div class=\"option-content\">\n                    <input id=\"_killMessageText\" class=\"input\" type=\"text\" maxlength=\"30\" placeholder=\"Message\">\n                    <label class=\"switch-checkbox\"><input id=\"_killMessage\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Provoke on Kill</span>\n                    <span class=\"opt-desc\">Reacts in chat when someone kills you instead.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_deathProvoke\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autospawn</span>\n                    <span class=\"opt-desc\">Respawns you as soon as the death screen appears.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autospawn\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoaccept</span>\n                    <span class=\"opt-desc\">Accepts incoming clan requests without asking.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoaccept\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Auto Chat<span class=\"sec-sub\">Lines you post on a timer. They cycle in the order listed.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enable</span>\n                    <span class=\"opt-desc\">Starts posting your messages while you are in game.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoChat\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Interval</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoChatInterval\" type=\"range\" step=\"1\" min=\"1\" max=\"60\" data-suffix=\"s\">\n                </label>\n            </div>\n            <div id=\"autoChatMsgList\"></div>\n            <div class=\"content-option centered\">\n                <button id=\"addAutoChatMsg\" class=\"option-button\">Add message</button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Auto Chat<span class=\"sec-sub\">The same thing, typed by every connected bot.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enable Player Chat</span>\n                    <span class=\"opt-desc\">Lets the bots post their own list of lines.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoBotChat\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div id=\"autoBotChatMsgList\"></div>\n            <div class=\"content-option centered\">\n                <button id=\"addAutoBotChatMsg\" class=\"option-button\">Add player message</button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Menu<span class=\"sec-sub\">How this interface itself behaves.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">See through the menu</span>\n                    <span class=\"opt-desc\">Lets the game show faintly behind this panel while it is open.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_menuTransparency\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Session<span class=\"sec-sub\">Counters kept by the client. They persist between games.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Total kills</span></div>\n                <span id=\"_totalKills\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Global kills with bots</span></div>\n                <span id=\"_globalKills\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Deaths</span></div>\n                <span id=\"_deaths\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Autosync</span></div>\n                <span id=\"_autoSyncTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike sync hammer</span></div>\n                <span id=\"_spikeSyncHammerTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike sync</span></div>\n                <span id=\"_spikeSyncTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Velocity tick</span></div>\n                <span id=\"_velocityTickTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Client</span></div>\n                <span id=\"author\" class=\"text-value\">Ryn Type 2</span>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Reset<span class=\"sec-sub\">Puts every setting on every page back to its shipped value.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Reset all settings</span>\n                    <span class=\"opt-desc\">Keybinds, combat, visual, misc and bot options all return to defaults. Your music library is not touched.</span>\n                </div>\n                <button id=\"resetSettings\" class=\"option-button red\">Reset settings</button>\n            </div>\n        </div>\n    </div>\n</div>";
+  const Misc_default = "<div class=\"menu-page\" data-id=\"4\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Misc</h1>\n        <p class=\"page-description\">Everything around the fight: what happens on a kill, what gets typed into chat for you and for the bots, how this menu behaves, and the counters the client has kept since you installed it.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Match<span class=\"sec-sub\">What the client does when a round starts or ends.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Kill Message</span>\n                    <span class=\"opt-desc\">Sends this line in chat every time you get a kill.</span>\n                </div>\n                <div class=\"option-content\">\n                    <input id=\"_killMessageText\" class=\"input\" type=\"text\" maxlength=\"30\" placeholder=\"Message\">\n                    <label class=\"switch-checkbox\"><input id=\"_killMessage\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Provoke on Kill</span>\n                    <span class=\"opt-desc\">Reacts in chat when someone kills you instead.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_deathProvoke\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autospawn</span>\n                    <span class=\"opt-desc\">Respawns you as soon as the death screen appears.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autospawn\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoaccept</span>\n                    <span class=\"opt-desc\">Accepts incoming clan requests without asking.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoaccept\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Auto Chat<span class=\"sec-sub\">Lines you post on a timer. They cycle in the order listed.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enable</span>\n                    <span class=\"opt-desc\">Starts posting your messages while you are in game.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoChat\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Interval</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoChatInterval\" type=\"range\" step=\"1\" min=\"1\" max=\"60\" data-suffix=\"s\">\n                </label>\n            </div>\n            <div id=\"autoChatMsgList\"></div>\n            <div class=\"content-option centered\">\n                <button id=\"addAutoChatMsg\" class=\"option-button\">Add message</button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Auto Chat<span class=\"sec-sub\">The same thing, typed by every connected bot.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enable Player Chat</span>\n                    <span class=\"opt-desc\">Lets the bots post their own list of lines.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoBotChat\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div id=\"autoBotChatMsgList\"></div>\n            <div class=\"content-option centered\">\n                <button id=\"addAutoBotChatMsg\" class=\"option-button\">Add player message</button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Chat Log<span class=\"sec-sub\">The log in the corner: what was said, who arrived, who left, who died, and who formed or joined a clan. Size, opacity, font, filters and mutes live behind the gear on the panel itself.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Show Chat Log</span>\n                    <span class=\"opt-desc\">Closing it only puts the panel away. It keeps recording, and everything from the last fifteen minutes is still there when you open it again.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_chatLogOpen\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot messages</span>\n                    <span class=\"opt-desc\">Whether chat from your own bots is listed. Off by default &mdash; forty bots fill a log quickly.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_chatLogBotMsg\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot events</span>\n                    <span class=\"opt-desc\">Whether your bots joining, leaving and dying is listed.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_chatLogBotEvents\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Lock position</span>\n                    <span class=\"opt-desc\">Stops the panel being dragged by accident. Resizing still works.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_chatLogLock\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Menu<span class=\"sec-sub\">How this interface itself behaves.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">See through the menu</span>\n                    <span class=\"opt-desc\">Lets the game show faintly behind this panel while it is open.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_menuTransparency\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Session<span class=\"sec-sub\">Counters kept by the client. They persist between games.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Total kills</span></div>\n                <span id=\"_totalKills\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Global kills with bots</span></div>\n                <span id=\"_globalKills\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Deaths</span></div>\n                <span id=\"_deaths\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Autosync</span></div>\n                <span id=\"_autoSyncTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike sync hammer</span></div>\n                <span id=\"_spikeSyncHammerTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike sync</span></div>\n                <span id=\"_spikeSyncTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Velocity tick</span></div>\n                <span id=\"_velocityTickTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Client</span></div>\n                <span id=\"author\" class=\"text-value\">Ryn Type 2</span>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Reset<span class=\"sec-sub\">Puts every setting on every page back to its shipped value.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Reset all settings</span>\n                    <span class=\"opt-desc\">Keybinds, combat, visual, misc and bot options all return to defaults. Your music library is not touched.</span>\n                </div>\n                <button id=\"resetSettings\" class=\"option-button red\">Reset settings</button>\n            </div>\n        </div>\n    </div>\n</div>";
   const Bots_default = "<div class=\"menu-page\" data-id=\"5\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Bots</h1>\n        <p class=\"page-description\">Connect alternate clients, name them, and decide how they follow, fight, build and farm. Everything below applies to every bot you have connected.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Fleet<span class=\"sec-sub\">Add a bot, give it a name, connect it. Connected bots appear underneath.</span></div>\n        <div class=\"section-content\">\n            <div id=\"bot-container\"></div>\n            <div id=\"dynamic-bot-list\"></div>\n            <div class=\"content-option stacked\" id=\"_botBulkRow\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Name every bot</span>\n                    <span class=\"opt-desc\">One name for the whole fleet. Every new row is pre-filled with it, so bots you add from here on join under it. <b>Apply to all</b> also gives it to the rows and bots you already have &mdash; a bot that is alive keeps the name it spawned with until it next respawns.</span>\n                </div>\n                <div class=\"inline\">\n                    <input id=\"_botBulkName\" class=\"input\" type=\"text\" maxlength=\"15\" placeholder=\"Enter name\" autocomplete=\"off\" spellcheck=\"false\">\n                    <button id=\"_botBulkNameApply\" class=\"option-button\">Apply to all</button>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Number the fleet</span>\n                    <span class=\"opt-desc\">Off, every bot joins under the name exactly as typed. On, each bot gets its slot number appended &mdash; base <b>555</b> becomes 5551, 5552, 5553 and so on. Applied when a bot spawns, so turning it off puts them back on their next respawn.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botNameNumbering\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">First number</span></div>\n                <div class=\"inline\"><input id=\"_botNameNumberStart\" class=\"input\" type=\"number\" min=\"0\" max=\"99\" step=\"1\" value=\"1\"></div>\n            </div>\n            <div class=\"content-option centered\">\n                <button id=\"add-bot-dynamic\" class=\"option-button primary tall\">Add bot</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Clan joins</span>\n                    <span class=\"opt-desc\">Restarts the join rotation for any bot that is still outside your clan. Bots already in it are skipped.</span>\n                </div>\n                <button id=\"_clanRecheck\" class=\"option-button\">Re-check clan joins</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto random bot names</span>\n                    <span class=\"opt-desc\">Pre-fills each new row with a random 1&ndash;7 character name.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoRandomBotNames\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bots own clan</span>\n                    <span class=\"opt-desc\">Each bot creates its own clan instead of joining yours.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botIndividualClans\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Behaviour<span class=\"sec-sub\">What the bots do while they are following you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Follow cursor</span>\n                    <span class=\"opt-desc\">Bots move toward where you are pointing rather than to you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_followCursor\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Stop movement radius</span>\n                    <span class=\"opt-desc\">How close a bot gets to its target point before it stops.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_movementRadius\" type=\"range\" step=\"25\" min=\"25\" max=\"250\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Auto Break</span>\n                    <span class=\"opt-desc\">Bots break structures standing in their way.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAutoBreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Ranged Kiting</span>\n                    <span class=\"opt-desc\">Bots holding a ranged weapon back off instead of closing.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botRangedKite\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Kite distance</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botKiteDistance\" type=\"range\" step=\"25\" min=\"150\" max=\"1200\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Volley Fire</span>\n                    <span class=\"opt-desc\">Bots fire in waves rather than all at once.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botVolley\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">First wave size</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botVolleyWave\" type=\"range\" step=\"1\" min=\"1\" max=\"20\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Avoid Shield Bots</span>\n                    <span class=\"opt-desc\">Bots steer away from a target that is holding a shield up.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAvoidShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Be Angel</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_botBeAngel\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Formation<span class=\"sec-sub\">The shape the fleet holds around you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Shape</span>\n                    <span class=\"opt-desc\">Pick a formation, and bind a key to any of them from inside the picker.</span>\n                </div>\n                <div id=\"_formationGrid\"></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Circle rotation</span>\n                    <span class=\"opt-desc\">Rotates the formation around you instead of holding it still.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_circleRotation\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Circle radius</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_circleRadius\" type=\"range\" step=\"25\" min=\"50\" max=\"600\">\n                </label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Loadout<span class=\"sec-sub\">What each bot carries. &ldquo;Copy from me&rdquo; mirrors your own weapon.</span></div>\n        <div class=\"section-content\">\n            <div class=\"stack\">\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Primary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-weapon-selector\">\n                        <div class=\"bot-weapon-btn\" data-wid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"0\" title=\"Tool Hammer\">Tool Hammer</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"1\" title=\"Hand Axe\">Hand Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"2\" title=\"Great Axe\">Great Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"3\" title=\"Short Sword\">Short Sword</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"4\" title=\"Katana\">Katana</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"5\" title=\"Polearm\">Polearm</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"6\" title=\"Bat\">Bat</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"7\" title=\"Daggers\">Daggers</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"8\" title=\"Stick\">Stick</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Secondary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-sec-weapon-selector\">\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"9\" title=\"Hunting Bow\">Hunting Bow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"10\" title=\"Great Hammer\">Great Hammer</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"11\" title=\"Wooden Shield\">Wooden Shield</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"12\" title=\"Crossbow\">Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"13\" title=\"Repeater Crossbow\">Repeater Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"14\" title=\"Mc Grabby\">Mc Grabby</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"15\" title=\"Musket\">Musket</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-sec-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Age 4 building</div>\n                    <div class=\"wpn-grid\" id=\"bot-age4-selector\">\n                        <div class=\"bot-weapon-btn\" data-age4id=\"0\" title=\"Trap\">Trap</div>\n                        <div class=\"bot-weapon-btn\" data-age4id=\"1\" title=\"Boost Pad\">Boost Pad</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-age4-label\">Trap (default)</span></div>\n                </div>\n            </div>\n\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Platform w/ Musket</span>\n                    <span class=\"opt-desc\">Bots carrying a musket build a platform to shoot from.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_platformMusket\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Auto Farm<span class=\"sec-sub\">Bots gather on their own and come back when they are done.</span></div>\n        <div class=\"section-content\">\n            <div class=\"stack\">\n                <div class=\"field\">\n                    <div class=\"field-head\">Farm mode</div>\n                    <div class=\"seg\">\n                        <button id=\"_farmModeSingle\" class=\"seg-btn\">Single</button>\n                        <button id=\"_farmModeNearest\" class=\"seg-btn\">Nearest</button>\n                    </div>\n                    <p class=\"field-note\">In <b>Single</b> mode every bot goes for one resource type. In <b>Nearest</b> mode each bot takes whatever is closest to it.</p>\n                </div>\n\n                <div class=\"field\" id=\"_farmTypeRow\">\n                    <div class=\"field-head\">Resource type</div>\n                    <div class=\"seg\">\n                        <button data-farm-type=\"0\" class=\"farm-type-btn\">Wood</button>\n                        <button data-farm-type=\"1\" class=\"farm-type-btn\">Food</button>\n                        <button data-farm-type=\"2\" class=\"farm-type-btn\">Stone</button>\n                        <button data-farm-type=\"3\" class=\"farm-type-btn\">Gold</button>\n                    </div>\n                    <input id=\"_botFarmType\" type=\"hidden\" value=\"0\">\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"field-head\">Limit</div>\n                    <div class=\"inline\">\n                        <input id=\"_botFarmLimit\" class=\"input\" type=\"number\" min=\"0\" max=\"9999\" step=\"50\" value=\"0\">\n                        <p class=\"field-note\" style=\"margin-top:0;\">Bots stop and return to you at this amount. <b>0</b> means no limit.</p>\n                    </div>\n                </div>\n            </div>\n        </div>\n    </div>\n    <div class=\"section\">\n        <div class=\"section-title\">Possession<span class=\"sec-sub\">Switch control into a bot and it becomes your character: its camera, its world, its HUD, its resources, its age, its inventory, its chat. Not a spectator view &mdash; you are that character until you switch back.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Who you are controlling</span>\n                    <span class=\"opt-desc\">Click a character to take it over. The game's own HUD, camera and minimap follow whoever is selected, and the rest of the fleet follows that character too.</span>\n                </div>\n                <div id=\"_possessList\"></div>\n            </div>\n        </div>\n    </div>\n\n</div>";
   const Music_default = "<div class=\"menu-page\" data-id=\"7\">\n<style>\n@keyframes ryn-eq{0%,100%{height:4px;}50%{height:16px;}}\n\n.rm-root{display:flex;flex-direction:column;max-width:1180px;margin:0 auto;}\n\n/* ---------- now playing ---------- */\n.rm-player{\n  display:grid;\n  grid-template-columns:auto minmax(0,1fr) auto;\n  grid-template-areas:\"art meta actions\" \"art transport transport\";\n  column-gap:26px;row-gap:22px;align-items:center;\n  padding:26px 0 30px;\n  border-bottom:1px solid var(--line);\n}\n.rm-art{\n  grid-area:art;\n  width:96px;height:96px;flex-shrink:0;\n  display:flex;align-items:flex-end;justify-content:center;gap:4px;\n  padding-bottom:22px;\n  border-radius:var(--r3);\n  background:linear-gradient(150deg,#221D33,#131320);\n  border:1px solid var(--line);\n  position:relative;\n  transition:border-color 260ms var(--ease);\n}\n.rm-art::after{\n  content:'\\266B';\n  position:absolute;inset:0;\n  display:flex;align-items:center;justify-content:center;\n  font-size:30px;color:var(--tx-4);\n  transition:opacity 220ms var(--ease);\n}\n.rm-art.playing{border-color:var(--sage-40);}\n.rm-art.playing::after{opacity:0;}\n.rm-eq{display:none;align-items:flex-end;gap:4px;height:18px;}\n.rm-art.playing .rm-eq{display:flex;}\n.rm-eq-bar{width:3px;border-radius:2px;background:var(--sage);animation:ryn-eq .95s ease-in-out infinite;}\n.rm-eq-bar:nth-child(2){animation-delay:.16s;}\n.rm-eq-bar:nth-child(3){animation-delay:.32s;}\n\n.rm-meta{grid-area:meta;min-width:0;}\n.rm-kicker{\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.24em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:9px;\n}\n.rm-title{\n  font-size:clamp(22px,2.1vw,29px);font-weight:800;line-height:1.12;\n  letter-spacing:-.028em;color:var(--tx-1);\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n}\n.rm-artist{\n  margin-top:7px;font-size:14px;font-weight:600;color:var(--tx-3);\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n}\n.rm-album-badge{\n  display:inline-block;margin-top:10px;\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--iris-hi);\n}\n.rm-album-badge:empty{display:none;}\n\n.rm-actions{grid-area:actions;display:flex;gap:8px;align-self:start;}\n.rm-like-btn,.rm-save-now-btn{\n  width:42px;height:42px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);border:1px solid var(--line);\n  font-size:16px;line-height:1;color:var(--tx-3);cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.rm-like-btn:hover,.rm-save-now-btn:hover{background:rgba(255,255,255,.08);color:var(--tx-1);border-color:var(--line-2);}\n.rm-like-btn.liked,.rm-like-btn.on{color:var(--rose);border-color:rgba(217,163,171,.4);background:var(--rose-12);}\n.rm-save-now-btn.on{color:var(--sky);border-color:var(--sky-45);background:var(--sky-12);}\n\n.rm-transport{grid-area:transport;display:flex;align-items:center;gap:24px;min-width:0;}\n.rm-ctrl{display:flex;align-items:center;gap:8px;flex-shrink:0;}\n.rm-btn{\n  width:38px;height:38px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r2);\n  background:transparent;border:1px solid transparent;\n  color:var(--tx-3);font-size:12.5px;cursor:pointer;\n  transition:background 150ms var(--ease),color 150ms var(--ease),border-color 150ms var(--ease);\n}\n.rm-btn:hover{background:rgba(255,255,255,.06);color:var(--tx-1);}\n.rm-btn.rm-on,.rm-btn.on{color:var(--sage);border-color:var(--sage-40);background:var(--sage-14);}\n.rm-play-btn{\n  width:52px;height:52px;flex-shrink:0;\n  border-radius:16px;\n  background:var(--tx-1);border:none;color:#0A0A0D;\n  font-size:15.5px;\n  transition:transform 150ms var(--ease),background 150ms var(--ease);\n}\n.rm-play-btn:hover{background:#FFFFFF;transform:scale(1.04);}\n.rm-play-btn:active{transform:scale(.97);}\n\n.rm-prog-wrap{flex:1;min-width:0;display:flex;align-items:center;gap:14px;}\n.rm-prog-rail{\n  flex:1;min-width:0;height:5px;border-radius:999px;cursor:pointer;\n  background:rgba(255,255,255,.08);position:relative;\n}\n.rm-prog-fill{\n  height:100%;border-radius:999px;width:0;\n  background:var(--sky);position:relative;\n  transition:width 120ms linear;\n}\n.rm-prog-fill::after{\n  content:'';position:absolute;right:-5px;top:50%;\n  width:11px;height:11px;border-radius:50%;background:#EEF4FA;\n  transform:translateY(-50%) scale(0);\n  transition:transform 150ms var(--ease);\n  box-shadow:0 1px 4px rgba(0,0,0,.6);\n}\n.rm-prog-wrap:hover .rm-prog-fill::after{transform:translateY(-50%) scale(1);}\n.rm-time{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);flex-shrink:0;\n}\n.rm-vol{display:flex;align-items:center;gap:10px;flex-shrink:0;}\n.rm-vol-icon{font-size:13px;color:var(--tx-4);}\n#music-volume{\n  -webkit-appearance:none;appearance:none;\n  width:110px;height:18px;background:transparent;cursor:pointer;\n}\n#music-volume::-webkit-slider-runnable-track{height:4px;border-radius:999px;background:rgba(255,255,255,.09);}\n#music-volume::-webkit-slider-thumb{\n  -webkit-appearance:none;width:12px;height:12px;margin-top:-4px;\n  border-radius:50%;background:#EEF4FA;border:1px solid rgba(0,0,0,.35);\n  transition:transform 130ms var(--ease);\n}\n#music-volume:hover::-webkit-slider-thumb{transform:scale(1.15);}\n.rm-vol-val{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);min-width:34px;text-align:right;\n}\n\n/* ---------- sections ---------- */\n.rm-sec{border-bottom:1px solid var(--line);}\n.rm-sec-head{\n  display:flex;align-items:center;gap:12px;\n  padding:22px 2px;cursor:pointer;user-select:none;\n}\n.rm-sec-dot{\n  width:5px;height:5px;border-radius:50%;flex-shrink:0;\n  background:var(--tx-4);transition:background 200ms var(--ease);\n}\n.rm-sec.open .rm-sec-dot{background:var(--iris-hi);}\n.rm-sec-title{\n  flex:1;font-family:var(--mono);font-size:11.5px;font-weight:700;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-2);\n}\n.rm-sec.open .rm-sec-title{color:var(--iris-hi);}\n.rm-sec-arrow{font-size:9px;color:var(--tx-4);transition:transform 200ms var(--ease);}\n.rm-sec.open .rm-sec-arrow{transform:rotate(180deg);}\n.rm-sec-body{display:none;flex-direction:column;gap:14px;padding:0 2px 26px;}\n.rm-sec.open .rm-sec-body{display:flex;animation:soft-in 180ms var(--ease);}\n\n/* ---------- library ---------- */\n.rm-filter-bar{display:flex;gap:7px;flex-wrap:wrap;}\n.rm-filter-btn{\n  height:34px;padding:0 16px;border-radius:999px;\n  background:rgba(255,255,255,.04);border:1px solid var(--line);\n  font-size:12.5px;font-weight:700;color:var(--tx-3);cursor:pointer;\n  transition:background 150ms var(--ease),color 150ms var(--ease),border-color 150ms var(--ease);\n}\n.rm-filter-btn:hover{background:rgba(255,255,255,.08);color:var(--tx-1);}\n.rm-filter-btn.active{background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;}\n\n#song-list{display:flex;flex-direction:column;}\n.rm-song-row{\n  display:flex;align-items:center;gap:15px;\n  padding:12px 13px;border-radius:var(--r2);cursor:pointer;\n  position:relative;\n  transition:background 140ms var(--ease);\n}\n.rm-song-row:hover{background:rgba(255,255,255,.035);}\n.rm-song-row.active{background:var(--sage-14);}\n.rm-song-row.active::before{\n  content:'';position:absolute;left:0;top:10px;bottom:10px;\n  width:2px;border-radius:0 2px 2px 0;background:var(--sage);\n}\n.rm-snum{\n  width:23px;flex-shrink:0;text-align:center;\n  font-family:var(--mono);font-size:12.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);\n}\n.rm-song-row.active .rm-snum{color:var(--sage);}\n.rm-stitle{\n  flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n}\n.rm-sartist{\n  flex-shrink:1;min-width:0;max-width:30%;\n  font-size:12.5px;font-weight:500;color:var(--tx-4);\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n}\n.rm-s-icons{display:flex;gap:4px;flex-shrink:0;opacity:0;transition:opacity 150ms var(--ease);}\n.rm-song-row:hover .rm-s-icons,.rm-song-row.active .rm-s-icons{opacity:1;}\n.rm-s-like,.rm-s-save,.rm-sdel{\n  width:30px;height:30px;flex-shrink:0;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r1);font-size:12.5px;line-height:1;\n  color:var(--tx-4);cursor:pointer;\n  transition:background 140ms var(--ease),color 140ms var(--ease);\n}\n.rm-s-like:hover,.rm-sdel:hover{background:var(--rose-12);color:var(--rose);}\n.rm-s-save:hover{background:var(--sky-12);color:var(--sky);}\n.rm-s-like.on{color:var(--rose);}\n.rm-s-save.on{color:var(--sky);}\n.rm-song-row:not(:hover) .rm-s-icons:has(.on){opacity:1;}\n.rm-empty{\n  padding:26px 0;text-align:center;\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n\n/* ---------- albums ---------- */\n.rm-album-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}\n.rm-album-card{\n  position:relative;padding:14px;border-radius:var(--r3);cursor:pointer;\n  background:rgba(255,255,255,.03);border:1px solid var(--line);\n  transition:background 160ms var(--ease),border-color 160ms var(--ease),transform 160ms var(--ease);\n}\n.rm-album-card:hover{background:rgba(255,255,255,.06);border-color:var(--line-2);transform:translateY(-2px);}\n.rm-album-card.active{background:var(--iris-12);border-color:var(--iris-45);}\n.rm-album-icon{\n  display:flex;align-items:center;justify-content:center;\n  width:100%;aspect-ratio:1.6;border-radius:var(--r2);margin-bottom:11px;\n  font-size:22px;\n  background:linear-gradient(150deg,#221D33,#131320);\n}\n.rm-album-name{font-size:13.5px;font-weight:700;color:var(--tx-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}\n.rm-album-count{margin-top:3px;font-size:11.5px;font-weight:500;color:var(--tx-4);}\n.rm-album-del{\n  position:absolute;top:8px;right:8px;\n  width:22px;height:22px;border-radius:var(--r1);\n  display:flex;align-items:center;justify-content:center;\n  background:rgba(0,0,0,.55);color:var(--tx-3);\n  font-size:10px;cursor:pointer;opacity:0;\n  transition:opacity 150ms var(--ease),color 150ms var(--ease);\n}\n.rm-album-card:hover .rm-album-del{opacity:1;}\n.rm-album-del:hover{color:var(--rose);}\n\n/* ---------- forms ---------- */\n.rm-form{display:flex;flex-direction:column;gap:9px;max-width:620px;}\n.rm-inp{\n  width:100%;height:42px;padding:0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);border:1px solid var(--line-2);\n  color:var(--tx-1);font-size:13.5px;font-weight:600;\n  outline:none;\n  transition:border-color 150ms var(--ease),background 150ms var(--ease);\n}\n.rm-inp::placeholder{color:var(--tx-4);font-weight:500;}\n.rm-inp:focus{border-color:var(--sky-45);background:var(--sky-12);}\ninput[type=\"file\"].rm-inp{padding:10px 12px;height:auto;font-size:12.5px;font-weight:500;cursor:pointer;}\n.rm-lrc{\n  padding:14px;border-radius:var(--r3);\n  background:rgba(255,255,255,.022);border:1px solid var(--line);\n}\n.rm-lrc-head{\n  display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n#lrc-status{font-family:var(--mono);font-size:11.5px;letter-spacing:0;text-transform:none;color:var(--sky);}\ntextarea.rm-inp{\n  height:98px;padding:11px 13px;resize:vertical;\n  font-family:var(--mono);font-size:12.5px;font-weight:500;line-height:1.6;\n}\n.rm-check{\n  display:flex;align-items:center;gap:9px;margin-top:11px;\n  font-size:12.5px;font-weight:600;color:var(--tx-3);cursor:pointer;\n}\n.rm-check input{accent-color:#A6D7B2;width:15px;height:15px;cursor:pointer;}\n.rm-row{display:flex;gap:9px;}\n\n/* ---------- sync ---------- */\n.rm-sync-row{\n  display:flex;align-items:center;justify-content:space-between;gap:16px;\n  padding:12px 14px;border-radius:var(--r2);\n  transition:background 140ms var(--ease);\n}\n.rm-sync-row:hover{background:rgba(255,255,255,.028);}\n.rm-sync-label{flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);}\n.rm-sync-note{padding:0 14px 8px;font-size:12.5px;font-weight:500;line-height:1.5;color:var(--tx-4);}\n.rm-badge{\n  display:inline-block;margin-left:9px;padding:2px 8px;border-radius:999px;\n  background:var(--iris-12);color:var(--iris-hi);\n  font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;\n  vertical-align:middle;\n}\n.rm-divider{height:1px;background:var(--line);margin:6px 0;}\n.rm-status{\n  font-family:var(--mono);font-size:11.5px;font-weight:500;\n  color:var(--tx-4);min-height:16px;\n}\n#bm-dbg-box{\n  margin:0;padding:11px 13px;border-radius:var(--r2);\n  background:rgba(0,0,0,.4);border:1px solid var(--line);\n  font-family:var(--mono);font-size:11.5px;color:var(--tx-3);\n  white-space:pre-wrap;max-height:150px;overflow-y:auto;\n}\n\n/* ---------- toast + guide ---------- */\n.rm-toast{\n  display:none;position:fixed;left:50%;bottom:28px;\n  transform:translateX(-50%);\n  padding:11px 20px;border-radius:999px;z-index:99999;\n  background:var(--tx-1);color:#0A0A0D;\n  font-size:12.5px;font-weight:700;\n  box-shadow:0 16px 40px -12px rgba(0,0,0,.8);\n}\n.rm-guide{\n  padding:18px 20px;margin-bottom:4px;\n  border-radius:var(--r3);\n  background:rgba(255,255,255,.022);border:1px solid var(--line);\n}\n.rm-guide summary{\n  cursor:pointer;list-style:none;\n  font-size:13.5px;font-weight:700;color:var(--tx-2);\n  display:flex;align-items:center;gap:10px;\n}\n.rm-guide summary::-webkit-details-marker{display:none;}\n.rm-guide summary::before{\n  content:'?';flex-shrink:0;width:20px;height:20px;border-radius:50%;\n  background:var(--iris-12);color:var(--iris-hi);\n  font-family:var(--mono);font-size:11px;font-weight:700;\n  display:grid;place-items:center;\n}\n.rm-guide[open] summary{margin-bottom:14px;color:var(--tx-1);}\n.rm-guide ol{margin:0;padding-left:20px;color:var(--tx-3);font-size:12.5px;line-height:2;}\n.rm-guide code{\n  background:rgba(255,255,255,.06);color:var(--sky);\n  padding:2px 7px;border-radius:5px;font-family:var(--mono);font-size:11.5px;\n}\n.rm-guide a{color:var(--sky);border-bottom:1px solid rgba(155,197,232,.35);}\n.rm-guide a:hover{color:var(--tx-1);border-bottom-color:var(--tx-1);}\n.rm-guide-note{margin-top:14px;color:var(--tx-4);font-size:11.5px;line-height:1.75;}\n</style>\n\n<div id=\"rm-toast\" class=\"rm-toast\"></div>\n\n<div class=\"page-head\">\n    <h1 class=\"page-title\">Music</h1>\n    <p class=\"page-description\">A local library that plays inside the client and can type synced lyrics into chat for you, for your bots, or for both at once.</p>\n</div>\n\n<div class=\"rm-root\">\n\n  <div class=\"rm-player\">\n    <div class=\"rm-art\" id=\"rm-art\">\n      <div class=\"rm-eq\"><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div></div>\n    </div>\n    <div class=\"rm-meta\">\n      <div class=\"rm-kicker\">Now playing</div>\n      <div id=\"music-title\" class=\"rm-title\">No song selected</div>\n      <div id=\"music-artist\" class=\"rm-artist\">--</div>\n      <div id=\"music-album-badge\" class=\"rm-album-badge\"></div>\n    </div>\n    <div class=\"rm-actions\">\n      <button id=\"rm-like-now\" class=\"rm-like-btn\" title=\"Like\">&#9825;</button>\n      <button id=\"rm-save-now\" class=\"rm-save-now-btn\" title=\"Save\">&#9733;</button>\n    </div>\n    <div class=\"rm-transport\">\n      <div class=\"rm-ctrl\">\n        <button id=\"music-prev\" class=\"rm-btn\" title=\"Previous\">&#9664;&#9664;</button>\n        <button id=\"music-play\" class=\"rm-btn rm-play-btn\" title=\"Play / pause\">&#9654;</button>\n        <button id=\"music-next\" class=\"rm-btn\" title=\"Next\">&#9654;&#9654;</button>\n        <button id=\"music-loop\" class=\"rm-btn\" title=\"Loop\">&#8635;</button>\n        <button id=\"music-shuffle\" class=\"rm-btn\" title=\"Shuffle\" style=\"font-size:10px;letter-spacing:.08em;font-weight:700;\">SHF</button>\n      </div>\n      <div class=\"rm-prog-wrap\">\n        <span id=\"music-time-current\" class=\"rm-time\">0:00</span>\n        <div id=\"music-progress-bar\" class=\"rm-prog-rail\"><div id=\"music-progress-fill\" class=\"rm-prog-fill\"></div></div>\n        <span id=\"music-time-total\" class=\"rm-time\">0:00</span>\n      </div>\n      <div class=\"rm-vol\">\n        <span class=\"rm-vol-icon\">&#9834;</span>\n        <input id=\"music-volume\" type=\"range\" min=\"0\" max=\"100\" value=\"70\">\n        <span id=\"music-volume-label\" class=\"rm-vol-val\">70%</span>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec open\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Library</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div id=\"rm-filter-bar\" class=\"rm-filter-bar\">\n        <button class=\"rm-filter-btn active\" data-filter=\"\">All songs</button>\n        <button class=\"rm-filter-btn\" data-filter=\"__liked\">&#9829; Liked</button>\n      </div>\n      <div id=\"song-list\"></div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec open\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Albums</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div id=\"rm-album-grid\" class=\"rm-album-grid\"></div>\n      <div class=\"rm-row\" style=\"max-width:480px;\">\n        <input id=\"album-name-input\" class=\"rm-inp\" type=\"text\" placeholder=\"New album name\" maxlength=\"30\">\n        <button id=\"add-album\" class=\"option-button\">Add</button>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Add song</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <details class=\"rm-guide\">\n        <summary>How to add a song with its lyrics</summary>\n        <ol>\n          <li>Find the song on <a href=\"https://www.youtube.com/\" target=\"_blank\" rel=\"noreferrer\">youtube.com</a> and copy its link.</li>\n          <li>Turn the link into a file on <a href=\"https://ytmp3.gl/\" target=\"_blank\" rel=\"noreferrer\">ytmp3.gl</a> and download the <code>.mp3</code>.</li>\n          <li>Search the same song on <a href=\"https://lrclib.net/\" target=\"_blank\" rel=\"noreferrer\">lrclib.net</a> and download the <b>synced</b> lyrics as <code>.lrc</code>.</li>\n          <li>Fill in the <b>Title</b> below and pick the <code>.mp3</code> in the file box, or paste a direct link in <b>URL</b>.</li>\n          <li>In the <b>LRC sync</b> box, pick the <code>.lrc</code> file &mdash; or paste its lines into the text area.</li>\n          <li>Press <b>Add song</b>. It shows up in the library with its lyrics attached.</li>\n        </ol>\n        <div class=\"rm-guide-note\">The <code>.lrc</code> has to be the synced kind &mdash; the one whose lines start with a timestamp like <code>[01:23.45]</code>. Plain lyrics still show up, but they will not follow the song. If the words drift, an <code>.lrc</code> from a different release of the track is usually the reason.</div>\n      </details>\n      <div class=\"rm-form\">\n        <input id=\"song-title-input\" class=\"rm-inp\" type=\"text\" placeholder=\"Title *\" maxlength=\"50\">\n        <input id=\"song-artist-input\" class=\"rm-inp\" type=\"text\" placeholder=\"Artist\" maxlength=\"30\">\n        <input id=\"song-url-input\" class=\"rm-inp\" type=\"text\" placeholder=\"URL (.mp3  .ogg  .wav)\">\n        <input id=\"song-file-input\" class=\"rm-inp\" type=\"file\" accept=\".mp3,.ogg,.wav,.flac,.aac,.m4a\">\n        <select id=\"song-album-select\" class=\"rm-inp ryn-select\"><option value=\"\">No album</option></select>\n        <div class=\"rm-lrc\">\n          <div class=\"rm-lrc-head\"><span>LRC sync</span><span id=\"lrc-status\"></span></div>\n          <input id=\"lrc-file-input\" class=\"rm-inp\" type=\"file\" accept=\".lrc,.txt\" style=\"margin-bottom:9px;\">\n          <textarea id=\"song-lyrics-input\" class=\"rm-inp\" placeholder=\"[0:15] Line 1&#10;[0:30] Line 2\"></textarea>\n          <label class=\"rm-check\"><input id=\"song-autosync\" type=\"checkbox\"> Auto-play and sync when added</label>\n        </div>\n        <div class=\"rm-row\">\n          <button id=\"add-song\" class=\"option-button primary wide\">Add song</button>\n          <button id=\"save-song-btn\" class=\"option-button\">Save lyrics</button>\n        </div>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Chat sync</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Enable chat sync</span><label class=\"switch-checkbox\"><input id=\"music-chat-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Mixed sync<span class=\"rm-badge\">Me + bots</span></span><label class=\"switch-checkbox\"><input id=\"music-mixed-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">You: line &#8594; bots: line &#8594; you &hellip;</div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Bots only sync<span class=\"rm-badge\">Bots</span></span><label class=\"switch-checkbox\"><input id=\"music-bots-only-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">Bot 1: line 1 &bull; bot 2: line 2 &bull; bot 3: line 3 &hellip;</div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Unified sync<span class=\"rm-badge\">All</span></span><label class=\"switch-checkbox\"><input id=\"music-unified-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">You and every bot post the same line at the same moment.</div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Auto delay<span id=\"bm-auto-delay-badge\" class=\"rm-badge\">off</span></span><label class=\"switch-checkbox\"><input id=\"music-auto-delay\" type=\"checkbox\" checked><span></span></label></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Sync bot<span id=\"bm-sync-bot-badge\" class=\"rm-badge\">off</span></span><button id=\"music-sync-bot-btn\" class=\"option-button\">OFF</button></div>\n      <div id=\"bm-manual-delay-row\" class=\"rm-sync-row\" style=\"display:none;\"><span class=\"rm-sync-label\">Delay</span><label class=\"slider\"><span class=\"slider-value\">0ms</span><input id=\"music-sync-delay\" type=\"range\" min=\"-3000\" max=\"3000\" step=\"50\" value=\"0\"></label></div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-row\" style=\"align-items:center;\">\n        <button id=\"bm-test-chat\" class=\"option-button\">Test chat</button>\n        <span id=\"bm-test-chat-status\" class=\"rm-status\" style=\"align-self:center;\"></span>\n      </div>\n      <button id=\"bm-send-all-lyrics\" class=\"option-button wide\">&#9836; Send All Lyrics: OFF</button>\n      <div id=\"bm-send-lyrics-status\" class=\"rm-status\" style=\"text-align:center;\"></div>\n      <div id=\"bm-dbg-wrap\" style=\"display:none;\"><pre id=\"bm-dbg-box\"></pre></div>\n      <button id=\"bm-dbg-toggle\" class=\"option-button wide\">Show Debug Log</button>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Backup &amp; restore</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <p class=\"rm-sync-note\" style=\"padding-left:0;\">Export the whole library to a JSON file and bring it back on another machine.</p>\n      <div class=\"rm-row\" style=\"max-width:420px;\">\n        <button id=\"music-export-btn\" class=\"option-button wide\">Export</button>\n        <button id=\"music-import-btn\" class=\"option-button wide\">Import</button>\n        <input id=\"music-import-file\" type=\"file\" accept=\".json\" style=\"display:none;\">\n      </div>\n      <div id=\"music-backup-status\" class=\"rm-status\"></div>\n    </div>\n  </div>\n\n</div>\n</div>";
   const styles_default = "@import url(\"https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap\");\n\n/* ============================================================\n   RYN TYPE 2 — interface stylesheet\n   Ground: near-black neutral. Iris (muted purple) = navigation.\n   Sage (soft light green) = enabled. Sky (light blue) = values,\n   focus and interaction. Nothing else carries colour.\n   ============================================================ */\n\n:root{\n  --ink-0:#07070A;\n  --ink-1:#0C0C11;\n  --ink-2:#101016;\n  --ink-3:#15151C;\n  --ink-4:#1B1B24;\n\n  --line:rgba(255,255,255,0.055);\n  --line-2:rgba(255,255,255,0.10);\n  --line-3:rgba(255,255,255,0.16);\n\n  --iris:#8E76CE;\n  --iris-hi:#A894E0;\n  --iris-05:rgba(142,118,206,0.05);\n  --iris-12:rgba(142,118,206,0.12);\n  --iris-18:rgba(142,118,206,0.18);\n  --iris-45:rgba(142,118,206,0.45);\n\n  --sage:#A6D7B2;\n  --sage-14:rgba(166,215,178,0.14);\n  --sage-40:rgba(166,215,178,0.40);\n\n  --sky:#9BC5E8;\n  --sky-12:rgba(155,197,232,0.12);\n  --sky-45:rgba(155,197,232,0.45);\n\n  --rose:#D9A3AB;\n  --rose-12:rgba(217,163,171,0.12);\n\n  --tx-1:#F3F2F7;\n  --tx-2:#ACA9BA;\n  --tx-3:#726F80;\n  --tx-4:#4E4B5A;\n\n  --r1:6px;\n  --r2:10px;\n  --r3:14px;\n  --r4:22px;\n\n  --s1:4px;  --s2:8px;   --s3:12px;  --s4:16px;\n  --s5:24px; --s6:32px;  --s7:44px;  --s8:64px;\n\n  --ease:cubic-bezier(.2,.8,.3,1);\n  --font:'Manrope','Segoe UI',system-ui,sans-serif;\n  --mono:'Space Grotesk','Manrope',system-ui,sans-serif;\n\n  /* legacy aliases kept so any stray rule still resolves */\n  --accent:#8E76CE;\n  --accent2:#9BC5E8;\n  --border:rgba(255,255,255,0.055);\n  --text:#F3F2F7;\n  --text-muted:#ACA9BA;\n  --text-dim:#726F80;\n}\n\n*{box-sizing:border-box;-webkit-user-select:none;user-select:none;}\nhtml,body{margin:0;padding:0;height:100%;overflow:hidden;background:transparent;}\nbody{font-family:var(--font);color:var(--tx-1);-webkit-font-smoothing:antialiased;}\nh1,h2,h3,p{margin:0;}\nbutton{font-family:inherit;border:none;outline:none;background:none;cursor:pointer;color:inherit;}\ninput,textarea,select{font-family:inherit;}\ninput,textarea{-webkit-user-select:text;user-select:text;}\na{color:var(--sky);text-decoration:none;}\n\n@keyframes toopen{from{opacity:0;transform:translateY(8px) scale(.994);}to{opacity:1;transform:none;}}\n@keyframes toclose{from{opacity:1;transform:none;}to{opacity:0;transform:translateY(6px) scale(.994);}}\n@keyframes page-in{from{opacity:0;transform:translateX(10px);}to{opacity:1;transform:none;}}\n@keyframes cap-pulse{0%,100%{opacity:1;}50%{opacity:.55;}}\n@keyframes ripple{from{opacity:.22;transform:scale(0);}to{opacity:0;transform:scale(1.3);}}\n@keyframes soft-in{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:none;}}\n\n/* ------------------------------------------------------------------\n   SHELL\n   ------------------------------------------------------------------ */\n\n#menu-container{\n  position:absolute;inset:0;\n  display:flex;align-items:center;justify-content:center;\n  padding:18px;\n}\n\n#menu-wrapper{\n  position:relative;\n  width:min(1100px,100%);\n  height:min(690px,100%);\n  min-width:860px;min-height:520px;\n  display:flex;\n  background:var(--ink-1);\n  border:1px solid var(--line-2);\n  border-radius:var(--r4);\n  overflow:hidden;\n  box-shadow:0 48px 110px -34px rgba(0,0,0,.92),0 0 0 1px rgba(0,0,0,.4);\n  transform:scale(var(--ryn-scale,1));\n  transform-origin:center center;\n}\n#menu-container.transparent #menu-wrapper{background:rgba(12,12,17,0.90);}\n#menu-wrapper.toopen{animation:180ms var(--ease) toopen both;}\n#menu-wrapper.toclose{animation:140ms ease-in toclose both;}\n\nmain{display:flex;flex:1;min-width:0;min-height:0;}\n\n/* the old top bar is gone — everything identifying lives in the rail */\nheader{display:none;}\n\n/* ------------------------------------------------------------------\n   NAVIGATION RAIL\n   ------------------------------------------------------------------ */\n\n#navbar-container{\n  width:236px;min-width:236px;flex-shrink:0;\n  display:flex;flex-direction:column;\n  background:var(--ink-2);\n  border-right:1px solid var(--line);\n  padding:22px 12px 12px;\n}\n\n.rail-brand{display:flex;align-items:baseline;gap:9px;padding:0 12px 18px;}\n.rail-mark{\n  font-family:var(--mono);font-weight:700;font-size:25px;line-height:1;\n  letter-spacing:-.02em;color:var(--tx-1);\n}\n.rail-sub{\n  font-family:var(--mono);font-weight:600;font-size:10.5px;line-height:1;\n  letter-spacing:.24em;text-transform:uppercase;color:var(--iris-hi);\n}\n\n.rail-label{\n  font-family:var(--mono);font-weight:600;font-size:10px;\n  letter-spacing:.22em;text-transform:uppercase;color:var(--tx-4);\n  padding:0 12px;margin:20px 0 7px;\n}\n\n#navbar-container nav{display:flex;flex-direction:column;gap:2px;}\n\n.open-menu{\n  position:relative;\n  display:flex;align-items:center;gap:13px;\n  width:100%;padding:12px 13px;\n  border-radius:var(--r2);\n  background:transparent;\n  color:var(--tx-2);\n  text-align:left;\n  overflow:hidden;\n  transition:background 150ms var(--ease),color 150ms var(--ease);\n}\n.open-menu .nav-index{\n  font-family:var(--mono);font-weight:600;font-size:11px;line-height:1;\n  letter-spacing:.06em;color:var(--tx-4);\n  width:20px;flex-shrink:0;\n  transition:color 150ms var(--ease);\n}\n.open-menu .nav-label{\n  font-weight:800;font-size:15px;line-height:1.1;letter-spacing:-.012em;\n}\n.open-menu:hover{background:rgba(255,255,255,.035);color:var(--tx-1);}\n.open-menu:active{background:rgba(255,255,255,.06);}\n.open-menu.active{background:var(--iris-12);color:#FFFFFF;}\n.open-menu.active .nav-index{color:var(--iris-hi);}\n.open-menu.active::before{\n  content:'';position:absolute;left:0;top:11px;bottom:11px;\n  width:3px;border-radius:0 3px 3px 0;background:var(--iris);\n}\n.open-menu .ripple{\n  position:absolute;border-radius:50%;\n  background:rgba(255,255,255,.07);\n  opacity:0;pointer-events:none;\n  animation:ripple 420ms ease-out;\n}\n\n/* live outline of the open category */\n#nav-outline{\n  display:flex;flex-direction:column;gap:1px;\n  margin-top:4px;padding-left:6px;\n  overflow-y:auto;flex:1;min-height:0;\n}\n#nav-outline::-webkit-scrollbar{width:6px;}\n#nav-outline::-webkit-scrollbar-thumb{background:rgba(255,255,255,.07);border-radius:6px;}\n.outline-item{\n  position:relative;\n  padding:7px 10px 7px 16px;\n  border-radius:var(--r1);\n  font-size:12.5px;font-weight:600;line-height:1.3;\n  color:var(--tx-3);text-align:left;\n  transition:color 140ms var(--ease),background 140ms var(--ease);\n}\n.outline-item::before{\n  content:'';position:absolute;left:4px;top:50%;\n  width:4px;height:4px;margin-top:-2px;border-radius:50%;\n  background:var(--tx-4);\n  transition:background 160ms var(--ease),transform 160ms var(--ease);\n}\n.outline-item:hover{color:var(--tx-1);background:rgba(255,255,255,.03);}\n.outline-item.current{color:var(--tx-1);}\n.outline-item.current::before{background:var(--iris-hi);transform:scale(1.35);}\n\n.rail-foot{\n  margin-top:auto;padding-top:16px;\n  border-top:1px solid var(--line);\n  display:flex;align-items:center;gap:10px;\n}\n#ryn-version{\n  font-family:var(--mono);font-size:10.5px;font-weight:500;\n  letter-spacing:.14em;text-transform:uppercase;color:var(--tx-4);\n  padding-left:12px;margin-right:auto;\n}\n#close-button{\n  width:34px;height:34px;padding:8px;flex-shrink:0;\n  border-radius:var(--r2);\n  fill:none;stroke:var(--tx-3);stroke-width:1.9;\n  background:transparent;cursor:pointer;\n  transition:background 150ms var(--ease),stroke 150ms var(--ease);\n}\n#close-button:hover{background:rgba(255,255,255,.06);stroke:var(--tx-1);}\n#close-button:active{background:rgba(255,255,255,.09);}\n\n/* search lives in the rail head */\n#ryn-search-wrap{\n  position:relative;\n  display:flex;align-items:center;gap:8px;\n  height:40px;padding:0 13px;\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line-2);\n  border-radius:var(--r2);\n  transition:border-color 160ms var(--ease),background 160ms var(--ease),box-shadow 160ms var(--ease);\n}\n#ryn-search-wrap:focus-within{\n  border-color:var(--sky-45);\n  background:var(--sky-12);\n  box-shadow:0 0 0 3px rgba(155,197,232,.10);\n}\n#ryn-search-wrap::before{\n  content:'';flex-shrink:0;width:15px;height:15px;\n  background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23726F80' stroke-width='1.6' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='4.6'/%3E%3Cpath d='M10.4 10.4L14 14'/%3E%3C/svg%3E\");\n  background-repeat:no-repeat;background-position:center;background-size:contain;\n}\n#ryn-search-input{\n  flex:1;min-width:0;\n  background:transparent;border:none;outline:none;\n  font-size:13.5px;font-weight:600;color:var(--tx-1);\n}\n#ryn-search-input::placeholder{color:var(--tx-4);font-weight:500;}\n#ryn-search-clear{\n  display:none;flex-shrink:0;\n  font-size:11px;line-height:1;color:var(--tx-4);cursor:pointer;\n  transition:color 140ms;\n}\n#ryn-search-clear:hover{color:var(--tx-1);}\n#ryn-search-dropdown{\n  display:none;position:absolute;top:calc(100% + 8px);left:0;\n  width:320px;max-height:340px;overflow-y:auto;\n  padding:6px;\n  background:var(--ink-3);\n  border:1px solid var(--line-2);\n  border-radius:var(--r3);\n  box-shadow:0 26px 60px -18px rgba(0,0,0,.9);\n  z-index:9999;\n  animation:soft-in 150ms var(--ease);\n}\n#ryn-search-dropdown::-webkit-scrollbar{width:8px;}\n#ryn-search-dropdown::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:8px;border:2px solid transparent;background-clip:padding-box;}\n.ryn-si{\n  display:flex;flex-direction:column;gap:3px;\n  padding:9px 11px;border-radius:var(--r2);cursor:pointer;\n  transition:background 130ms var(--ease);\n}\n.ryn-si:hover,.ryn-si.ryn-fx{background:var(--iris-12);}\n.ryn-st{font-size:13px;font-weight:700;color:var(--tx-1);line-height:1.3;}\n.ryn-st mark{background:var(--iris-45);color:#fff;border-radius:3px;padding:0 2px;}\n.ryn-sp{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--tx-4);}\n.ryn-se{text-align:center;padding:22px 12px;font-size:12.5px;font-weight:600;color:var(--tx-4);}\n.ryn-sl{\n  font-family:var(--mono);font-size:9.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--iris-hi);\n  padding:9px 11px 4px;\n}\n\n/* ------------------------------------------------------------------\n   CONTENT COLUMN — one continuous vertical flow, full available width\n   ------------------------------------------------------------------ */\n\n#page-container{\n  flex:1;min-width:0;\n  overflow-y:auto;overflow-x:hidden;\n  background:var(--ink-1);\n}\n#page-container::-webkit-scrollbar{width:12px;}\n#page-container::-webkit-scrollbar-track{background:transparent;}\n#page-container::-webkit-scrollbar-thumb{\n  background:rgba(255,255,255,.09);\n  border-radius:12px;\n  border:4px solid transparent;\n  background-clip:padding-box;\n}\n#page-container::-webkit-scrollbar-thumb:hover{background:rgba(142,118,206,.55);background-clip:padding-box;}\n\n.menu-page{display:none;}\n.menu-page.opened{\n  display:block;\n  padding:34px clamp(20px,2.6vw,38px) 92px;\n  animation:page-in 190ms var(--ease);\n}\n.page-head{\n  max-width:1180px;margin:0 auto 6px;\n  padding-bottom:24px;\n  border-bottom:1px solid var(--line);\n}\n.menu-page .page-title{\n  font-size:clamp(27px,2.5vw,33px);font-weight:800;line-height:1.03;\n  letter-spacing:-.03em;color:var(--tx-1);\n}\n.page-description{\n  margin-top:12px;max-width:74ch;\n  font-size:13.5px;font-weight:500;line-height:1.6;color:var(--tx-3);\n}\n\n.section{max-width:1180px;margin:0 auto;padding-top:36px;}\n.section-title{\n  display:flex;flex-direction:column;gap:7px;\n  padding:0 2px 13px;\n  border-bottom:1px solid var(--line);\n  font-family:var(--mono);font-size:11.5px;font-weight:700;\n  letter-spacing:.19em;text-transform:uppercase;color:var(--iris-hi);\n}\nh2.section-title{font-family:var(--mono);}\n.sec-sub{\n  font-family:var(--font);font-size:12.5px;font-weight:500;\n  letter-spacing:0;text-transform:none;line-height:1.55;color:var(--tx-3);\n}\n.section-content{display:flex;flex-direction:column;padding-top:4px;}\n\n/* ------------------------------------------------------------------\n   SETTING ROW\n   ------------------------------------------------------------------ */\n\n.content-option{\n  position:relative;\n  display:flex;align-items:center;justify-content:space-between;gap:24px;\n  min-height:60px;\n  padding:13px 15px 13px 17px;\n  border-radius:var(--r2);\n  border-bottom:1px solid rgba(255,255,255,.032);\n  transition:background 150ms var(--ease);\n}\n.content-option:last-child{border-bottom:none;}\n.content-option:hover{background:rgba(255,255,255,.026);}\n.content-option::before{\n  content:'';position:absolute;left:0;top:14px;bottom:14px;\n  width:2px;border-radius:0 2px 2px 0;\n  background:var(--sage);\n  opacity:0;\n  transition:opacity 190ms var(--ease);\n}\n.content-option:has(input[type=\"checkbox\"]:checked)::before{opacity:.85;}\n\n.content-option.centered{justify-content:center;}\n.content-option.left-flex{justify-content:flex-start;gap:14px;}\n.content-option.text{justify-content:flex-start;}\n.content-option.stacked{flex-direction:column;align-items:stretch;gap:14px;}\n\n.opt-main{display:flex;flex-direction:column;gap:5px;min-width:0;flex:1;}\n.option-title{\n  font-size:15.5px;font-weight:700;line-height:1.32;\n  letter-spacing:-.008em;color:var(--tx-1);\n}\nlabel.option-title{cursor:pointer;}\nlabel.option-title:active{opacity:.75;}\n.opt-desc{\n  font-size:12.5px;font-weight:500;line-height:1.5;\n  color:var(--tx-3);max-width:74ch;\n}\n.content-option.quiet .option-title{font-size:14.5px;font-weight:600;color:var(--tx-2);}\n.content-option.quiet{min-height:54px;}\n.content-option.quiet:hover .option-title{color:var(--tx-1);}\n.option-content{display:flex;align-items:center;gap:12px;flex-shrink:0;}.ryn-select{appearance:none;-webkit-appearance:none;background:rgba(255,255,255,.06);color:inherit;border:1px solid rgba(255,255,255,.18);border-radius:7px;padding:5px 26px 5px 10px;font:inherit;font-size:12px;cursor:pointer;flex-shrink:0;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 14px) calc(50% + 1px),calc(100% - 9px) calc(50% + 1px);background-size:5px 5px,5px 5px;background-repeat:no-repeat;}.ryn-select:hover{border-color:rgba(255,255,255,.32);}.ryn-select:focus{outline:none;border-color:var(--iris);}.ryn-select option{background:#1a1526;color:#fff;}\n\n.text-value{\n  font-family:var(--mono);font-size:15px;font-weight:700;\n  color:var(--sky);font-variant-numeric:tabular-nums;\n}\n.simplified{font-size:12.5px;font-weight:500;color:var(--tx-3);line-height:1.6;}\n.highlight{color:var(--iris-hi);}\n\n/* nested detail rows under a parent toggle */\n.sub-options{\n  margin:2px 0 6px 18px;\n  padding-left:16px;\n  border-left:1px solid var(--line-2);\n  transition:opacity 200ms var(--ease);\n}\n.sub-options .content-option{min-height:50px;padding-top:9px;padding-bottom:9px;}\n.sub-options .option-title{font-size:14px;font-weight:600;color:var(--tx-2);}\n.sub-options .content-option:hover .option-title{color:var(--tx-1);}\n.content-option:has(> .switch-checkbox > input:not(:checked)) + .sub-options{\n  opacity:.32;pointer-events:none;\n}\n\n/* ------------------------------------------------------------------\n   CONTROLS\n   ------------------------------------------------------------------ */\n\n/* toggle */\n.switch-checkbox{position:relative;width:48px;height:27px;flex-shrink:0;}\n.switch-checkbox input{position:absolute;opacity:0;width:0;height:0;}\n.switch-checkbox span{\n  position:absolute;inset:0;\n  border-radius:10px;cursor:pointer;\n  background:rgba(255,255,255,.06);\n  border:1px solid rgba(255,255,255,.11);\n  transition:background 180ms var(--ease),border-color 180ms var(--ease);\n}\n.switch-checkbox span::before{\n  content:'';position:absolute;left:4px;top:50%;\n  width:18px;height:18px;border-radius:6px;\n  background:rgba(255,255,255,.32);\n  transform:translateY(-50%);\n  transition:transform 190ms var(--ease),background 190ms var(--ease);\n}\n.switch-checkbox span:hover{border-color:rgba(255,255,255,.2);}\n.switch-checkbox input:checked + span{\n  background:var(--sage-14);\n  border-color:var(--sage-40);\n}\n.switch-checkbox input:checked + span::before{\n  transform:translateY(-50%) translateX(21px);\n  background:var(--sage);\n}\n.switch-checkbox input:focus-visible + span{box-shadow:0 0 0 3px rgba(155,197,232,.20);}\n\n/* keycap */\n.hotkeyInput{\n  display:flex;align-items:center;justify-content:center;\n  min-width:82px;height:42px;padding:0 15px;\n  border-radius:10px;\n  background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.028));\n  border:1px solid rgba(255,255,255,.115);\n  box-shadow:0 2px 0 rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.10);\n  font-family:var(--mono);font-size:13.5px;font-weight:700;\n  letter-spacing:.07em;text-transform:uppercase;color:var(--tx-1);\n  transition:transform 120ms var(--ease),border-color 150ms var(--ease),\n             background 150ms var(--ease),box-shadow 150ms var(--ease),color 150ms var(--ease);\n}\n.hotkeyInput:hover{border-color:var(--sky-45);color:#fff;}\n.hotkeyInput:active{transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.06);}\n.hotkeyInput.active{\n  border-color:var(--iris);background:var(--iris-18);color:var(--iris-hi);\n  box-shadow:inset 0 1px 0 rgba(255,255,255,.08);\n  transform:translateY(2px);\n  animation:cap-pulse 1.15s ease-in-out infinite;\n}\n.hotkeyInput.red{\n  border-color:rgba(217,163,171,.5);background:var(--rose-12);color:var(--rose);\n}\n.key-state{\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--tx-4);\n  min-width:78px;text-align:right;\n}\n.key-state::after{content:'';}\n.content-option:has(.hotkeyInput.red) .key-state::after{content:'Conflict';color:var(--rose);}\n.content-option:has(.hotkeyInput.active) .key-state::after{content:'Press a key';color:var(--iris-hi);}\n.content-option:has(.hotkeyInput.red) .key-state,\n.content-option:has(.hotkeyInput.active) .key-state{color:inherit;}\n\n/* button */\n.option-button{\n  display:inline-flex;align-items:center;justify-content:center;gap:8px;\n  height:42px;padding:0 21px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.05);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);\n  font-size:13.5px;font-weight:700;letter-spacing:.005em;\n  white-space:nowrap;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),\n             transform 110ms var(--ease),color 150ms var(--ease);\n}\n.option-button:hover{background:rgba(255,255,255,.085);border-color:var(--line-3);}\n.option-button:active{transform:translateY(1px);background:rgba(255,255,255,.11);}\n.option-button:disabled{opacity:.4;pointer-events:none;}\n.option-button.primary{\n  background:var(--iris-18);border-color:var(--iris-45);color:#EFEAFF;\n}\n.option-button.primary:hover{background:rgba(142,118,206,.26);border-color:rgba(142,118,206,.7);}\n.option-button.wide{width:100%;}\n.option-button.tall{height:48px;padding:0 28px;font-size:14.5px;}\n.option-button.red,.option-button.danger{\n  background:transparent;border-color:rgba(217,163,171,.28);color:var(--rose);\n}\n.option-button.red:hover,.option-button.danger:hover{\n  background:var(--rose-12);border-color:rgba(217,163,171,.5);color:#F0CDD2;\n}\n.option-button.icon-only{width:42px;padding:0;}\n\n/* segmented control */\n.seg{display:flex;gap:6px;flex-wrap:wrap;max-width:680px;}\n.seg-btn,.farm-type-btn{\n  flex:1;min-width:92px;height:44px;padding:0 15px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line);\n  color:var(--tx-3);\n  font-family:var(--font);font-size:13.5px;font-weight:700;\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.seg-btn:hover,.farm-type-btn:hover{background:rgba(255,255,255,.06);color:var(--tx-1);}\n.seg-btn.seg-active,.farm-type-btn.seg-active{\n  background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;\n}\n\n/* text / number input */\n.input{\n  height:42px;width:235px;padding:0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);\n  font-size:13.5px;font-weight:600;text-align:left;\n  transition:border-color 150ms var(--ease),background 150ms var(--ease),box-shadow 150ms var(--ease);\n}\n.input::placeholder{color:var(--tx-4);font-weight:500;}\n.input:focus{\n  outline:none;border-color:var(--sky-45);\n  background:var(--sky-12);\n  box-shadow:0 0 0 3px rgba(155,197,232,.11);\n}\ninput[type=\"number\"].input{width:122px;font-family:var(--mono);font-variant-numeric:tabular-nums;}\n.input.invalid{border-color:rgba(217,163,171,.6);background:var(--rose-12);}\n\n/* rows the client builds for auto chat: input plus a remove control */\n.chat-row{min-height:58px;}\n.chat-row .input{flex:1;min-width:0;}\n\n/* colour */\ninput[id][type=\"color\"]{\n  width:36px;height:36px;padding:0;\n  border:none;border-radius:9px;background:transparent;cursor:pointer;\n  box-shadow:0 0 0 1px rgba(255,255,255,.16);\n  transition:box-shadow 160ms var(--ease),transform 160ms var(--ease);\n}\ninput[id][type=\"color\"]::-webkit-color-swatch-wrapper{padding:3px;}\ninput[id][type=\"color\"]::-webkit-color-swatch{border:none;border-radius:7px;}\ninput[id][type=\"color\"]:hover{transform:scale(1.06);box-shadow:0 0 0 1px rgba(255,255,255,.34);}\n.reset-color{\n  width:15px;height:15px;flex-shrink:0;\n  border-radius:50%;border:1px solid rgba(255,255,255,.22);\n  background:var(--data-color,var(--iris));\n  opacity:0;cursor:pointer;\n  transition:opacity 160ms var(--ease),transform 160ms var(--ease);\n}\n.content-option:hover .reset-color{opacity:.85;}\n.reset-color:hover{opacity:1;transform:scale(1.2);}\n\n/* slider */\n.slider{display:flex;align-items:center;gap:18px;flex-shrink:0;}\n.slider input[type=\"range\"]{order:1;}\n.slider-value{\n  order:2;\n  font-family:var(--mono);font-size:13.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;\n  color:var(--sky);min-width:58px;text-align:right;\n}\n.slider input[type=\"range\"]{\n  -webkit-appearance:none;appearance:none;\n  width:clamp(150px,17vw,250px);height:22px;\n  background:transparent;cursor:pointer;outline:none;border:none;\n}\n.slider input[type=\"range\"]::-webkit-slider-runnable-track{\n  height:4px;border-radius:999px;\n  background:linear-gradient(90deg,var(--sky) var(--val,0%),rgba(255,255,255,.09) var(--val,0%));\n}\n.slider input[type=\"range\"]::-webkit-slider-thumb{\n  -webkit-appearance:none;\n  width:15px;height:15px;margin-top:-5.5px;\n  border-radius:50%;background:#EEF4FA;\n  border:1px solid rgba(0,0,0,.35);\n  box-shadow:0 1px 4px rgba(0,0,0,.55);\n  transition:transform 130ms var(--ease),box-shadow 130ms var(--ease);\n}\n.slider input[type=\"range\"]:hover::-webkit-slider-thumb{transform:scale(1.14);}\n.slider input[type=\"range\"]:active::-webkit-slider-thumb{\n  transform:scale(1.06);box-shadow:0 0 0 6px rgba(155,197,232,.16);\n}\n\n/* select */\nselect.ryn-select{\n  height:42px;padding:0 38px 0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);font-size:13.5px;font-weight:600;\n  -webkit-appearance:none;appearance:none;cursor:pointer;\n  background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7' viewBox='0 0 11 7'%3E%3Cpath d='M1 1l4.5 4.5L10 1' stroke='%239BC5E8' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\");\n  background-repeat:no-repeat;background-position:right 14px center;\n  transition:border-color 150ms var(--ease);\n}\nselect.ryn-select:focus{outline:none;border-color:var(--sky-45);}\nselect.ryn-select option{background:var(--ink-3);color:var(--tx-1);}\n\n/* misc atoms */\n.icon{width:20px;height:20px;}\n.small-icon{width:15px;height:15px;}\n.key-badge{\n  display:inline-flex;align-items:center;justify-content:center;\n  min-width:26px;height:20px;padding:0 6px;\n  border-radius:var(--r1);\n  background:rgba(255,255,255,.05);border:1px solid var(--line-2);\n  font-family:var(--mono);font-size:10.5px;font-weight:600;color:var(--tx-2);\n}\n.note{\n  max-width:1180px;margin:14px auto 0;\n  padding:14px 18px;\n  border-left:2px solid var(--line-2);\n  font-size:12.5px;font-weight:500;line-height:1.6;color:var(--tx-3);\n}\n\n/* ------------------------------------------------------------------\n   BOTS\n   ------------------------------------------------------------------ */\n\n#bot-container{display:flex;flex-direction:column;}\n#bot-container:empty{display:none;}\n.content-option[data-bot-id]{\n  background:rgba(255,255,255,.028);\n  border:1px solid var(--line);border-bottom:1px solid var(--line);\n  margin-bottom:6px;min-height:52px;\n}\n.content-option[data-bot-id] .option-title{font-family:var(--mono);font-size:13.5px;font-weight:600;}\n.disconnect-button{\n  width:16px;height:16px;flex-shrink:0;\n  fill:var(--tx-4);cursor:pointer;\n  transition:fill 150ms var(--ease);\n}\n.content-option:hover .disconnect-button{fill:var(--tx-2);}\n.disconnect-button:hover{fill:var(--rose)!important;}\n\n#connectingBot{\n  padding:14px 18px;margin-bottom:6px;\n  border-radius:var(--r2);\n  border:1px dashed var(--line-2);\n  font-family:var(--mono);font-size:12px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--tx-4);\n}\n\n#dynamic-bot-list{display:flex;flex-direction:column;gap:8px;}\n.bot-row{\n  display:flex;align-items:center;gap:10px;\n  padding:10px 12px;\n  background:rgba(255,255,255,.028);\n  border:1px solid var(--line);\n  border-radius:var(--r2);\n  transition:border-color 150ms var(--ease),opacity 150ms var(--ease);\n}\n.bot-row:hover{border-color:var(--line-2);}\n.bot-row.connected{background:var(--sage-14);border-color:var(--sage-40);}\n.bot-row-label{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  letter-spacing:.12em;text-transform:uppercase;color:var(--tx-4);\n  min-width:74px;flex-shrink:0;\n}\n.bot-row-name{flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}\n.bot-row-name .pending{color:var(--tx-4);font-weight:600;}\n.bot-row .input{flex:1;min-width:0;width:auto;}\n.bot-row-check{width:17px;height:17px;flex-shrink:0;fill:var(--sage);}\n.icon-btn{\n  display:flex;align-items:center;justify-content:center;\n  width:42px;height:42px;flex-shrink:0;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.045);\n  border:1px solid var(--line-2);\n  font-size:15px;line-height:1;color:var(--tx-2);\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.icon-btn:hover{background:rgba(255,255,255,.08);border-color:var(--line-3);color:var(--tx-1);}\n.icon-btn.danger:hover{background:var(--rose-12);border-color:rgba(217,163,171,.45);color:var(--rose);}\n\n/* option grids (weapons, age-4 building) */\n.wpn-label{\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:12px;\n}\n.wpn-grid{\n  display:grid;grid-template-columns:repeat(auto-fill,minmax(124px,1fr));\n  gap:8px;\n}\n.bot-weapon-btn,.bot-sec-weapon-btn{\n  display:flex;align-items:center;justify-content:center;\n  min-height:54px;padding:10px 12px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.03);\n  border:1px solid var(--line);\n  color:var(--tx-3);\n  font-size:13px;font-weight:600;text-align:center;line-height:1.3;\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.bot-weapon-btn:hover,.bot-sec-weapon-btn:hover{\n  background:rgba(255,255,255,.06);border-color:var(--line-2);color:var(--tx-1);\n}\n.bot-weapon-btn.wpn-active,.bot-sec-weapon-btn.wpn-active{\n  background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;\n}\n.wpn-selected-bar{\n  display:flex;align-items:center;gap:10px;\n  margin-top:12px;padding:11px 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.025);\n  border:1px solid var(--line);\n}\n.wpn-selected-dot{\n  width:6px;height:6px;flex-shrink:0;border-radius:50%;background:var(--iris-hi);\n}\n.wpn-selected-text{font-size:13px;font-weight:600;color:var(--tx-2);}\n\n.stack{display:flex;flex-direction:column;gap:22px;padding-top:8px;}\n.field{display:flex;flex-direction:column;gap:0;}\n.field-head{\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:10px;\n}\n.field-note{margin-top:10px;font-size:12.5px;font-weight:500;line-height:1.55;color:var(--tx-3);}\n.field-note b{color:var(--tx-2);font-weight:700;}\n.inline{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}\n#_botBulkRow .input{flex:1;min-width:180px;width:auto;}\n.bot-row-id{\n  font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.06em;\n  color:var(--tx-4);flex-shrink:0;padding:0 9px;height:25px;\n  display:flex;align-items:center;white-space:nowrap;\n  border:1px solid var(--line);border-radius:var(--r2);\n}\n\n#_formationGrid{width:100%;}\n\n/* ------------------------------------------------------------------\n   FORMATION POPUP (built in JS, lives on document.body)\n   ------------------------------------------------------------------ */\n\n.fsel-trigger{\n  display:flex;align-items:center;gap:12px;\n  width:100%;padding:13px 14px;max-width:680px;\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line-2);\n  border-radius:var(--r2);\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease);\n}\n.fsel-trigger:hover{background:rgba(255,255,255,.06);border-color:var(--line-3);}\n.fsel-trigger.open{border-color:var(--iris-45);background:var(--iris-12);}\n.fsel-trigger .fsel-icon{width:26px;flex-shrink:0;text-align:center;font-size:16px;color:var(--iris-hi);}\n.fsel-trigger .fsel-label{flex:1;font-size:14.5px;font-weight:700;color:var(--tx-1);}\n.fsel-trigger .fsel-arrow{font-size:10px;color:var(--tx-4);transition:transform 170ms var(--ease);}\n.fsel-trigger.open .fsel-arrow{transform:rotate(180deg);}\n\n.fsel-popup{\n  position:fixed;z-index:99999;width:300px;\n  display:flex;flex-direction:column;overflow:hidden;\n  background:var(--ink-3);\n  border:1px solid var(--line-2);\n  border-radius:var(--r3);\n  box-shadow:0 30px 70px -20px rgba(0,0,0,.92);\n}\n.fsel-popup.toopen{animation:soft-in 160ms var(--ease);}\n.fsel-popup-header{\n  display:flex;align-items:center;gap:10px;\n  padding:12px 14px;\n  border-bottom:1px solid var(--line);\n  cursor:grab;\n}\n.fsel-popup-header:active{cursor:grabbing;}\n.fsel-popup-title{\n  flex:1;font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n.fsel-popup-close{\n  width:22px;height:22px;flex-shrink:0;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r1);font-size:11px;color:var(--tx-4);cursor:pointer;\n  transition:background 140ms,color 140ms;\n}\n.fsel-popup-close:hover{background:rgba(255,255,255,.07);color:var(--tx-1);}\n.fsel-popup-body{\n  display:grid;grid-template-columns:repeat(4,1fr);gap:8px;\n  padding:12px;max-height:280px;overflow-y:auto;\n}\n.fsel-popup-body::-webkit-scrollbar{width:8px;}\n.fsel-popup-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:8px;border:2px solid transparent;background-clip:padding-box;}\n.fcat-btn{\n  position:relative;\n  display:flex;align-items:center;justify-content:center;\n  aspect-ratio:1;border-radius:var(--r2);\n  background:rgba(255,255,255,.03);\n  border:1px solid var(--line);\n  color:var(--tx-2);font-size:17px;cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.fcat-btn:hover{background:rgba(255,255,255,.07);border-color:var(--line-2);color:var(--tx-1);}\n.fcat-btn.active{background:var(--iris-18);border-color:var(--iris-45);color:#fff;}\n.fcat-tip{\n  display:none;position:absolute;top:calc(100% + 6px);left:50%;\n  transform:translateX(-50%);\n  padding:4px 9px;border-radius:var(--r1);\n  background:var(--ink-4);border:1px solid var(--line-2);\n  font-family:var(--font);font-size:11px;font-weight:600;color:var(--tx-1);\n  white-space:nowrap;pointer-events:none;z-index:5;\n}\n.fcat-btn:hover .fcat-tip{display:block;}\n.fcat-key{\n  position:absolute;top:3px;right:3px;\n  min-width:17px;height:15px;padding:0 3px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:4px;\n  background:rgba(0,0,0,.45);border:1px solid var(--line);\n  font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--tx-3);\n  line-height:1;cursor:pointer;\n  transition:background 130ms,border-color 130ms,color 130ms;\n}\n.fcat-key:hover{background:rgba(255,255,255,.10);color:var(--tx-1);}\n.fcat-key.set{background:var(--iris-18);border-color:var(--iris-45);color:#EFEAFF;}\n.fcat-key.recording{background:var(--sky-12);border-color:var(--sky-45);color:var(--sky);animation:cap-pulse 1.1s ease-in-out infinite;}\n.fcat-reset{\n  position:absolute;bottom:3px;left:3px;\n  width:15px;height:15px;display:none;\n  align-items:center;justify-content:center;\n  border-radius:4px;\n  background:var(--rose-12);border:1px solid rgba(217,163,171,.3);\n  font-size:9px;line-height:1;color:var(--rose);cursor:pointer;\n}\n.fcat-reset.show{display:flex;}\n.fcat-reset:hover{background:rgba(217,163,171,.24);}\n.fsel-popup-footer{padding:10px 12px;border-top:1px solid var(--line);}\n.fsel-reset-all{\n  width:100%;padding:9px 0;\n  border-radius:var(--r2);\n  background:transparent;border:1px solid rgba(217,163,171,.26);\n  font-family:var(--font);font-size:12px;font-weight:700;\n  color:var(--rose);text-align:center;cursor:pointer;\n  transition:background 140ms,border-color 140ms;\n}\n.fsel-reset-all:hover{background:var(--rose-12);border-color:rgba(217,163,171,.48);}";
@@ -7356,7 +7356,18 @@ window.grbtp = 35;
         const id = buffer[i];
         const player = this.playerData.get(id);
         this.players.push(player);
+        // The clan the server last reported for this player, held across the
+        // update so the real membership transition the update carries can be
+        // seen. buffer[i + 7] is that field; the comparison is against what
+        // update() writes from it rather than against the buffer, so it is the
+        // client's own notion of the player's clan that is being watched.
+        const prevClanName = player.clanName;
         player.update(id, buffer[i + 1], buffer[i + 2], buffer[i + 3], buffer[i + 4], buffer[i + 5], buffer[i + 6], buffer[i + 7], buffer[i + 8], buffer[i + 9], buffer[i + 10], buffer[i + 11], buffer[i + 12]);
+        if (isOwner && player.clanName !== prevClanName) {
+          try {
+            ChatLog_default.onClanChange(this.client, player, prevClanName);
+          } catch (_) {}
+        }
         player.corpseSeenTick = corpseTick;
         if (!this.client.isBotByID(id) && !myPlayer.isMyPlayerByID(id) && myPlayer.isTeammateByID(id) && EnemyManager2.isNear(player, this.nearestTeammate, myPlayer)) {
           this.nearestTeammate = player;
@@ -7400,6 +7411,12 @@ window.grbtp = 35;
       ObjectManager2.postTick();
       if (myPlayer.inGame) {
         myPlayer.tickUpdate();
+        // Reads the same kill flag the corpse renderer does, and leaves after
+        // two property reads on every tick where nobody died. Runs first
+        // because CorpseHandler consumes corpseSeenTick when it claims a body.
+        try {
+          ChatLog_default.tick(this);
+        } catch (_) {}
         // Purely visual, and last: it reads the kill flag tickUpdate has just
         // raised and writes nothing any module will see.
         CorpseHandler.tick(this);
@@ -7889,6 +7906,14 @@ window.grbtp = 35;
         break;
 
        case "P":
+        // Ahead of the reset, which clears the state the entry is named from.
+        // The server telling this client it died is the one death there can be
+        // no argument about.
+        if (this.client.isOwner) {
+          try {
+            ChatLog_default.onOwnDeath(this.client);
+          } catch (_) {}
+        }
         myPlayer.reset();
         this.client.InputHandler.reset();
         break;
@@ -7914,15 +7939,44 @@ window.grbtp = 35;
           // bundle on a possession switch. It is the server's own payload, so
           // the replay is exact rather than reconstructed.
           player._rynSpawnRaw = data2;
+          // A connection's first "D" is an arrival; every later one is that
+          // player respawning. The Chat Log tells them apart by the connection
+          // id in data2[0], which is also how a leave is matched back to a
+          // player id.
+          if (this.client.isOwner) {
+            try {
+              ChatLog_default.onSpawn(this.client, data2);
+            } catch (_) {}
+          }
           this.handlePlayerInit(player);
           break;
         }
+
+       // Nothing in the client needed this: a player it stops being told
+       // about simply stops being drawn, so the case never existed. It is the
+       // only packet that means gone-for-good, which is exactly what separates
+       // a leave from a death and from a respawn, so the Chat Log reads it
+       // here. The client's own model is untouched.
+       case "E":
+        if (this.client.isOwner) {
+          try {
+            ChatLog_default.onRemove(this.client, temp[1]);
+          } catch (_) {}
+        }
+        break;
 
        case "O":
         {
           const player = PlayerManager2.playerData.get(temp[1]);
           if (player !== void 0) {
             player.updateHealth(temp[2]);
+          }
+          // Zero health is the server stating a player is dead — the one death
+          // signal this protocol carries for somebody else's character.
+          if (this.client.isOwner) {
+            try {
+              ChatLog_default.onHealth(this.client, temp[1], temp[2]);
+            } catch (_) {}
           }
           break;
         }
@@ -8057,6 +8111,11 @@ window.grbtp = 35;
 
        case "g":
         PlayerManager2.createClan(temp[1].sid, temp[1].owner);
+        if (this.client.isOwner) {
+          try {
+            ChatLog_default.onClanCreated(this.client, temp[1].sid, temp[1].owner);
+          } catch (_) {}
+        }
         break;
 
        case "1":
@@ -8105,6 +8164,11 @@ window.grbtp = 35;
           const player = PlayerManager2.playerData.get(id);
           if (this.client.isOwner) {
             RYNLink.handleChat(this.client, id, player, message);
+          }
+          if (this.client.isOwner) {
+            try {
+              ChatLog_default.onChat(this.client, id, player, message);
+            } catch (_) {}
           }
           if (player != null && player.isLeader && player.clanName !== null && myPlayer.isEnemyByID(player.id) && /owner/i.test(player.clanName) && /bee op then your hack/.test(message) && this.client.isOwner) {
             this.client.removeBots();
@@ -8387,7 +8451,12 @@ window.grbtp = 35;
       if (event.code === Settings_default._toggleMenu && !isInput) {
         UI_default.toggleMenu();
       }
-      if (event.code === Settings_default._toggleChat && !UI_default.isMenuOpened) {
+      if (Settings_default._chatLogKey && event.code === Settings_default._chatLogKey && !isInput && !UI_default.isMenuOpened) {
+        try {
+          ChatLog_default.toggle();
+        } catch (_) {}
+      }
+      if (event.code === Settings_default._toggleChat && !UI_default.isMenuOpened && !ChatLog_default.ownsInput()) {
         GameUI_default.handleEnter(event);
       }
       const active = this.active;
@@ -24764,6 +24833,25 @@ window.grbtp = 35;
         SaveSettings();
         break;
 
+       case "_chatLogOpen":
+        try {
+          if (checked) ChatLog_default.show(); else ChatLog_default.hide();
+        } catch (_) {}
+        break;
+
+       case "_chatLogBotMsg":
+       case "_chatLogBotEvents":
+        try {
+          ChatLog_default.refresh();
+        } catch (_) {}
+        break;
+
+       case "_chatLogLock":
+        try {
+          ChatLog_default.refresh();
+        } catch (_) {}
+        break;
+
        case "_autoAssassin":
        case "_botsAutoAssassin":
         break;
@@ -25835,6 +25923,9 @@ window.grbtp = 35;
       menuWrapper.classList.remove("toopen");
       menuWrapper.classList.add("toclose");
       this.menuOpened = false;
+      try {
+        ChatLog_default.setMenuOpen(false);
+      } catch (_) {}
       clearTimeout(this.toggleTimeout);
       this.toggleTimeout = setTimeout(() => {
         menuWrapper.classList.remove("toclose");
@@ -25847,6 +25938,9 @@ window.grbtp = 35;
       menuWrapper.classList.remove("toclose");
       menuWrapper.classList.add("toopen");
       this.menuOpened = true;
+      try {
+        ChatLog_default.setMenuOpen(true);
+      } catch (_) {}
       clearTimeout(this.toggleTimeout);
       this.toggleTimeout = setTimeout(() => {
         menuWrapper.classList.remove("toopen");
@@ -26254,6 +26348,38 @@ window.grbtp = 35;
     _autoSyncTimes: 0,
     _spikeSyncHammerTimes: 0,
     _spikeSyncTimes: 0,
+    // ---- Chat Log ----------------------------------------------------
+    // Everything the panel remembers between sessions. It rides the client's
+    // own settings store — one localStorage record under "RYN", written
+    // through SaveSettings — rather than a second store of its own.
+    _chatLogOpen: true,
+    _chatLogKey: "KeyL",
+    _chatLogX: 14,
+    _chatLogY: 52,
+    _chatLogW: 340,
+    _chatLogH: 260,
+    _chatLogBgOpacity: 55,
+    _chatLogMsgOpacity: 100,
+    _chatLogFont: "manrope",
+    _chatLogFontSize: 12,
+    _chatLogTime: true,
+    _chatLogID: true,
+    _chatLogLock: false,
+    // Event filters. Display only — the log collects every event whatever
+    // these say, so switching one back on shows what arrived while it was off.
+    _chatLogFChat: true,
+    _chatLogFJoin: true,
+    _chatLogFLeave: true,
+    _chatLogFDeath: true,
+    _chatLogFClanNew: true,
+    _chatLogFClanJoin: true,
+    // Bots are yours and there can be forty of them, so their chat is off by
+    // default and their arrivals and departures are not.
+    _chatLogBotMsg: false,
+    _chatLogBotEvents: true,
+    // [[sid, lastKnownName], ...]. Keyed on the player id so a rename does not
+    // shake a mute off.
+    _chatLogMuted: [],
     _velocityTickTimes: 0,
   };
   const storedSettings = CustomStorage.get("RYN") || {};
@@ -26403,6 +26529,9 @@ window.grbtp = 35;
     }
     SaveSettings();
     UI_default.resetFrame();
+    try {
+      ChatLog_default.reload();
+    } catch (_) {}
   };
   const Settings_default = settings;
   // Preplace and Replace are slaved to Autoplacer: they no longer have their own
@@ -26420,6 +26549,1477 @@ window.grbtp = 35;
       }
     } catch (_) {}
   }
+  const CHATLOG_CSS = "@import url(\"https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&family=Space+Grotesk:wght@500;700&display=swap\");\n\n/* ============================================================\n   RYN TYPE 2 — CHAT LOG\n   Same palette as the client menu: near-black ground, iris for\n   the brand rail, sky for identity, sage for arrivals, rose for\n   deaths. Nothing else carries colour.\n\n   Every colour, size and opacity the user can change is a custom\n   property set on #ryn-chatlog itself, so a settings change is one\n   property write and no rule rebuild. Filtering and muting are\n   pure CSS too — see the two <style> blocks the module owns — so\n   hiding a kind or a player never walks the entry list.\n   ============================================================ */\n\n#ryn-chatlog {\n  /* user-controlled */\n  --cl-w: 340px;\n  --cl-h: 260px;\n  --cl-bg-a: 0.55;\n  --cl-fg-a: 1;\n  --cl-fs: 12px;\n  --cl-font: 'Manrope', 'Segoe UI', system-ui, sans-serif;\n\n  /* palette — mirrors the menu stylesheet */\n  --cl-ink: 10, 10, 14;\n  --cl-line: rgba(255, 255, 255, 0.075);\n  --cl-line-2: rgba(255, 255, 255, 0.13);\n  --cl-line-3: rgba(255, 255, 255, 0.24);\n  --cl-iris: #8e76ce;\n  --cl-iris-hi: #a894e0;\n  --cl-sky: #9bc5e8;\n  --cl-sage: #a6d7b2;\n  --cl-rose: #d9a3ab;\n  --cl-tx-1: #f3f2f7;\n  --cl-tx-2: #aca9ba;\n  --cl-tx-3: #726f80;\n\n  position: fixed;\n  left: 0;\n  top: 0;\n  z-index: 9998;\n  width: var(--cl-w);\n  height: var(--cl-h);\n  min-width: 200px;\n  min-height: 110px;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n  border: 1px solid var(--cl-line);\n  border-radius: 12px;\n  background: rgba(var(--cl-ink), var(--cl-bg-a));\n  backdrop-filter: blur(14px) saturate(140%);\n  -webkit-backdrop-filter: blur(14px) saturate(140%);\n  box-shadow: 0 18px 44px -18px rgba(0, 0, 0, 0.8);\n  font-family: var(--cl-font);\n  font-size: var(--cl-fs);\n  line-height: 1.45;\n  color: var(--cl-tx-1);\n  -webkit-user-select: none;\n  user-select: none;\n  contain: layout style;\n}\n\n#ryn-chatlog.rcl-hidden { display: none; }\n/* The panel's own flex/grid displays outrank the UA's [hidden] rule, so the\n   attribute is given back its meaning inside the panel. Everything that opens\n   and closes in here toggles `hidden`, not an inline display. */\n#ryn-chatlog [hidden] { display: none !important; }\n\n/* ---------------- header rail ---------------- */\n\n.rcl-head {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n  padding: 0 6px 0 10px;\n  height: 27px;\n  flex-shrink: 0;\n  border-bottom: 1px solid var(--cl-line);\n  background: rgba(255, 255, 255, 0.022);\n  cursor: grab;\n}\n#ryn-chatlog.rcl-lock .rcl-head { cursor: default; }\n#ryn-chatlog.rcl-drag .rcl-head { cursor: grabbing; }\n\n.rcl-mark {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-weight: 700;\n  font-size: 11px;\n  letter-spacing: 0.16em;\n  color: var(--cl-iris);\n}\n.rcl-name-lbl {\n  font-size: 10px;\n  font-weight: 600;\n  letter-spacing: 0.12em;\n  text-transform: uppercase;\n  color: var(--cl-tx-3);\n}\n.rcl-count {\n  margin-left: auto;\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 10px;\n  font-variant-numeric: tabular-nums;\n  color: var(--cl-tx-3);\n  padding-right: 2px;\n}\n\n.rcl-ic {\n  width: 20px;\n  height: 20px;\n  flex-shrink: 0;\n  display: grid;\n  place-items: center;\n  border: none;\n  border-radius: 6px;\n  background: none;\n  padding: 0;\n  cursor: pointer;\n  color: var(--cl-tx-3);\n  transition: color 130ms ease, background 130ms ease;\n}\n.rcl-ic:hover { color: var(--cl-tx-1); background: rgba(255, 255, 255, 0.07); }\n.rcl-ic.on { color: var(--cl-iris-hi); background: rgba(142, 118, 206, 0.16); }\n.rcl-ic:focus-visible { outline: 1px solid var(--cl-sky); outline-offset: 1px; }\n.rcl-ic svg { width: 12px; height: 12px; display: block; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }\n\n/* ---------------- search ---------------- */\n\n.rcl-find {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 4px 8px;\n  flex-shrink: 0;\n  border-bottom: 1px solid var(--cl-line);\n}\n.rcl-find input {\n  flex: 1;\n  min-width: 0;\n  border: none;\n  outline: none;\n  background: none;\n  font: inherit;\n  font-size: 11px;\n  color: var(--cl-tx-1);\n  -webkit-user-select: text;\n  user-select: text;\n}\n.rcl-find input::placeholder { color: var(--cl-tx-3); }\n.rcl-find .rcl-hits {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 10px;\n  font-variant-numeric: tabular-nums;\n  color: var(--cl-tx-3);\n}\n\n/* ---------------- list ---------------- */\n\n.rcl-body { position: relative; flex: 1; min-height: 0; display: flex; }\n\n.rcl-list {\n  flex: 1;\n  min-width: 0;\n  overflow-y: auto;\n  overflow-x: hidden;\n  overscroll-behavior: contain;\n  padding: 5px 9px 7px;\n  opacity: var(--cl-fg-a);\n  scrollbar-width: thin;\n  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;\n}\n.rcl-list::-webkit-scrollbar { width: 6px; }\n.rcl-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); border-radius: 3px; }\n.rcl-list::-webkit-scrollbar-track { background: transparent; }\n\n.rcl-e {\n  display: grid;\n  grid-template-columns: auto minmax(0, 1fr);\n  column-gap: 7px;\n  padding: 1px 0;\n  border-radius: 4px;\n  animation: rcl-in 150ms cubic-bezier(.2, .8, .3, 1) both;\n}\n#ryn-chatlog.rcl-notime .rcl-e { grid-template-columns: minmax(0, 1fr); }\n#ryn-chatlog.rcl-notime .rcl-time { display: none; }\n\n.rcl-e:hover { background: rgba(255, 255, 255, 0.045); }\n.rcl-e.rcl-copied { background: rgba(166, 215, 178, 0.16); }\n\n.rcl-time {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 0.85em;\n  font-variant-numeric: tabular-nums;\n  color: var(--cl-tx-3);\n  padding-top: 0.1em;\n}\n\n.rcl-txt {\n  min-width: 0;\n  overflow-wrap: anywhere;\n  word-break: break-word;\n}\n\n.rcl-who {\n  display: inline;\n  border: none;\n  background: none;\n  padding: 0;\n  margin: 0;\n  font: inherit;\n  cursor: pointer;\n  color: var(--cl-sky);\n  text-align: start;\n}\n.rcl-who:hover { text-decoration: underline; text-underline-offset: 2px; }\n.rcl-who:focus-visible { outline: 1px solid var(--cl-sky); outline-offset: 1px; }\n.rcl-nick { font-weight: 600; unicode-bidi: isolate; }\n.rcl-sid {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 0.85em;\n  font-variant-numeric: tabular-nums;\n  color: var(--cl-tx-3);\n  padding-inline-start: 3px;\n}\n#ryn-chatlog.rcl-noid .rcl-sid { display: none; }\n\n.rcl-sep { color: var(--cl-tx-3); }\n.rcl-msg { color: var(--cl-tx-1); unicode-bidi: isolate; }\n.rcl-act { color: var(--cl-tx-2); }\n.rcl-clan { color: var(--cl-iris-hi); font-weight: 600; unicode-bidi: isolate; }\n\n.rcl-bot {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 0.72em;\n  font-weight: 700;\n  letter-spacing: 0.08em;\n  color: var(--cl-tx-3);\n  border: 1px solid var(--cl-line-2);\n  border-radius: 4px;\n  padding: 0 3px;\n  margin-inline-end: 4px;\n  vertical-align: 1px;\n}\n\n/* the verb carries the event's colour; the name always stays sky */\n.rcl-e[data-kind=\"join\"]  .rcl-act { color: var(--cl-sage); }\n.rcl-e[data-kind=\"leave\"] .rcl-act { color: var(--cl-tx-3); }\n.rcl-e[data-kind=\"death\"] .rcl-act { color: var(--cl-rose); }\n.rcl-e[data-kind=\"clanNew\"]  .rcl-act,\n.rcl-e[data-kind=\"clanJoin\"] .rcl-act { color: var(--cl-iris-hi); }\n\n@keyframes rcl-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }\n\n/* ---------------- new-events pill ---------------- */\n\n.rcl-new {\n  position: absolute;\n  left: 50%;\n  bottom: 8px;\n  transform: translateX(-50%);\n  display: flex;\n  align-items: center;\n  gap: 5px;\n  border: 1px solid var(--cl-line-2);\n  border-radius: 999px;\n  padding: 3px 11px;\n  font: inherit;\n  font-size: 10px;\n  font-weight: 700;\n  letter-spacing: 0.1em;\n  color: var(--cl-tx-1);\n  background: rgba(var(--cl-ink), 0.92);\n  cursor: pointer;\n  box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.9);\n  animation: rcl-pill 160ms cubic-bezier(.2, .8, .3, 1) both;\n}\n.rcl-new:hover { border-color: var(--cl-iris); }\n@keyframes rcl-pill { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translate(-50%, 0); } }\n\n/* ---------------- empty state ---------------- */\n\n/* Outside the list, so clearing the log is one `textContent = \"\"` on the list\n   and cannot take the empty state with it. */\n.rcl-empty {\n  position: absolute;\n  inset: 0;\n  z-index: 1;\n  margin: 0;\n  display: grid;\n  place-items: center;\n  padding: 0 22px;\n  text-align: center;\n  font-size: 11px;\n  line-height: 1.5;\n  color: var(--cl-tx-3);\n  pointer-events: none;\n}\n\n/* ---------------- resize grip ---------------- */\n\n.rcl-grip {\n  position: absolute;\n  right: 0;\n  bottom: 0;\n  width: 15px;\n  height: 15px;\n  cursor: nwse-resize;\n  z-index: 3;\n}\n.rcl-grip::after {\n  content: \"\";\n  position: absolute;\n  right: 3px;\n  bottom: 3px;\n  width: 7px;\n  height: 7px;\n  border-right: 1.5px solid var(--cl-tx-3);\n  border-bottom: 1.5px solid var(--cl-tx-3);\n  border-bottom-right-radius: 3px;\n}\n#ryn-chatlog.rcl-lockall .rcl-grip { display: none; }\n\n/* ---------------- per-entry menu ---------------- */\n\n.rcl-menu {\n  position: absolute;\n  z-index: 6;\n  min-width: 132px;\n  padding: 4px;\n  border: 1px solid var(--cl-line-2);\n  border-radius: 9px;\n  background: #0b0b11;\n  box-shadow: 0 14px 30px -12px rgba(0, 0, 0, 0.9);\n  animation: rcl-pop 120ms cubic-bezier(.2, .8, .3, 1) both;\n}\n@keyframes rcl-pop { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }\n.rcl-menu-h {\n  padding: 3px 8px 5px;\n  font-size: 10px;\n  letter-spacing: 0.06em;\n  color: var(--cl-tx-3);\n  border-bottom: 1px solid var(--cl-line);\n  margin-bottom: 3px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.rcl-menu button {\n  display: block;\n  width: 100%;\n  text-align: start;\n  border: none;\n  background: none;\n  border-radius: 6px;\n  padding: 5px 8px;\n  font: inherit;\n  font-size: 11px;\n  color: var(--cl-tx-1);\n  cursor: pointer;\n}\n.rcl-menu button:hover { background: rgba(255, 255, 255, 0.07); }\n.rcl-menu button.danger { color: var(--cl-rose); }\n\n/* ---------------- settings sheet ---------------- */\n\n/* Opaque, unlike the panel behind it: settings are read, not glanced past, and\n   the log showing through them is noise. */\n.rcl-cfg {\n  position: absolute;\n  inset: 0;\n  z-index: 5;\n  display: flex;\n  flex-direction: column;\n  background: #0b0b11;\n  animation: rcl-sheet 160ms cubic-bezier(.2, .8, .3, 1) both;\n}\n@keyframes rcl-sheet { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }\n\n.rcl-cfg-scroll {\n  flex: 1;\n  min-height: 0;\n  overflow-y: auto;\n  overscroll-behavior: contain;\n  padding: 7px 10px 10px;\n  scrollbar-width: thin;\n  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;\n}\n.rcl-cfg-scroll::-webkit-scrollbar { width: 6px; }\n.rcl-cfg-scroll::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); border-radius: 3px; }\n\n.rcl-grp {\n  font-size: 9.5px;\n  font-weight: 700;\n  letter-spacing: 0.14em;\n  text-transform: uppercase;\n  color: var(--cl-tx-3);\n  margin: 9px 0 4px;\n}\n.rcl-grp:first-child { margin-top: 1px; }\n\n.rcl-row {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  min-height: 22px;\n  padding: 1px 0;\n}\n.rcl-row > label:first-child,\n.rcl-row > span:first-child { flex: 1; min-width: 0; font-size: 11px; color: var(--cl-tx-2); }\n.rcl-row .rcl-num {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 10px;\n  font-variant-numeric: tabular-nums;\n  color: var(--cl-tx-3);\n  width: 34px;\n  text-align: end;\n}\n\n.rcl-cfg select {\n  border: 1px solid var(--cl-line-2);\n  border-radius: 6px;\n  background: rgba(255, 255, 255, 0.05);\n  color: var(--cl-tx-1);\n  font: inherit;\n  font-size: 11px;\n  padding: 2px 5px;\n  outline: none;\n  cursor: pointer;\n  max-width: 130px;\n}\n.rcl-cfg select option { background: #101016; color: #f3f2f7; }\n\n.rcl-cfg input[type=\"range\"] {\n  -webkit-appearance: none;\n  appearance: none;\n  width: 104px;\n  height: 3px;\n  border-radius: 2px;\n  background: rgba(255, 255, 255, 0.13);\n  outline: none;\n  cursor: pointer;\n}\n.rcl-cfg input[type=\"range\"]::-webkit-slider-thumb {\n  -webkit-appearance: none;\n  width: 11px; height: 11px;\n  border-radius: 50%;\n  background: var(--cl-iris);\n  cursor: pointer;\n}\n.rcl-cfg input[type=\"range\"]::-moz-range-thumb {\n  width: 11px; height: 11px; border: none;\n  border-radius: 50%;\n  background: var(--cl-iris);\n  cursor: pointer;\n}\n\n/* switch */\n.rcl-sw { position: relative; width: 26px; height: 14px; flex-shrink: 0; cursor: pointer; }\n.rcl-sw input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }\n.rcl-sw i {\n  position: absolute; inset: 0;\n  border-radius: 999px;\n  background: rgba(255, 255, 255, 0.12);\n  transition: background 150ms ease;\n  pointer-events: none;\n}\n.rcl-sw i::after {\n  content: \"\";\n  position: absolute;\n  top: 2px; left: 2px;\n  width: 10px; height: 10px;\n  border-radius: 50%;\n  background: var(--cl-tx-2);\n  transition: transform 150ms cubic-bezier(.2, .8, .3, 1), background 150ms ease;\n}\n.rcl-sw input:checked + i { background: rgba(166, 215, 178, 0.28); }\n.rcl-sw input:checked + i::after { transform: translateX(12px); background: var(--cl-sage); }\n.rcl-sw input:focus-visible + i { box-shadow: 0 0 0 2px rgba(155, 197, 232, 0.5); }\n\n.rcl-btns { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }\n.rcl-btn {\n  border: 1px solid var(--cl-line-2);\n  border-radius: 7px;\n  background: rgba(255, 255, 255, 0.04);\n  color: var(--cl-tx-2);\n  font: inherit;\n  font-size: 10.5px;\n  padding: 4px 9px;\n  cursor: pointer;\n  transition: color 130ms ease, border-color 130ms ease, background 130ms ease;\n}\n.rcl-btn:hover { color: var(--cl-tx-1); border-color: var(--cl-line-3); background: rgba(255, 255, 255, 0.075); }\n.rcl-btn.danger { color: var(--cl-rose); border-color: rgba(217, 163, 171, 0.3); }\n.rcl-btn.danger:hover { background: rgba(217, 163, 171, 0.12); }\n\n.rcl-muted { display: flex; flex-wrap: wrap; gap: 4px; }\n.rcl-chip {\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  border: 1px solid var(--cl-line-2);\n  border-radius: 999px;\n  padding: 2px 4px 2px 9px;\n  font-size: 10.5px;\n  color: var(--cl-tx-2);\n  max-width: 100%;\n}\n.rcl-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: isolate; }\n.rcl-chip button {\n  width: 14px; height: 14px;\n  flex-shrink: 0;\n  display: grid; place-items: center;\n  border: none; border-radius: 50%;\n  background: rgba(255, 255, 255, 0.08);\n  color: var(--cl-tx-2);\n  font: inherit; font-size: 9px; line-height: 1;\n  padding: 0; cursor: pointer;\n}\n.rcl-chip button:hover { background: rgba(217, 163, 171, 0.3); color: var(--cl-tx-1); }\n.rcl-none { font-size: 10.5px; color: var(--cl-tx-3); }\n\n/* ---------------- motion ---------------- */\n\n@media (prefers-reduced-motion: reduce) {\n  #ryn-chatlog *, #ryn-chatlog *::before, #ryn-chatlog *::after {\n    animation-duration: 1ms !important;\n    transition-duration: 1ms !important;\n  }\n}\n";
+
+  // =========================================================================
+  //  CHAT LOG
+  //
+  //  A log of the things a player actually cares about — what was said, who
+  //  arrived, who left, who died, and who formed or joined a clan — read off
+  //  the connection this client already has. Nothing here opens a socket, adds
+  //  a listener to one, polls the world, or runs a frame loop. Every entry in
+  //  it arrives because one of the six observation points below was called by
+  //  code that was going to run anyway:
+  //
+  //    SocketManager "6"  → chat            (id, message)
+  //    SocketManager "D"  → join / respawn  (socketID, sid, nickname)
+  //    SocketManager "E"  → leave           (socketID)
+  //    SocketManager "O"  → death           (sid, health) when health hits 0
+  //    SocketManager "P"  → your own death
+  //    SocketManager "g"  → clan created    (clan name, owner sid)
+  //    PlayerManager tick → clan joined, and deaths RYN credited you with
+  //
+  //  Identity is the server's own: the player sid that "D" hands out and every
+  //  later packet keys on. The nickname rides along as display metadata, so a
+  //  name change keeps the same [id] and a mute keeps pointing at the same
+  //  player.
+  //
+  //  Rendering is incremental. One event appends one row; one expiry removes
+  //  one row; a filter, a mute or a font change writes a CSS property or a
+  //  class and touches no rows at all. The only timer the whole system owns is
+  //  a single self-rescheduling setTimeout that fires when the oldest entry is
+  //  due to expire, and nothing at all runs while the log is idle.
+  // =========================================================================
+
+  const CHATLOG_LIFETIME = 15 * 60 * 1000;
+  // The secondary guard. The lifetime above is what actually bounds the log in
+  // practice; this is the ceiling that keeps a flood — a server full of bots
+  // spamming chat — from putting thousands of rows in the DOM before the first
+  // of them is fifteen minutes old.
+  const CHATLOG_MAX = 400;
+  // Death is only claimed for a player the server stopped reporting on the
+  // tick RYN was credited with a kill, and only inside this many ticks of it.
+  // Same window CorpseHandler uses, for the same reason: one tick of slack for
+  // the kill credit and the last player update arriving in either order.
+  const CHATLOG_DEATH_TICKS = 3;
+  // And only within weapon reach of where you were standing. Without it, an
+  // enemy who walked out of view on the tick you killed someone else would be
+  // logged as dead — exactly the "ordinary disappearance" a death must not be
+  // inferred from.
+  const CHATLOG_DEATH_RANGE_SQ = 320 * 320;
+
+  const CHATLOG_FONTS = {
+    manrope: "'Manrope','Segoe UI',system-ui,sans-serif",
+    grotesk: "'Space Grotesk','Manrope',system-ui,sans-serif",
+    hammersmith: "'Hammersmith One','Manrope',Arial,sans-serif",
+    system: "system-ui,'Segoe UI',Roboto,Arial,sans-serif",
+    mono: "ui-monospace,'Space Grotesk',Consolas,monospace"
+  };
+
+  // kind → [settings key that shows it, sentence the event reads as]. The empty
+  // verb on `chat` is what makes the chat row take the "name: message" shape
+  // instead of the "name <verb>" shape.
+  const CHATLOG_KINDS = {
+    chat:     { flag: "_chatLogFChat",     verb: "" },
+    join:     { flag: "_chatLogFJoin",     verb: " joined the server" },
+    leave:    { flag: "_chatLogFLeave",    verb: " left the server" },
+    death:    { flag: "_chatLogFDeath",    verb: " died" },
+    clanNew:  { flag: "_chatLogFClanNew",  verb: " created clan " },
+    clanJoin: { flag: "_chatLogFClanJoin", verb: " joined clan " }
+  };
+
+  const CHATLOG_ICONS = {
+    search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.1-4.1"/></svg>',
+    gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 14a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1v.2a2 2 0 0 1-4 0v-.1a1.6 1.6 0 0 0-2.8-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.5 13h-.2a2 2 0 0 1 0-4h.1A1.6 1.6 0 0 0 4.6 6.2l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3h.1A1.6 1.6 0 0 0 10.3 2.2V2a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8v.1a1.6 1.6 0 0 0 1.5 1h.2a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>',
+    close: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    down: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg>'
+  };
+
+  const ChatLog = new class {
+    // ---- state -----------------------------------------------------------
+    // entries is append-only at the tail and shift-only at the head, which is
+    // what lets expiry look at entries[0] alone instead of scanning.
+    entries = [];
+    seq = 0;
+    root = null;
+    ready = false;
+    _built = false;
+    // socketID → sid. "E" (leave) names a player by the connection id the game
+    // gives out in "D"[0]; every other packet names them by sid. This is the
+    // only bridge between the two, and the only reason a leave can be reported
+    // with the same [id] the player's chat carried.
+    _bySocket = new Map;
+    // socketID → true once that connection has produced a "D". A second "D" for
+    // the same connection is a respawn, not a join — the game reuses the player
+    // object and only the first one is an arrival.
+    _joined = new Set;
+    // sid → { name, clan }. The last identity seen for a player, kept so a
+    // leave or a death can still name someone the server has stopped sending.
+    _known = new Map;
+    // A clan the "g" packet has just named, so the membership transition that
+    // follows for its owner is reported as the creation it is rather than as a
+    // second, spurious join. Not deduplication: two different players joining
+    // the same clan still produce two entries, and so does the same player
+    // joining twice.
+    _createdClan = new Map;
+    _muted = new Map;
+    _expiryTimer = 0;
+    _follow = true;
+    _pending = 0;
+    _searchTerm = "";
+    _searchTimer = 0;
+    _saveTimer = 0;
+    _menu = null;
+    _cfgOpen = false;
+    _drag = null;
+    _raf = 0;
+    _pos = { x: 14, y: 52 };
+
+    // ---- settings helpers -------------------------------------------------
+    _s(key) { return Settings_default[key]; }
+    _set(key, value) {
+      Settings_default[key] = value;
+      this._saveSoon();
+    }
+    // Position, size and the mute table change many times a second while
+    // someone is dragging a panel or a slider. They are coalesced into one
+    // write instead of one write per pixel.
+    _saveSoon() {
+      if (this._saveTimer) return;
+      this._saveTimer = setTimeout(() => {
+        this._saveTimer = 0;
+        try { SaveSettings(); } catch (_) {}
+      }, 400);
+    }
+
+    // ---- lifecycle --------------------------------------------------------
+    init() {
+      if (this._built) return;
+      try {
+        this._build();
+        this._built = true;
+        this.ready = true;
+        this._applyAll();
+        if (this._s("_chatLogOpen")) this.show(); else this.hide();
+      } catch (e) {
+        // A chat log that cannot draw itself must not take the client with it.
+        this.ready = false;
+        try { Logger.error("ChatLog failed to initialise: " + e); } catch (_) {}
+      }
+    }
+
+    // ======================================================================
+    //  OBSERVATION — called from the packet handlers, never the other way
+    //  round. Every one of these is wrapped at the call site, and every one
+    //  returns immediately when the log is not up.
+    // ======================================================================
+
+    onChat(client2, sid, player, message) {
+      if (!this.ready) return;
+      const text = message == null ? "" : String(message);
+      if (text === "") return;
+      const name = this._name(sid, player);
+      this._remember(sid, name, player ? player.clanName : null);
+      // The message is passed through exactly as the server sent it. No
+      // filtering, no masking, no trimming of content — if the game received
+      // it, the log shows it.
+      this._push("chat", sid, name, text, "", this._isBot(client2, sid));
+    }
+
+    // "D". data[0] is the connection id, data[1] the player sid, data[2] the
+    // nickname. A connection's first "D" is an arrival; every later one is that
+    // player respawning, which is not an arrival and is not logged.
+    onSpawn(client2, data) {
+      if (!this.ready || !data) return;
+      const socketID = data[0];
+      const sid = data[1];
+      const name = String(data[2] == null ? "" : data[2]);
+      if (sid == null) return;
+      if (socketID != null) this._bySocket.set(socketID, sid);
+      this._remember(sid, name, null);
+      if (socketID != null) {
+        if (this._joined.has(socketID)) return;
+        this._joined.add(socketID);
+      }
+      this._push("join", sid, name, "", "", this._isBot(client2, sid));
+    }
+
+    // "E" — the server dropping a connection. This is the only packet that
+    // means "gone", and it is not sent for a death or a respawn, so a leave is
+    // never confused with either.
+    onRemove(client2, socketID) {
+      if (!this.ready || socketID == null) return;
+      const sid = this._bySocket.get(socketID);
+      this._bySocket.delete(socketID);
+      this._joined.delete(socketID);
+      if (sid === undefined) return;
+      const known = this._known.get(sid);
+      this._push("leave", sid, known ? known.name : "", "", "", this._isBot(client2, sid));
+      // Nothing can refer to them again until a fresh "D" reintroduces them, so
+      // the identity is released here. The entries already in the log carry
+      // their own copy of the name and are unaffected. This is what keeps the
+      // bookkeeping bounded by who is on the server rather than by how long the
+      // session has been running.
+      this.forget(sid);
+    }
+
+    // "O" — a health update. Zero or less is the server stating the player is
+    // dead, which is the one death signal the protocol carries for someone
+    // else's character.
+    onHealth(client2, sid, health) {
+      if (!this.ready) return;
+      if (typeof health !== "number" || health > 0) return;
+      const known = this._known.get(sid);
+      if (known === undefined) return;
+      this._claimDeath(client2, sid, known.name);
+    }
+
+    // "P" — the server telling this client it died. Authoritative, and the only
+    // death anyone can be certain of without a kill credit.
+    onOwnDeath(client2) {
+      if (!this.ready) return;
+      const myPlayer = client2 && client2.myPlayer;
+      if (!myPlayer || myPlayer.id === -1) return;
+      this._claimDeath(client2, myPlayer.id, myPlayer.nickname || "");
+    }
+
+    // "g" — a clan appearing. `name` is the clan's own id (moomoo keys clans by
+    // their name) and `ownerID` the sid of the player who made it.
+    onClanCreated(client2, name, ownerID) {
+      if (!this.ready || name == null || ownerID == null) return;
+      const known = this._known.get(ownerID);
+      const who = known ? known.name : "";
+      this._createdClan.set(ownerID, String(name));
+      this._push("clanNew", ownerID, who, "", String(name), this._isBot(client2, ownerID));
+    }
+
+    // The clan membership transition itself, read off the player update the
+    // client already decodes every tick. Called only when the field actually
+    // changed, so this costs one string comparison per visible player per tick
+    // inside a loop that was already running.
+    onClanChange(client2, player, previous) {
+      if (!this.ready) return;
+      const clan = player.clanName;
+      const sid = player.id;
+      const name = player.nickname || "";
+      this._remember(sid, name, clan);
+      if (clan == null || clan === "") return;
+      // Leaving one clan for another is still a join into the new one; only
+      // leaving into no clan is not an event this log reports.
+      const created = this._createdClan.get(sid);
+      if (created === clan) {
+        this._createdClan.delete(sid);
+        return;
+      }
+      this._push("clanJoin", sid, name, "", String(clan), this._isBot(client2, sid));
+    }
+
+    // Deaths RYN was credited with. Runs once a tick from PlayerManager.postTick
+    // and leaves after two property reads on every tick where nothing died,
+    // which is almost all of them.
+    tick(playerManager) {
+      if (!this.ready) return;
+      const client2 = playerManager.client;
+      if (!client2.isOwner) return;
+      const myPlayer = client2.myPlayer;
+      // `killedSomeone` is the client's own kill event; the kill-count guard is
+      // the one false positive it has — on the first tick of a new life the
+      // counter is compared against a zeroed baseline, so a kill from a
+      // previous life reads as a fresh one.
+      if (!myPlayer.killedSomeone || myPlayer.resources.kills === 0) return;
+      const tick = playerManager.corpseTick;
+      const mine = myPlayer.pos.current;
+      const cx = mine.x;
+      const cy = mine.y;
+      for (const player of playerManager.playerData.values()) {
+        const seen = player.corpseSeenTick;
+        if (seen <= 0) continue;
+        const gone = tick - seen;
+        if (gone < 1 || gone > CHATLOG_DEATH_TICKS) continue;
+        // Our own marker, so claiming a body here neither consumes nor is
+        // consumed by the corpse renderer's claim on the same tick.
+        const id = player.id;
+        if (!myPlayer.isEnemyByID(id)) continue;
+        const pos = player.pos.current;
+        const dx = pos.x - cx;
+        const dy = pos.y - cy;
+        if (dx * dx + dy * dy > CHATLOG_DEATH_RANGE_SQ) continue;
+        // _claimDeath owns the stamp, so a body the zero-health update already
+        // reported is not reported again here.
+        this._claimDeath(client2, id, player.nickname || "");
+      }
+    }
+
+    // A player's connection is gone for good — drop what was being kept for
+    // them. Called from the same place the client forgets them.
+    forget(sid) {
+      this._known.delete(sid);
+      this._createdClan.delete(sid);
+    }
+
+    // ---- identity ---------------------------------------------------------
+    _name(sid, player) {
+      if (player && player.nickname) return player.nickname;
+      const known = this._known.get(sid);
+      return known ? known.name : "";
+    }
+    _remember(sid, name, clan) {
+      const known = this._known.get(sid);
+      if (known === undefined) {
+        this._known.set(sid, { name: name || "", clan: clan == null ? null : clan });
+        return;
+      }
+      if (name) known.name = name;
+      known.clan = clan == null ? null : clan;
+    }
+    // RYN's own bot register — the set of player ids belonging to connections
+    // this client opened. Nobody else can land in it, so a real player is never
+    // classed as a bot.
+    _isBot(client2, sid) {
+      try { return !!(client2 && client2.isBotByID && client2.isBotByID(sid)); } catch (_) { return false; }
+    }
+    // One character death is one entry.
+    //
+    // Three independent signals can witness the same death — the server's own
+    // zero-health update, the "P" the server sends this client when it dies,
+    // and the kill credit RYN raises when you are the one who did it — and for
+    // an enemy you killed in view, two of them fire on the same tick. The stamp
+    // below reconciles the witnesses on the game's own tick counter so the
+    // death is written once.
+    //
+    // This is not event deduplication and does not behave like it: two separate
+    // deaths of the same player are two entries, because a player cannot die,
+    // respawn and die again inside the three ticks (a third of a second) this
+    // covers. Nothing else in the log is coalesced — repeated chat, repeated
+    // joins, repeated clan events all go in exactly as they arrive.
+    _claimDeath(client2, sid, name) {
+      const manager = client2 && client2.PlayerManager;
+      const player = manager ? manager.playerData.get(sid) : undefined;
+      if (player !== undefined && manager !== undefined) {
+        const tick = manager.corpseTick;
+        const stamped = player._chatLogDeathTick;
+        if (stamped !== undefined && tick - stamped <= CHATLOG_DEATH_TICKS) return;
+        player._chatLogDeathTick = tick;
+      }
+      const known = this._known.get(sid);
+      if (known !== undefined) {
+        if (name) known.name = name;
+      }
+      this._push("death", sid, name || (known ? known.name : ""), "", "", this._isBot(client2, sid));
+    }
+
+    // The client menu is opened over the whole page, so the panel is put away
+    // for as long as it is up and comes back exactly as it was.
+    setMenuOpen(open) {
+      if (!this.root) return;
+      this.root.style.visibility = open ? "hidden" : "";
+      if (open) this._closeMenu();
+    }
+
+    // True while the log's own search box has the keyboard. The client's key
+    // handler asks before it acts on the chat key, which is the one branch it
+    // takes without first checking for a focused input.
+    ownsInput() {
+      return this.ready && document.activeElement === this._findInput;
+    }
+
+    // ======================================================================
+    //  ENTRIES
+    // ======================================================================
+
+    _push(kind, sid, name, message, clan, isBot) {
+      let entry;
+      try {
+        entry = {
+          id: ++this.seq,
+          t: Date.now(),
+          kind: kind,
+          sid: sid,
+          name: name || "",
+          msg: message || "",
+          clan: clan || "",
+          bot: !!isBot,
+          el: null
+        };
+        this.entries.push(entry);
+      } catch (_) { return; }
+      try {
+        if (this.entries.length > CHATLOG_MAX) this._dropOldest();
+        this._render(entry);
+        this._scheduleExpiry();
+        this._updateCount();
+      } catch (_) {}
+    }
+
+    _dropOldest() {
+      const gone = this.entries.shift();
+      if (gone && gone.el) {
+        gone.el.remove();
+        gone.el = null;
+      }
+    }
+
+    // One timer for the whole log, armed for the moment the oldest entry turns
+    // fifteen minutes old and rearmed from whatever is oldest after that. No
+    // interval, no per-entry timer, and nothing running at all when the log is
+    // empty.
+    _scheduleExpiry() {
+      if (this._expiryTimer) return;
+      const head = this.entries[0];
+      if (head === undefined) return;
+      const wait = head.t + CHATLOG_LIFETIME - Date.now();
+      this._expiryTimer = setTimeout(() => {
+        this._expiryTimer = 0;
+        try { this._expire(); } catch (_) {}
+        this._scheduleExpiry();
+      }, wait > 50 ? wait : 50);
+    }
+
+    _expire() {
+      const cutoff = Date.now() - CHATLOG_LIFETIME;
+      let removed = 0;
+      while (this.entries.length > 0 && this.entries[0].t <= cutoff) {
+        this._dropOldest();
+        removed++;
+      }
+      if (removed > 0) {
+        this._updateCount();
+        this._updateEmpty();
+      }
+    }
+
+    clear() {
+      const list = this._list;
+      for (let i = 0; i < this.entries.length; i++) this.entries[i].el = null;
+      this.entries.length = 0;
+      if (list) list.textContent = "";
+      this._closeMenu();
+      this._cancelScroll();
+      if (this._expiryTimer) {
+        clearTimeout(this._expiryTimer);
+        this._expiryTimer = 0;
+      }
+      this._pending = 0;
+      this._follow = true;
+      this._updateNewPill();
+      this._updateCount();
+      this._updateEmpty();
+    }
+
+    // ======================================================================
+    //  RENDERING
+    // ======================================================================
+
+    _render(entry) {
+      const list = this._list;
+      if (!list) return;
+      const doc = document;
+      const row = doc.createElement("div");
+      row.className = "rcl-e";
+      row.dataset.kind = entry.kind;
+      row.dataset.sid = String(entry.sid);
+      if (entry.bot) row.dataset.bot = "1";
+      row._clEntry = entry;
+
+      const time = doc.createElement("span");
+      time.className = "rcl-time";
+      time.textContent = this._clock(entry.t);
+      row.appendChild(time);
+
+      const text = doc.createElement("span");
+      text.className = "rcl-txt";
+
+      if (entry.bot) {
+        const tag = doc.createElement("span");
+        tag.className = "rcl-bot";
+        tag.textContent = "BOT";
+        text.appendChild(tag);
+      }
+
+      const who = doc.createElement("button");
+      who.type = "button";
+      who.className = "rcl-who";
+      const nick = doc.createElement("span");
+      nick.className = "rcl-nick";
+      nick.dir = "auto";
+      nick.textContent = entry.name || "unknown";
+      who.appendChild(nick);
+      const sid = doc.createElement("span");
+      sid.className = "rcl-sid";
+      sid.textContent = "[" + entry.sid + "]";
+      who.appendChild(sid);
+      text.appendChild(who);
+
+      if (entry.kind === "chat") {
+        const sep = doc.createElement("span");
+        sep.className = "rcl-sep";
+        sep.textContent = ": ";
+        text.appendChild(sep);
+        const msg = doc.createElement("span");
+        msg.className = "rcl-msg";
+        msg.dir = "auto";
+        msg.textContent = entry.msg;
+        text.appendChild(msg);
+      } else {
+        const act = doc.createElement("span");
+        act.className = "rcl-act";
+        act.textContent = CHATLOG_KINDS[entry.kind].verb;
+        text.appendChild(act);
+        if (entry.clan) {
+          const clan = doc.createElement("span");
+          clan.className = "rcl-clan";
+          clan.dir = "auto";
+          clan.textContent = entry.clan;
+          text.appendChild(clan);
+        }
+      }
+
+      row.appendChild(text);
+      if (this._searchTerm !== "" && !this._matches(entry)) row.style.display = "none";
+      entry.el = row;
+      list.appendChild(row);
+
+      this._updateEmpty();
+      if (this._follow) {
+        this._scrollSoon();
+      } else {
+        this._pending++;
+        this._updateNewPill();
+      }
+    }
+
+    // Following the tail means reading scrollHeight, and reading scrollHeight
+    // right after appending a row forces the browser to lay the list out there
+    // and then. Doing that once per message turns a burst into one forced
+    // layout per message; doing it once per frame is the same result at a
+    // fraction of the cost, and a frame is as often as a scroll position could
+    // be seen anyway.
+    _scrollSoon() {
+      if (this._scrollRaf) return;
+      this._scrollRaf = requestAnimationFrame(() => {
+        this._scrollRaf = 0;
+        if (!this._follow) return;
+        const list = this._list;
+        if (list) list.scrollTop = list.scrollHeight;
+      });
+    }
+
+    _cancelScroll() {
+      if (!this._scrollRaf) return;
+      cancelAnimationFrame(this._scrollRaf);
+      this._scrollRaf = 0;
+    }
+
+    _clock(ms) {
+      const d = new Date(ms);
+      const h = d.getHours();
+      const m = d.getMinutes();
+      return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
+    }
+
+    // The exact text a copy produces, and also what search reads, so the two
+    // never disagree about what an entry says.
+    _line(entry) {
+      const head = this._clock(entry.t) + " " + (entry.name || "unknown") + " [" + entry.sid + "]";
+      if (entry.kind === "chat") return head + ": " + entry.msg;
+      return head + CHATLOG_KINDS[entry.kind].verb + entry.clan;
+    }
+
+    // The immediate version, for the three places a person asked for it: the
+    // new-events pill, reopening the panel, and letting go of the resize grip.
+    _toBottom() {
+      this._cancelScroll();
+      const list = this._list;
+      if (!list) return;
+      list.scrollTop = list.scrollHeight;
+      this._pending = 0;
+      this._follow = true;
+      this._updateNewPill();
+    }
+
+    _updateNewPill() {
+      const pill = this._newPill;
+      if (!pill) return;
+      const show = !this._follow && this._pending > 0;
+      if (show) {
+        pill.lastChild.textContent = this._pending > 99 ? "99+ NEW" : this._pending + " NEW";
+        pill.hidden = false;
+      } else {
+        pill.hidden = true;
+      }
+    }
+
+    _updateCount() {
+      if (this._countEl) this._countEl.textContent = String(this.entries.length);
+    }
+
+    _updateEmpty() {
+      if (!this._emptyEl) return;
+      this._emptyEl.hidden = this.entries.length > 0;
+    }
+
+    // ======================================================================
+    //  FILTERING — all of it declarative
+    //
+    //  Kind filters and mutes are two stylesheets the module rewrites when a
+    //  switch moves. Hiding every message from a player, or every join in the
+    //  log, is therefore one string assignment regardless of how many entries
+    //  are in the DOM, and the entries themselves are never touched: the log
+    //  keeps collecting exactly what it collected before.
+    // ======================================================================
+
+    _applyFilters() {
+      if (!this._filterSheet) return;
+      let css = "";
+      for (const kind in CHATLOG_KINDS) {
+        if (!this._s(CHATLOG_KINDS[kind].flag)) {
+          css += '#ryn-chatlog .rcl-e[data-kind="' + kind + '"]{display:none}';
+        }
+      }
+      if (!this._s("_chatLogBotMsg")) {
+        css += '#ryn-chatlog .rcl-e[data-bot="1"][data-kind="chat"]{display:none}';
+      }
+      if (!this._s("_chatLogBotEvents")) {
+        css += '#ryn-chatlog .rcl-e[data-bot="1"]:not([data-kind="chat"]){display:none}';
+      }
+      this._filterSheet.textContent = css;
+    }
+
+    _applyMutes() {
+      if (!this._muteSheet) return;
+      let css = "";
+      for (const sid of this._muted.keys()) {
+        css += '#ryn-chatlog .rcl-e[data-kind="chat"][data-sid="' + sid + '"]{display:none}';
+      }
+      this._muteSheet.textContent = css;
+    }
+
+    // ---- mute -------------------------------------------------------------
+    // The one question the game bundle asks. It is answered from the sid, which
+    // is what the chat packet carries, so a player who renames themselves stays
+    // muted and a player who takes the muted player's old name does not become
+    // muted with them.
+    isMuted(sid) {
+      return this._muted.size !== 0 && this._muted.has(sid);
+    }
+
+    mute(sid, name) {
+      if (sid == null) return;
+      this._muted.set(sid, name || "");
+      this._applyMutes();
+      this._persistMutes();
+      this._renderMuteList();
+    }
+
+    unmute(sid) {
+      if (!this._muted.delete(sid)) return;
+      this._applyMutes();
+      this._persistMutes();
+      this._renderMuteList();
+    }
+
+    _persistMutes() {
+      const out = [];
+      for (const pair of this._muted) out.push([ pair[0], pair[1] ]);
+      this._set("_chatLogMuted", out);
+    }
+
+    _loadMutes() {
+      this._muted.clear();
+      const stored = this._s("_chatLogMuted");
+      if (!Array.isArray(stored)) return;
+      for (let i = 0; i < stored.length; i++) {
+        const pair = stored[i];
+        if (Array.isArray(pair) && pair[0] != null) this._muted.set(pair[0], String(pair[1] == null ? "" : pair[1]));
+      }
+    }
+
+    // ---- search -----------------------------------------------------------
+    // Debounced, and bounded by the entry cap rather than by the DOM: it walks
+    // the entry array, which is at most CHATLOG_MAX long, and writes a display
+    // value only on the rows whose visibility actually changed.
+    _search(term) {
+      this._searchTerm = term.trim().toLowerCase();
+      let hits = 0;
+      for (let i = 0; i < this.entries.length; i++) {
+        const entry = this.entries[i];
+        if (!entry.el) continue;
+        const show = this._searchTerm === "" || this._matches(entry);
+        if (show) hits++;
+        const want = show ? "" : "none";
+        if (entry.el.style.display !== want) entry.el.style.display = want;
+      }
+      if (this._hitsEl) {
+        this._hitsEl.textContent = this._searchTerm === "" ? "" : hits + (hits === 1 ? " hit" : " hits");
+      }
+    }
+
+    _matches(entry) {
+      const term = this._searchTerm;
+      if (term === "") return true;
+      if (String(entry.sid).indexOf(term) !== -1) return true;
+      if (entry.name.toLowerCase().indexOf(term) !== -1) return true;
+      if (entry.msg.toLowerCase().indexOf(term) !== -1) return true;
+      if (entry.clan.toLowerCase().indexOf(term) !== -1) return true;
+      if (entry.kind.toLowerCase().indexOf(term) !== -1) return true;
+      const verb = CHATLOG_KINDS[entry.kind].verb;
+      return verb !== "" && verb.toLowerCase().indexOf(term) !== -1;
+    }
+
+    // ======================================================================
+    //  APPEARANCE
+    // ======================================================================
+
+    _applyAll() {
+      this._loadMutes();
+      this._applyFilters();
+      this._applyMutes();
+      this._applyFont();
+      this._applyOpacity();
+      this._applySize();
+      this._applyPosition(this._s("_chatLogX"), this._s("_chatLogY"));
+      this._applyToggles();
+    }
+
+    _applyFont() {
+      const root = this.root;
+      if (!root) return;
+      const family = CHATLOG_FONTS[this._s("_chatLogFont")] || CHATLOG_FONTS.manrope;
+      root.style.setProperty("--cl-font", family);
+      root.style.setProperty("--cl-fs", this._s("_chatLogFontSize") + "px");
+    }
+
+    _applyOpacity() {
+      const root = this.root;
+      if (!root) return;
+      root.style.setProperty("--cl-bg-a", (this._s("_chatLogBgOpacity") / 100).toFixed(3));
+      root.style.setProperty("--cl-fg-a", (this._s("_chatLogMsgOpacity") / 100).toFixed(3));
+    }
+
+    _applySize() {
+      const root = this.root;
+      if (!root) return;
+      root.style.setProperty("--cl-w", this._s("_chatLogW") + "px");
+      root.style.setProperty("--cl-h", this._s("_chatLogH") + "px");
+      this._applyPosition(this._pos.x, this._pos.y);
+    }
+
+    _applyToggles() {
+      const root = this.root;
+      if (!root) return;
+      root.classList.toggle("rcl-notime", !this._s("_chatLogTime"));
+      root.classList.toggle("rcl-noid", !this._s("_chatLogID"));
+      root.classList.toggle("rcl-lock", !!this._s("_chatLogLock"));
+    }
+
+    // Viewport-safe placement, applied on every move and on every window event
+    // that can change the viewport — a resize, a zoom step, fullscreen in or
+    // out, or a position restored from a session on a bigger monitor.
+    //
+    // While the panel fits, it is kept fully inside. When it does not — a very
+    // small window, or a size dragged past the viewport — the header stays on
+    // screen so the panel can always be grabbed and dragged back. There is no
+    // arrangement of window size and saved position that can strand it.
+    _applyPosition(x, y) {
+      const root = this.root;
+      if (!root) return;
+      const w = root.offsetWidth || this._s("_chatLogW");
+      const h = root.offsetHeight || this._s("_chatLogH");
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const nx = vw >= w
+        ? Math.min(Math.max(0, x), vw - w)
+        : Math.min(0, Math.max(vw - w, x));
+      const ny = Math.min(Math.max(0, y), Math.max(0, vh >= h ? vh - h : vh - 28));
+      this._pos.x = nx;
+      this._pos.y = ny;
+      root.style.transform = "translate3d(" + nx + "px," + ny + "px,0)";
+    }
+
+    _savePosition() {
+      Settings_default._chatLogX = Math.round(this._pos.x);
+      Settings_default._chatLogY = Math.round(this._pos.y);
+      this._saveSoon();
+    }
+
+    // ---- open / close -----------------------------------------------------
+    // Closing hides the panel and nothing else. Every observation point above
+    // keeps running, entries keep accumulating and keep expiring on schedule,
+    // so reopening shows everything that arrived in the meantime.
+    show() {
+      if (!this.root) return;
+      this.root.classList.remove("rcl-hidden");
+      if (this._s("_chatLogOpen") !== true) {
+        this._set("_chatLogOpen", true);
+        this._syncMiscSwitch(true);
+      }
+      // Nothing laid out while the panel was hidden, so the list has no scroll
+      // height to speak of until now.
+      this._applyPosition(this._pos.x, this._pos.y);
+      if (this._follow) this._toBottom();
+    }
+
+    hide() {
+      if (!this.root) return;
+      this.root.classList.add("rcl-hidden");
+      this._closeMenu();
+      // A hidden list has no layout to scroll; the jump to the tail is done
+      // again by show().
+      this._cancelScroll();
+      if (this._s("_chatLogOpen") !== false) {
+        this._set("_chatLogOpen", false);
+        this._syncMiscSwitch(false);
+      }
+    }
+
+    // The Misc page's switch and the panel's own close button are two ways to
+    // the same setting, so whichever is used moves the other.
+    _syncMiscSwitch(open) {
+      try {
+        const doc = UI_default.frame && UI_default.frame.document;
+        if (!doc) return;
+        const box = doc.getElementById("_chatLogOpen");
+        if (box) box.checked = open;
+      } catch (_) {}
+    }
+
+    toggle() {
+      if (!this.ready) return;
+      if (this.root.classList.contains("rcl-hidden")) this.show(); else this.hide();
+    }
+
+    isOpen() {
+      return !!this.root && !this.root.classList.contains("rcl-hidden");
+    }
+
+    // A Chat Log setting was changed from somewhere other than the panel — the
+    // Misc page. Re-reads the settings the panel draws from; it does not touch
+    // a single entry.
+    refresh() {
+      if (!this.ready) return;
+      this._applyFilters();
+      this._applyToggles();
+      this._syncControls();
+    }
+
+    // Every Chat Log setting changed at once, from the client's own global
+    // reset. Same as refresh, plus the ones that are not simple switches.
+    reload() {
+      if (!this.ready) return;
+      this._applyAll();
+      this._syncControls();
+      this._renderMuteList();
+      if (this._s("_chatLogOpen")) this.show(); else this.hide();
+    }
+
+    // ---- resets -----------------------------------------------------------
+    resetPosition() {
+      Settings_default._chatLogX = defaultSettings._chatLogX;
+      Settings_default._chatLogY = defaultSettings._chatLogY;
+      this._saveSoon();
+      this._applyPosition(defaultSettings._chatLogX, defaultSettings._chatLogY);
+    }
+
+    resetSize() {
+      Settings_default._chatLogW = defaultSettings._chatLogW;
+      Settings_default._chatLogH = defaultSettings._chatLogH;
+      this._saveSoon();
+      this._applySize();
+      this._syncControls();
+    }
+
+    resetOpacity() {
+      Settings_default._chatLogBgOpacity = defaultSettings._chatLogBgOpacity;
+      Settings_default._chatLogMsgOpacity = defaultSettings._chatLogMsgOpacity;
+      this._saveSoon();
+      this._applyOpacity();
+      this._syncControls();
+    }
+
+    resetFont() {
+      Settings_default._chatLogFont = defaultSettings._chatLogFont;
+      Settings_default._chatLogFontSize = defaultSettings._chatLogFontSize;
+      this._saveSoon();
+      this._applyFont();
+      this._syncControls();
+    }
+
+    // Chat Log keys only. Nothing else in the client is touched — the reset
+    // list is exactly the keys this feature owns.
+    resetAll() {
+      for (const key in defaultSettings) {
+        if (key.indexOf("_chatLog") !== 0) continue;
+        if (key === "_chatLogOpen" || key === "_chatLogKey") continue;
+        const value = defaultSettings[key];
+        Settings_default[key] = Array.isArray(value) ? value.slice() : value;
+      }
+      this._saveSoon();
+      this._loadMutes();
+      this._applyAll();
+      this._syncControls();
+      this._renderMuteList();
+      this._search(this._searchTerm);
+    }
+
+    // ======================================================================
+    //  DOM
+    // ======================================================================
+
+    _build() {
+      const doc = document;
+      const host = doc.body || doc.documentElement;
+
+      const style = doc.createElement("style");
+      style.id = "ryn-chatlog-style";
+      style.textContent = CHATLOG_CSS;
+      doc.head.appendChild(style);
+
+      this._filterSheet = doc.createElement("style");
+      this._filterSheet.id = "ryn-chatlog-filters";
+      doc.head.appendChild(this._filterSheet);
+
+      this._muteSheet = doc.createElement("style");
+      this._muteSheet.id = "ryn-chatlog-mutes";
+      doc.head.appendChild(this._muteSheet);
+
+      const root = doc.createElement("div");
+      root.id = "ryn-chatlog";
+      root.className = "rcl-hidden";
+
+      // --- header
+      const head = doc.createElement("div");
+      head.className = "rcl-head";
+      const mark = doc.createElement("span");
+      mark.className = "rcl-mark";
+      mark.textContent = "RYN";
+      const label = doc.createElement("span");
+      label.className = "rcl-name-lbl";
+      label.textContent = "Chat Log";
+      const count = doc.createElement("span");
+      count.className = "rcl-count";
+      count.textContent = "0";
+      this._countEl = count;
+      head.appendChild(mark);
+      head.appendChild(label);
+      head.appendChild(count);
+
+      const findBtn = this._iconButton("search", "Search");
+      const cfgBtn = this._iconButton("gear", "Chat Log settings");
+      const closeBtn = this._iconButton("close", "Close Chat Log");
+      head.appendChild(findBtn);
+      head.appendChild(cfgBtn);
+      head.appendChild(closeBtn);
+      root.appendChild(head);
+
+      // --- search bar
+      const find = doc.createElement("div");
+      find.className = "rcl-find";
+      find.hidden = true;
+      const findInput = doc.createElement("input");
+      findInput.type = "text";
+      findInput.id = "ryn-chatlog-search";
+      findInput.placeholder = "name, id, message, event";
+      findInput.autocomplete = "off";
+      findInput.spellcheck = false;
+      this._findInput = findInput;
+      const hits = doc.createElement("span");
+      hits.className = "rcl-hits";
+      this._hitsEl = hits;
+      find.appendChild(findInput);
+      find.appendChild(hits);
+      root.appendChild(find);
+
+      // --- body
+      const body = doc.createElement("div");
+      body.className = "rcl-body";
+      const list = doc.createElement("div");
+      list.className = "rcl-list";
+      this._list = list;
+      body.appendChild(list);
+      const empty = doc.createElement("p");
+      empty.className = "rcl-empty";
+      empty.textContent = "Nothing yet. Chat, arrivals, departures, deaths and clans show up here.";
+      this._emptyEl = empty;
+      body.appendChild(empty);
+
+      const pill = doc.createElement("button");
+      pill.type = "button";
+      pill.className = "rcl-new";
+      pill.hidden = true;
+      pill.innerHTML = CHATLOG_ICONS.down;
+      pill.appendChild(doc.createTextNode("NEW"));
+      this._newPill = pill;
+      body.appendChild(pill);
+
+      this._cfg = this._buildSettings(doc);
+      body.appendChild(this._cfg);
+      root.appendChild(body);
+
+      const grip = doc.createElement("div");
+      grip.className = "rcl-grip";
+      root.appendChild(grip);
+
+      host.appendChild(root);
+      this.root = root;
+
+      // --- wiring
+      const closeFind = () => {
+        find.hidden = true;
+        findBtn.classList.remove("on");
+        findInput.value = "";
+        this._search("");
+        findInput.blur();
+      };
+      findBtn.onclick = () => {
+        if (find.hidden) {
+          find.hidden = false;
+          findBtn.classList.add("on");
+          findInput.focus();
+        } else {
+          closeFind();
+        }
+      };
+      cfgBtn.onclick = () => {
+        this._cfgOpen = !this._cfgOpen;
+        this._cfg.hidden = !this._cfgOpen;
+        cfgBtn.classList.toggle("on", this._cfgOpen);
+        if (this._cfgOpen) {
+          this._syncControls();
+          this._renderMuteList();
+        }
+      };
+      closeBtn.onclick = () => this.hide();
+
+      findInput.oninput = () => {
+        clearTimeout(this._searchTimer);
+        this._searchTimer = setTimeout(() => this._search(findInput.value), 120);
+      };
+      // The game bundle reads the keyboard off `window` in the bubble phase and
+      // guards only on whether its own chat and clan panels are open — it does
+      // not look at which element has focus. So a key typed into this box would
+      // also swing a weapon or place a spike. Stopping propagation at the input
+      // keeps it out of the bundle's handlers; the client's own handler sits in
+      // the capture phase and already declines while an input has focus.
+      const swallow = event => event.stopPropagation();
+      findInput.addEventListener("keydown", event => {
+        if (event.key === "Escape") closeFind();
+        swallow(event);
+      }, true);
+      findInput.addEventListener("keyup", swallow, true);
+      findInput.addEventListener("keypress", swallow, true);
+
+      pill.onclick = () => this._toBottom();
+
+      // Smart scroll. One passive listener, fired by the browser only when the
+      // user actually scrolls, is the whole mechanism — there is no polling of
+      // scroll position anywhere.
+      list.addEventListener("scroll", () => {
+        const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 12;
+        if (atBottom === this._follow) return;
+        this._follow = atBottom;
+        if (atBottom) {
+          this._pending = 0;
+        }
+        this._updateNewPill();
+      }, { passive: true });
+
+      list.addEventListener("click", event => this._onListClick(event));
+      list.addEventListener("dblclick", event => {
+        const row = this._rowOf(event.target);
+        if (row) this._copy(row);
+      });
+
+      head.addEventListener("pointerdown", event => this._startDrag(event), true);
+      grip.addEventListener("pointerdown", event => this._startResize(event), true);
+
+      // One listener for the window, shared by every viewport concern there is:
+      // resizing, zooming, entering and leaving fullscreen all arrive here.
+      window.addEventListener("resize", () => this._applyPosition(this._pos.x, this._pos.y), { passive: true });
+
+      doc.addEventListener("pointerdown", event => {
+        if (this._menu && !this._menu.contains(event.target)) this._closeMenu();
+      }, true);
+    }
+
+    _iconButton(icon, title) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "rcl-ic";
+      button.title = title;
+      button.setAttribute("aria-label", title);
+      button.innerHTML = CHATLOG_ICONS[icon];
+      return button;
+    }
+
+    _rowOf(node) {
+      while (node && node !== this._list) {
+        if (node._clEntry !== undefined) return node;
+        node = node.parentNode;
+      }
+      return null;
+    }
+
+    _onListClick(event) {
+      const target = event.target;
+      const who = target.closest ? target.closest(".rcl-who") : null;
+      if (!who) return;
+      const row = this._rowOf(who);
+      if (row) this._openMenu(row, who);
+    }
+
+    _copy(row) {
+      const entry = row._clEntry;
+      if (!entry) return;
+      const text = this._line(entry);
+      const flash = () => {
+        row.classList.add("rcl-copied");
+        setTimeout(() => row.classList.remove("rcl-copied"), 380);
+      };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(flash, () => this._copyFallback(text, flash));
+          return;
+        }
+      } catch (_) {}
+      this._copyFallback(text, flash);
+    }
+
+    // execCommand still works where the clipboard API is refused — an insecure
+    // origin, or a document that does not have focus.
+    _copyFallback(text, done) {
+      try {
+        const area = document.createElement("textarea");
+        area.value = text;
+        area.setAttribute("readonly", "");
+        area.style.cssText = "position:fixed;top:-1000px;opacity:0";
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand("copy");
+        area.remove();
+        done();
+      } catch (_) {}
+    }
+
+    _openMenu(row, anchor) {
+      this._closeMenu();
+      const entry = row._clEntry;
+      if (!entry) return;
+      const doc = document;
+      const menu = doc.createElement("div");
+      menu.className = "rcl-menu";
+
+      const header = doc.createElement("div");
+      header.className = "rcl-menu-h";
+      header.dir = "auto";
+      header.textContent = (entry.name || "unknown") + " [" + entry.sid + "]";
+      menu.appendChild(header);
+
+      const copy = doc.createElement("button");
+      copy.type = "button";
+      copy.textContent = "Copy entry";
+      copy.onclick = () => { this._copy(row); this._closeMenu(); };
+      menu.appendChild(copy);
+
+      const muted = this.isMuted(entry.sid);
+      const mute = doc.createElement("button");
+      mute.type = "button";
+      mute.textContent = muted ? "Unmute player" : "Mute player";
+      if (!muted) mute.className = "danger";
+      mute.onclick = () => {
+        if (muted) this.unmute(entry.sid); else this.mute(entry.sid, entry.name);
+        this._closeMenu();
+      };
+      menu.appendChild(mute);
+
+      this.root.appendChild(menu);
+      const box = this.root.getBoundingClientRect();
+      const spot = anchor.getBoundingClientRect();
+      const left = Math.min(Math.max(2, spot.left - box.left), Math.max(2, box.width - menu.offsetWidth - 2));
+      const below = spot.bottom - box.top + 3;
+      const top = below + menu.offsetHeight > box.height - 2
+        ? Math.max(2, spot.top - box.top - menu.offsetHeight - 3)
+        : below;
+      menu.style.left = left + "px";
+      menu.style.top = top + "px";
+      this._menu = menu;
+    }
+
+    _closeMenu() {
+      if (!this._menu) return;
+      this._menu.remove();
+      this._menu = null;
+    }
+
+    // ---- drag / resize ----------------------------------------------------
+    // Both share one pattern: the move listener is added on pointerdown and
+    // removed on pointerup, so nothing is listening while nobody is dragging;
+    // and the move handler only records coordinates, with the single write to
+    // the element happening once per frame.
+    _startDrag(event) {
+      if (event.button !== 0 || this._s("_chatLogLock")) return;
+      if (event.target.closest && event.target.closest(".rcl-ic")) return;
+      event.preventDefault();
+      this._beginPointer(event, {
+        mode: "move",
+        ox: event.clientX - this._pos.x,
+        oy: event.clientY - this._pos.y
+      });
+      this.root.classList.add("rcl-drag");
+    }
+
+    _startResize(event) {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      this._beginPointer(event, {
+        mode: "size",
+        ox: event.clientX - this.root.offsetWidth,
+        oy: event.clientY - this.root.offsetHeight
+      });
+    }
+
+    _beginPointer(event, state) {
+      state.x = event.clientX;
+      state.y = event.clientY;
+      this._drag = state;
+      const move = e => {
+        if (!this._drag) return;
+        this._drag.x = e.clientX;
+        this._drag.y = e.clientY;
+        if (this._raf) return;
+        this._raf = requestAnimationFrame(() => {
+          this._raf = 0;
+          this._applyPointer();
+        });
+      };
+      const up = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        window.removeEventListener("pointercancel", up);
+        if (this._raf) {
+          cancelAnimationFrame(this._raf);
+          this._raf = 0;
+          this._applyPointer();
+        }
+        const mode = this._drag ? this._drag.mode : "";
+        this._drag = null;
+        this.root.classList.remove("rcl-drag");
+        if (mode === "move") {
+          this._savePosition();
+        } else if (mode === "size") {
+          this._saveSoon();
+          this._syncControls();
+          if (this._follow) this._toBottom();
+        }
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+      window.addEventListener("pointercancel", up);
+    }
+
+    _applyPointer() {
+      const drag = this._drag;
+      if (!drag || !this.root) return;
+      if (drag.mode === "move") {
+        this._applyPosition(drag.x - drag.ox, drag.y - drag.oy);
+        return;
+      }
+      const w = Math.round(Math.min(Math.max(200, drag.x - drag.ox), Math.max(200, window.innerWidth - this._pos.x)));
+      const h = Math.round(Math.min(Math.max(110, drag.y - drag.oy), Math.max(110, window.innerHeight - this._pos.y)));
+      Settings_default._chatLogW = w;
+      Settings_default._chatLogH = h;
+      this.root.style.setProperty("--cl-w", w + "px");
+      this.root.style.setProperty("--cl-h", h + "px");
+    }
+
+    // ======================================================================
+    //  SETTINGS SHEET
+    // ======================================================================
+
+    _buildSettings(doc) {
+      const cfg = doc.createElement("div");
+      cfg.className = "rcl-cfg";
+      cfg.hidden = true;
+      const scroll = doc.createElement("div");
+      scroll.className = "rcl-cfg-scroll";
+      cfg.appendChild(scroll);
+      this._controls = {};
+
+      const group = title => {
+        const el = doc.createElement("div");
+        el.className = "rcl-grp";
+        el.textContent = title;
+        scroll.appendChild(el);
+      };
+      const row = title => {
+        const el = doc.createElement("div");
+        el.className = "rcl-row";
+        const label = doc.createElement("span");
+        label.textContent = title;
+        el.appendChild(label);
+        scroll.appendChild(el);
+        return el;
+      };
+      const toggle = (title, key, after) => {
+        const host = row(title);
+        const wrap = doc.createElement("label");
+        wrap.className = "rcl-sw";
+        const input = doc.createElement("input");
+        input.type = "checkbox";
+        input.id = "ryn-chatlog-" + key;
+        input.checked = !!this._s(key);
+        const knob = doc.createElement("i");
+        wrap.appendChild(input);
+        wrap.appendChild(knob);
+        host.appendChild(wrap);
+        input.onchange = () => {
+          this._set(key, input.checked);
+          if (after) after();
+        };
+        this._controls[key] = input;
+        return input;
+      };
+      const slider = (title, key, min, max, step, suffix, after) => {
+        const host = row(title);
+        const input = doc.createElement("input");
+        input.type = "range";
+        input.id = "ryn-chatlog-" + key;
+        input.min = String(min);
+        input.max = String(max);
+        input.step = String(step);
+        input.value = String(this._s(key));
+        const value = doc.createElement("span");
+        value.className = "rcl-num";
+        value.textContent = this._s(key) + suffix;
+        host.appendChild(input);
+        host.appendChild(value);
+        input.oninput = () => {
+          const n = Number(input.value);
+          this._set(key, n);
+          value.textContent = n + suffix;
+          if (after) after();
+        };
+        this._controls[key] = input;
+        this._controls[key + ":out"] = value;
+        this._controls[key + ":sfx"] = suffix;
+        return input;
+      };
+      const button = (title, cls, onClick) => {
+        const el = doc.createElement("button");
+        el.type = "button";
+        el.className = "rcl-btn" + (cls ? " " + cls : "");
+        el.textContent = title;
+        el.onclick = onClick;
+        return el;
+      };
+
+      group("Appearance");
+      const fontRow = row("Font");
+      const fontSelect = doc.createElement("select");
+      fontSelect.id = "ryn-chatlog-font";
+      const fontNames = {
+        manrope: "Manrope",
+        grotesk: "Space Grotesk",
+        hammersmith: "Hammersmith One",
+        system: "System",
+        mono: "Monospace"
+      };
+      for (const key in CHATLOG_FONTS) {
+        const option = doc.createElement("option");
+        option.value = key;
+        option.textContent = fontNames[key];
+        fontSelect.appendChild(option);
+      }
+      fontSelect.value = this._s("_chatLogFont");
+      fontSelect.onchange = () => {
+        this._set("_chatLogFont", fontSelect.value);
+        this._applyFont();
+      };
+      fontRow.appendChild(fontSelect);
+      this._controls._chatLogFont = fontSelect;
+
+      slider("Font size", "_chatLogFontSize", 10, 20, 1, "px", () => this._applyFont());
+      slider("Background opacity", "_chatLogBgOpacity", 0, 100, 1, "%", () => this._applyOpacity());
+      slider("Message opacity", "_chatLogMsgOpacity", 25, 100, 1, "%", () => this._applyOpacity());
+      slider("Width", "_chatLogW", 200, 900, 5, "", () => this._applySize());
+      slider("Height", "_chatLogH", 110, 800, 5, "", () => this._applySize());
+
+      group("Display");
+      toggle("Show time", "_chatLogTime", () => this._applyToggles());
+      toggle("Show player ID", "_chatLogID", () => this._applyToggles());
+      toggle("Lock position", "_chatLogLock", () => this._applyToggles());
+
+      group("Events");
+      toggle("Messages", "_chatLogFChat", () => this._applyFilters());
+      toggle("Player join", "_chatLogFJoin", () => this._applyFilters());
+      toggle("Player leave", "_chatLogFLeave", () => this._applyFilters());
+      toggle("Player death", "_chatLogFDeath", () => this._applyFilters());
+      toggle("Clan created", "_chatLogFClanNew", () => this._applyFilters());
+      toggle("Clan join", "_chatLogFClanJoin", () => this._applyFilters());
+      toggle("Bot messages", "_chatLogBotMsg", () => this._applyFilters());
+      toggle("Bot events", "_chatLogBotEvents", () => this._applyFilters());
+
+      group("Muted players");
+      const muteList = doc.createElement("div");
+      muteList.className = "rcl-muted";
+      this._muteListEl = muteList;
+      scroll.appendChild(muteList);
+
+      group("Reset");
+      const resets = doc.createElement("div");
+      resets.className = "rcl-btns";
+      resets.appendChild(button("Position", "", () => this.resetPosition()));
+      resets.appendChild(button("Size", "", () => this.resetSize()));
+      resets.appendChild(button("Opacity", "", () => this.resetOpacity()));
+      resets.appendChild(button("Font", "", () => this.resetFont()));
+      resets.appendChild(button("Reset all", "", () => this.resetAll()));
+      resets.appendChild(button("Clear log", "danger", () => this.clear()));
+      scroll.appendChild(resets);
+
+      return cfg;
+    }
+
+    // Pulls the sheet back in line with the settings after something else
+    // changed them — a reset, a drag on the resize grip, or the Misc page.
+    _syncControls() {
+      const controls = this._controls;
+      if (!controls) return;
+      for (const key in controls) {
+        if (key.indexOf(":") !== -1) continue;
+        const control = controls[key];
+        const value = this._s(key);
+        if (control.type === "checkbox") {
+          control.checked = !!value;
+        } else {
+          control.value = String(value);
+          const out = controls[key + ":out"];
+          if (out) out.textContent = value + controls[key + ":sfx"];
+        }
+      }
+    }
+
+    _renderMuteList() {
+      const host = this._muteListEl;
+      if (!host) return;
+      host.textContent = "";
+      if (this._muted.size === 0) {
+        const none = document.createElement("span");
+        none.className = "rcl-none";
+        none.textContent = "No one is muted.";
+        host.appendChild(none);
+        return;
+      }
+      for (const pair of this._muted) {
+        const sid = pair[0];
+        const chip = document.createElement("span");
+        chip.className = "rcl-chip";
+        const label = document.createElement("span");
+        label.dir = "auto";
+        label.textContent = (pair[1] || "unknown") + " [" + sid + "]";
+        const off = document.createElement("button");
+        off.type = "button";
+        off.title = "Unmute";
+        off.setAttribute("aria-label", "Unmute " + (pair[1] || sid));
+        off.textContent = "✕";
+        off.onclick = () => this.unmute(sid);
+        chip.appendChild(label);
+        chip.appendChild(off);
+        host.appendChild(chip);
+      }
+    }
+  }();
+  const ChatLog_default = ChatLog;
+
   const GameUI = new class {
     getElements() {
       const querySelector = document.querySelector.bind(document);
@@ -27304,6 +28904,19 @@ window.grbtp = 35;
     Hook.replace("meleeWeapon", /(\w+)\((\w+)\.weapons\[(\w+)\.weaponIndex\],(\w+)\.weaponVariants\[\3\.weaponVariant\]\.src,\3\.scale,0,(\w+)\)/, "RYN._MeleeAnim._drawWeapon($1,$3,$2.weapons[$3.weaponIndex],$4.weaponVariants[$3.weaponVariant].src,$3.scale,0,$5)", "g");
     Hook.replace("meleeHands", /(\w+)\.fillStyle=(\w+)\.skinColors\[(\w+)\.skinColor\],(\w+)\(\3\.scale\*Math\.cos\((\w+)\),\3\.scale\*Math\.sin\(\5\),NUM{14}\),\4\(\3\.scale\*(\w+)\*Math\.cos\(-\5\*(\w+)\),\3\.scale\*\6\*Math\.sin\(-\5\*\7\),NUM{14}\)/, "$1.fillStyle=$2.skinColors[$3.skinColor],RYN._MeleeAnim._drawHands($4,$3,$5,$7,$6,$1)");
     Hook.replace("meleeBody", /(\w+)=\((\w+)==(\w+)\?(\w+)\(\):\2\.dir\)\+\2\.dirPlus/, "$1=($2==$3?$4():$2.dir)+RYN._MeleeAnim._bodyRot($2)");
+    // The bundle's entire chat display:
+    //
+    //     function dl(e,t){const i=Rt(e);i&&(i.chatMessage=t,i.chatCountdown=y.chatCountdown)}
+    //
+    // `e` is the sender's sid and those two assignments are the whole act of
+    // showing a message — the render loop draws the bubble for as long as
+    // chatCountdown is above zero and reads nothing else about it. So not
+    // making them for a muted sender is precisely a presentation filter: the
+    // packet still arrives and is still decoded, the socket is untouched,
+    // nothing is blocked, every other player's chat is unaffected, and what
+    // this client sends is not involved at all. A mute asks about the sid, so
+    // it holds through a rename.
+    Hook.replace("chatMute", /function (\w+)\((\w+),(\w+)\)\{const (\w+)=(\w+)\(\2\);\4&&\(\4\.chatMessage=\3,\4\.chatCountdown=(\w+)\.chatCountdown\)\}/, "function $1($2,$3){if(RYN._ChatLog&&RYN._ChatLog.isMuted($2))return;const $4=$5($2);$4&&($4.chatMessage=$3,$4.chatCountdown=$6.chatCountdown)}");
     Hook.replace("maskFRVR", /window\.FRVR/, "FRVR", "g");
     Hook.replace("scaleWidth", /=1920/, "=RYN._ZoomHandler._scale._smooth._w");
     Hook.replace("scaleHeight", /=1080/, "=RYN._ZoomHandler._scale._smooth._h");
@@ -32131,6 +33744,8 @@ window.grbtp = 35;
     // buttons. It answers with the main player until a bot is possessed, so
     // nothing about the bundle changes until one is.
     _Possess: Possess,
+    // Read by the bundle's chat display, and by nothing else in it.
+    _ChatLog: ChatLog_default,
     _settings: Settings_default,
     _Renderer: Renderer_default,
     _DamageText: DamageText_default,
@@ -32186,6 +33801,7 @@ window.grbtp = 35;
     GameUI_default.init();
     UI_default.init();
     StoreHandler_default.init();
+    ChatLog_default.init();
   };
   window.addEventListener("DOMContentLoaded", contentLoaded);
   if (document.readyState !== "loading") {

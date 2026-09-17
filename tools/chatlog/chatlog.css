@@ -1,0 +1,531 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&family=Space+Grotesk:wght@500;700&display=swap");
+
+/* ============================================================
+   RYN TYPE 2 — CHAT LOG
+   Same palette as the client menu: near-black ground, iris for
+   the brand rail, sky for identity, sage for arrivals, rose for
+   deaths. Nothing else carries colour.
+
+   Every colour, size and opacity the user can change is a custom
+   property set on #ryn-chatlog itself, so a settings change is one
+   property write and no rule rebuild. Filtering and muting are
+   pure CSS too — see the two <style> blocks the module owns — so
+   hiding a kind or a player never walks the entry list.
+   ============================================================ */
+
+#ryn-chatlog {
+  /* user-controlled */
+  --cl-w: 340px;
+  --cl-h: 260px;
+  --cl-bg-a: 0.55;
+  --cl-fg-a: 1;
+  --cl-fs: 12px;
+  --cl-font: 'Manrope', 'Segoe UI', system-ui, sans-serif;
+
+  /* palette — mirrors the menu stylesheet */
+  --cl-ink: 10, 10, 14;
+  --cl-line: rgba(255, 255, 255, 0.075);
+  --cl-line-2: rgba(255, 255, 255, 0.13);
+  --cl-line-3: rgba(255, 255, 255, 0.24);
+  --cl-iris: #8e76ce;
+  --cl-iris-hi: #a894e0;
+  --cl-sky: #9bc5e8;
+  --cl-sage: #a6d7b2;
+  --cl-rose: #d9a3ab;
+  --cl-tx-1: #f3f2f7;
+  --cl-tx-2: #aca9ba;
+  --cl-tx-3: #726f80;
+
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 9998;
+  width: var(--cl-w);
+  height: var(--cl-h);
+  min-width: 200px;
+  min-height: 110px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--cl-line);
+  border-radius: 12px;
+  background: rgba(var(--cl-ink), var(--cl-bg-a));
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  box-shadow: 0 18px 44px -18px rgba(0, 0, 0, 0.8);
+  font-family: var(--cl-font);
+  font-size: var(--cl-fs);
+  line-height: 1.45;
+  color: var(--cl-tx-1);
+  -webkit-user-select: none;
+  user-select: none;
+  contain: layout style;
+}
+
+#ryn-chatlog.rcl-hidden { display: none; }
+/* The panel's own flex/grid displays outrank the UA's [hidden] rule, so the
+   attribute is given back its meaning inside the panel. Everything that opens
+   and closes in here toggles `hidden`, not an inline display. */
+#ryn-chatlog [hidden] { display: none !important; }
+
+/* ---------------- header rail ---------------- */
+
+.rcl-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 6px 0 10px;
+  height: 27px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--cl-line);
+  background: rgba(255, 255, 255, 0.022);
+  cursor: grab;
+}
+#ryn-chatlog.rcl-lock .rcl-head { cursor: default; }
+#ryn-chatlog.rcl-drag .rcl-head { cursor: grabbing; }
+
+.rcl-mark {
+  font-family: 'Space Grotesk', var(--cl-font);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--cl-iris);
+}
+.rcl-name-lbl {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cl-tx-3);
+}
+.rcl-count {
+  margin-left: auto;
+  font-family: 'Space Grotesk', var(--cl-font);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-tx-3);
+  padding-right: 2px;
+}
+
+.rcl-ic {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--cl-tx-3);
+  transition: color 130ms ease, background 130ms ease;
+}
+.rcl-ic:hover { color: var(--cl-tx-1); background: rgba(255, 255, 255, 0.07); }
+.rcl-ic.on { color: var(--cl-iris-hi); background: rgba(142, 118, 206, 0.16); }
+.rcl-ic:focus-visible { outline: 1px solid var(--cl-sky); outline-offset: 1px; }
+.rcl-ic svg { width: 12px; height: 12px; display: block; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------------- search ---------------- */
+
+.rcl-find {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--cl-line);
+}
+.rcl-find input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: none;
+  font: inherit;
+  font-size: 11px;
+  color: var(--cl-tx-1);
+  -webkit-user-select: text;
+  user-select: text;
+}
+.rcl-find input::placeholder { color: var(--cl-tx-3); }
+.rcl-find .rcl-hits {
+  font-family: 'Space Grotesk', var(--cl-font);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-tx-3);
+}
+
+/* ---------------- list ---------------- */
+
+.rcl-body { position: relative; flex: 1; min-height: 0; display: flex; }
+
+.rcl-list {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding: 5px 9px 7px;
+  opacity: var(--cl-fg-a);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+.rcl-list::-webkit-scrollbar { width: 6px; }
+.rcl-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); border-radius: 3px; }
+.rcl-list::-webkit-scrollbar-track { background: transparent; }
+
+.rcl-e {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 7px;
+  padding: 1px 0;
+  border-radius: 4px;
+  animation: rcl-in 150ms cubic-bezier(.2, .8, .3, 1) both;
+}
+#ryn-chatlog.rcl-notime .rcl-e { grid-template-columns: minmax(0, 1fr); }
+#ryn-chatlog.rcl-notime .rcl-time { display: none; }
+
+.rcl-e:hover { background: rgba(255, 255, 255, 0.045); }
+.rcl-e.rcl-copied { background: rgba(166, 215, 178, 0.16); }
+
+.rcl-time {
+  font-family: 'Space Grotesk', var(--cl-font);
+  font-size: 0.85em;
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-tx-3);
+  padding-top: 0.1em;
+}
+
+.rcl-txt {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.rcl-who {
+  display: inline;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  cursor: pointer;
+  color: var(--cl-sky);
+  text-align: start;
+}
+.rcl-who:hover { text-decoration: underline; text-underline-offset: 2px; }
+.rcl-who:focus-visible { outline: 1px solid var(--cl-sky); outline-offset: 1px; }
+.rcl-nick { font-weight: 600; unicode-bidi: isolate; }
+.rcl-sid {
+  font-family: 'Space Grotesk', var(--cl-font);
+  font-size: 0.85em;
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-tx-3);
+  padding-inline-start: 3px;
+}
+#ryn-chatlog.rcl-noid .rcl-sid { display: none; }
+
+.rcl-sep { color: var(--cl-tx-3); }
+.rcl-msg { color: var(--cl-tx-1); unicode-bidi: isolate; }
+.rcl-act { color: var(--cl-tx-2); }
+.rcl-clan { color: var(--cl-iris-hi); font-weight: 600; unicode-bidi: isolate; }
+
+.rcl-bot {
+  font-family: 'Space Grotesk', var(--cl-font);
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--cl-tx-3);
+  border: 1px solid var(--cl-line-2);
+  border-radius: 4px;
+  padding: 0 3px;
+  margin-inline-end: 4px;
+  vertical-align: 1px;
+}
+
+/* the verb carries the event's colour; the name always stays sky */
+.rcl-e[data-kind="join"]  .rcl-act { color: var(--cl-sage); }
+.rcl-e[data-kind="leave"] .rcl-act { color: var(--cl-tx-3); }
+.rcl-e[data-kind="death"] .rcl-act { color: var(--cl-rose); }
+.rcl-e[data-kind="clanNew"]  .rcl-act,
+.rcl-e[data-kind="clanJoin"] .rcl-act { color: var(--cl-iris-hi); }
+
+@keyframes rcl-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+/* ---------------- new-events pill ---------------- */
+
+.rcl-new {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--cl-line-2);
+  border-radius: 999px;
+  padding: 3px 11px;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--cl-tx-1);
+  background: rgba(var(--cl-ink), 0.92);
+  cursor: pointer;
+  box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.9);
+  animation: rcl-pill 160ms cubic-bezier(.2, .8, .3, 1) both;
+}
+.rcl-new:hover { border-color: var(--cl-iris); }
+@keyframes rcl-pill { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* ---------------- empty state ---------------- */
+
+/* Outside the list, so clearing the log is one `textContent = ""` on the list
+   and cannot take the empty state with it. */
+.rcl-empty {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  padding: 0 22px;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--cl-tx-3);
+  pointer-events: none;
+}
+
+/* ---------------- resize grip ---------------- */
+
+.rcl-grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 15px;
+  height: 15px;
+  cursor: nwse-resize;
+  z-index: 3;
+}
+.rcl-grip::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid var(--cl-tx-3);
+  border-bottom: 1.5px solid var(--cl-tx-3);
+  border-bottom-right-radius: 3px;
+}
+#ryn-chatlog.rcl-lockall .rcl-grip { display: none; }
+
+/* ---------------- per-entry menu ---------------- */
+
+.rcl-menu {
+  position: absolute;
+  z-index: 6;
+  min-width: 132px;
+  padding: 4px;
+  border: 1px solid var(--cl-line-2);
+  border-radius: 9px;
+  background: #0b0b11;
+  box-shadow: 0 14px 30px -12px rgba(0, 0, 0, 0.9);
+  animation: rcl-pop 120ms cubic-bezier(.2, .8, .3, 1) both;
+}
+@keyframes rcl-pop { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
+.rcl-menu-h {
+  padding: 3px 8px 5px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--cl-tx-3);
+  border-bottom: 1px solid var(--cl-line);
+  margin-bottom: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rcl-menu button {
+  display: block;
+  width: 100%;
+  text-align: start;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--cl-tx-1);
+  cursor: pointer;
+}
+.rcl-menu button:hover { background: rgba(255, 255, 255, 0.07); }
+.rcl-menu button.danger { color: var(--cl-rose); }
+
+/* ---------------- settings sheet ---------------- */
+
+/* Opaque, unlike the panel behind it: settings are read, not glanced past, and
+   the log showing through them is noise. */
+.rcl-cfg {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  background: #0b0b11;
+  animation: rcl-sheet 160ms cubic-bezier(.2, .8, .3, 1) both;
+}
+@keyframes rcl-sheet { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+.rcl-cfg-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 7px 10px 10px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+.rcl-cfg-scroll::-webkit-scrollbar { width: 6px; }
+.rcl-cfg-scroll::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); border-radius: 3px; }
+
+.rcl-grp {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cl-tx-3);
+  margin: 9px 0 4px;
+}
+.rcl-grp:first-child { margin-top: 1px; }
+
+.rcl-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+  padding: 1px 0;
+}
+.rcl-row > label:first-child,
+.rcl-row > span:first-child { flex: 1; min-width: 0; font-size: 11px; color: var(--cl-tx-2); }
+.rcl-row .rcl-num {
+  font-family: 'Space Grotesk', var(--cl-font);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--cl-tx-3);
+  width: 34px;
+  text-align: end;
+}
+
+.rcl-cfg select {
+  border: 1px solid var(--cl-line-2);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--cl-tx-1);
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 5px;
+  outline: none;
+  cursor: pointer;
+  max-width: 130px;
+}
+.rcl-cfg select option { background: #101016; color: #f3f2f7; }
+
+.rcl-cfg input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 104px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.13);
+  outline: none;
+  cursor: pointer;
+}
+.rcl-cfg input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 11px; height: 11px;
+  border-radius: 50%;
+  background: var(--cl-iris);
+  cursor: pointer;
+}
+.rcl-cfg input[type="range"]::-moz-range-thumb {
+  width: 11px; height: 11px; border: none;
+  border-radius: 50%;
+  background: var(--cl-iris);
+  cursor: pointer;
+}
+
+/* switch */
+.rcl-sw { position: relative; width: 26px; height: 14px; flex-shrink: 0; cursor: pointer; }
+.rcl-sw input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.rcl-sw i {
+  position: absolute; inset: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  transition: background 150ms ease;
+  pointer-events: none;
+}
+.rcl-sw i::after {
+  content: "";
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--cl-tx-2);
+  transition: transform 150ms cubic-bezier(.2, .8, .3, 1), background 150ms ease;
+}
+.rcl-sw input:checked + i { background: rgba(166, 215, 178, 0.28); }
+.rcl-sw input:checked + i::after { transform: translateX(12px); background: var(--cl-sage); }
+.rcl-sw input:focus-visible + i { box-shadow: 0 0 0 2px rgba(155, 197, 232, 0.5); }
+
+.rcl-btns { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
+.rcl-btn {
+  border: 1px solid var(--cl-line-2);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--cl-tx-2);
+  font: inherit;
+  font-size: 10.5px;
+  padding: 4px 9px;
+  cursor: pointer;
+  transition: color 130ms ease, border-color 130ms ease, background 130ms ease;
+}
+.rcl-btn:hover { color: var(--cl-tx-1); border-color: var(--cl-line-3); background: rgba(255, 255, 255, 0.075); }
+.rcl-btn.danger { color: var(--cl-rose); border-color: rgba(217, 163, 171, 0.3); }
+.rcl-btn.danger:hover { background: rgba(217, 163, 171, 0.12); }
+
+.rcl-muted { display: flex; flex-wrap: wrap; gap: 4px; }
+.rcl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--cl-line-2);
+  border-radius: 999px;
+  padding: 2px 4px 2px 9px;
+  font-size: 10.5px;
+  color: var(--cl-tx-2);
+  max-width: 100%;
+}
+.rcl-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: isolate; }
+.rcl-chip button {
+  width: 14px; height: 14px;
+  flex-shrink: 0;
+  display: grid; place-items: center;
+  border: none; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--cl-tx-2);
+  font: inherit; font-size: 9px; line-height: 1;
+  padding: 0; cursor: pointer;
+}
+.rcl-chip button:hover { background: rgba(217, 163, 171, 0.3); color: var(--cl-tx-1); }
+.rcl-none { font-size: 10.5px; color: var(--cl-tx-3); }
+
+/* ---------------- motion ---------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  #ryn-chatlog *, #ryn-chatlog *::before, #ryn-chatlog *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}

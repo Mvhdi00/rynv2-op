@@ -117,6 +117,7 @@ but nothing in the client needs it. It is stripped from the build.
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
+Ryn_Type2.user.js         Ryn Type 2, with the Chat Log integrated
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
@@ -126,6 +127,8 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/build-chatlog.js    Chat Log -> Ryn_Type2.user.js
+tools/chatlog/            the Chat Log module, its stylesheet, and its harness
 ```
 
 ## Build
@@ -169,6 +172,111 @@ against, and re-checks the observable parts ~15s after load — frame signature
 width, transport mode, live opcode table size. A server-side protocol change
 shows up as a console warning instead of as packets that quietly stop being
 understood.
+
+---
+
+# Ryn Type 2 — Chat Log
+
+`Ryn_Type2.user.js` is Ryn Type 2 with a Chat Log integrated into it: a
+draggable panel in the top-left corner listing what was said, who arrived, who
+left, who died, and who formed or joined a clan.
+
+```sh
+node tools/build-chatlog.js --check   # report the anchors, write nothing
+node tools/build-chatlog.js           # patch Ryn_Type2.user.js in place
+node tools/chatlog/preview.js         # build the browser test harness
+node tools/chatlog/artifact.js        # build the shareable live preview
+```
+
+The module lives in `tools/chatlog/chatlog.js` and its stylesheet in
+`tools/chatlog/chatlog.css`; `build-chatlog.js` injects both and makes 17 other
+anchored edits, each of which fails the build if its anchor is missing or
+ambiguous — the same rule `build-reup.js` follows.
+
+## Where the events come from
+
+Nothing is inferred and nothing is polled. Each event is read at a point the
+client already runs for that packet:
+
+| Event | Source | Payload |
+|---|---|---|
+| Chat | `SocketManager` case `"6"` | `[sid, message]` |
+| Join | `SocketManager` case `"D"` | `[socketID, sid, nickname, …]`, first time that connection appears |
+| Leave | `SocketManager` case `"E"` | `[socketID]` — added; the client had no use for it before |
+| Death | `SocketManager` case `"O"` / `"P"` / kill credit | zero health, own death, or `myPlayer.killedSomeone` |
+| Clan created | `SocketManager` case `"g"` | `{sid: clanName, owner: sid}` |
+| Clan joined | `PlayerManager.updatePlayer` | `player.clanName` changing, in the loop that already decodes it |
+
+Identity is the server's own player sid — the one `"D"` hands out and every
+later packet keys on. The nickname is display metadata, so a rename keeps the
+same `[id]` and keeps its mute.
+
+A connection's **first** `"D"` is an arrival; every later one is that player
+respawning, and is not logged as a join. `"E"` is the only packet that means
+gone-for-good, which is what makes a leave distinguishable from a death and
+from a respawn.
+
+## Mute
+
+Muting filters at the game's own presentation layer. The bundle's entire chat
+display is one function:
+
+```js
+function dl(e,t){const i=Rt(e);i&&(i.chatMessage=t,i.chatCountdown=y.chatCountdown)}
+```
+
+`e` is the sender's sid, and those two assignments are the whole act of showing
+a message — the render loop draws the bubble for as long as `chatCountdown` is
+above zero. The `chatMute` hook declines to make them for a muted sender. The
+packet still arrives and is still decoded, the socket is untouched, nothing is
+blocked, every other player's chat is unaffected, and outgoing messages are not
+involved. A muted player is invisible in the game's own chat bubbles *and* in
+the log.
+
+## Cost
+
+- **No polling.** No `setInterval`, no `MutationObserver`, no frame loop. One
+  `setTimeout` for the whole system, armed for the moment the oldest entry
+  turns 15 minutes old and rearmed from whatever is oldest after that — nothing
+  runs at all while the log is idle.
+- **Incremental DOM.** One event appends one row; one expiry removes one row.
+- **Filters and mutes are CSS.** Hiding a kind, or every message from a player,
+  rewrites one stylesheet — O(1) in the number of entries, and the entries
+  themselves are never touched, so the log keeps collecting what it collected
+  before.
+- **One forced layout per frame.** Following the tail reads `scrollHeight`,
+  which is a synchronous layout; it is coalesced into one `requestAnimationFrame`
+  so a burst of messages costs one layout, not one per message. This is worth
+  60× on a flood: 0.66ms per event before, 0.011ms after.
+- **Bounded.** 15-minute lifetime, 400-entry cap, and per-player bookkeeping
+  released when that player leaves.
+
+## Checks
+
+```sh
+node --check Ryn_Type2.user.js
+node tools/chatlog/preview.js && open tools/chatlog/preview.html
+```
+
+`preview.html` cuts the module out of the built userscript — so it exercises the
+integrated code, not a copy — stubs the handful of client objects it closes
+over, drives the observation points with real packet payloads, and prints 43
+assertions on the page. All 43 pass, and all 53 bundle-rewrite hooks bind
+against the shipped `moomoo.io` bundle, `chatMute` among them.
+
+## Limits
+
+moomoo broadcasts no "player X died" packet for third parties. Three signals
+are read instead — the server's zero-health update, the `"P"` sent to this
+client on its own death, and RYN's existing kill credit — and reconciled on the
+game's tick counter so one death is one entry. A death you did not cause, and
+which no zero-health update accompanies, cannot be detected without guessing,
+and is not guessed at.
+
+Muting a player while their bubble is already on screen leaves that one bubble
+up until the game's own ~3s countdown runs out. The next message is suppressed.
+
+---
 
 ## Notes
 
