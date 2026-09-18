@@ -45,6 +45,17 @@
   // inferred from.
   const CHATLOG_DEATH_RANGE_SQ = 320 * 320;
 
+  // Where the assembly sits, and where the client's corner mark sits inside the
+  // panel's header once it has joined it. The corner is the mark's own home
+  // (#ryn-v2-wrapper is fixed at 12,12), so docking reads as the panel arriving
+  // under it rather than the pair moving somewhere else. The insets are the
+  // panel's header padding: 10px in, and centred in a 60px row against the
+  // mark's own 44px height.
+  const CHATLOG_DOCK_X = 12;
+  const CHATLOG_DOCK_Y = 12;
+  const CHATLOG_DOCK_INSET_X = 10;
+  const CHATLOG_DOCK_INSET_Y = 8;
+
   const CHATLOG_FONTS = {
     manrope: "'Manrope','Segoe UI',system-ui,sans-serif",
     grotesk: "'Space Grotesk','Manrope',system-ui,sans-serif",
@@ -111,6 +122,11 @@
     _drag = null;
     _raf = 0;
     _pos = { x: 14, y: 52 };
+    // The panel belongs to the game, not to the menu you launch it from, so it
+    // stays out of sight until this client is actually playing. It keeps
+    // recording either way — this is visibility and nothing else.
+    _inGame = false;
+    _docked = false;
 
     // ---- settings helpers -------------------------------------------------
     _s(key) { return Settings_default[key]; }
@@ -136,8 +152,9 @@
         this._build();
         this._built = true;
         this.ready = true;
+        this._docked = !!this._s("_chatLogDocked");
         this._applyAll();
-        if (this._s("_chatLogOpen")) this.show(); else this.hide();
+        this._applyVisibility();
       } catch (e) {
         // A chat log that cannot draw itself must not take the client with it.
         this.ready = false;
@@ -343,14 +360,6 @@
         if (name) known.name = name;
       }
       this._push("death", sid, name || (known ? known.name : ""), "", "", this._isBot(client2, sid));
-    }
-
-    // The client menu is opened over the whole page, so the panel is put away
-    // for as long as it is up and comes back exactly as it was.
-    setMenuOpen(open) {
-      if (!this.root) return;
-      this.root.style.visibility = open ? "hidden" : "";
-      if (open) this._closeMenu();
     }
 
     // True while the log's own search box has the keyboard. The client's key
@@ -713,8 +722,9 @@
       this._applyMutes();
       this._applyFont();
       this._applyOpacity();
+      this._pos.x = this._s("_chatLogX");
+      this._pos.y = this._s("_chatLogY");
       this._applySize();
-      this._applyPosition(this._s("_chatLogX"), this._s("_chatLogY"));
       this._applyToggles();
     }
 
@@ -731,6 +741,9 @@
       if (!root) return;
       root.style.setProperty("--cl-bg-a", (this._s("_chatLogBgOpacity") / 100).toFixed(3));
       root.style.setProperty("--cl-fg-a", (this._s("_chatLogMsgOpacity") / 100).toFixed(3));
+      // The docked lockup is painted from the same value, so the two halves of
+      // the assembly never disagree about how transparent they are.
+      this._syncDock();
     }
 
     _applySize() {
@@ -738,7 +751,10 @@
       if (!root) return;
       root.style.setProperty("--cl-w", this._s("_chatLogW") + "px");
       root.style.setProperty("--cl-h", this._s("_chatLogH") + "px");
-      this._applyPosition(this._pos.x, this._pos.y);
+      // The lockup's card is as wide as the panel, so a width change has to
+      // reach it too or the seam stops lining up.
+      this._syncDock();
+      this._place();
     }
 
     _applyToggles() {
@@ -747,6 +763,104 @@
       root.classList.toggle("rcl-notime", !this._s("_chatLogTime"));
       root.classList.toggle("rcl-noid", !this._s("_chatLogID"));
       root.classList.toggle("rcl-lock", !!this._s("_chatLogLock"));
+    }
+
+    // ======================================================================
+    //  DOCKING TO THE RYN TYPE 2 LOCKUP
+    //
+    //  Dragged up under the corner mark, the panel joins it: the lockup grows
+    //  a card the width of the panel with its bottom edge open, the panel
+    //  squares off its own top corners against it, and the panel's "RYN Chat
+    //  Log" title steps aside because the lockup above is already saying it.
+    //  The two read as one built thing rather than a badge with a window under
+    //  it.
+    //
+    //  The lockup is the client's own #ryn-v2-wrapper and is looked up fresh
+    //  each time rather than held: it is injected on a MutationObserver and may
+    //  not exist yet when the log starts. Nothing here runs on a timer — only
+    //  on a drag, a resize, or the panel appearing.
+    // ======================================================================
+
+    _lockup() {
+      return document.getElementById("ryn-v2-wrapper");
+    }
+
+    // Where the assembly lives: the same corner the mark occupies on its own,
+    // so docking looks like the panel arriving under the mark rather than the
+    // pair moving somewhere new.
+    _dockPoint() {
+      return { x: CHATLOG_DOCK_X, y: CHATLOG_DOCK_Y };
+    }
+
+    // Seats the mark inside the panel's header, or puts it back. Called when
+    // the panel is shown, hidden, docked, undocked, moved or resized — never on
+    // a timer, and never from inside a drag frame.
+    _syncDock() {
+      const on = this._docked && this.isOpen();
+      if (this.root) this.root.classList.toggle("rcl-docked", on);
+      const lockup = this._lockup();
+      if (!lockup) return;
+      if (on) {
+        // Offsets into the panel's own header box, so the mark tracks the panel
+        // if the viewport ever clamps it away from the corner.
+        lockup.style.setProperty("--rcl-dock-x", (this._pos.x + CHATLOG_DOCK_INSET_X) + "px");
+        lockup.style.setProperty("--rcl-dock-y", (this._pos.y + CHATLOG_DOCK_INSET_Y) + "px");
+      } else {
+        lockup.style.removeProperty("--rcl-dock-x");
+        lockup.style.removeProperty("--rcl-dock-y");
+      }
+      lockup.classList.toggle("rcl-docked", on);
+    }
+
+    // True while the panel is being dragged close enough to the mark that
+    // letting go would join them.
+    _nearDock(x, y) {
+      if (!this._lockup()) return false;
+      return Math.abs(x - CHATLOG_DOCK_X) <= 90 && Math.abs(y - CHATLOG_DOCK_Y) <= 90;
+    }
+
+    dock(animate) {
+      if (!this.root || !this._lockup()) return;
+      this._docked = true;
+      this._set("_chatLogDocked", true);
+      if (animate) this._snap();
+      const point = this._dockPoint();
+      this._applyPosition(point.x, point.y);
+      this._syncDock();
+      Settings_default._chatLogX = Math.round(this._pos.x);
+      Settings_default._chatLogY = Math.round(this._pos.y);
+      this._saveSoon();
+    }
+
+    undock() {
+      if (!this._docked) return;
+      this._docked = false;
+      this._set("_chatLogDocked", false);
+      this._syncDock();
+    }
+
+    // The join itself: one short slide into place. The class carries the only
+    // transition on the panel's transform, and it is taken off again as soon as
+    // the slide ends, so dragging stays instant.
+    _snap() {
+      const root = this.root;
+      if (!root) return;
+      root.classList.add("rcl-snap");
+      clearTimeout(this._snapTimer);
+      this._snapTimer = setTimeout(() => root.classList.remove("rcl-snap"), 320);
+    }
+
+    // Position the panel where it belongs right now — under the lockup when
+    // docked, at the saved coordinates otherwise.
+    _place() {
+      if (this._docked) {
+        const point = this._dockPoint();
+        if (point) {
+          this._applyPosition(point.x, point.y);
+          return;
+        }
+      }
+      this._applyPosition(this._pos.x, this._pos.y);
     }
 
     // Viewport-safe placement, applied on every move and on every window event
@@ -771,6 +885,15 @@
       this._pos.x = nx;
       this._pos.y = ny;
       root.style.transform = "translate3d(" + nx + "px," + ny + "px,0)";
+      // The mark rides in the panel's header, so it follows every clamp the
+      // panel takes. Two custom-property writes, and only while docked.
+      if (this._docked) {
+        const lockup = this._lockup();
+        if (lockup) {
+          lockup.style.setProperty("--rcl-dock-x", (nx + CHATLOG_DOCK_INSET_X) + "px");
+          lockup.style.setProperty("--rcl-dock-y", (ny + CHATLOG_DOCK_INSET_Y) + "px");
+        }
+      }
     }
 
     _savePosition() {
@@ -782,30 +905,50 @@
     // ---- open / close -----------------------------------------------------
     // Closing hides the panel and nothing else. Every observation point above
     // keeps running, entries keep accumulating and keep expiring on schedule,
-    // so reopening shows everything that arrived in the meantime.
+    // so reopening shows everything that arrived in the meantime. The same is
+    // true of the lobby: the log is collecting there too, it just has nothing
+    // to show for a game you have not joined.
     show() {
-      if (!this.root) return;
-      this.root.classList.remove("rcl-hidden");
       if (this._s("_chatLogOpen") !== true) {
         this._set("_chatLogOpen", true);
         this._syncMiscSwitch(true);
       }
-      // Nothing laid out while the panel was hidden, so the list has no scroll
-      // height to speak of until now.
-      this._applyPosition(this._pos.x, this._pos.y);
-      if (this._follow) this._toBottom();
+      this._applyVisibility();
     }
 
     hide() {
-      if (!this.root) return;
-      this.root.classList.add("rcl-hidden");
-      this._closeMenu();
-      // A hidden list has no layout to scroll; the jump to the tail is done
-      // again by show().
-      this._cancelScroll();
       if (this._s("_chatLogOpen") !== false) {
         this._set("_chatLogOpen", false);
         this._syncMiscSwitch(false);
+      }
+      this._applyVisibility();
+    }
+
+    // Called from ClientPlayer's own spawn and reset, which are the client's
+    // real answers to "am I playing". Dying puts moomoo back on its menu card,
+    // so the panel goes with it and comes back on the next spawn.
+    setInGame(playing) {
+      if (!this.ready || this._inGame === playing) return;
+      this._inGame = playing;
+      this._applyVisibility();
+    }
+
+    // Wanted and playing, or nothing. Everything that reacts to the panel
+    // appearing or disappearing hangs off this one place.
+    _applyVisibility() {
+      const root = this.root;
+      if (!root) return;
+      const visible = this._inGame && !!this._s("_chatLogOpen");
+      root.classList.toggle("rcl-hidden", !visible);
+      this._syncDock();
+      if (visible) {
+        // Nothing laid out while it was hidden, so the list has no scroll
+        // height to speak of until now.
+        this._place();
+        if (this._follow) this._toBottom();
+      } else {
+        this._closeMenu();
+        this._cancelScroll();
       }
     }
 
@@ -822,7 +965,7 @@
 
     toggle() {
       if (!this.ready) return;
-      if (this.root.classList.contains("rcl-hidden")) this.show(); else this.hide();
+      if (this._s("_chatLogOpen")) this.hide(); else this.show();
     }
 
     isOpen() {
@@ -843,18 +986,21 @@
     // reset. Same as refresh, plus the ones that are not simple switches.
     reload() {
       if (!this.ready) return;
+      this._docked = !!this._s("_chatLogDocked");
       this._applyAll();
       this._syncControls();
       this._renderMuteList();
-      if (this._s("_chatLogOpen")) this.show(); else this.hide();
+      this._applyVisibility();
     }
 
     // ---- resets -----------------------------------------------------------
     resetPosition() {
       Settings_default._chatLogX = defaultSettings._chatLogX;
       Settings_default._chatLogY = defaultSettings._chatLogY;
+      this._pos.x = defaultSettings._chatLogX;
+      this._pos.y = defaultSettings._chatLogY;
       this._saveSoon();
-      this._applyPosition(defaultSettings._chatLogX, defaultSettings._chatLogY);
+      if (defaultSettings._chatLogDocked) this.dock(true); else { this.undock(); this._place(); }
     }
 
     resetSize() {
@@ -891,8 +1037,10 @@
         Settings_default[key] = Array.isArray(value) ? value.slice() : value;
       }
       this._saveSoon();
+      this._docked = !!defaultSettings._chatLogDocked;
       this._loadMutes();
       this._applyAll();
+      this._place();
       this._syncControls();
       this._renderMuteList();
       this._search(this._searchTerm);
@@ -1071,7 +1219,7 @@
 
       // One listener for the window, shared by every viewport concern there is:
       // resizing, zooming, entering and leaving fullscreen all arrive here.
-      window.addEventListener("resize", () => this._applyPosition(this._pos.x, this._pos.y), { passive: true });
+      window.addEventListener("resize", () => this._place(), { passive: true });
 
       doc.addEventListener("pointerdown", event => {
         if (this._menu && !this._menu.contains(event.target)) this._closeMenu();
@@ -1196,8 +1344,15 @@
       if (event.button !== 0 || this._s("_chatLogLock")) return;
       if (event.target.closest && event.target.closest(".rcl-ic")) return;
       event.preventDefault();
+      // Picking the panel up always releases it from the lockup, so the drag
+      // itself is ordinary. Letting go inside the dock zone joins them again,
+      // which makes a nudge that ends where it started a no-op rather than an
+      // accidental undock.
+      const wasDocked = this._docked;
+      if (wasDocked) this.undock();
       this._beginPointer(event, {
         mode: "move",
+        wasDocked: wasDocked,
         ox: event.clientX - this._pos.x,
         oy: event.clientY - this._pos.y
       });
@@ -1241,11 +1396,18 @@
         const mode = this._drag ? this._drag.mode : "";
         this._drag = null;
         this.root.classList.remove("rcl-drag");
+        this._hintDock(false);
         if (mode === "move") {
-          this._savePosition();
+          if (this._nearDock(this._pos.x, this._pos.y)) {
+            this.dock(true);
+          } else {
+            this._savePosition();
+          }
         } else if (mode === "size") {
           this._saveSoon();
           this._syncControls();
+          this._syncDock();
+          if (this._docked) this._place();
           if (this._follow) this._toBottom();
         }
       };
@@ -1254,11 +1416,21 @@
       window.addEventListener("pointercancel", up);
     }
 
+    // Lights the lockup up while the panel is over it, so it is clear before
+    // letting go that the two will join.
+    _hintDock(on) {
+      if (on === this._hinting) return;
+      this._hinting = on;
+      const lockup = this._lockup();
+      if (lockup) lockup.classList.toggle("rcl-dock-hint", on);
+    }
+
     _applyPointer() {
       const drag = this._drag;
       if (!drag || !this.root) return;
       if (drag.mode === "move") {
         this._applyPosition(drag.x - drag.ox, drag.y - drag.oy);
+        this._hintDock(this._nearDock(this._pos.x, this._pos.y));
         return;
       }
       const w = Math.round(Math.min(Math.max(200, drag.x - drag.ox), Math.max(200, window.innerWidth - this._pos.x)));

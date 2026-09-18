@@ -82,6 +82,9 @@ before("defaults", `    _velocityTickTimes: 0,
     _chatLogKey: "KeyL",
     _chatLogX: 14,
     _chatLogY: 52,
+    // Joined to the Ryn Type 2 corner mark. Drag the panel away to separate
+    // them, drop it back under the mark to join them again.
+    _chatLogDocked: true,
     _chatLogW: 340,
     _chatLogH: 260,
     _chatLogBgOpacity: 55,
@@ -296,23 +299,33 @@ edit("boot", `    client.InputHandler.init();
     ChatLog_default.init();`);
 
 // ---------------------------------------------------------------------------
-// 8. The client menu is an iframe over the whole page. The panel steps aside
-//    while it is up.
+// 8. Playing or not. The panel belongs to the game rather than to the menu you
+//    launch it from, so it stays out of sight until this client has spawned.
+//    These are the client's own two answers to the question — nothing new is
+//    tracked, and the log keeps collecting either way.
 // ---------------------------------------------------------------------------
 
-edit("menu:close", `      this.menuOpened = false;
-      clearTimeout(this.toggleTimeout);`, `      this.menuOpened = false;
-      try {
-        ChatLog_default.setMenuOpen(false);
-      } catch (_) {}
-      clearTimeout(this.toggleTimeout);`);
+edit("state:spawn", `    playerSpawn() {
+      this.inGame = true;`, `    playerSpawn() {
+      this.inGame = true;
+      if (this.client.isOwner) {
+        try {
+          ChatLog_default.setInGame(true);
+        } catch (_) {}
+      }`);
 
-edit("menu:open", `      this.menuOpened = true;
-      clearTimeout(this.toggleTimeout);`, `      this.menuOpened = true;
-      try {
-        ChatLog_default.setMenuOpen(true);
-      } catch (_) {}
-      clearTimeout(this.toggleTimeout);`);
+edit("state:reset", `      ModuleHandler.reset();
+      this.inGame = false;
+      this.wasDead = true;`, `      ModuleHandler.reset();
+      this.inGame = false;
+      // Dying puts moomoo back on its own menu card, so the panel goes with it
+      // and returns on the next spawn.
+      if (this.client.isOwner) {
+        try {
+          ChatLog_default.setInGame(false);
+        } catch (_) {}
+      }
+      this.wasDead = true;`);
 
 // ---------------------------------------------------------------------------
 // 9. Keyboard. The hotkey sits with Toggle Menu, above the in-game guard, so it

@@ -7016,6 +7016,11 @@ window.grbtp = 35;
     }
     playerSpawn() {
       this.inGame = true;
+      if (this.client.isOwner) {
+        try {
+          ChatLog_default.setInGame(true);
+        } catch (_) {}
+      }
       if (!this.client.isOwner) {
         const ownerID = this.client.ownerClient?.myPlayer?.id;
         if (ownerID !== undefined && ownerID !== -1) {
@@ -7187,6 +7192,13 @@ window.grbtp = 35;
       const {_ModuleHandler: ModuleHandler, PlayerManager: PlayerManager} = this.client;
       ModuleHandler.reset();
       this.inGame = false;
+      // Dying puts moomoo back on its own menu card, so the panel goes with it
+      // and returns on the next spawn.
+      if (this.client.isOwner) {
+        try {
+          ChatLog_default.setInGame(false);
+        } catch (_) {}
+      }
       this.wasDead = true;
       this.upgradeOrder.length = 0;
       this.upgradeIndex = 0;
@@ -25923,9 +25935,6 @@ window.grbtp = 35;
       menuWrapper.classList.remove("toopen");
       menuWrapper.classList.add("toclose");
       this.menuOpened = false;
-      try {
-        ChatLog_default.setMenuOpen(false);
-      } catch (_) {}
       clearTimeout(this.toggleTimeout);
       this.toggleTimeout = setTimeout(() => {
         menuWrapper.classList.remove("toclose");
@@ -25938,9 +25947,6 @@ window.grbtp = 35;
       menuWrapper.classList.remove("toclose");
       menuWrapper.classList.add("toopen");
       this.menuOpened = true;
-      try {
-        ChatLog_default.setMenuOpen(true);
-      } catch (_) {}
       clearTimeout(this.toggleTimeout);
       this.toggleTimeout = setTimeout(() => {
         menuWrapper.classList.remove("toopen");
@@ -26356,6 +26362,9 @@ window.grbtp = 35;
     _chatLogKey: "KeyL",
     _chatLogX: 14,
     _chatLogY: 52,
+    // Joined to the Ryn Type 2 corner mark. Drag the panel away to separate
+    // them, drop it back under the mark to join them again.
+    _chatLogDocked: true,
     _chatLogW: 340,
     _chatLogH: 260,
     _chatLogBgOpacity: 55,
@@ -26549,7 +26558,7 @@ window.grbtp = 35;
       }
     } catch (_) {}
   }
-  const CHATLOG_CSS = "@import url(\"https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&family=Space+Grotesk:wght@500;700&display=swap\");\n\n/* ============================================================\n   RYN TYPE 2 — CHAT LOG\n   Same palette as the client menu: near-black ground, iris for\n   the brand rail, sky for identity, sage for arrivals, rose for\n   deaths. Nothing else carries colour.\n\n   Every colour, size and opacity the user can change is a custom\n   property set on #ryn-chatlog itself, so a settings change is one\n   property write and no rule rebuild. Filtering and muting are\n   pure CSS too — see the two <style> blocks the module owns — so\n   hiding a kind or a player never walks the entry list.\n   ============================================================ */\n\n#ryn-chatlog {\n  /* user-controlled */\n  --cl-w: 340px;\n  --cl-h: 260px;\n  --cl-bg-a: 0.55;\n  --cl-fg-a: 1;\n  --cl-fs: 12px;\n  --cl-font: 'Manrope', 'Segoe UI', system-ui, sans-serif;\n\n  /* palette — mirrors the menu stylesheet */\n  --cl-ink: 10, 10, 14;\n  --cl-line: rgba(255, 255, 255, 0.075);\n  --cl-line-2: rgba(255, 255, 255, 0.13);\n  --cl-line-3: rgba(255, 255, 255, 0.24);\n  --cl-iris: #8e76ce;\n  --cl-iris-hi: #a894e0;\n  --cl-sky: #9bc5e8;\n  --cl-sage: #a6d7b2;\n  --cl-rose: #d9a3ab;\n  --cl-tx-1: #f3f2f7;\n  --cl-tx-2: #aca9ba;\n  --cl-tx-3: #726f80;\n\n  position: fixed;\n  left: 0;\n  top: 0;\n  z-index: 9998;\n  width: var(--cl-w);\n  height: var(--cl-h);\n  min-width: 200px;\n  min-height: 110px;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n  border: 1px solid var(--cl-line);\n  border-radius: 12px;\n  background: rgba(var(--cl-ink), var(--cl-bg-a));\n  backdrop-filter: blur(14px) saturate(140%);\n  -webkit-backdrop-filter: blur(14px) saturate(140%);\n  box-shadow: 0 18px 44px -18px rgba(0, 0, 0, 0.8);\n  font-family: var(--cl-font);\n  font-size: var(--cl-fs);\n  line-height: 1.45;\n  color: var(--cl-tx-1);\n  -webkit-user-select: none;\n  user-select: none;\n  contain: layout style;\n}\n\n#ryn-chatlog.rcl-hidden { display: none; }\n/* The panel's own flex/grid displays outrank the UA's [hidden] rule, so the\n   attribute is given back its meaning inside the panel. Everything that opens\n   and closes in here toggles `hidden`, not an inline display. */\n#ryn-chatlog [hidden] { display: none !important; }\n\n/* ---------------- header rail ---------------- */\n\n.rcl-head {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n  padding: 0 6px 0 10px;\n  height: 27px;\n  flex-shrink: 0;\n  border-bottom: 1px solid var(--cl-line);\n  background: rgba(255, 255, 255, 0.022);\n  cursor: grab;\n}\n#ryn-chatlog.rcl-lock .rcl-head { cursor: default; }\n#ryn-chatlog.rcl-drag .rcl-head { cursor: grabbing; }\n\n.rcl-mark {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-weight: 700;\n  font-size: 11px;\n  letter-spacing: 0.16em;\n  color: var(--cl-iris);\n}\n.rcl-name-lbl {\n  font-size: 10px;\n  font-weight: 600;\n  letter-spacing: 0.12em;\n  text-transform: uppercase;\n  color: var(--cl-tx-3);\n}\n.rcl-count {\n  margin-left: auto;\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 10px;\n  font-variant-numeric: tabular-nums;\n  color: var(--cl-tx-3);\n  padding-right: 2px;\n}\n\n.rcl-ic {\n  width: 20px;\n  height: 20px;\n  flex-shrink: 0;\n  display: grid;\n  place-items: center;\n  border: none;\n  border-radius: 6px;\n  background: none;\n  padding: 0;\n  cursor: pointer;\n  color: var(--cl-tx-3);\n  transition: color 130ms ease, background 130ms ease;\n}\n.rcl-ic:hover { color: var(--cl-tx-1); background: rgba(255, 255, 255, 0.07); }\n.rcl-ic.on { color: var(--cl-iris-hi); background: rgba(142, 118, 206, 0.16); }\n.rcl-ic:focus-visible { outline: 1px solid var(--cl-sky); outline-offset: 1px; }\n.rcl-ic svg { width: 12px; height: 12px; display: block; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }\n\n/* ---------------- search ---------------- */\n\n.rcl-find {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 4px 8px;\n  flex-shrink: 0;\n  border-bottom: 1px solid var(--cl-line);\n}\n.rcl-find input {\n  flex: 1;\n  min-width: 0;\n  border: none;\n  outline: none;\n  background: none;\n  font: inherit;\n  font-size: 11px;\n  color: var(--cl-tx-1);\n  -webkit-user-select: text;\n  user-select: text;\n}\n.rcl-find input::placeholder { color: var(--cl-tx-3); }\n.rcl-find .rcl-hits {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 10px;\n  font-variant-numeric: tabular-nums;\n  color: var(--cl-tx-3);\n}\n\n/* ---------------- list ---------------- */\n\n.rcl-body { position: relative; flex: 1; min-height: 0; display: flex; }\n\n.rcl-list {\n  flex: 1;\n  min-width: 0;\n  overflow-y: auto;\n  overflow-x: hidden;\n  overscroll-behavior: contain;\n  padding: 5px 9px 7px;\n  opacity: var(--cl-fg-a);\n  scrollbar-width: thin;\n  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;\n}\n.rcl-list::-webkit-scrollbar { width: 6px; }\n.rcl-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); border-radius: 3px; }\n.rcl-list::-webkit-scrollbar-track { background: transparent; }\n\n.rcl-e {\n  display: grid;\n  grid-template-columns: auto minmax(0, 1fr);\n  column-gap: 7px;\n  padding: 1px 0;\n  border-radius: 4px;\n  animation: rcl-in 150ms cubic-bezier(.2, .8, .3, 1) both;\n}\n#ryn-chatlog.rcl-notime .rcl-e { grid-template-columns: minmax(0, 1fr); }\n#ryn-chatlog.rcl-notime .rcl-time { display: none; }\n\n.rcl-e:hover { background: rgba(255, 255, 255, 0.045); }\n.rcl-e.rcl-copied { background: rgba(166, 215, 178, 0.16); }\n\n.rcl-time {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 0.85em;\n  font-variant-numeric: tabular-nums;\n  color: var(--cl-tx-3);\n  padding-top: 0.1em;\n}\n\n.rcl-txt {\n  min-width: 0;\n  overflow-wrap: anywhere;\n  word-break: break-word;\n}\n\n.rcl-who {\n  display: inline;\n  border: none;\n  background: none;\n  padding: 0;\n  margin: 0;\n  font: inherit;\n  cursor: pointer;\n  color: var(--cl-sky);\n  text-align: start;\n}\n.rcl-who:hover { text-decoration: underline; text-underline-offset: 2px; }\n.rcl-who:focus-visible { outline: 1px solid var(--cl-sky); outline-offset: 1px; }\n.rcl-nick { font-weight: 600; unicode-bidi: isolate; }\n.rcl-sid {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 0.85em;\n  font-variant-numeric: tabular-nums;\n  color: var(--cl-tx-3);\n  padding-inline-start: 3px;\n}\n#ryn-chatlog.rcl-noid .rcl-sid { display: none; }\n\n.rcl-sep { color: var(--cl-tx-3); }\n.rcl-msg { color: var(--cl-tx-1); unicode-bidi: isolate; }\n.rcl-act { color: var(--cl-tx-2); }\n.rcl-clan { color: var(--cl-iris-hi); font-weight: 600; unicode-bidi: isolate; }\n\n.rcl-bot {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 0.72em;\n  font-weight: 700;\n  letter-spacing: 0.08em;\n  color: var(--cl-tx-3);\n  border: 1px solid var(--cl-line-2);\n  border-radius: 4px;\n  padding: 0 3px;\n  margin-inline-end: 4px;\n  vertical-align: 1px;\n}\n\n/* the verb carries the event's colour; the name always stays sky */\n.rcl-e[data-kind=\"join\"]  .rcl-act { color: var(--cl-sage); }\n.rcl-e[data-kind=\"leave\"] .rcl-act { color: var(--cl-tx-3); }\n.rcl-e[data-kind=\"death\"] .rcl-act { color: var(--cl-rose); }\n.rcl-e[data-kind=\"clanNew\"]  .rcl-act,\n.rcl-e[data-kind=\"clanJoin\"] .rcl-act { color: var(--cl-iris-hi); }\n\n@keyframes rcl-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }\n\n/* ---------------- new-events pill ---------------- */\n\n.rcl-new {\n  position: absolute;\n  left: 50%;\n  bottom: 8px;\n  transform: translateX(-50%);\n  display: flex;\n  align-items: center;\n  gap: 5px;\n  border: 1px solid var(--cl-line-2);\n  border-radius: 999px;\n  padding: 3px 11px;\n  font: inherit;\n  font-size: 10px;\n  font-weight: 700;\n  letter-spacing: 0.1em;\n  color: var(--cl-tx-1);\n  background: rgba(var(--cl-ink), 0.92);\n  cursor: pointer;\n  box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.9);\n  animation: rcl-pill 160ms cubic-bezier(.2, .8, .3, 1) both;\n}\n.rcl-new:hover { border-color: var(--cl-iris); }\n@keyframes rcl-pill { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translate(-50%, 0); } }\n\n/* ---------------- empty state ---------------- */\n\n/* Outside the list, so clearing the log is one `textContent = \"\"` on the list\n   and cannot take the empty state with it. */\n.rcl-empty {\n  position: absolute;\n  inset: 0;\n  z-index: 1;\n  margin: 0;\n  display: grid;\n  place-items: center;\n  padding: 0 22px;\n  text-align: center;\n  font-size: 11px;\n  line-height: 1.5;\n  color: var(--cl-tx-3);\n  pointer-events: none;\n}\n\n/* ---------------- resize grip ---------------- */\n\n.rcl-grip {\n  position: absolute;\n  right: 0;\n  bottom: 0;\n  width: 15px;\n  height: 15px;\n  cursor: nwse-resize;\n  z-index: 3;\n}\n.rcl-grip::after {\n  content: \"\";\n  position: absolute;\n  right: 3px;\n  bottom: 3px;\n  width: 7px;\n  height: 7px;\n  border-right: 1.5px solid var(--cl-tx-3);\n  border-bottom: 1.5px solid var(--cl-tx-3);\n  border-bottom-right-radius: 3px;\n}\n#ryn-chatlog.rcl-lockall .rcl-grip { display: none; }\n\n/* ---------------- per-entry menu ---------------- */\n\n.rcl-menu {\n  position: absolute;\n  z-index: 6;\n  min-width: 132px;\n  padding: 4px;\n  border: 1px solid var(--cl-line-2);\n  border-radius: 9px;\n  background: #0b0b11;\n  box-shadow: 0 14px 30px -12px rgba(0, 0, 0, 0.9);\n  animation: rcl-pop 120ms cubic-bezier(.2, .8, .3, 1) both;\n}\n@keyframes rcl-pop { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }\n.rcl-menu-h {\n  padding: 3px 8px 5px;\n  font-size: 10px;\n  letter-spacing: 0.06em;\n  color: var(--cl-tx-3);\n  border-bottom: 1px solid var(--cl-line);\n  margin-bottom: 3px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.rcl-menu button {\n  display: block;\n  width: 100%;\n  text-align: start;\n  border: none;\n  background: none;\n  border-radius: 6px;\n  padding: 5px 8px;\n  font: inherit;\n  font-size: 11px;\n  color: var(--cl-tx-1);\n  cursor: pointer;\n}\n.rcl-menu button:hover { background: rgba(255, 255, 255, 0.07); }\n.rcl-menu button.danger { color: var(--cl-rose); }\n\n/* ---------------- settings sheet ---------------- */\n\n/* Opaque, unlike the panel behind it: settings are read, not glanced past, and\n   the log showing through them is noise. */\n.rcl-cfg {\n  position: absolute;\n  inset: 0;\n  z-index: 5;\n  display: flex;\n  flex-direction: column;\n  background: #0b0b11;\n  animation: rcl-sheet 160ms cubic-bezier(.2, .8, .3, 1) both;\n}\n@keyframes rcl-sheet { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }\n\n.rcl-cfg-scroll {\n  flex: 1;\n  min-height: 0;\n  overflow-y: auto;\n  overscroll-behavior: contain;\n  padding: 7px 10px 10px;\n  scrollbar-width: thin;\n  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;\n}\n.rcl-cfg-scroll::-webkit-scrollbar { width: 6px; }\n.rcl-cfg-scroll::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); border-radius: 3px; }\n\n.rcl-grp {\n  font-size: 9.5px;\n  font-weight: 700;\n  letter-spacing: 0.14em;\n  text-transform: uppercase;\n  color: var(--cl-tx-3);\n  margin: 9px 0 4px;\n}\n.rcl-grp:first-child { margin-top: 1px; }\n\n.rcl-row {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  min-height: 22px;\n  padding: 1px 0;\n}\n.rcl-row > label:first-child,\n.rcl-row > span:first-child { flex: 1; min-width: 0; font-size: 11px; color: var(--cl-tx-2); }\n.rcl-row .rcl-num {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 10px;\n  font-variant-numeric: tabular-nums;\n  color: var(--cl-tx-3);\n  width: 34px;\n  text-align: end;\n}\n\n.rcl-cfg select {\n  border: 1px solid var(--cl-line-2);\n  border-radius: 6px;\n  background: rgba(255, 255, 255, 0.05);\n  color: var(--cl-tx-1);\n  font: inherit;\n  font-size: 11px;\n  padding: 2px 5px;\n  outline: none;\n  cursor: pointer;\n  max-width: 130px;\n}\n.rcl-cfg select option { background: #101016; color: #f3f2f7; }\n\n.rcl-cfg input[type=\"range\"] {\n  -webkit-appearance: none;\n  appearance: none;\n  width: 104px;\n  height: 3px;\n  border-radius: 2px;\n  background: rgba(255, 255, 255, 0.13);\n  outline: none;\n  cursor: pointer;\n}\n.rcl-cfg input[type=\"range\"]::-webkit-slider-thumb {\n  -webkit-appearance: none;\n  width: 11px; height: 11px;\n  border-radius: 50%;\n  background: var(--cl-iris);\n  cursor: pointer;\n}\n.rcl-cfg input[type=\"range\"]::-moz-range-thumb {\n  width: 11px; height: 11px; border: none;\n  border-radius: 50%;\n  background: var(--cl-iris);\n  cursor: pointer;\n}\n\n/* switch */\n.rcl-sw { position: relative; width: 26px; height: 14px; flex-shrink: 0; cursor: pointer; }\n.rcl-sw input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }\n.rcl-sw i {\n  position: absolute; inset: 0;\n  border-radius: 999px;\n  background: rgba(255, 255, 255, 0.12);\n  transition: background 150ms ease;\n  pointer-events: none;\n}\n.rcl-sw i::after {\n  content: \"\";\n  position: absolute;\n  top: 2px; left: 2px;\n  width: 10px; height: 10px;\n  border-radius: 50%;\n  background: var(--cl-tx-2);\n  transition: transform 150ms cubic-bezier(.2, .8, .3, 1), background 150ms ease;\n}\n.rcl-sw input:checked + i { background: rgba(166, 215, 178, 0.28); }\n.rcl-sw input:checked + i::after { transform: translateX(12px); background: var(--cl-sage); }\n.rcl-sw input:focus-visible + i { box-shadow: 0 0 0 2px rgba(155, 197, 232, 0.5); }\n\n.rcl-btns { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }\n.rcl-btn {\n  border: 1px solid var(--cl-line-2);\n  border-radius: 7px;\n  background: rgba(255, 255, 255, 0.04);\n  color: var(--cl-tx-2);\n  font: inherit;\n  font-size: 10.5px;\n  padding: 4px 9px;\n  cursor: pointer;\n  transition: color 130ms ease, border-color 130ms ease, background 130ms ease;\n}\n.rcl-btn:hover { color: var(--cl-tx-1); border-color: var(--cl-line-3); background: rgba(255, 255, 255, 0.075); }\n.rcl-btn.danger { color: var(--cl-rose); border-color: rgba(217, 163, 171, 0.3); }\n.rcl-btn.danger:hover { background: rgba(217, 163, 171, 0.12); }\n\n.rcl-muted { display: flex; flex-wrap: wrap; gap: 4px; }\n.rcl-chip {\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  border: 1px solid var(--cl-line-2);\n  border-radius: 999px;\n  padding: 2px 4px 2px 9px;\n  font-size: 10.5px;\n  color: var(--cl-tx-2);\n  max-width: 100%;\n}\n.rcl-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: isolate; }\n.rcl-chip button {\n  width: 14px; height: 14px;\n  flex-shrink: 0;\n  display: grid; place-items: center;\n  border: none; border-radius: 50%;\n  background: rgba(255, 255, 255, 0.08);\n  color: var(--cl-tx-2);\n  font: inherit; font-size: 9px; line-height: 1;\n  padding: 0; cursor: pointer;\n}\n.rcl-chip button:hover { background: rgba(217, 163, 171, 0.3); color: var(--cl-tx-1); }\n.rcl-none { font-size: 10.5px; color: var(--cl-tx-3); }\n\n/* ---------------- motion ---------------- */\n\n@media (prefers-reduced-motion: reduce) {\n  #ryn-chatlog *, #ryn-chatlog *::before, #ryn-chatlog *::after {\n    animation-duration: 1ms !important;\n    transition-duration: 1ms !important;\n  }\n}\n";
+  const CHATLOG_CSS = "@import url(\"https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&family=Space+Grotesk:wght@500;700&display=swap\");\n\n/* ============================================================\n   RYN TYPE 2 — CHAT LOG\n   Same palette as the client menu: near-black ground, iris for\n   the brand rail, sky for identity, sage for arrivals, rose for\n   deaths. Nothing else carries colour.\n\n   Every colour, size and opacity the user can change is a custom\n   property set on #ryn-chatlog itself, so a settings change is one\n   property write and no rule rebuild. Filtering and muting are\n   pure CSS too — see the two <style> blocks the module owns — so\n   hiding a kind or a player never walks the entry list.\n   ============================================================ */\n\n#ryn-chatlog {\n  /* user-controlled */\n  --cl-w: 340px;\n  --cl-h: 260px;\n  --cl-bg-a: 0.55;\n  --cl-fg-a: 1;\n  --cl-fs: 12px;\n  --cl-font: 'Manrope', 'Segoe UI', system-ui, sans-serif;\n\n  /* palette — mirrors the menu stylesheet */\n  --cl-ink: 10, 10, 14;\n  --cl-line: rgba(255, 255, 255, 0.075);\n  --cl-line-2: rgba(255, 255, 255, 0.13);\n  --cl-line-3: rgba(255, 255, 255, 0.24);\n  --cl-iris: #8e76ce;\n  --cl-iris-hi: #a894e0;\n  --cl-sky: #9bc5e8;\n  --cl-sid: #8fb0ce;\n  --cl-sage: #a6d7b2;\n  --cl-rose: #d9a3ab;\n  --cl-tx-1: #f3f2f7;\n  --cl-tx-2: #aca9ba;\n  --cl-tx-3: #726f80;\n\n  position: fixed;\n  left: 0;\n  top: 0;\n  z-index: 9998;\n  width: var(--cl-w);\n  height: var(--cl-h);\n  min-width: 200px;\n  min-height: 110px;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n  border: 1px solid var(--cl-line);\n  border-radius: 12px;\n  background: rgba(var(--cl-ink), var(--cl-bg-a));\n  backdrop-filter: blur(14px) saturate(140%);\n  -webkit-backdrop-filter: blur(14px) saturate(140%);\n  box-shadow: 0 18px 44px -18px rgba(0, 0, 0, 0.8);\n  font-family: var(--cl-font);\n  font-size: var(--cl-fs);\n  line-height: 1.45;\n  color: var(--cl-tx-1);\n  -webkit-user-select: none;\n  user-select: none;\n  contain: layout style;\n}\n\n/* Border-box throughout, so a declared height is the height the mark is\n   centred against and the borders do not push the seam off by a pixel. */\n#ryn-chatlog, #ryn-chatlog *, #ryn-chatlog *::before, #ryn-chatlog *::after { box-sizing: border-box; }\n\n#ryn-chatlog.rcl-hidden { display: none; }\n/* The panel's own flex/grid displays outrank the UA's [hidden] rule, so the\n   attribute is given back its meaning inside the panel. Everything that opens\n   and closes in here toggles `hidden`, not an inline display. */\n#ryn-chatlog [hidden] { display: none !important; }\n\n/* ---------------- header rail ---------------- */\n\n.rcl-head {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n  padding: 0 6px 0 10px;\n  height: 27px;\n  flex-shrink: 0;\n  border-bottom: 1px solid var(--cl-line);\n  background: rgba(255, 255, 255, 0.022);\n  cursor: grab;\n}\n#ryn-chatlog.rcl-lock .rcl-head { cursor: default; }\n#ryn-chatlog.rcl-drag .rcl-head { cursor: grabbing; }\n\n.rcl-mark {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-weight: 700;\n  font-size: 11px;\n  letter-spacing: 0.16em;\n  color: var(--cl-iris);\n}\n.rcl-name-lbl {\n  font-size: 10px;\n  font-weight: 600;\n  letter-spacing: 0.12em;\n  text-transform: uppercase;\n  color: var(--cl-tx-3);\n}\n.rcl-count {\n  margin-left: auto;\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 10px;\n  font-variant-numeric: tabular-nums;\n  color: var(--cl-tx-3);\n  padding-right: 2px;\n}\n\n.rcl-ic {\n  width: 20px;\n  height: 20px;\n  flex-shrink: 0;\n  display: grid;\n  place-items: center;\n  border: none;\n  border-radius: 6px;\n  background: none;\n  padding: 0;\n  cursor: pointer;\n  color: var(--cl-tx-3);\n  transition: color 130ms ease, background 130ms ease;\n}\n.rcl-ic:hover { color: var(--cl-tx-1); background: rgba(255, 255, 255, 0.07); }\n.rcl-ic.on { color: var(--cl-iris-hi); background: rgba(142, 118, 206, 0.16); }\n.rcl-ic:focus-visible { outline: 1px solid var(--cl-sky); outline-offset: 1px; }\n.rcl-ic svg { width: 12px; height: 12px; display: block; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }\n\n/* ---------------- search ---------------- */\n\n.rcl-find {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 4px 8px;\n  flex-shrink: 0;\n  border-bottom: 1px solid var(--cl-line);\n}\n.rcl-find input {\n  flex: 1;\n  min-width: 0;\n  border: none;\n  outline: none;\n  background: none;\n  font: inherit;\n  font-size: 11px;\n  color: var(--cl-tx-1);\n  -webkit-user-select: text;\n  user-select: text;\n}\n.rcl-find input::placeholder { color: var(--cl-tx-3); }\n.rcl-find .rcl-hits {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 10px;\n  font-variant-numeric: tabular-nums;\n  color: var(--cl-tx-3);\n}\n\n/* ---------------- list ---------------- */\n\n.rcl-body { position: relative; flex: 1; min-height: 0; display: flex; }\n\n.rcl-list {\n  flex: 1;\n  min-width: 0;\n  overflow-y: auto;\n  overflow-x: hidden;\n  overscroll-behavior: contain;\n  padding: 5px 9px 7px;\n  opacity: var(--cl-fg-a);\n  scrollbar-width: thin;\n  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;\n}\n.rcl-list::-webkit-scrollbar { width: 6px; }\n.rcl-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); border-radius: 3px; }\n.rcl-list::-webkit-scrollbar-track { background: transparent; }\n\n.rcl-e {\n  display: grid;\n  grid-template-columns: auto minmax(0, 1fr);\n  column-gap: 7px;\n  padding: 1px 0;\n  border-radius: 4px;\n  animation: rcl-in 150ms cubic-bezier(.2, .8, .3, 1) both;\n}\n#ryn-chatlog.rcl-notime .rcl-e { grid-template-columns: minmax(0, 1fr); }\n#ryn-chatlog.rcl-notime .rcl-time { display: none; }\n\n.rcl-e:hover { background: rgba(255, 255, 255, 0.045); }\n.rcl-e.rcl-copied { background: rgba(166, 215, 178, 0.16); }\n\n.rcl-time {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 0.85em;\n  font-variant-numeric: tabular-nums;\n  color: var(--cl-tx-3);\n  padding-top: 0.1em;\n}\n\n.rcl-txt {\n  min-width: 0;\n  overflow-wrap: anywhere;\n  word-break: break-word;\n}\n\n.rcl-who {\n  display: inline;\n  border: none;\n  background: none;\n  padding: 0;\n  margin: 0;\n  font: inherit;\n  cursor: pointer;\n  color: var(--cl-sky);\n  text-align: start;\n}\n.rcl-who:hover { text-decoration: underline; text-underline-offset: 2px; }\n.rcl-who:focus-visible { outline: 1px solid var(--cl-sky); outline-offset: 1px; }\n.rcl-nick { font-weight: 600; unicode-bidi: isolate; }\n/* The id is half the identity, not a footnote to it: one step down from the\n   name in weight and lightness, and nowhere near the dimness of the clock. */\n.rcl-sid {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 0.88em;\n  font-weight: 500;\n  font-variant-numeric: tabular-nums;\n  color: var(--cl-sid);\n  padding-inline-start: 3px;\n}\n#ryn-chatlog.rcl-noid .rcl-sid { display: none; }\n\n.rcl-sep { color: var(--cl-tx-3); }\n.rcl-msg { color: var(--cl-tx-1); unicode-bidi: isolate; }\n.rcl-act { color: var(--cl-tx-2); }\n.rcl-clan { color: var(--cl-iris-hi); font-weight: 600; unicode-bidi: isolate; }\n\n.rcl-bot {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 0.72em;\n  font-weight: 700;\n  letter-spacing: 0.08em;\n  color: var(--cl-tx-3);\n  border: 1px solid var(--cl-line-2);\n  border-radius: 4px;\n  padding: 0 3px;\n  margin-inline-end: 4px;\n  vertical-align: 1px;\n}\n\n/* the verb carries the event's colour; the name always stays sky */\n.rcl-e[data-kind=\"join\"]  .rcl-act { color: var(--cl-sage); }\n.rcl-e[data-kind=\"leave\"] .rcl-act { color: var(--cl-tx-3); }\n.rcl-e[data-kind=\"death\"] .rcl-act { color: var(--cl-rose); }\n.rcl-e[data-kind=\"clanNew\"]  .rcl-act,\n.rcl-e[data-kind=\"clanJoin\"] .rcl-act { color: var(--cl-iris-hi); }\n\n@keyframes rcl-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }\n\n/* ---------------- new-events pill ---------------- */\n\n.rcl-new {\n  position: absolute;\n  left: 50%;\n  bottom: 8px;\n  transform: translateX(-50%);\n  display: flex;\n  align-items: center;\n  gap: 5px;\n  border: 1px solid var(--cl-line-2);\n  border-radius: 999px;\n  padding: 3px 11px;\n  font: inherit;\n  font-size: 10px;\n  font-weight: 700;\n  letter-spacing: 0.1em;\n  color: var(--cl-tx-1);\n  background: rgba(var(--cl-ink), 0.92);\n  cursor: pointer;\n  box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.9);\n  animation: rcl-pill 160ms cubic-bezier(.2, .8, .3, 1) both;\n}\n.rcl-new:hover { border-color: var(--cl-iris); }\n@keyframes rcl-pill { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translate(-50%, 0); } }\n\n/* ---------------- empty state ---------------- */\n\n/* Outside the list, so clearing the log is one `textContent = \"\"` on the list\n   and cannot take the empty state with it. */\n.rcl-empty {\n  position: absolute;\n  inset: 0;\n  z-index: 1;\n  margin: 0;\n  display: grid;\n  place-items: center;\n  padding: 0 22px;\n  text-align: center;\n  font-size: 11px;\n  line-height: 1.5;\n  color: var(--cl-tx-3);\n  pointer-events: none;\n}\n\n/* ---------------- resize grip ---------------- */\n\n.rcl-grip {\n  position: absolute;\n  right: 0;\n  bottom: 0;\n  width: 15px;\n  height: 15px;\n  cursor: nwse-resize;\n  z-index: 3;\n}\n.rcl-grip::after {\n  content: \"\";\n  position: absolute;\n  right: 3px;\n  bottom: 3px;\n  width: 7px;\n  height: 7px;\n  border-right: 1.5px solid var(--cl-tx-3);\n  border-bottom: 1.5px solid var(--cl-tx-3);\n  border-bottom-right-radius: 3px;\n}\n#ryn-chatlog.rcl-lockall .rcl-grip { display: none; }\n\n/* ---------------- per-entry menu ---------------- */\n\n.rcl-menu {\n  position: absolute;\n  z-index: 6;\n  min-width: 132px;\n  padding: 4px;\n  border: 1px solid var(--cl-line-2);\n  border-radius: 9px;\n  background: #0b0b11;\n  box-shadow: 0 14px 30px -12px rgba(0, 0, 0, 0.9);\n  animation: rcl-pop 120ms cubic-bezier(.2, .8, .3, 1) both;\n}\n@keyframes rcl-pop { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }\n.rcl-menu-h {\n  padding: 3px 8px 5px;\n  font-size: 10px;\n  letter-spacing: 0.06em;\n  color: var(--cl-tx-3);\n  border-bottom: 1px solid var(--cl-line);\n  margin-bottom: 3px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.rcl-menu button {\n  display: block;\n  width: 100%;\n  text-align: start;\n  border: none;\n  background: none;\n  border-radius: 6px;\n  padding: 5px 8px;\n  font: inherit;\n  font-size: 11px;\n  color: var(--cl-tx-1);\n  cursor: pointer;\n}\n.rcl-menu button:hover { background: rgba(255, 255, 255, 0.07); }\n.rcl-menu button.danger { color: var(--cl-rose); }\n\n/* ---------------- settings sheet ---------------- */\n\n/* Opaque, unlike the panel behind it: settings are read, not glanced past, and\n   the log showing through them is noise. */\n.rcl-cfg {\n  position: absolute;\n  inset: 0;\n  z-index: 5;\n  display: flex;\n  flex-direction: column;\n  background: #0b0b11;\n  animation: rcl-sheet 160ms cubic-bezier(.2, .8, .3, 1) both;\n}\n@keyframes rcl-sheet { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }\n\n.rcl-cfg-scroll {\n  flex: 1;\n  min-height: 0;\n  overflow-y: auto;\n  overscroll-behavior: contain;\n  padding: 7px 10px 10px;\n  scrollbar-width: thin;\n  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;\n}\n.rcl-cfg-scroll::-webkit-scrollbar { width: 6px; }\n.rcl-cfg-scroll::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); border-radius: 3px; }\n\n.rcl-grp {\n  font-size: 9.5px;\n  font-weight: 700;\n  letter-spacing: 0.14em;\n  text-transform: uppercase;\n  color: var(--cl-tx-3);\n  margin: 9px 0 4px;\n}\n.rcl-grp:first-child { margin-top: 1px; }\n\n.rcl-row {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  min-height: 22px;\n  padding: 1px 0;\n}\n.rcl-row > label:first-child,\n.rcl-row > span:first-child { flex: 1; min-width: 0; font-size: 11px; color: var(--cl-tx-2); }\n.rcl-row .rcl-num {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 10px;\n  font-variant-numeric: tabular-nums;\n  color: var(--cl-tx-3);\n  width: 34px;\n  text-align: end;\n}\n\n.rcl-cfg select {\n  border: 1px solid var(--cl-line-2);\n  border-radius: 6px;\n  background: rgba(255, 255, 255, 0.05);\n  color: var(--cl-tx-1);\n  font: inherit;\n  font-size: 11px;\n  padding: 2px 5px;\n  outline: none;\n  cursor: pointer;\n  max-width: 130px;\n}\n.rcl-cfg select option { background: #101016; color: #f3f2f7; }\n\n.rcl-cfg input[type=\"range\"] {\n  -webkit-appearance: none;\n  appearance: none;\n  width: 104px;\n  height: 3px;\n  border-radius: 2px;\n  background: rgba(255, 255, 255, 0.13);\n  outline: none;\n  cursor: pointer;\n}\n.rcl-cfg input[type=\"range\"]::-webkit-slider-thumb {\n  -webkit-appearance: none;\n  width: 11px; height: 11px;\n  border-radius: 50%;\n  background: var(--cl-iris);\n  cursor: pointer;\n}\n.rcl-cfg input[type=\"range\"]::-moz-range-thumb {\n  width: 11px; height: 11px; border: none;\n  border-radius: 50%;\n  background: var(--cl-iris);\n  cursor: pointer;\n}\n\n/* switch */\n.rcl-sw { position: relative; width: 26px; height: 14px; flex-shrink: 0; cursor: pointer; }\n.rcl-sw input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }\n.rcl-sw i {\n  position: absolute; inset: 0;\n  border-radius: 999px;\n  background: rgba(255, 255, 255, 0.12);\n  transition: background 150ms ease;\n  pointer-events: none;\n}\n.rcl-sw i::after {\n  content: \"\";\n  position: absolute;\n  top: 2px; left: 2px;\n  width: 10px; height: 10px;\n  border-radius: 50%;\n  background: var(--cl-tx-2);\n  transition: transform 150ms cubic-bezier(.2, .8, .3, 1), background 150ms ease;\n}\n.rcl-sw input:checked + i { background: rgba(166, 215, 178, 0.28); }\n.rcl-sw input:checked + i::after { transform: translateX(12px); background: var(--cl-sage); }\n.rcl-sw input:focus-visible + i { box-shadow: 0 0 0 2px rgba(155, 197, 232, 0.5); }\n\n.rcl-btns { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }\n.rcl-btn {\n  border: 1px solid var(--cl-line-2);\n  border-radius: 7px;\n  background: rgba(255, 255, 255, 0.04);\n  color: var(--cl-tx-2);\n  font: inherit;\n  font-size: 10.5px;\n  padding: 4px 9px;\n  cursor: pointer;\n  transition: color 130ms ease, border-color 130ms ease, background 130ms ease;\n}\n.rcl-btn:hover { color: var(--cl-tx-1); border-color: var(--cl-line-3); background: rgba(255, 255, 255, 0.075); }\n.rcl-btn.danger { color: var(--cl-rose); border-color: rgba(217, 163, 171, 0.3); }\n.rcl-btn.danger:hover { background: rgba(217, 163, 171, 0.12); }\n\n.rcl-muted { display: flex; flex-wrap: wrap; gap: 4px; }\n.rcl-chip {\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  border: 1px solid var(--cl-line-2);\n  border-radius: 999px;\n  padding: 2px 4px 2px 9px;\n  font-size: 10.5px;\n  color: var(--cl-tx-2);\n  max-width: 100%;\n}\n.rcl-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: isolate; }\n.rcl-chip button {\n  width: 14px; height: 14px;\n  flex-shrink: 0;\n  display: grid; place-items: center;\n  border: none; border-radius: 50%;\n  background: rgba(255, 255, 255, 0.08);\n  color: var(--cl-tx-2);\n  font: inherit; font-size: 9px; line-height: 1;\n  padding: 0; cursor: pointer;\n}\n.rcl-chip button:hover { background: rgba(217, 163, 171, 0.3); color: var(--cl-tx-1); }\n.rcl-none { font-size: 10.5px; color: var(--cl-tx-3); }\n\n/* ---------------- docked to the Ryn Type 2 lockup ----------------\n\n   Not two cards stacked. Two panes of glass sharing an edge each blur the page\n   behind them separately, and over a gradient the two results do not match, so\n   the join reads as a line however carefully the borders are removed.\n\n   Instead the panel keeps its own single surface and grows its header to the\n   height of the corner mark, and the mark — the client's own #ryn-v2-wrapper,\n   which already sits above everything at z-index 99999 — is moved into that\n   space. One pane of glass, no seam, and the mark's own styling, hover and\n   click are left exactly as they were. The panel stops drawing its own \"RYN\n   Chat Log\" title because the mark above it is already saying it, and the\n   count and controls move over to share the mark's row. */\n\n#ryn-v2-wrapper.rcl-docked {\n  left: var(--rcl-dock-x, 12px) !important;\n  top: var(--rcl-dock-y, 12px) !important;\n}\n/* Docking is available: shown while the panel is dragged over the mark. */\n#ryn-v2-wrapper.rcl-dock-hint .ryn-v2-mark { opacity: 1; transform: translateY(-1px) scale(1.04); }\n#ryn-v2-wrapper.rcl-dock-hint .ryn-v2-n1 { color: #ffffff; }\n\n#ryn-chatlog.rcl-docked .rcl-head {\n  height: 60px;\n  align-items: center;\n  padding: 0 6px 0 10px;\n  background: none;\n  border-bottom: 1px solid var(--cl-line);\n}\n#ryn-chatlog.rcl-docked .rcl-mark,\n#ryn-chatlog.rcl-docked .rcl-name-lbl { display: none; }\n/* The panel's own glass settles up into place as the mark takes its seat. */\n#ryn-chatlog.rcl-docked .rcl-head { animation: rcl-assemble 240ms cubic-bezier(.2, .8, .3, 1) both; }\n@keyframes rcl-assemble {\n  from { opacity: .45; }\n  to { opacity: 1; }\n}\n/* The one transition on the panel's transform, added for the length of the\n   snap and taken off again — dragging has to stay instant. */\n#ryn-chatlog.rcl-snap { transition: transform 260ms cubic-bezier(.2, .85, .3, 1.08); }\n\n/* ---------------- motion ---------------- */\n\n@media (prefers-reduced-motion: reduce) {\n  #ryn-chatlog *, #ryn-chatlog *::before, #ryn-chatlog *::after {\n    animation-duration: 1ms !important;\n    transition-duration: 1ms !important;\n  }\n}\n";
 
   // =========================================================================
   //  CHAT LOG
@@ -26597,6 +26606,17 @@ window.grbtp = 35;
   // logged as dead — exactly the "ordinary disappearance" a death must not be
   // inferred from.
   const CHATLOG_DEATH_RANGE_SQ = 320 * 320;
+
+  // Where the assembly sits, and where the client's corner mark sits inside the
+  // panel's header once it has joined it. The corner is the mark's own home
+  // (#ryn-v2-wrapper is fixed at 12,12), so docking reads as the panel arriving
+  // under it rather than the pair moving somewhere else. The insets are the
+  // panel's header padding: 10px in, and centred in a 60px row against the
+  // mark's own 44px height.
+  const CHATLOG_DOCK_X = 12;
+  const CHATLOG_DOCK_Y = 12;
+  const CHATLOG_DOCK_INSET_X = 10;
+  const CHATLOG_DOCK_INSET_Y = 8;
 
   const CHATLOG_FONTS = {
     manrope: "'Manrope','Segoe UI',system-ui,sans-serif",
@@ -26664,6 +26684,11 @@ window.grbtp = 35;
     _drag = null;
     _raf = 0;
     _pos = { x: 14, y: 52 };
+    // The panel belongs to the game, not to the menu you launch it from, so it
+    // stays out of sight until this client is actually playing. It keeps
+    // recording either way — this is visibility and nothing else.
+    _inGame = false;
+    _docked = false;
 
     // ---- settings helpers -------------------------------------------------
     _s(key) { return Settings_default[key]; }
@@ -26689,8 +26714,9 @@ window.grbtp = 35;
         this._build();
         this._built = true;
         this.ready = true;
+        this._docked = !!this._s("_chatLogDocked");
         this._applyAll();
-        if (this._s("_chatLogOpen")) this.show(); else this.hide();
+        this._applyVisibility();
       } catch (e) {
         // A chat log that cannot draw itself must not take the client with it.
         this.ready = false;
@@ -26896,14 +26922,6 @@ window.grbtp = 35;
         if (name) known.name = name;
       }
       this._push("death", sid, name || (known ? known.name : ""), "", "", this._isBot(client2, sid));
-    }
-
-    // The client menu is opened over the whole page, so the panel is put away
-    // for as long as it is up and comes back exactly as it was.
-    setMenuOpen(open) {
-      if (!this.root) return;
-      this.root.style.visibility = open ? "hidden" : "";
-      if (open) this._closeMenu();
     }
 
     // True while the log's own search box has the keyboard. The client's key
@@ -27266,8 +27284,9 @@ window.grbtp = 35;
       this._applyMutes();
       this._applyFont();
       this._applyOpacity();
+      this._pos.x = this._s("_chatLogX");
+      this._pos.y = this._s("_chatLogY");
       this._applySize();
-      this._applyPosition(this._s("_chatLogX"), this._s("_chatLogY"));
       this._applyToggles();
     }
 
@@ -27284,6 +27303,9 @@ window.grbtp = 35;
       if (!root) return;
       root.style.setProperty("--cl-bg-a", (this._s("_chatLogBgOpacity") / 100).toFixed(3));
       root.style.setProperty("--cl-fg-a", (this._s("_chatLogMsgOpacity") / 100).toFixed(3));
+      // The docked lockup is painted from the same value, so the two halves of
+      // the assembly never disagree about how transparent they are.
+      this._syncDock();
     }
 
     _applySize() {
@@ -27291,7 +27313,10 @@ window.grbtp = 35;
       if (!root) return;
       root.style.setProperty("--cl-w", this._s("_chatLogW") + "px");
       root.style.setProperty("--cl-h", this._s("_chatLogH") + "px");
-      this._applyPosition(this._pos.x, this._pos.y);
+      // The lockup's card is as wide as the panel, so a width change has to
+      // reach it too or the seam stops lining up.
+      this._syncDock();
+      this._place();
     }
 
     _applyToggles() {
@@ -27300,6 +27325,104 @@ window.grbtp = 35;
       root.classList.toggle("rcl-notime", !this._s("_chatLogTime"));
       root.classList.toggle("rcl-noid", !this._s("_chatLogID"));
       root.classList.toggle("rcl-lock", !!this._s("_chatLogLock"));
+    }
+
+    // ======================================================================
+    //  DOCKING TO THE RYN TYPE 2 LOCKUP
+    //
+    //  Dragged up under the corner mark, the panel joins it: the lockup grows
+    //  a card the width of the panel with its bottom edge open, the panel
+    //  squares off its own top corners against it, and the panel's "RYN Chat
+    //  Log" title steps aside because the lockup above is already saying it.
+    //  The two read as one built thing rather than a badge with a window under
+    //  it.
+    //
+    //  The lockup is the client's own #ryn-v2-wrapper and is looked up fresh
+    //  each time rather than held: it is injected on a MutationObserver and may
+    //  not exist yet when the log starts. Nothing here runs on a timer — only
+    //  on a drag, a resize, or the panel appearing.
+    // ======================================================================
+
+    _lockup() {
+      return document.getElementById("ryn-v2-wrapper");
+    }
+
+    // Where the assembly lives: the same corner the mark occupies on its own,
+    // so docking looks like the panel arriving under the mark rather than the
+    // pair moving somewhere new.
+    _dockPoint() {
+      return { x: CHATLOG_DOCK_X, y: CHATLOG_DOCK_Y };
+    }
+
+    // Seats the mark inside the panel's header, or puts it back. Called when
+    // the panel is shown, hidden, docked, undocked, moved or resized — never on
+    // a timer, and never from inside a drag frame.
+    _syncDock() {
+      const on = this._docked && this.isOpen();
+      if (this.root) this.root.classList.toggle("rcl-docked", on);
+      const lockup = this._lockup();
+      if (!lockup) return;
+      if (on) {
+        // Offsets into the panel's own header box, so the mark tracks the panel
+        // if the viewport ever clamps it away from the corner.
+        lockup.style.setProperty("--rcl-dock-x", (this._pos.x + CHATLOG_DOCK_INSET_X) + "px");
+        lockup.style.setProperty("--rcl-dock-y", (this._pos.y + CHATLOG_DOCK_INSET_Y) + "px");
+      } else {
+        lockup.style.removeProperty("--rcl-dock-x");
+        lockup.style.removeProperty("--rcl-dock-y");
+      }
+      lockup.classList.toggle("rcl-docked", on);
+    }
+
+    // True while the panel is being dragged close enough to the mark that
+    // letting go would join them.
+    _nearDock(x, y) {
+      if (!this._lockup()) return false;
+      return Math.abs(x - CHATLOG_DOCK_X) <= 90 && Math.abs(y - CHATLOG_DOCK_Y) <= 90;
+    }
+
+    dock(animate) {
+      if (!this.root || !this._lockup()) return;
+      this._docked = true;
+      this._set("_chatLogDocked", true);
+      if (animate) this._snap();
+      const point = this._dockPoint();
+      this._applyPosition(point.x, point.y);
+      this._syncDock();
+      Settings_default._chatLogX = Math.round(this._pos.x);
+      Settings_default._chatLogY = Math.round(this._pos.y);
+      this._saveSoon();
+    }
+
+    undock() {
+      if (!this._docked) return;
+      this._docked = false;
+      this._set("_chatLogDocked", false);
+      this._syncDock();
+    }
+
+    // The join itself: one short slide into place. The class carries the only
+    // transition on the panel's transform, and it is taken off again as soon as
+    // the slide ends, so dragging stays instant.
+    _snap() {
+      const root = this.root;
+      if (!root) return;
+      root.classList.add("rcl-snap");
+      clearTimeout(this._snapTimer);
+      this._snapTimer = setTimeout(() => root.classList.remove("rcl-snap"), 320);
+    }
+
+    // Position the panel where it belongs right now — under the lockup when
+    // docked, at the saved coordinates otherwise.
+    _place() {
+      if (this._docked) {
+        const point = this._dockPoint();
+        if (point) {
+          this._applyPosition(point.x, point.y);
+          return;
+        }
+      }
+      this._applyPosition(this._pos.x, this._pos.y);
     }
 
     // Viewport-safe placement, applied on every move and on every window event
@@ -27324,6 +27447,15 @@ window.grbtp = 35;
       this._pos.x = nx;
       this._pos.y = ny;
       root.style.transform = "translate3d(" + nx + "px," + ny + "px,0)";
+      // The mark rides in the panel's header, so it follows every clamp the
+      // panel takes. Two custom-property writes, and only while docked.
+      if (this._docked) {
+        const lockup = this._lockup();
+        if (lockup) {
+          lockup.style.setProperty("--rcl-dock-x", (nx + CHATLOG_DOCK_INSET_X) + "px");
+          lockup.style.setProperty("--rcl-dock-y", (ny + CHATLOG_DOCK_INSET_Y) + "px");
+        }
+      }
     }
 
     _savePosition() {
@@ -27335,30 +27467,50 @@ window.grbtp = 35;
     // ---- open / close -----------------------------------------------------
     // Closing hides the panel and nothing else. Every observation point above
     // keeps running, entries keep accumulating and keep expiring on schedule,
-    // so reopening shows everything that arrived in the meantime.
+    // so reopening shows everything that arrived in the meantime. The same is
+    // true of the lobby: the log is collecting there too, it just has nothing
+    // to show for a game you have not joined.
     show() {
-      if (!this.root) return;
-      this.root.classList.remove("rcl-hidden");
       if (this._s("_chatLogOpen") !== true) {
         this._set("_chatLogOpen", true);
         this._syncMiscSwitch(true);
       }
-      // Nothing laid out while the panel was hidden, so the list has no scroll
-      // height to speak of until now.
-      this._applyPosition(this._pos.x, this._pos.y);
-      if (this._follow) this._toBottom();
+      this._applyVisibility();
     }
 
     hide() {
-      if (!this.root) return;
-      this.root.classList.add("rcl-hidden");
-      this._closeMenu();
-      // A hidden list has no layout to scroll; the jump to the tail is done
-      // again by show().
-      this._cancelScroll();
       if (this._s("_chatLogOpen") !== false) {
         this._set("_chatLogOpen", false);
         this._syncMiscSwitch(false);
+      }
+      this._applyVisibility();
+    }
+
+    // Called from ClientPlayer's own spawn and reset, which are the client's
+    // real answers to "am I playing". Dying puts moomoo back on its menu card,
+    // so the panel goes with it and comes back on the next spawn.
+    setInGame(playing) {
+      if (!this.ready || this._inGame === playing) return;
+      this._inGame = playing;
+      this._applyVisibility();
+    }
+
+    // Wanted and playing, or nothing. Everything that reacts to the panel
+    // appearing or disappearing hangs off this one place.
+    _applyVisibility() {
+      const root = this.root;
+      if (!root) return;
+      const visible = this._inGame && !!this._s("_chatLogOpen");
+      root.classList.toggle("rcl-hidden", !visible);
+      this._syncDock();
+      if (visible) {
+        // Nothing laid out while it was hidden, so the list has no scroll
+        // height to speak of until now.
+        this._place();
+        if (this._follow) this._toBottom();
+      } else {
+        this._closeMenu();
+        this._cancelScroll();
       }
     }
 
@@ -27375,7 +27527,7 @@ window.grbtp = 35;
 
     toggle() {
       if (!this.ready) return;
-      if (this.root.classList.contains("rcl-hidden")) this.show(); else this.hide();
+      if (this._s("_chatLogOpen")) this.hide(); else this.show();
     }
 
     isOpen() {
@@ -27396,18 +27548,21 @@ window.grbtp = 35;
     // reset. Same as refresh, plus the ones that are not simple switches.
     reload() {
       if (!this.ready) return;
+      this._docked = !!this._s("_chatLogDocked");
       this._applyAll();
       this._syncControls();
       this._renderMuteList();
-      if (this._s("_chatLogOpen")) this.show(); else this.hide();
+      this._applyVisibility();
     }
 
     // ---- resets -----------------------------------------------------------
     resetPosition() {
       Settings_default._chatLogX = defaultSettings._chatLogX;
       Settings_default._chatLogY = defaultSettings._chatLogY;
+      this._pos.x = defaultSettings._chatLogX;
+      this._pos.y = defaultSettings._chatLogY;
       this._saveSoon();
-      this._applyPosition(defaultSettings._chatLogX, defaultSettings._chatLogY);
+      if (defaultSettings._chatLogDocked) this.dock(true); else { this.undock(); this._place(); }
     }
 
     resetSize() {
@@ -27444,8 +27599,10 @@ window.grbtp = 35;
         Settings_default[key] = Array.isArray(value) ? value.slice() : value;
       }
       this._saveSoon();
+      this._docked = !!defaultSettings._chatLogDocked;
       this._loadMutes();
       this._applyAll();
+      this._place();
       this._syncControls();
       this._renderMuteList();
       this._search(this._searchTerm);
@@ -27624,7 +27781,7 @@ window.grbtp = 35;
 
       // One listener for the window, shared by every viewport concern there is:
       // resizing, zooming, entering and leaving fullscreen all arrive here.
-      window.addEventListener("resize", () => this._applyPosition(this._pos.x, this._pos.y), { passive: true });
+      window.addEventListener("resize", () => this._place(), { passive: true });
 
       doc.addEventListener("pointerdown", event => {
         if (this._menu && !this._menu.contains(event.target)) this._closeMenu();
@@ -27749,8 +27906,15 @@ window.grbtp = 35;
       if (event.button !== 0 || this._s("_chatLogLock")) return;
       if (event.target.closest && event.target.closest(".rcl-ic")) return;
       event.preventDefault();
+      // Picking the panel up always releases it from the lockup, so the drag
+      // itself is ordinary. Letting go inside the dock zone joins them again,
+      // which makes a nudge that ends where it started a no-op rather than an
+      // accidental undock.
+      const wasDocked = this._docked;
+      if (wasDocked) this.undock();
       this._beginPointer(event, {
         mode: "move",
+        wasDocked: wasDocked,
         ox: event.clientX - this._pos.x,
         oy: event.clientY - this._pos.y
       });
@@ -27794,11 +27958,18 @@ window.grbtp = 35;
         const mode = this._drag ? this._drag.mode : "";
         this._drag = null;
         this.root.classList.remove("rcl-drag");
+        this._hintDock(false);
         if (mode === "move") {
-          this._savePosition();
+          if (this._nearDock(this._pos.x, this._pos.y)) {
+            this.dock(true);
+          } else {
+            this._savePosition();
+          }
         } else if (mode === "size") {
           this._saveSoon();
           this._syncControls();
+          this._syncDock();
+          if (this._docked) this._place();
           if (this._follow) this._toBottom();
         }
       };
@@ -27807,11 +27978,21 @@ window.grbtp = 35;
       window.addEventListener("pointercancel", up);
     }
 
+    // Lights the lockup up while the panel is over it, so it is clear before
+    // letting go that the two will join.
+    _hintDock(on) {
+      if (on === this._hinting) return;
+      this._hinting = on;
+      const lockup = this._lockup();
+      if (lockup) lockup.classList.toggle("rcl-dock-hint", on);
+    }
+
     _applyPointer() {
       const drag = this._drag;
       if (!drag || !this.root) return;
       if (drag.mode === "move") {
         this._applyPosition(drag.x - drag.ox, drag.y - drag.oy);
+        this._hintDock(this._nearDock(this._pos.x, this._pos.y));
         return;
       }
       const w = Math.round(Math.min(Math.max(200, drag.x - drag.ox), Math.max(200, window.innerWidth - this._pos.x)));

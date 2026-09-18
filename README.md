@@ -193,6 +193,26 @@ The module lives in `tools/chatlog/chatlog.js` and its stylesheet in
 anchored edits, each of which fails the build if its anchor is missing or
 ambiguous — the same rule `build-reup.js` follows.
 
+It appears when this client spawns, not on moomoo's menu card, and it stays on
+screen while the Ryn menu is open. Both are read off the client's own state:
+`ClientPlayer.playerSpawn` and `ClientPlayer.reset`. The log records in the
+lobby too — everything said before you spawned is there when you arrive.
+
+## Docked to the corner mark
+
+By default the panel is joined to the Ryn Type 2 corner mark: the panel's
+header opens up to the mark's height, the mark takes its seat inside it, and
+the panel drops its own "RYN Chat Log" title because the mark is already saying
+it. Drag the panel away to separate them; drop it back near the corner to join
+them again.
+
+Two panes of glass sharing an edge do not merge — each blurs the page behind it
+separately, and over a gradient the two results differ enough that the join
+reads as a line. So there is only ever one pane: the panel's. The mark
+(`#ryn-v2-wrapper`, already at `z-index: 99999`) is repositioned into the
+panel's header through two custom properties, and its own styling, hover and
+click-to-open-menu are untouched.
+
 ## Where the events come from
 
 Nothing is inferred and nothing is polled. Each event is read at a point the
@@ -260,8 +280,8 @@ node tools/chatlog/preview.js && open tools/chatlog/preview.html
 
 `preview.html` cuts the module out of the built userscript — so it exercises the
 integrated code, not a copy — stubs the handful of client objects it closes
-over, drives the observation points with real packet payloads, and prints 43
-assertions on the page. All 43 pass, and all 53 bundle-rewrite hooks bind
+over, drives the observation points with real packet payloads, and prints 61
+assertions on the page. All 61 pass, and all 53 bundle-rewrite hooks bind
 against the shipped `moomoo.io` bundle, `chatMute` among them.
 
 ## Limits

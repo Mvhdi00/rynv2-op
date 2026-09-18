@@ -81,6 +81,15 @@ const page = `<!doctype html>
 </head>
 <body>
 <div id="ground"></div>
+<!-- The client's own corner mark, reproduced at the size and position the
+     client gives it, so the docking geometry is the real geometry. -->
+<div id="ryn-v2-wrapper" class="ryn-v2-wrapper" style="position:fixed;top:12px;left:12px;display:flex;align-items:center;gap:9px;z-index:99999;font-family:'Hammersmith One',Arial,sans-serif;text-transform:uppercase">
+  <div class="ryn-v2-mark" style="width:44px;height:44px;border-radius:13px;background:linear-gradient(140deg,#3b3357,#1a1728);box-shadow:inset 0 0 0 1px rgba(0,0,0,.28)"></div>
+  <div class="ryn-v2-badge" style="display:flex;align-items:baseline;gap:5px;line-height:1">
+    <span class="ryn-v2-n1" style="color:rgba(255,255,255,.88);font-size:13px;letter-spacing:.14em">Ryn</span>
+    <span class="ryn-v2-n2" style="color:rgba(255,255,255,.46);font-size:10px;letter-spacing:.22em">Type 2</span>
+  </div>
+</div>
 <div id="tests"></div>
 <p id="hint">
   drag the <b>header</b> &middot; drag the <b>corner</b> to resize<br>
@@ -122,7 +131,6 @@ function spawn(socketID, sid, nickname) {
 }
 
 ChatLog.init();
-ChatLog.show();
 
 // ---- a plausible session ------------------------------------------------
 spawn("s1", 1, "Raptor");
@@ -159,6 +167,19 @@ const check = (name, ok, detail) => results.push((ok ? "PASS  " : "FAIL  ") + na
 const kinds = k => ChatLog.entries.filter(e => e.kind === k).length;
 const visible = () => Array.from(document.querySelectorAll("#ryn-chatlog .rcl-e"))
   .filter(el => getComputedStyle(el).display !== "none").length;
+const lockup = document.getElementById("ryn-v2-wrapper");
+
+// ---- in the lobby -------------------------------------------------------
+// Everything above arrived before this client spawned, so none of it was on
+// screen — and all of it was still recorded.
+check("hidden on the game's menu", getComputedStyle(ChatLog.root).display === "none");
+check("recording on the game's menu anyway", ChatLog.entries.length > 0, ChatLog.entries.length);
+check("lockup left alone while hidden", !lockup.classList.contains("rcl-docked"));
+
+client.myPlayer.playerSpawn = () => ChatLog.setInGame(true);
+client.myPlayer.playerSpawn();
+check("shown once in game", getComputedStyle(ChatLog.root).display !== "none");
+check("everything from the lobby is there on arrival", visible() > 0, visible());
 
 check("join x6", kinds("join") === 6, kinds("join"));
 check("respawn is not a join", (spawn("s2", 12, "Kenny"), kinds("join") === 6), kinds("join"));
@@ -222,6 +243,7 @@ const whileClosed = ChatLog.entries.length;
 ChatLog.show();
 check("records while closed",
   ChatLog.entries.length === whileClosed && ChatLog.entries[ChatLog.entries.length - 1].msg === "while closed");
+check("reopening shows it", getComputedStyle(ChatLog.root).display !== "none");
 
 // Filters are display-only: the entries stay, the rows stop being drawn.
 const chatCount = kinds("chat");
@@ -240,6 +262,43 @@ check("bot messages on reveals what arrived while off",
 Settings_default._chatLogBotMsg = false;
 ChatLog.refresh();
 check("chat entries untouched by filtering", kinds("chat") === chatCount);
+
+// ---- docked to the lockup ----------------------------------------------
+check("docked by default", ChatLog._docked && lockup.classList.contains("rcl-docked") &&
+  ChatLog.root.classList.contains("rcl-docked"));
+check("panel takes the corner the mark lives in",
+  ChatLog._pos.x === 12 && ChatLog._pos.y === 12, ChatLog._pos.x + "," + ChatLog._pos.y);
+check("mark is seated inside the panel header",
+  Math.round(lockup.getBoundingClientRect().left) === 22 &&
+  Math.round(lockup.getBoundingClientRect().top) === 20,
+  lockup.getBoundingClientRect().left + "," + lockup.getBoundingClientRect().top);
+check("header opened up to hold it",
+  Math.round(ChatLog.root.querySelector(".rcl-head").getBoundingClientRect().height) === 60);
+check("panel title steps aside for the lockup",
+  getComputedStyle(ChatLog.root.querySelector(".rcl-mark")).display === "none" &&
+  getComputedStyle(ChatLog.root.querySelector(".rcl-name-lbl")).display === "none");
+check("one pane of glass, so no seam to hide",
+  getComputedStyle(ChatLog.root).backdropFilter !== "none" &&
+  getComputedStyle(lockup).backdropFilter === "none" &&
+  getComputedStyle(lockup).backgroundColor === "rgba(0, 0, 0, 0)");
+
+ChatLog.undock();
+check("undock puts the mark back in its own corner",
+  !lockup.classList.contains("rcl-docked") && !ChatLog.root.classList.contains("rcl-docked") &&
+  Math.round(lockup.getBoundingClientRect().left) === 12 &&
+  getComputedStyle(ChatLog.root.querySelector(".rcl-name-lbl")).display !== "none");
+check("dock zone is reachable from just below the mark", ChatLog._nearDock(20, 90));
+check("dock zone does not reach across the screen", !ChatLog._nearDock(700, 500));
+ChatLog.dock(false);
+check("re-dock", ChatLog._docked && lockup.classList.contains("rcl-docked"));
+
+// Hiding the panel must not leave an empty card hanging off the lockup.
+ChatLog.setInGame(false);
+check("mark returns to its own corner when the panel goes",
+  !lockup.classList.contains("rcl-docked") && Math.round(lockup.getBoundingClientRect().left) === 12);
+ChatLog.setInGame(true);
+check("and comes back on respawn", lockup.classList.contains("rcl-docked"));
+ChatLog.undock();
 
 // Drag, resize, lock, and the viewport clamp.
 ChatLog._applyPosition(400, 300);

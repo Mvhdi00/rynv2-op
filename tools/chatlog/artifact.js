@@ -124,15 +124,58 @@ body {
 #keys span { display: inline-flex; align-items: center; gap: 6px; }
 #keys i { width: 7px; height: 7px; border-radius: 2px; display: inline-block; }
 
+/* The corner mark, reproduced from the client's own rules. The Chat Log docks
+   into it — the panel's header opens up to the mark's height and the mark takes
+   its seat inside, on one pane of glass. */
+.ryn-v2-wrapper {
+  position: fixed;
+  top: 12px; left: 12px;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+  user-select: none;
+}
+.ryn-v2-mark {
+  width: 44px; height: 44px; flex: none;
+  border-radius: 13px;
+  background: linear-gradient(140deg, #3b3357, #1a1728);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.38), inset 0 0 0 1px rgba(0,0,0,0.28);
+  opacity: .92;
+  transition: transform 170ms cubic-bezier(.34,1.56,.64,1), opacity 200ms ease;
+}
+.ryn-v2-badge {
+  display: flex; align-items: baseline; gap: 5px;
+  font-family: 'Space Grotesk', 'Manrope', sans-serif;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-shadow: 0 1px 5px rgba(0,0,0,0.78);
+  pointer-events: none;
+}
+.ryn-v2-n1 { color: rgba(255,255,255,0.88); font-size: 13px; letter-spacing: 0.14em; transition: color 200ms ease; }
+.ryn-v2-n2 { color: rgba(255,255,255,0.46); font-size: 10px; letter-spacing: 0.22em; }
+.ryn-v2-wrapper:hover .ryn-v2-mark { opacity: 1; transform: translateY(-1px) scale(1.04); }
+
 @media (max-width: 560px) {
   #legend p { flex: 1 0 100%; }
 }
 </style>
 
 <div id="stage"></div>
+<!-- The client's own corner mark, at the size and position the client gives
+     it, so the docking geometry here is the real geometry. -->
+<div id="ryn-v2-wrapper" class="ryn-v2-wrapper">
+  <div class="ryn-v2-mark"></div>
+  <div class="ryn-v2-badge">
+    <span class="ryn-v2-n1">Ryn</span>
+    <span class="ryn-v2-n2">Type 2</span>
+  </div>
+</div>
 <div id="legend">
   <h1>Ryn Type 2 &middot; Chat Log</h1>
-  <p><b>Drag</b> the header <span class="dot">&middot;</span> <b>drag</b> the corner to resize</p>
+  <p><b>Drag</b> it off the mark to separate them <span class="dot">&middot;</span> <b>drop it back</b> to join</p>
   <p><b>Click a name</b> to mute or copy <span class="dot">&middot;</span> <b>double-click a row</b> to copy</p>
   <p><span class="k">&#9881;</span> settings <span class="dot">&middot;</span> <span class="k">&#9906;</span> search <span class="dot">&middot;</span> <span class="k">L</span> in game</p>
   <div id="keys">
@@ -183,8 +226,8 @@ function join(sid, clan) {
 }
 
 ChatLog.init();
-ChatLog._applyPosition(20, 20);
-ChatLog.show();
+// The panel belongs to the game, so it stays away until this client spawns.
+ChatLog.setInGame(true);
 
 spawn("s1", 1, "Raptor");
 spawn("s2", 12, "Kenny");
