@@ -117,6 +117,7 @@ but nothing in the client needs it. It is stripped from the build.
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
+Ryn_Type_2.user.js        RYN Type 2, standalone userscript (see below)
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
@@ -126,7 +127,62 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/survival-harness.js extracts the real tables + SurvivalCore out of
+                          Ryn_Type_2.user.js and evaluates them standalone
+tools/survival-world.js   a synthetic world with the surface SurvivalCore reads
+tools/survival-tests.js   the survival engine's test and audit suite
 ```
+
+## RYN Type 2 — Survival Core
+
+`Ryn_Type_2.user.js` is a separate client and a separate script; it is not
+built from `src/` and `build-reup.js` does not touch it.
+
+Its autoheal is **Survival Core**, a rebuild of the module from zero. The
+previous one (`NovastormHeal`, a novastorm 1.4 / Falcons port) summed five
+damage terms into one capped number with no timing in it and compared that to
+the health bar. Survival Core instead builds a health curve `H(t)` over the
+next nine server ticks — one full period of the game's regen and poison loop —
+out of typed, timed, confidence-weighted threats, and asks when a food has to
+leave so that it lands before the curve crosses lethal.
+
+Three things it derives from the game's own code that no client in the
+reference set has right:
+
+- **The shame window is measured on the server, and latency is inside it.**
+  The server compares `Date.now() - hitTime` against 120ms when a consumable
+  is used, so what it sees is our wait *plus* the round trip. The window is
+  therefore `120 - RTT` of our time, not 120ms — and past ~120ms of ping there
+  is no window left and every heal is already a shame *reduction*.
+- **Shame is charged per burst, not per food.** `hitTime` is zeroed by the
+  first consumable of a burst, so six apples cost the same +1 as one.
+- **An apple at full health is a free -2.** The shame block runs before the
+  consume, and the consume is refused at full health before it spends the
+  food — three packets for two shame, available under pressure.
+
+Plus two corrections to numbers this client was already carrying: the
+knockback impulse in `Weapons[].knockback` is already `(0.3 + knock) × 111`
+and the old code added another 33.3 to it, and a raised shield *replaces* the
+weapon-variant multiplier rather than stacking with it.
+
+Healing also has a packet reservation. `ModuleHandler.packetLimit` became a
+getter over `packetLimitRaw - healReserve`, so every placement system in the
+client — the placer, the placement engine, replace, preplace, spam preplace,
+spike tick, retrap, `resendPlace` — stands aside for a forecast heal without
+knowing the reservation exists, and the heal itself measures against the raw
+allowance.
+
+```sh
+node tools/survival-tests.js
+```
+
+147 checks: the 37 scenarios the rebuild was specified against, the derived
+mechanics above, and a 20,000-tick chaos run that randomises ping, packet
+pressure, enemy arrival and departure, weapon and hat swaps, object id reuse,
+out-of-order state, trap state and respawns, asserting no throw, bounded
+memory, and no shame lockout. The suite runs the shipped file's own bytes: the
+harness slices the data tables and the module out of `Ryn_Type_2.user.js` and
+evaluates them, so a change to either is a change to what is tested.
 
 ## Build
 
