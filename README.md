@@ -117,7 +117,10 @@ but nothing in the client needs it. It is stripped from the build.
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
-Ryn_Type_2.user.js        RYN Type 2, standalone userscript (see below)
+Ryn_Type_2.user.js        RYN Type 2, standalone userscript — a separate
+                          client, not built from src/ and not touched by
+                          build-reup.js. It has no autoheal: the module was
+                          removed and the Autoheal switch is an empty shell.
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
@@ -127,118 +130,7 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
-tools/survival-harness.js extracts the real tables + SurvivalCore out of
-                          Ryn_Type_2.user.js and evaluates them standalone
-tools/survival-world.js   a synthetic world with the surface SurvivalCore reads
-tools/survival-tests.js   the survival engine's test and audit suite
 ```
-
-## RYN Type 2 — Survival Core
-
-`Ryn_Type_2.user.js` is a separate client and a separate script; it is not
-built from `src/` and `build-reup.js` does not touch it.
-
-Its autoheal is **Survival Core**, a rebuild of the module from zero. The
-previous one (`NovastormHeal`, a novastorm 1.4 / Falcons port) summed five
-damage terms into one capped number with no timing in it and compared that to
-the health bar. Survival Core instead builds a health curve `H(t)` over the
-next nine server ticks — one full period of the game's regen and poison loop —
-out of typed, timed, confidence-weighted threats.
-
-### The shame rule
-
-Everything else in the module is subordinate to one policy:
-
-> A food is never sent inside the server's 120ms window unless waiting for
-> that window to open would actually kill you.
-
-Not "unless the tier is urgent", not "unless the deadline has passed" — those
-are proxies, and a proxy is what lets a 20-damage tap walk the count up. The
-forecast can answer the real question exactly: take the *confident* curve, look
-at where it is when the window opens, and ask whether we are alive there. If we
-are, the food waits, whatever tier asked for it.
-
-Three things make that policy actually hold:
-
-- **The window is measured from the fastest round trip, not the average.** The
-  server compares `Date.now() - hitTime` to 120ms at consume time, so what it
-  sees is our wait *plus* the trip. An average of 70 on a connection whose
-  floor is 40 says "wait 50ms", and every packet that takes the fast path lands
-  at 90 — inside the window — and is charged. RYN already records the floor as
-  `SocketManager.minPingTime`; the window uses it, and adds the jitter rather
-  than subtracting it.
-- **Only a *confident* threat may spend a point.** The forecast carries three
-  curves: expected (weighted, sizes the heal), worst (p ≥ 0.5, decides whether
-  to heal) and sure (p ≥ 0.78, and nothing reads it but the shame rule). "They
-  are next to me and the ground is free" is not a reason to pay the server.
-- **The count grades the window.** `Player.updateHealth` runs the server's own
-  rule on the health echo, so a change in the count is the server's verdict on
-  the food just sent. A heal the module *believed* was free and that was charged
-  anyway lengthens the window by a tick; a free one gives it back slowly. A heal
-  it knew would be charged is not graded at all — grading those is a runaway,
-  and it is what walked the count to the wall on a low-ping connection.
-
-Two further consequences of reading the server's code rather than guessing:
-shame is charged **per burst, not per food** (`hitTime` is zeroed by the first
-consumable), so on the rare tick the module does pay, it stops rationing and
-buys a full bar with the point; and an apple at full health while armed is a
-free **-2**, because the shame block runs before the consume and the consume is
-refused at full health before it spends the food.
-
-The measured result, 900 ticks per run against a real weapon on its real
-reload:
-
-| | ping 20 | 45 | 70 | 100 | 140 | 200 |
-|---|---|---|---|---|---|---|
-| katana | 0 | 0 | 0 | 0 | 0 | 0 |
-| bull polearm | 0 | 0 | 0 | 0 | 0 | 0 |
-| bull daggers | 0 | 0 | 0 | 0 | 0 | 0 |
-
-(final shame count; no deaths, no lockouts, no learned bias drift)
-
-### The rest of it
-
-Every damage source the client can see or infer goes on one threat list with an
-amount, an arrival tick and a confidence: melee and secondary swings, spike
-contact and approach, knockback into spikes, the spike ring, trap breaks,
-poison on the real one-second loop, turret fire with a line-of-fire test and a
-computed travel time, shots already in the air, dagger/bull bursts, musket,
-musketbow, reverse insta, velocity tick, clown pressure, reflect gear — Spike
-Gear, Sawblade and Corrupt X Wings push a fraction of our own raw weapon damage
-back at us on the tick we choose to attack — and anything it cannot classify,
-whose rhythm it learns and schedules. Named sequences *promote* the threats
-already on the board rather than adding their sum again.
-
-Two corrections to numbers this client was already carrying: the knockback
-impulse in `Weapons[].knockback` is already `(0.3 + knock) × 111` and the old
-code added another 33.3 to it, and a raised shield *replaces* the weapon-variant
-multiplier rather than stacking with it.
-
-Healing also has a packet reservation. `ModuleHandler.packetLimit` became a
-getter over `packetLimitRaw - healReserve`, so every placement system in the
-client — the placer, the placement engine, replace, preplace, spam preplace,
-spike tick, retrap, `resendPlace` — stands aside for a forecast heal without
-knowing the reservation exists, and the heal itself measures against the raw
-allowance. The food hotkey routes through the module too, so holding it cannot
-go behind the shame rule.
-
-There is one switch, **Autoheal**, and it turns the whole thing on. It had
-sub-switches for the shame guard, the drain, the reservation and the EMP swap;
-none of them was a preference, each was part of the same decision, and turning
-any one off left the other three reasoning against a rule that was no longer
-true.
-
-```sh
-node tools/survival-tests.js
-```
-
-174 checks: the 37 scenarios the rebuild was specified against, the shame rule
-across the ping range and every weapon class, the derived mechanics above, and
-a 20,000-tick chaos run that randomises ping, packet pressure, enemy arrival
-and departure, weapon and hat swaps, object id reuse, out-of-order state, trap
-state and respawns, asserting no throw, bounded memory, and no shame lockout. The suite runs the shipped file's own bytes: the
-harness slices the data tables and the module out of `Ryn_Type_2.user.js` and
-evaluates them, so a change to either is a change to what is tested.
 
 ## Build
 
