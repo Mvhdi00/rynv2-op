@@ -34,13 +34,7 @@ const prelude = `
   const Logger = { log() {}, warn() {}, error() {}, test() {} };
   let __activeClient = null;
   const AC = () => __activeClient;
-  const Settings_default = {
-    _autoheal: true,
-    _soldierEMP: true,
-    _healShameGuard: true,
-    _healShameDrain: true,
-    _healReserve: true
-  };
+  const Settings_default = { _autoheal: true };
 `;
 
 const epilogue = `

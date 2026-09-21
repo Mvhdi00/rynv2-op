@@ -269,12 +269,161 @@ run("17/18 four enemies at once", () => {
 run("19 high ping: the shame window closes", () => {
   const lows = new World({ ping: 20 });
   for (let i = 0; i < 4; i++) { lows.ping = 20; lows.tick(); }
-  const highs = new World({ ping: 150 });
-  for (let i = 0; i < 4; i++) { highs.ping = 150; highs.tick(); }
-  check("20ms ping still has a wait", lows.core.clock.shameFreeAfterMs() > 80, "wait=" + lows.core.clock.shameFreeAfterMs().toFixed(1));
-  check("150ms ping has none", highs.core.clock.shameFreeAfterMs() === 0, "wait=" + highs.core.clock.shameFreeAfterMs().toFixed(1));
+  const mids = new World({ ping: 150 });
+  for (let i = 0; i < 4; i++) { mids.ping = 150; mids.tick(); }
+  const highs = new World({ ping: 260 });
+  for (let i = 0; i < 4; i++) { highs.ping = 260; highs.tick(); }
+  check("20ms ping has a long wait", lows.core.clock.shameFreeAfterMs() > 120, "wait=" + lows.core.clock.shameFreeAfterMs().toFixed(1));
+  check("the wait shrinks with ping", mids.core.clock.shameFreeAfterMs() < lows.core.clock.shameFreeAfterMs(),
+    lows.core.clock.shameFreeAfterMs().toFixed(1) + " -> " + mids.core.clock.shameFreeAfterMs().toFixed(1));
+  check("past the window there is none left", highs.core.clock.shameFreeAfterMs() === 0, "wait=" + highs.core.clock.shameFreeAfterMs().toFixed(1));
   check("lead grows with ping", highs.core.clock.leadTicks > lows.core.clock.leadTicks,
     lows.core.clock.leadTicks + " vs " + highs.core.clock.leadTicks);
+});
+
+// ── The shame rule, which is now the whole policy ──────────────────────────
+run("S1 the window is measured from the fastest trip, not the average", () => {
+  // A connection whose average settles at 90 but which has been seen at 40.
+  // The average would say "wait 65ms"; a packet on the fast path then reaches
+  // the server at 40 + 65 = 105ms and is charged. The floor says wait 115.
+  const w = new World({ ping: 40 });
+  w.tick(); w.tick();
+  // observe() only folds in a *fresh* pong, so the samples have to differ.
+  for (let i = 0; i < 20; i++) { w.ping = 88 + (i % 5); w.tick(); }
+  const avg = w.core.clock.roundTrip;
+  const fast = w.core.clock.fastestTrip;
+  check("average settled above the floor", avg > fast + 20, "avg=" + avg.toFixed(1) + " floor=" + fast);
+  check("window uses the floor", w.core.clock.shameFreeAfterMs() > 120 - fast, "wait=" + w.core.clock.shameFreeAfterMs().toFixed(1));
+  check("which is longer than the average would give", w.core.clock.shameFreeAfterMs() > 120 - avg + 10);
+});
+
+run("S2 a simple hit never costs a point", () => {
+  // The case from the field report: a tap, comfortable health, autoheal on.
+  // The old rule ate immediately; this one waits every time.
+  for (const ping of [ 10, 35, 70, 110 ]) {
+    const w = new World({ ping });
+    const e = w.addEnemy({ x: 110, y: 0, primary: 4, hat: 0 });
+    e.angle = Math.PI;
+    for (let i = 0; i < 300; i++) {
+      if (i % 9 === 0) { w.damage(20); e.lastAttacked = w.myPlayer.tickCount; }
+      w.tick();
+    }
+    check("ping " + ping + ": shame stayed at zero", w.myPlayer.shameCount === 0 && !w.myPlayer.shameActive,
+      "shame=" + w.myPlayer.shameCount + " active=" + w.myPlayer.shameActive);
+    check("ping " + ping + ": and it still healed", w.heals.length > 0 && w.myPlayer.currentHealth > 60,
+      "heals=" + w.heals.length + " hp=" + w.myPlayer.currentHealth);
+  }
+});
+
+run("S3 the point is spent only when waiting is lethal", () => {
+  // 18 health, a bull polearm in reach and loaded. Waiting 100ms for the
+  // window means eating the 67.5 first, which is death. This is the one tick
+  // the rule allows a charged heal.
+  const w = new World({ ping: 20 });
+  for (let i = 0; i < 3; i++) w.tick();
+  const e = w.addEnemy({ x: 105, y: 0, primary: 5, hat: 7, pReload: 7 });
+  e.angle = Math.PI;
+  w.damage(82);                     // arms the window, leaves 18
+  const before = w.heals.length;
+  w.tick();
+  check("ate inside the window", w.heals.length > before, "sent=" + (w.heals.length - before));
+  check("because the wait was not survivable", !w.core._survivesUntil(w.core.clock.shameFreeAfterMs()));
+
+  // The same enemy at full health, with no room for them to drop a spike: the
+  // worst they have is one 67.5 swing, which 80 health carries, so the food
+  // waits for the window even though the tier is asking for it now.
+  const safe = new World({ ping: 20, canPlace: false });
+  for (let i = 0; i < 3; i++) safe.tick();
+  const e2 = safe.addEnemy({ x: 105, y: 0, primary: 5, hat: 7, pReload: 7 });
+  e2.angle = Math.PI;
+  safe.damage(20);
+  const b2 = safe.heals.length;
+  safe.tick();
+  check("comfortable: nothing sent yet", safe.heals.length === b2);
+  check("and it is held, not dropped", safe.core.healingDelay > 0, "hold=" + safe.core.healingDelay);
+});
+
+run("S4 the wall is absolute", () => {
+  const w = new World({ ping: 20 });
+  for (let i = 0; i < 3; i++) w.tick();
+  w.myPlayer.shameCount = 7;
+  const e = w.addEnemy({ x: 105, y: 0, primary: 5, hat: 7, pReload: 7 });
+  e.angle = Math.PI;
+  w.damage(85);                     // 15 left, lethal wait
+  const before = w.heals.length;
+  w.tick();
+  check("no charged burst even to survive", w.heals.length === before, "sent=" + (w.heals.length - before));
+  check("never reaches the lockout", !w.myPlayer.shameActive && w.myPlayer.shameCount <= 7, "shame=" + w.myPlayer.shameCount);
+});
+
+run("S5 the count retunes the window", () => {
+  const w = new World({ ping: 60 });
+  for (let i = 0; i < 3; i++) w.tick();
+  const before = w.core.clock.shameFreeAfterMs();
+  // The server charges a heal the module believed was free: the only way the
+  // module can learn its window is short.
+  for (let i = 0; i < 3; i++) w.core.clock.noteShameOutcome(true);
+  const after = w.core.clock.shameFreeAfterMs();
+  check("a charged heal lengthens the wait", after > before, before.toFixed(1) + " -> " + after.toFixed(1));
+  check("by about a tick each time", after - before > 300 / 3, "delta=" + (after - before).toFixed(1));
+  for (let i = 0; i < 200; i++) w.core.clock.noteShameOutcome(false);
+  check("free heals give it back", w.core.clock.shameFreeAfterMs() <= before + 0.01, "back to " + w.core.clock.shameFreeAfterMs().toFixed(1));
+  check("and the bias is capped", w.core.clock.bias <= 150);
+});
+
+run("S5b sustained fights: every weapon, every ping", () => {
+  // The matrix the field report was about. Each run is 900 ticks of a real
+  // weapon on its real reload, with the enemy's cooldown reset when they swing
+  // the way PlayerManager.attackPlayer resets it in the client.
+  const weapons = [ [ 4, 0, "katana" ], [ 5, 7, "bull polearm" ], [ 7, 7, "bull daggers" ] ];
+  const pings = [ 20, 45, 70, 100, 140, 200 ];
+  let worstShame = 0, deaths = 0, runs = 0;
+  for (const [ id, hat, name ] of weapons) {
+    for (const ping of pings) {
+      const w = new World({ ping });
+      for (let i = 0; i < 3; i++) w.tick();
+      const e = w.addEnemy({ x: 110, y: 0, primary: id, hat });
+      e.angle = Math.PI;
+      const wp = M.Weapons[id];
+      const reloadTicks = Math.ceil(wp.speed / (1000 / 9));
+      e.reload[0].max = reloadTicks;
+      const dmg = wp.damage * (hat === 7 ? 1.5 : 1);
+      let died = false;
+      for (let i = 0; i < 900; i++) {
+        if (i % reloadTicks === 0) {
+          w.damage(dmg);
+          e.lastAttacked = w.myPlayer.tickCount;
+          e.reload[0].current = 0;
+        }
+        w.tick();
+        if (w.myPlayer.currentHealth <= 0) { died = true; break; }
+      }
+      runs++;
+      if (died) deaths++;
+      if (w.myPlayer.shameCount > worstShame) worstShame = w.myPlayer.shameCount;
+      if (w.myPlayer.shameActive) worstShame = 99;
+      if (w.core.clock.bias !== 0) worstShame = Math.max(worstShame, 50);
+    }
+  }
+  check("survived every run", deaths === 0, deaths + "/" + runs + " deaths");
+  check("shame never moved in any of them", worstShame === 0, "worst=" + worstShame);
+  results.push("        (" + runs + " runs: 3 weapons x 6 pings, 900 ticks each)");
+});
+
+run("S6 the food hotkey cannot go behind the rule", () => {
+  // Placer's path: currentType 2, key held, every tick. It used to send on
+  // shameCount < 7 alone.
+  const w = new World({ ping: 20 });
+  for (let i = 0; i < 3; i++) w.tick();
+  w.myPlayer.currentHealth = w.myPlayer.tempHealth = 70;
+  w.damage(10);
+  let sent = 0;
+  for (let i = 0; i < 12; i++) {
+    sent += w.core.requestHeal(1) ? 1 : 0;
+    w.tick();
+  }
+  check("did eat eventually", w.heals.length > 0, "heals=" + w.heals.length);
+  check("but never paid for it", w.myPlayer.shameCount === 0, "shame=" + w.myPlayer.shameCount);
 });
 
 run("20 jitter widens the margin, bounded", () => {
@@ -628,10 +777,22 @@ run("X8 no oscillation on a chip", () => {
   // system that flapped would spend well over that and hold the bar at 100.
   check("no food wasted on chatter", w.heals.length <= needed + 2, w.heals.length + " food for " + taken + " damage (need " + needed + ")");
   check("no send while already full", w.log.every(l => !(l.sent > 0 && l.hp >= 100)));
-  // And the tier does not flap across the ladder: a steady chip stays in the
-  // two tiers that answer a chip.
-  const seen = new Set(w.log.map(l => l.name));
-  check("tier stays in its band", [...seen].every(n => n === "CHIP" || n === "PREHEAL" || n === "IDLE"), [...seen].join(","));
+  // The tier climbs as the curve degrades and resets when it is answered —
+  // that is the ladder reporting, not flapping. What would be flapping is the
+  // tier moving without the health moving, so the two are checked together.
+  let inconsistent = 0;
+  for (let i = 1; i < w.log.length; i++) {
+    const rose = w.log[i].tier > w.log[i - 1].tier;
+    const fell = w.log[i].tier < w.log[i - 1].tier;
+    const hpFell = w.log[i].hp < w.log[i - 1].hp;
+    const healed = w.log[i - 1].sent > 0;
+    if (rose && !hpFell) inconsistent++;
+    if (fell && !healed) inconsistent++;
+  }
+  check("tier only moves when the health does", inconsistent === 0, "inconsistent=" + inconsistent);
+  // And it never lets the bar get close to the floor while answering a chip.
+  const low = Math.min(...w.log.map(l => l.hp));
+  check("never driven near death by the wait", low >= 35, "lowest=" + low);
   check("shame did not run away", !w.myPlayer.shameActive, "shame=" + w.myPlayer.shameCount);
 });
 

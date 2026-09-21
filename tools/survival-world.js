@@ -226,7 +226,15 @@ class World {
       canPlaceItem: () => opts.canPlace !== false
     };
     this.EnemyManager = { nearestDangerAnimal: null };
-    this.SocketManager = { get pong() { return world.ping; }, TICK: 1000 / 9 };
+    // minPingTime is the floor RYN records across the whole session; the shame
+    // window is measured against it, so the fake one has to keep it the same
+    // way — a running minimum of every ping this connection has reported.
+    this._minPing = Infinity;
+    this.SocketManager = {
+      get pong() { return world.ping; },
+      get minPingTime() { return world._minPing; },
+      TICK: 1000 / 9
+    };
     this.InputHandler = { fastHealPress: false };
     this.ownerClient = this;
     this.isOwner = true;
@@ -314,6 +322,15 @@ class World {
   tick(ms) {
     const step = ms === undefined ? 1000 / 9 : ms;
     CLOCK += step;
+    if (this.ping >= 0 && this.ping < this._minPing) this._minPing = this.ping;
+    // PacketManager zeroes its counter on a one-second interval; without the
+    // same reset here the fake budget only ever fills and every test longer
+    // than nine ticks ends in PACKET_STARVED.
+    this._packetWindow = (this._packetWindow || 0) + step;
+    if (this._packetWindow >= 1000) {
+      this._packetWindow = 0;
+      if (!this.holdPackets) this._ModuleHandler.packetCount = 0;
+    }
     this.myPlayer.tickCount += 1;
     this._ModuleHandler.tickCount += 1;
     this._ModuleHandler.healedOnce = false;
