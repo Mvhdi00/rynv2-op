@@ -31,6 +31,14 @@ function check(name, actual, expected) {
 const near = (want, tol = .01) => got => Math.abs(got - want) <= tol;
 const atLeast = want => got => got >= want;
 
+// The Auto Heal settings at the values the userscript ships, captured before
+// anything has touched them. `settings()` puts them back and applies whatever a
+// scenario wants changed, so no test inherits another's switches.
+const SHIPPED = Object.assign({}, H.Settings);
+function settings(over) {
+  Object.assign(H.Settings, SHIPPED, over || {});
+}
+
 // novastorm's getPlayerInfo(player, "primaryDmg"): weapon damage x 1.5 x variant,
 // with the 1.5 applied whether or not the enemy is wearing the bull hat.
 const primaryDmg = (weaponID, variant = 0) =>
@@ -74,18 +82,47 @@ class FakeModuleHandler {
     this.soldierAnti = false;
     this.healedOnce = false;
     this.owned = new Set([ 0, 6, 7, 40, 53, 23, 20, 12 ]);
+    // Accessories owned, for the regen-gear branch.
+    this.ownedAcc = new Set([]);
     this.heals = 0;
     this.packets = 0;
+    this.packetLimit = 119;
+    this.useAcc = null;
+    this.currentHolding = 0;
+    this.weapon = 0;
+    this.forceWeapon = null;
+    this.attacking = 0;
+    this.selected = [];
     this.client = null;
   }
-  canBuy(type, id) { return type === 0 && this.owned.has(id); }
+  get packetCount() { return this.packets; }
+  canBuy(type, id) { return type === 0 ? this.owned.has(id) : this.ownedAcc.has(id); }
   setForceHat(hat) { if (this.forceHat !== null && hat !== null) return; this.forceHat = hat; }
+  // The client's own rule: the predicted slot if it exists, else primary, else
+  // secondary. Only the identity matters here, not the packet.
+  _getPredictWeapon() {
+    if (this.forceWeapon !== null) return this.forceWeapon;
+    const p = this.client.myPlayer;
+    return p.getItemByType(0) !== null ? 0 : 1;
+  }
+  whichWeapon(type) {
+    if (this.client.myPlayer.getItemByType(type) === null) return;
+    this.currentHolding = type;
+    this.weapon = type;
+    this.packets += 1;
+    this.selected.push(type);
+  }
   heal() {
     this.heals += 1;
     this.packets += 4;   // novastorm's place(): z, F1, F0, z
     const p = this.client.myPlayer;
     const food = Items[p.getItemByType(2)];
     p.currentHealth = Math.min(p.maxHealth, p.currentHealth + food.restore);
+    p.resources.food = Math.max(0, p.resources.food - food.cost.food);
+    // place() comes back to a weapon slot after every apple, and the chain can
+    // leave a different one in hand than it started with.
+    this.currentHolding = 1;
+    this.weapon = 1;
   }
   plannedHat() {
     if (this.soldierAnti && this.canBuy(0, 6)) return 6;
@@ -172,6 +209,21 @@ function tick(w) {
   w.mh.healedOnce = false;
   w.mh.forceHat = null;
   w.mh.soldierAnti = false;
+  w.mh.useAcc = null;
+  w.mh.currentHolding = 0;
+  w.mh.weapon = 0;
+  w.mh.selected.length = 0;
+}
+// n whole ticks of the client, scan and decision included. The engine's own
+// `tick` only moves inside scan(), so a bare tick() does not age `damageTick`
+// and a scenario that means to be quiet has to actually run the ticks.
+function idle(w, n) {
+  for (let i = 0; i < n; i++) { tick(w); w.heal.postTick(); }
+}
+// A friendly healing pad under our feet. Item 19, healCol 15, owned by us.
+function healPad(w, dx = 0, dy = 0) {
+  const p = w.myPlayer.pos.current;
+  return w.om.add(new PlayerObject(uid++, p.x + dx, p.y + dy, 0, Items[19].scale, 19, w.myPlayer.id));
 }
 function damage(w, amount) {
   const before = w.myPlayer.currentHealth;
@@ -647,7 +699,11 @@ group("shame reset", () => {
 
 // ══ THE HEAL ═════════════════════════════════════════════════════════════
 // if (((healing && shameCount < 7) || (tick - damageTick) > 0) && health < 100)
+//
+// The fallback branch: what postTick does with _autoHeal off. Every check in
+// this group is novastorm's own gate, unchanged.
 group("the heal", () => {
+  settings({_autoHeal: false});
   {
     const s = makeWorld({health: 55});
     tick(s); s.heal.postTick();
@@ -723,6 +779,612 @@ group("the heal", () => {
     const s = makeWorld({health: 10});
     tick(s); s.heal.postTick();
     check("nothing in the client refuses the chain for its size", s.mh.heals, Math.ceil(90 / 20));
+  }
+});
+
+// ══ THE RYN TYPE 2 DECISION ══════════════════════════════════════════════
+//
+//     const reactive   = (tick - damageTick) <= 2;
+//     const predictive = myPlayer.health <= totalDmgPot;
+//     const critical   = myPlayer.health <= 25;
+//     const shouldHeal = reactive || predictive || critical ||
+//                        (threshold > 0 && myPlayer.health <= threshold);
+//
+// Every scenario below runs through postTick with _autoHeal on, so the world,
+// the scan and the decision are all the client's own.
+group("ryn2 — the four reasons", () => {
+  {
+    settings({});
+    const s = makeWorld({health: 100});
+    tick(s); s.heal.postTick();
+    check("full health -> nothing, whatever the reason", s.mh.heals, 0);
+    check("...and it says why", s.heal.blockedReason, "full");
+  }
+  {
+    // Hurt, quiet, nothing predicted, threshold off. novastorm's fallback heals
+    // here on `(tick - damageTick) > 0`; the Ryn 2 reactive window is the other
+    // side of that line and has closed, so nothing is a reason.
+    settings({});
+    const s = makeWorld({health: 70});
+    idle(s, 4);                      // `damageTick` is 0 and the window is 2 ticks
+    s.myPlayer.currentHealth = 70;
+    tick(s); s.heal.postTick();
+    check("quiet, healthy, nothing predicted -> no reason to eat", s.mh.heals, 0);
+    check("...named", s.heal.blockedReason, "noReason");
+  }
+  {
+    // reactive: damage landed on this tick. This is the branch novastorm's gate
+    // refuses outright — `(tick - damageTick) > 0` is false — and the one the
+    // shame guard exists to bound.
+    settings({});
+    const s = makeWorld({health: 100});
+    tick(s);
+    damage(s, 30);
+    s.heal.postTick();
+    check("damage on this very tick -> reactive eats", s.mh.heals, atLeast(1));
+  }
+  {
+    settings({});
+    const s = makeWorld({health: 20});
+    tick(s); s.heal.postTick();
+    check("health at or under 25 -> critical eats", s.mh.heals, atLeast(1));
+  }
+  {
+    settings({_autoHealThreshold: 80});
+    const s = makeWorld({health: 75});
+    idle(s, 4);
+    s.myPlayer.currentHealth = 75;
+    tick(s); s.heal.postTick();
+    check("threshold 80 at 75 health -> eats with nothing else true", s.mh.heals, atLeast(1));
+  }
+  {
+    settings({_autoHealThreshold: 50});
+    const s = makeWorld({health: 75});
+    idle(s, 4);
+    s.myPlayer.currentHealth = 75;
+    tick(s); s.heal.postTick();
+    check("threshold under the bar -> still no reason", s.heal.blockedReason, "noReason");
+  }
+});
+
+group("ryn2 — predictive and the weight", () => {
+  {
+    // predictive: the pot is larger than what is left. An enemy in reach with a
+    // ready primary against a bar under one swing is novastorm's own one-shot
+    // gate, and it puts ~76 in the pot against 60 health.
+    settings({});
+    const s = makeWorld({health: 60});
+    s.om.placeable = false;
+    addEnemy(s, {x: 5100, y: 5000, primary: 5});
+    tick(s); s.heal.postTick();
+    check("pot over health -> predictive eats", s.mh.heals, atLeast(1));
+    check("...and the pot is what drove it", s.heal.getTotalDmgPot(), atLeast(60));
+  }
+  {
+    // Weight 0 removes the forecast entirely, so the same world has nothing
+    // left but the reactive window, which has closed.
+    settings({_autoHealPredictWeight: 0});
+    const s = makeWorld({health: 60});
+    s.om.placeable = false;
+    addEnemy(s, {x: 5100, y: 5000, primary: 5});
+    idle(s, 4);
+    s.myPlayer.currentHealth = 60;
+    tick(s); s.heal.postTick();
+    check("weight 0 -> the forecast is not a reason", s.heal.blockedReason, "noReason");
+  }
+  {
+    // getHealAmountNeeded is the gap plus the weighted pot, which is what makes
+    // the chain adaptive rather than a top-up.
+    settings({});
+    const s = makeWorld({health: 60});
+    s.om.placeable = false;
+    addEnemy(s, {x: 5100, y: 5000, primary: 5});
+    tick(s); s.heal.scan();
+    const pot = s.heal.getTotalDmgPot();
+    check("need = gap + weighted pot", s.heal.getHealAmountNeeded(), near(Math.min(100, 40 + pot)));
+  }
+  {
+    settings({_autoHealPredictWeight: .5});
+    const s = makeWorld({health: 60});
+    s.om.placeable = false;
+    addEnemy(s, {x: 5100, y: 5000, primary: 5});
+    tick(s); s.heal.scan();
+    check("half weight halves the forecast half", s.heal.getHealAmountNeeded(), near(Math.min(100, 40 + s.heal.getTotalDmgPot() * .5)));
+  }
+});
+
+group("ryn2 — shame", () => {
+  {
+    settings({});
+    const s = makeWorld({health: 60});
+    s.myPlayer.shameCount = 7;
+    tick(s); damage(s, 10); s.heal.postTick();
+    check("shame 7 stops the heal", s.mh.heals, 0);
+    check("...named", s.heal.blockedReason, "shame");
+  }
+  {
+    settings({});
+    const s = makeWorld({health: 60});
+    s.myPlayer.shameCount = 6;
+    tick(s); damage(s, 10); s.heal.postTick();
+    check("shame 6 takes it", s.mh.heals, atLeast(1));
+  }
+  {
+    settings({_autoHealShameRespect: false});
+    const s = makeWorld({health: 60});
+    s.myPlayer.shameCount = 7;
+    tick(s); damage(s, 10); s.heal.postTick();
+    check("respect off -> eats through the count", s.mh.heals, atLeast(1));
+  }
+  {
+    settings({_autoHealMode: "aggro"});
+    const s = makeWorld({health: 60});
+    s.myPlayer.shameCount = 7;
+    tick(s); damage(s, 10); s.heal.postTick();
+    check("aggro spends the point", s.mh.heals, atLeast(1));
+  }
+  {
+    // shameAbuse is the server's latch: set the first time an apple lands
+    // inside the 120 ms window, never cleared. Only safe reads it.
+    settings({_autoHealMode: "safe"});
+    const s = makeWorld({health: 60});
+    s.myPlayer.shameAbuse = true;
+    tick(s); damage(s, 10); s.heal.postTick();
+    check("safe refuses after an early apple", s.mh.heals, 0);
+    check("...named", s.heal.blockedReason, "shame");
+  }
+  {
+    settings({});
+    const s = makeWorld({health: 60});
+    s.myPlayer.shameAbuse = true;
+    tick(s); damage(s, 10); s.heal.postTick();
+    check("ryn2 does not read the latch", s.mh.heals, atLeast(1));
+  }
+  {
+    // The 30s lockout. A kill switch above every setting, including respect
+    // off — every apple sent into it is refused by the server and still costs
+    // four packets.
+    settings({_autoHealShameRespect: false, _autoHealMode: "aggro"});
+    const s = makeWorld({health: 30});
+    s.myPlayer.shameActive = true;
+    tick(s); damage(s, 10); s.heal.postTick();
+    check("the lockout stops everything", s.mh.heals, 0);
+    check("...named", s.heal.blockedReason, "shameLockout");
+  }
+  {
+    // The real latch, set by the client's own updateHealth on a heal that
+    // landed inside the window.
+    settings({});
+    const s = makeWorld({health: 60});
+    s.myPlayer.currentHealth = 60;
+    s.myPlayer.updateHealth(50);
+    s.myPlayer.updateHealth(70);   // back up, inside 120ms
+    check("an early apple sets the server's latch", s.myPlayer.shameAbuse, true);
+    check("...and the count with it", s.myPlayer.shameCount, 1);
+  }
+});
+
+group("ryn2 — safe-first and the antis", () => {
+  {
+    // soldierAnti alone: a hundred damage is inbound. ryn2 still eats — the
+    // apple is 20 health against damage that has not landed yet.
+    settings({});
+    const s = makeWorld({health: 60});
+    tick(s); s.heal.scan();
+    s.heal.soldierAnti = true;
+    s.heal.autoHealRyn2();
+    check("soldierAnti alone -> ryn2 still eats", s.mh.heals, atLeast(1));
+  }
+  {
+    settings({_autoHealMode: "safe"});
+    const s = makeWorld({health: 60});
+    tick(s); s.heal.scan();
+    s.heal.soldierAnti = true;
+    s.heal.autoHealRyn2();
+    check("safe waits out a hundred-damage read", s.mh.heals, 0);
+    check("...named", s.heal.blockedReason, "soldierAnti");
+  }
+  {
+    settings({_autoHealMode: "safe"});
+    const s = makeWorld({health: 20});
+    tick(s); s.heal.scan();
+    s.heal.soldierAnti = true;
+    s.heal.autoHealRyn2();
+    check("...unless the bar is critical", s.mh.heals, atLeast(1));
+  }
+  {
+    // spikeTickAnti without the helmet: a spike is about to be placed into the
+    // tick we would spend chewing.
+    settings({});
+    const s = makeWorld({health: 60});
+    tick(s); s.heal.scan();
+    s.heal.lastSpikeTickAnti = true;
+    s.heal.autoHealRyn2();
+    check("spikeTickAnti without soldier -> wait", s.mh.heals, 0);
+    check("...named", s.heal.blockedReason, "spikeTickAnti");
+  }
+  {
+    // Both at once is the kill switch, and it is above the safe-first guards.
+    settings({});
+    const s = makeWorld({health: 60});
+    tick(s); s.heal.scan();
+    s.heal.lastSpikeTickAnti = true;
+    s.heal.soldierAnti = true;
+    s.heal.autoHealRyn2();
+    check("both antis -> the kill switch", s.mh.heals, 0);
+    check("...named", s.heal.blockedReason, "antiStack");
+  }
+  {
+    // Held on a spike, above 25, no helmet: the spike's damage plus a primary
+    // arrive together on the tick the apple was worth 20.
+    settings({});
+    const s = makeWorld({health: 60});
+    tick(s);
+    trapOnSpike(s, 6);               // 20, so the bar stays above 25
+    s.heal.postTick();
+    check("state: collidingspike is read from the world", s.heal.collidingspike, true);
+    check("held on a spike, not critical -> wait", s.mh.heals, 0);
+    check("...named", s.heal.blockedReason, "collidingSpike");
+  }
+  {
+    settings({});
+    const s = makeWorld({health: 30});
+    tick(s);
+    trapOnSpike(s, 6);            // 20 off a 30 bar -> critical
+    s.heal.postTick();
+    check("...critical eats anyway", s.mh.heals, atLeast(1));
+  }
+  {
+    settings({_autoHealMode: "aggro"});
+    const s = makeWorld({health: 60});
+    tick(s);
+    trapOnSpike(s, 6);
+    s.heal.postTick();
+    check("aggro still waits above 25", s.mh.heals, 0);
+  }
+  {
+    settings({});
+    const s = makeWorld({health: 60});
+    tick(s);
+    trapOnSpike(s, 6);
+    s.heal.scan();
+    s.heal.soldierAnti = true;    // helmet on: the spike is 0.75 of itself
+    s.heal.autoHealRyn2();
+    check("with the helmet on, the spike is eaten through", s.mh.heals, atLeast(1));
+  }
+});
+
+group("ryn2 — the world's states", () => {
+  {
+    // trapped: isTrapped alone is not a spike, so nothing blocks the heal.
+    settings({});
+    const s = makeWorld({health: 60});
+    s.myPlayer.isTrapped = true;
+    tick(s); damage(s, 10); s.heal.postTick();
+    check("trapped but not in a spike -> heals", s.mh.heals, atLeast(1));
+    check("...and the state is read", s.heal.imTrapped, true);
+  }
+  {
+    // poison: before any poison has landed the prediction fires once every
+    // nine ticks, and those 5 are a real part of the pot.
+    settings({});
+    const s = makeWorld({health: 60});
+    let sawPoisonPot = false;
+    for (let i = 0; i < 12; i++) { tick(s); s.heal.scan(); if (s.heal.poisonDmgPot === 5) sawPoisonPot = true; }
+    check("state: the poison tick reaches the pot", sawPoisonPot, true);
+  }
+  {
+    // turret: an enemy wearing turret gear inside 350 with a bar under one
+    // shot. novastorm's third turret gate.
+    settings({});
+    const s = makeWorld({health: 20});
+    s.om.placeable = false;
+    const e = addEnemy(s, {x: 5300, y: 5000, primary: 5});
+    e.hatID = 53;
+    for (let i = 0; i < 3; i++) { e.reload[2].current = 0; tick(s); s.heal.scan(); }
+    e.reload[2].current = 99;
+    tick(s); s.heal.scan();
+    check("state: the turret shot is in the pot", s.heal.turretDmgPot, atLeast(1));
+  }
+  {
+    // knockback: a swing that would shove us into a spike. The sweep puts both
+    // the spike and the swing in the pot, and the heal follows the pot.
+    settings({});
+    const s = makeWorld({health: 60});
+    s.om.placeable = false;
+    addEnemy(s, {x: 5100, y: 5000, primary: 5});
+    spike(s.om, 4930, 5000, 6);
+    tick(s); s.heal.scan();
+    check("state: the knockback sweep reaches the pot", s.heal.spikeDmgPot, atLeast(Items[6].damage));
+    s.heal.autoHealRyn2();
+    check("...and it is a reason to eat", s.mh.heals, atLeast(1));
+  }
+  {
+    // A move into a spike we are already walking at.
+    settings({});
+    const s = makeWorld({health: 60});
+    s.om.placeable = false;
+    spike(s.om, 5090, 5000, 6);
+    s.myPlayer.pos.future._setXY(5080, 5000);
+    s.heal.lastPosX = 4900;               // moved: the sweep is armed
+    tick(s); s.heal.scan();
+    check("state: willcollide", s.heal.willcollide, true);
+  }
+});
+
+group("ryn2 — the chain", () => {
+  {
+    // maxFoodPerTick is the throttle, and it is the smaller of the two.
+    settings({_autoHealMaxFoodPerTick: 2});
+    const s = makeWorld({health: 10});
+    tick(s); s.heal.postTick();
+    check("the per-tick cap holds", s.mh.heals, 2);
+    check("...and it knew it wanted more", s.heal.wantedFood, 2);
+  }
+  {
+    settings({_autoHealMaxFoodPerTick: 10});
+    const s = makeWorld({health: 10});
+    tick(s); s.heal.postTick();
+    // 90 missing, nothing predicted, apples at 20 -> ceil(90/20) = 5
+    check("under the cap it asks for what it needs", s.mh.heals, 5);
+  }
+  {
+    settings({_autoHealMaxFoodPerTick: 10});
+    const s = makeWorld({health: 10});
+    s.myPlayer.resources.food = 25;      // apples cost 10: two, and change
+    tick(s); s.heal.postTick();
+    check("food on hand caps the chain", s.mh.heals, 2);
+  }
+  {
+    settings({_autoHealMaxFoodPerTick: 10});
+    const s = makeWorld({health: 10});
+    s.myPlayer.resources.food = 0;
+    tick(s); s.heal.postTick();
+    check("no food, no heal", s.mh.heals, 0);
+    check("...named", s.heal.blockedReason, "noFood");
+  }
+  {
+    // The budget is the client's own: 119 a second, and the chain keeps a
+    // margin so it never spends the tick's whole allowance.
+    settings({_autoHealMaxFoodPerTick: 10});
+    const s = makeWorld({health: 10});
+    tick(s);
+    s.mh.packets = 115;
+    s.heal.postTick();
+    check("no packet room -> nothing is sent", s.mh.heals, 0);
+    check("...named", s.heal.blockedReason, "packets");
+  }
+  {
+    settings({_autoHealMaxFoodPerTick: 10});
+    const s = makeWorld({health: 10});
+    tick(s);
+    s.mh.packets = 103;                  // 119 - 8 - 103 = 8 -> two apples
+    s.heal.postTick();
+    check("a thin budget is a shorter chain", s.mh.heals, 2);
+  }
+  {
+    // Cheese: 30 on the bite plus 50 over five seconds. Calm, the whole 80
+    // counts, so one closes a 70 gap.
+    settings({_autoHealMaxFoodPerTick: 10, _autoHealThreshold: 50});
+    const s = makeWorld({health: 30});
+    s.myPlayer.inventory[2] = 2;
+    idle(s, 4);
+    s.myPlayer.currentHealth = 30;
+    tick(s); s.heal.postTick();
+    check("calm: cheese is counted at 30 + 50", s.heal.wantedFood, 1);
+  }
+  {
+    // The same gap with damage on the tick: the trailing 50 arrives over five
+    // seconds and the next hit is in 111 ms, so only the 30 counts.
+    settings({_autoHealMaxFoodPerTick: 10});
+    const s = makeWorld({health: 40});
+    s.myPlayer.inventory[2] = 2;
+    tick(s); damage(s, 10); s.heal.postTick();
+    check("urgent: only the bite counts", s.heal.wantedFood, atLeast(3));
+  }
+  {
+    // One heal per tick, whoever took it.
+    settings({});
+    const s = makeWorld({health: 60});
+    tick(s); damage(s, 10);
+    s.mh.healedOnce = true;
+    s.heal.postTick();
+    check("something already healed this tick", s.mh.heals, 0);
+    check("...named", s.heal.blockedReason, "healedOnce");
+  }
+  {
+    // The slot the client was coming back to, restored once after the chain.
+    settings({_autoHealMaxFoodPerTick: 3});
+    const s = makeWorld({health: 30});
+    tick(s); s.heal.postTick();
+    check("predictWeapon is snapshotted", s.heal.savedPredictWeapon, 0);
+    check("...and the hand is put back", s.mh.currentHolding, 0);
+    check("...with one packet, not one per apple", s.mh.selected.length, 1);
+  }
+});
+
+group("ryn2 — healing pads", () => {
+  {
+    // 15 a second, free. A small quiet gap is left to it.
+    settings({});
+    const s = makeWorld({health: 90});
+    healPad(s);
+    idle(s, 4);
+    s.myPlayer.currentHealth = 90;
+    settings({_autoHealThreshold: 95});
+    tick(s); s.heal.postTick();
+    check("a small gap on a pad -> the pad takes it", s.mh.heals, 0);
+    check("...named", s.heal.blockedReason, "healPad");
+    check("...and the pad was seen", s.heal.onHealPad, true);
+  }
+  {
+    settings({_autoHealThreshold: 95});
+    const s = makeWorld({health: 70});
+    healPad(s);
+    idle(s, 4);
+    s.myPlayer.currentHealth = 70;
+    tick(s); s.heal.postTick();
+    check("a gap the pad cannot close in a second -> eat anyway", s.mh.heals, atLeast(1));
+  }
+  {
+    settings({});
+    const s = makeWorld({health: 20});
+    healPad(s);
+    tick(s); s.heal.postTick();
+    check("critical never waits for a pad", s.mh.heals, atLeast(1));
+  }
+  {
+    settings({_autoHealUseHealPads: false, _autoHealThreshold: 95});
+    const s = makeWorld({health: 90});
+    healPad(s);
+    idle(s, 4);
+    s.myPlayer.currentHealth = 90;
+    tick(s); s.heal.postTick();
+    check("the switch off -> the pad is not looked for", s.mh.heals, atLeast(1));
+  }
+  {
+    settings({});
+    const s = makeWorld({health: 90});
+    const pad = healPad(s);
+    pad.ownerID = 99;                    // an enemy's
+    tick(s); s.heal.scan();
+    check("an enemy's pad is not ours to stand on", s.heal.tryUseHealPad(), false);
+  }
+  {
+    settings({});
+    const s = makeWorld({health: 90});
+    healPad(s, 300, 0);                  // out from under us
+    tick(s); s.heal.scan();
+    check("a pad we are not standing on does not count", s.heal.tryUseHealPad(), false);
+  }
+});
+
+group("ryn2 — regen gear", () => {
+  {
+    // Medic Gear first: +3 a second, and the hat slot is free here.
+    settings({});
+    const s = makeWorld({health: 50});
+    s.mh.owned.add(13);
+    tick(s); s.heal.postTick();
+    check("a gap over 40 asks for Medic Gear", s.mh.forceHat, 13);
+  }
+  {
+    settings({});
+    const s = makeWorld({health: 70});
+    s.mh.owned.add(13);
+    tick(s); s.heal.postTick();
+    check("a gap of 30 does not", s.mh.forceHat, null);
+  }
+  {
+    settings({_autoHealUseRegenGear: false});
+    const s = makeWorld({health: 50});
+    s.mh.owned.add(13);
+    tick(s); s.heal.postTick();
+    check("the switch off -> no gear", s.mh.forceHat, null);
+  }
+  {
+    // Not while damage is inbound: none of the three reduces what lands.
+    settings({});
+    const s = makeWorld({health: 50});
+    s.mh.owned.add(13);
+    tick(s); s.heal.scan();
+    s.heal.soldierAnti = true;
+    s.mh.forceHat = null;
+    s.heal.optimizeRegenGear();
+    check("a hundred-damage read keeps the slot", s.mh.forceHat, null);
+  }
+  {
+    settings({});
+    const s = makeWorld({health: 50});
+    s.mh.owned.add(13);
+    tick(s);
+    trapOnSpike(s, 6);
+    s.heal.scan();
+    s.mh.forceHat = null;
+    s.heal.optimizeRegenGear();
+    check("held on a spike keeps the slot", s.mh.forceHat, null);
+  }
+  {
+    // A hat someone else already claimed is not taken from them.
+    settings({});
+    const s = makeWorld({health: 50});
+    s.mh.owned.add(13);
+    tick(s); s.heal.scan();
+    s.mh.forceHat = 53;
+    s.heal.optimizeRegenGear();
+    check("an insta's turret gear keeps the slot", s.mh.forceHat, 53);
+  }
+  {
+    // No Medic: Angel Wings, +3 in the accessory slot.
+    settings({});
+    const s = makeWorld({health: 50});
+    s.mh.ownedAcc.add(13);
+    tick(s); s.heal.postTick();
+    check("no Medic -> Angel Wings", s.mh.useAcc, 13);
+    check("...and the hat slot is untouched", s.mh.forceHat, null);
+  }
+  {
+    settings({});
+    const s = makeWorld({health: 50});
+    s.mh.ownedAcc.add(17);
+    tick(s); s.heal.postTick();
+    check("no wings -> Apple Basket", s.mh.useAcc, 17);
+  }
+  {
+    settings({});
+    const s = makeWorld({health: 50});
+    s.mh.owned.add(13);
+    s.mh.ownedAcc.add(13);
+    tick(s); s.heal.postTick();
+    check("the hat is preferred over the slot", s.mh.forceHat, 13);
+    check("...and the accessory is left alone", s.mh.useAcc, null);
+  }
+  {
+    settings({});
+    const s = makeWorld({health: 50});
+    s.mh.ownedAcc.add(13);
+    tick(s); s.heal.scan();
+    s.mh.useAcc = 11;                    // a tail someone else wanted
+    s.heal.optimizeRegenGear();
+    check("an accessory already claimed is left", s.mh.useAcc, 11);
+  }
+});
+
+group("ryn2 — the fallback", () => {
+  {
+    // _autoHeal off is novastorm's gate, unchanged: it refuses the tick the
+    // damage landed and takes the next one.
+    settings({_autoHeal: false});
+    const s = makeWorld({health: 60});
+    tick(s); damage(s, 20); s.heal.postTick();
+    check("fallback: nothing on the damage tick", s.mh.heals, 0);
+    tick(s); s.heal.postTick();
+    check("fallback: the next tick tops up to full", s.mh.heals, Math.ceil(60 / Items[0].restore));
+  }
+  {
+    // And the Ryn 2 layer on the same world eats on the damage tick.
+    settings({});
+    const s = makeWorld({health: 60});
+    tick(s); damage(s, 20); s.heal.postTick();
+    check("ryn2: the damage tick is the reason", s.mh.heals, atLeast(1));
+  }
+  {
+    // The fallback is novastorm's decision, and novastorm has no regen gear.
+    settings({_autoHeal: false});
+    const s = makeWorld({health: 50});
+    s.mh.owned.add(13);
+    s.mh.ownedAcc.add(13);
+    tick(s); s.heal.postTick();
+    check("fallback: no Medic Gear", s.mh.forceHat, null);
+    check("fallback: no wings", s.mh.useAcc, null);
+  }
+  {
+    // _autoheal off is the whole engine off, under either layer.
+    settings({_autoheal: false});
+    const s = makeWorld({health: 30});
+    tick(s); s.heal.postTick();
+    check("the engine switch stops everything", s.mh.heals, 0);
+    settings({});
   }
 });
 

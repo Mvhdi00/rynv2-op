@@ -46,8 +46,21 @@ function build() {
     Math.LN1 = 100;
     var window = { grbtp: 35 };
     var isProd = false;
-    var Logger = { log() {}, warn() {}, error() {}, test() {} };
-    var Settings_default = { _autoheal: true };
+    var Logger = { log() {}, warn() {}, error() {}, test() {}, staticLog() {} };
+    // The Auto Heal keys, at the values Ryn_Type_2.user.js ships. Tests mutate
+    // this object through the exported \`Settings\` handle.
+    var Settings_default = {
+      _autoheal: true,
+      _autoHeal: true,
+      _autoHealMode: "ryn2",
+      _autoHealThreshold: 0,
+      _autoHealShameRespect: true,
+      _autoHealUseHealPads: true,
+      _autoHealUseRegenGear: true,
+      _autoHealPredictWeight: 1,
+      _autoHealMaxFoodPerTick: 3,
+      _autoHealDebug: false
+    };
     var HatPredictor_default = { train() {}, predict() { return null; } };
     var Hooker_default = { linker(v) { return [ v ]; } };
   `;

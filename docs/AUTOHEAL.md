@@ -1,12 +1,23 @@
 # Auto Heal — RYN Type 2
 
-NovaStorm's survival block, ported whole into RYN Type 2.
+NovaStorm's survival block, ported whole into RYN Type 2, with a configurable
+decision layer on top of it.
 
 - **Implementation target:** `Ryn_Type_2.user.js`
 - **Behaviour:** `novastorm.v1.4.js` — the mod code inside the embedded webpack
   bundle's `./src/js/app.js` module
 - **Game truth:** the current moomoo.io client (`moomoo_1.js` / `moomoo_2.js`)
-- **Tests:** `node tools/autoheal-test.js` — 91 checks
+- **Tests:** `node tools/autoheal-test.js` — 179 checks
+
+There are two halves and they are separately switchable:
+
+| | switch | what it is |
+|---|---|---|
+| **the engine** | `_autoheal` | the scan, the five damage buckets, the hat rules, `soldierAnti` |
+| **the decision** | `_autoHeal` | §10–§14 below: what the engine's number is used for |
+
+With `_autoHeal` off the engine falls back to NovaStorm's own one-line gate and
+nothing in §10–§14 runs.
 
 ---
 
@@ -190,7 +201,7 @@ the ones that could not land are not sent. Nothing else about the chain changes.
 
 ## 8. Tests
 
-`node tools/autoheal-test.js` — 91 checks. `tools/autoheal-harness.js` slices the
+`node tools/autoheal-test.js` — 179 checks. `tools/autoheal-harness.js` slices the
 engine, `Player`, `Entity` and the game tables **out of the userscript** and runs
 them under node, so a change to any table shows up in the tests without the tests
 being edited.
@@ -202,34 +213,212 @@ normal instakill · anti spike tick (both gates) · poison (both phases of the
 latch) · the total, the ceiling and soldierAnti · shame reset · the heal · damage
 distribution · packet ordering.
 
-## 9. What was touched outside the engine
+Then the decision layer, in six more groups: the four reasons · predictive and
+the weight · shame (the count, the latch, the lockout, all three modes) ·
+safe-first and the antis · the world's states (trapped, colliding, poison,
+turret, knockback) · the chain (the cap, food, packets, cheese, the
+predictWeapon restore) · healing pads · regen gear · the fallback.
+
+---
+
+# The Ryn Type 2 decision layer
+
+## 10. The nine settings
+
+All on the new **Auto Heal** page. `_autoheal` is the engine; the rest apply
+only while `_autoHeal` is on.
+
+| key | control | default | what it does |
+|---|---|---|---|
+| `_autoHeal` | toggle | on | Ryn 2 logic, or NovaStorm's gate |
+| `_autoHealMode` | select | `ryn2` | `safe` / `ryn2` / `aggro` — §11 |
+| `_autoHealThreshold` | slider 0–100 | 0 | a health floor that is a reason on its own; 0 = predictive only |
+| `_autoHealShameRespect` | toggle | on | stop at the mode's shame line, re-checked between apples |
+| `_autoHealUseHealPads` | toggle | on | leave a small quiet gap to a pad under your feet |
+| `_autoHealUseRegenGear` | toggle | on | Medic Gear / Angel Wings / Apple Basket once the gap is over 40 |
+| `_autoHealPredictWeight` | slider 0–2 | 1 | multiplier on the pot before it is compared and before it sizes the chain |
+| `_autoHealMaxFoodPerTick` | slider 1–10 | 3 | ceiling on one chain |
+| `_autoHealDebug` | toggle | off | one console line per decision |
+
+`_autoHeal` and `_autoheal` differ only in case. They are the brief's names,
+kept so the spec maps one to one, and the page labels them **Ryn 2 Logic** and
+**Autoheal** so the difference is readable without knowing that.
+
+## 11. The functions
+
+Each one, and why it is what it is.
+
+**`getTotalDmgPot()`** — the five buckets, summed, clamped at 140 and adjusted
+for the hat that will be on our head when the damage lands. That is what
+`totalDmgPot` already holds after the scan, and the adjustment is the reason
+NovaStorm runs `hatFc` between the sum and the heal: this is damage we will take,
+not damage aimed at us. **`getRawDmgPot()`** is the same sum before the ceiling
+and the hat — it is reported, never decided on, because a pot sitting at the
+ceiling hides how far over it went.
+
+**`isHealBlocked()`** — the brief asks for
+`shameCount >= 7 || shameTimer > 0 || shameAbuse`. Each is read against what it
+means in this client:
+
+- `shameCount >= 7` — one apple from the server's lockout at 8. Unchanged.
+- `shameTimer > 0` — on the server that is a countdown from 30000 and is above
+  zero only while eating is refused. RYN's `shameTimer` counts *up* from spawn
+  on every tick and only means anything next to `shameActive`, so reading it
+  literally would block the heal from the second tick of every game.
+  `shameActive` is this client's answer to the same question.
+- `shameAbuse` — latched the first time an apple lands inside the 120 ms window
+  and never cleared. Read literally it ends healing for the rest of the life,
+  which is a shutdown, not a safety rule. It is recorded faithfully (added to
+  `Player`, set exactly where the server sets it, cleared only on respawn) and
+  gates the **safe** mode alone.
+
+The three settle into the mode ladder: **safe** reads all three, **ryn2** the
+count and the lockout, **aggro** the lockout only.
+
+**`getBestFoodItem()`** — the equipped food. There is one food slot:
+`myPlayer.items[0]` in NovaStorm and `inventory[2]` here are the same entry and
+an upgrade replaces what is in it, so a player carrying cookie is not also
+carrying apple. What the deficit decides is how many to send, which is the
+caller's `ceil(deficit / restore)`.
+
+**`_foodValue(id, urgent)`** — what one of that food is worth. The item table
+carries `restore` and nothing else; cheese's other half is in the game's own
+`consume`: `dmgOverTime.dmg = -10, time = 5`, so 50 on top of the 30. One cheese
+is worth 80 to a bar with five seconds and 30 to one with this tick, so the
+trailing half counts only when nothing has just landed and nothing is predicted.
+
+**`getHealAmountNeeded()`** — the gap **plus the weighted pot**, capped at one
+bar. Healing only the gap leaves it exactly where the next hit wanted it; this is
+the adaptive half.
+
+**`canHealNow()`** — in game, not full, nothing else healed this tick, shame
+allows it, food in the slot. Every miss names itself in `blockedReason`.
+
+**`tryUseHealPad()`** — whether a healing pad of ours or a teammate's is under
+us. 15 a second, free, already running, so a small gap with nothing predicted and
+nothing freshly landed is left to it. Nothing is placed by this function.
+
+**`optimizeRegenGear()`** — Medic Gear (13) once the gap is over 40, then Angel
+Wings (acc 13), then Apple Basket (acc 17). None of them reduces damage taken, so
+it only asks while `soldierAnti`, `spikeTickAnti` and `collidingspike` are all
+clear, it goes through `setForceHat` so anything with a prior claim keeps the
+slot, and `ModuleHandler`'s `soldierAnti` override runs after every module and
+puts the soldier helmet back. The accessory is only taken when the hat is not
+owned: a slot spent on wings is a slot not spent on a tail.
+
+**`autoHealRyn2()`** — the decision, in order: the two kill switches, then
+`canHealNow`, then the four reasons, then safe-first, then the pad, then the
+chain. §12.
+
+**`_affordableFood(id)`**, **`_predictWeight()`**, **`_healPadRate()`**,
+**`_debug()`** — the small ones. `_debug` goes to `console.log` directly rather
+than through `Logger`, because `Logger` is behind `isProd`, which is `true` in
+the shipped file, and a debug switch that printed nothing would be a lie.
+
+## 12. The decision, in order
+
+```
+shameActive                      → kill switch, "shameLockout"
+soldierAnti && spikeTickAnti     → kill switch, "antiStack"
+canHealNow()                     → full / healedOnce / shame / noFood
+reactive   = tick - damageTick <= 2
+predictive = health <= pot * weight
+critical   = health <= 25
+threshold  = threshold > 0 && health <= threshold
+  none of the four               → "noReason"
+safe-first, unless aggro && critical:
+  spikeTickAnti && !soldierAnti  → "spikeTickAnti"
+  collidingspike && !soldierAnti && health > 25 → "collidingSpike"
+  safe && soldierAnti && !critical → "soldierAnti"
+pad: on a pad, calm, gap <= 15   → "healPad"
+count = min(maxFoodPerTick, ceil(need / perItem), affordable, packet room)
+  save predictWeapon → chain, re-checking shame between apples → restore
+healedOnce = true
+```
+
+Two things about `reactive` are worth saying out loud, because they are the
+opposite of the port's behaviour and they are deliberate:
+
+- NovaStorm's free heal is `(tick - damageTick) > 0` — **wait** a whole server
+  tick after damage. The brief's is `<= 2` — **eat** inside the window right
+  after it. 2 ticks is 222 ms and the server's shame window is 120 ms, so delta
+  0 and delta 1 can each cost a shame point. That is the trade a reactive heal
+  makes, and the shame guard and the mode ladder are what bound it.
+- `damageTick` starts at 0 and so does `tick`, so a client that has never taken
+  damage reads as "just did" for its first two ticks. At spawn the bar is full
+  so nothing comes of it; it only shows if the engine is switched on mid-life
+  while hurt, where the result is a heal that was wanted anyway.
+
+Three places where the layer differs from the brief as written, each because the
+brief's own line would misbehave here:
+
+| brief | here | why |
+|---|---|---|
+| `shameTimer > 0` | `shameActive` | RYN's `shameTimer` counts up from spawn |
+| `shameAbuse` in every mode | safe mode only | latched and never cleared — it ends healing for the life |
+| `damageHealed = (tick - damageTick) <= 1` | set on the heal | in this client the same flag is the one-heal-per-tick latch, so setting it without healing suppresses a heal still owed |
+
+## 13. Healing pads and regen gear
+
+| | value | source |
+|---|---|---|
+| healing pad | item 19, `healCol` 15 | `Items[19]` |
+| Medic Gear | hat 13, `healthRegen` 3 | `Hats[13]` |
+| Angel Wings | acc 13, `healthRegen` 3 | `Accessories[13]` |
+| Apple Basket | acc 17, `healthRegen` 1 | `Accessories[17]` |
+| cheese, over time | −10/s for 5 s = 50 | `items.list[2].consume` |
+
+## 14. The menu
+
+A new page and a new rail button, both native: the page is a `.menu-page`
+constant with `data-id="8"`, the button is `.open-menu[data-id="8"]`, and the
+switching code finds both generically — nothing was added to it. Controls bind by
+`id` matching a `Settings` key, like every other control in the client, so there
+is no second persistence path.
+
+| | |
+|---|---|
+| `AutoHealPage_default` | the page, beside the other page constants |
+| `Navbar_default` | one button, inserted after Combat; the rail indices renumber 01–07 |
+| `getFrameContent()` | one `${AutoHealPage_default}` |
+| `_RYN_PAGE_NAMES` | `8: "Auto Heal"`, so search results name the page |
+
+The Combat page's **Defense** section had the `_autoheal` row; it moved here, so
+the setting still has exactly one control. Nothing else on Combat changed.
+
+## 15. What was touched outside the engine
 
 | region | change |
 |---|---|
-| `Player` fields | `lastAttackWeapon` added beside the existing `lastAttacked` |
-| `PlayerManager.attackPlayer` | records it — one line |
+| `Player` fields | `lastAttackWeapon`, `shameAbuse` |
+| `Player.updateHealth` | sets `shameAbuse` on the ≤120 ms branch — one line |
+| `Player.reset` | clears `shameAbuse` — one line |
+| `PlayerManager.attackPlayer` | records `lastAttackWeapon` — one line |
 | `ClientPlayer.updateHealth` | one guarded call into the engine |
 | `ClientPlayer.reset` | `reportDeath()` before `ModuleHandler.reset()` |
 | `ShameReset` | rewritten: the drain is NovaStorm's now, in the engine, and this module reports it |
 | `ModuleHandler` | `soldierAnti` field + reset, `plannedHat()`, registration, `\|\| this.soldierAnti` in the existing soldier block, `stopAttack(null)` added to `heal()` |
+| `defaultSettings` | the nine keys, plus the enum validation for `_autoHealMode` |
+| menu | the new page, the rail button, the frame injection, the page name, and the `_autoheal` row moved off Combat |
 
 Not touched: `RynPlacementEngine`, `AutoPlacer`, `PreplaceBook`, `Placer`,
 replace, spam preplace, retrap resend, `MELEE_PROFILES` and the weapon animation
-system, the building destruction animation, `ChatLog`, `GameUI`, the menu HTML,
-`Settings` (no key added or removed), `InputHandler`, `SocketManager`,
-`PacketManager`, `ObjectManager`, `ProjectileManager`, `EnemyManager`,
-`MovementSimulation`, the bot fleet, possession, `RynLRC` and the music page.
+system, the building destruction animation, `ChatLog`, `GameUI`, `InputHandler`,
+`SocketManager`, `PacketManager`, `ObjectManager`, `ProjectileManager`,
+`EnemyManager`, `MovementSimulation`, the bot fleet, possession, `RynLRC` and the
+music page, and every other page of the menu.
 
-No button, menu, panel, toggle or slider was added. `_autoheal`, which already
-existed, is the entry point.
+### Removed in the port pass
 
-### Removed in this pass
-
-Everything from the previous attempt that was not NovaStorm's: the delta model
-built on `EnemyManager.potentialDamage`, the `countedPrimary`/`countedSecondary`/
+Everything from the first attempt that was not NovaStorm's: the delta model built
+on `EnemyManager.potentialDamage`, the `countedPrimary`/`countedSecondary`/
 `countedTurret` ledger, the event list with confidence and repeat, `futureHealth`
 and the derived horizon, the emergency/recovery state machine with its calm
 counter, the packet budget on the heal, the 120 ms wall clock, the spike contact
 pool that took a max where NovaStorm sums, RYN's own shame drain (the 1-in-9 tick
 gate and the cross-tick latch), and the soldier-helmet case added to RYN's
 damage-over-time detector.
+
+None of it came back. The packet budget and the resource test now live in the
+Ryn 2 layer, where they are that layer's own rules rather than corrections to
+NovaStorm's — with `_autoHeal` off, the heal has neither, exactly as §6 says.
