@@ -5834,6 +5834,13 @@ window.grbtp = 35;
   // while everything under it still shows.
   const VELTICK_MARK_COLOR = "#8a2be2";
   const VELTICK_MARK_ALPHA = .5;
+  // How big the mark gets once you are standing on it, and how far out it
+  // starts growing. 37.5 is what the mark measured back when the band was the
+  // wider 170-245, which is the size that reads comfortably under your own
+  // feet; 150 units is about the length of a polearm fight, so the swell is
+  // already under way by the time the walk has you anywhere near the point.
+  const VELTICK_MARK_NEAR_RADIUS = 37.5;
+  const VELTICK_MARK_SWELL_RANGE = 150;
   const EntityRenderer = new class {
     start=Date.now();
     step=0;
@@ -6008,32 +6015,50 @@ window.grbtp = 35;
       // and it is the same point Auto Spacing walks you onto — the two are one
       // answer shown two ways.
       //
-      // The radius is not Glotus's. Theirs is the full width of the band, which
-      // draws a circle half a band too big in every direction: on this client's
-      // 170-245 that is a disc reaching from 132 to 282 units out, so a third of
-      // what it covers is out of range. Half the width is the honest figure,
-      // and it is exactly right rather than nearly right — for a disc, the
-      // nearest and furthest points from anything outside it are its centre
-      // distance minus and plus its radius, so a disc of half the band centred
-      // in the middle of the band spans precisely the band and nothing else.
-      // Every point in the purple is a firing position.
+      // The paint is not Glotus's. Theirs is an outlined circle in a red-pink,
+      // and a red ring reads as a warning; this is not one, it is a place to
+      // stand. So it is filled rather than drawn as an edge, and it is the
+      // client's own purple — something you take in at the edge of vision
+      // while you are watching the fight, not a thing that asks to be looked
+      // at.
       //
-      // The paint is not Glotus's either. Theirs is an outlined circle in a
-      // red-pink, and a red ring reads as a warning; this is not one, it is a
-      // place to stand. So it is filled rather than drawn as an edge, and it is
-      // the client's own purple at low alpha — something you take in at the
-      // edge of vision while you are watching the fight, not a thing that asks
-      // to be looked at.
+      // ── The size, which changes as you close on it ──────────────────────
       //
-      // The band is read live off the module because its floor moves with the
-      // ping, so the circle sits where the connection actually puts it.
+      // At rest it is half the width of the band, and that figure is exact
+      // rather than close: for a disc, the nearest and furthest points from
+      // anything outside it are its centre distance minus and plus its radius,
+      // so a disc of half the band centred in the middle of the band spans
+      // precisely the band and nothing else. Standing in the purple is
+      // standing in range. On a 220-245 band that is a radius of 12.5 — small,
+      // which is right for something you are reading from across the map.
+      //
+      // Small is wrong once you are nearly on it, though: at that point the
+      // question is no longer "where is it" but "am I there yet", and a
+      // twelve-unit dot under your own feet answers that badly. So it swells
+      // as you close, to VELTICK_MARK_NEAR_RADIUS at the moment you arrive —
+      // the size the wider band used to draw it at, which is the size that
+      // reads comfortably underfoot.
+      //
+      // The trade is deliberate and it falls the right way round. The disc is
+      // exactly the band precisely when exactness is what you need, which is
+      // while you are still walking in; by the time it has swollen past the
+      // band you are standing on the centre and can see perfectly well where
+      // you are. Smoothstepped, so it neither pops at the edge of the swell
+      // nor snaps as it fills.
       const {velocityTick: velocityTick} = ModuleHandler.staticModules;
       const velMark = velocityTick.markTarget;
       if (entity.isPlayer && velMark !== null && entity.sid === velMark.id) {
-        const radius = Math.abs(velocityTick.maxKB - velocityTick.minKB) / 2;
-        const reach = velocityTick.minKB + radius;
+        const band = Math.abs(velocityTick.maxKB - velocityTick.minKB) / 2;
+        const reach = velocityTick.minKB + band;
         const back = getAngle(entity.x, entity.y, player.x, player.y);
-        Renderer_default.fillCircle(ctx, entity.x + Math.cos(back) * reach, entity.y + Math.sin(back) * reach, radius, VELTICK_MARK_COLOR, VELTICK_MARK_ALPHA);
+        const markX = entity.x + Math.cos(back) * reach;
+        const markY = entity.y + Math.sin(back) * reach;
+        const gap = Math.hypot(player.x - markX, player.y - markY);
+        const grown = Math.max(band, VELTICK_MARK_NEAR_RADIUS);
+        let t = 1 - gap / VELTICK_MARK_SWELL_RANGE;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        const radius = band + (grown - band) * t * t * (3 - 2 * t);
+        Renderer_default.fillCircle(ctx, markX, markY, radius, VELTICK_MARK_COLOR, VELTICK_MARK_ALPHA);
       }
     }
   };
