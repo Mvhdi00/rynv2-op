@@ -3432,19 +3432,12 @@ window.grbtp = 35;
     potentialDamage=0;
     primaryDamage=0;
     spikeDamage=0;
-    // What canPossiblyInstakill actually charged for this enemy this tick, and
-    // whether our shield was between us and them while it did.
-    //
-    // The survival engine adds the novastorm terms RYN has no equivalent for,
-    // and several of them are the same weapon seen from a different distance —
-    // a secondary read off a melee hit at 400, a turret counted at 350, a
-    // primary arriving with a turret shot. Without a record of what was already
-    // counted the only options are to guess at canPossiblyInstakill's internals
-    // from outside it, or to pay twice. This is the record.
-    countedPrimary=false;
-    countedSecondary=false;
-    countedTurret=false;
-    lookingShield=false;
+    // The weapon the last attack animation carried, alongside `lastAttacked`
+    // which was already here. Novastorm's damage distribution matches an
+    // observed number against the swing that produced it, and the swing's
+    // weapon is what decides the number — the weapon in hand at update time is
+    // not always the one that was swung.
+    lastAttackWeapon=null;
     dangerList=[];
     danger=0;
     prevDanger=0;
@@ -3664,19 +3657,7 @@ window.grbtp = 35;
           this.shameCount = Math.max(0, this.shameCount - 2);
         }
       }
-      // The 1000ms server timer: regen, bull's -5 drain and every poison tick
-      // ride it, so a damage value that can only have come from it is what
-      // phases `bullTick`, and `isBullTickTime` counts the nine server ticks
-      // between one and the next.
-      //
-      // 3.75 is that same 5 taken through a soldier helmet (Hats[6].dmgMult).
-      // The old game rounded health on the wire, so a drain under soldier
-      // arrived as 4 and the `=== 4` test caught it; the live game sends health
-      // unrounded, so it arrives as 3.75 and the phase was being lost for
-      // exactly the player who is wearing soldier because something is trying
-      // to kill them. Both forms are accepted, and the tolerance is there
-      // because the value is a difference of two floats off the wire.
-      const diffDmg = difference === 5 || difference === 2 || difference === 4 || Math.abs(difference - 5 * Hats[6].dmgMult) < .02;
+      const diffDmg = difference === 5 || difference === 2 || difference === 4;
       const isDmgOverTime = diffDmg && currentHealth < previousHealth;
       this.isDmgOverTime = isDmgOverTime;
       if (isDmgOverTime) {
@@ -4076,23 +4057,17 @@ window.grbtp = 35;
       const collidingTurret = myPlayer.collidingEntity(this, turretRange);
       let spikeSyncDamage = 0;
       let includeTurret = false;
-      this.countedPrimary = false;
-      this.countedSecondary = false;
-      this.countedTurret = false;
-      this.lookingShield = lookingShield;
       if (collidingPrimary) {
         if (primaryReloaded) {
           this.potentialDamage += primaryDamage;
           this.primaryDamage = primaryDamage;
           spikeSyncDamage += primaryDamage;
-          this.countedPrimary = true;
         }
         includeTurret = true;
       }
       if (collidingSecondary) {
         if (this.isReloaded(1, 1)) {
           this.potentialDamage += secondaryDamage;
-          this.countedSecondary = true;
         }
         if (DataHandler_default.isMelee(secondary)) {
           includeTurret = true;
@@ -4100,7 +4075,6 @@ window.grbtp = 35;
       }
       if (this.isReloaded(2, 1) && includeTurret && !lookingShield) {
         this.potentialDamage += 25;
-        this.countedTurret = true;
       }
 
       // Velocity tick anti, from Novastorm. A turret-gear enemy who has just
@@ -4126,7 +4100,6 @@ window.grbtp = 35;
         const closing = myPlayer.pos.future.distance(this.pos.future);
         if (closing > VELOCITY_TICK_MIN_RANGE && closing < VELOCITY_TICK_MAX_RANGE) {
           this.potentialDamage += primaryDamage;
-          this.countedPrimary = true;
         }
       }
       // The enemy side of Glotus's velocity tick: they are in primary and
@@ -7012,23 +6985,19 @@ window.grbtp = 35;
       const before = this.currentHealth;
       super.updateHealth(health);
       const {_ModuleHandler: ModuleHandler} = this.client;
-      // Unconditional, and ahead of the shameActive return: the survival engine
-      // wants the full-health case as much as the damaged one, because reaching
-      // full health is what clears the damage history and the spike streak, and
-      // a shamed player is exactly the one whose history is worth keeping.
+      // novastorm's updateHealth, the myPlayer half:
       //
-      // Guarded because this runs inside the socket's message handler: whatever
-      // the engine could ever do wrong, taking the rest of the frame down with
-      // it is not one of the things it is allowed to do.
+      //     if (damage > 0) { damages.push(...); deathDamages.push(...); }
+      //     else if (tmpObj == myPlayer && tmpObj.health == 100)
+      //         { deathDamages = []; spikeDmg = 0; }
+      //
+      // Ahead of the shameActive return, because a shamed player is exactly the
+      // one whose damage list is worth keeping. Guarded because this runs inside
+      // the socket's message handler: whatever the engine could ever do wrong,
+      // taking the rest of the frame down with it is not one of them.
       const survival = ModuleHandler.staticModules && ModuleHandler.staticModules.autoHeal;
       if (survival !== void 0 && survival !== null) {
         survival.healthUpdate(before, health);
-      }
-      if (this.shameActive) {
-        return;
-      }
-      if (health < 100) {
-        ModuleHandler.staticModules.shameReset.healthUpdate();
       }
     }
     playerInit(id) {
@@ -7367,6 +7336,7 @@ window.grbtp = 35;
       const {hatID: hatID, reload: reload} = player;
       const {myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
       player.lastAttacked = myPlayer.tickCount;
+      player.lastAttackWeapon = weaponID;
       const isMyPlayer = myPlayer.isMyPlayerByID(id);
       if (isMyPlayer && !myPlayer.inGame) {
         return;
@@ -18267,133 +18237,102 @@ window.grbtp = 35;
       }
     }
   }
+  // Novastorm's shame drain is two lines: one condition in the survival block,
+  //
+  //     if (myPlayer.shameCount > 0 && !soldierAnti && !collidingspike
+  //         && poisonDmgPot == 0 && totalDmgPot == 0) shouldResetShame = true;
+  //
+  // and one rule in hatFc,
+  //
+  //     if (isBoughtHat(7, 0)) { if (shouldResetShame) currentHat = 7; }
+  //
+  // Both are in the survival engine, because hatFc resolves that rule against
+  // the rest of the hat cascade in one ordered pass and the two halves cannot be
+  // in different modules and keep that order. What was here instead was RYN's
+  // own drain: a 1-in-9 tick gate, a latch held across ticks until the drain
+  // landed, and a save condition missing two of novastorm's four terms. None of
+  // it is novastorm's, so none of it is here.
+  //
+  // The module stays as the client's handle on the drain and reports what the
+  // engine decided.
   class ShameReset {
     moduleName="shameReset";
     client;
-    tickToggle=false;
     constructor(client2) {
       this.client = client2;
     }
-    isBullTickTime() {
-      const {myPlayer: myPlayer} = this.client;
-      return !myPlayer.shameActive && myPlayer.shameCount > 0 && myPlayer.poisonCount === 0 && myPlayer.isBullTickTime();
-    }
-    // Putting bull on is how the count comes down: its -5 a period re-arms the
-    // server's hitTime, and an apple eaten outside the window after it is worth
-    // -2. isBullTickTime covers shame > 0 and poison, and notSave() covers
-    // spike contact and the insta threats EnemyManager tracks.
     get shouldReset() {
-      const {_ModuleHandler: ModuleHandler} = this.client;
-      return this.isBullTickTime() && ModuleHandler.canBuy(0, 7);
+      const survival = this.client._ModuleHandler.staticModules.autoHeal;
+      return survival !== void 0 && survival.lastShouldResetShame;
     }
-    // Novastorm's own guard on the drain is the whole of its threat model:
-    //
-    //     if (shameCount > 0 && !soldierAnti && !collidingspike
-    //         && poisonDmgPot == 0 && totalDmgPot == 0) shouldResetShame = true;
-    //
-    // Two of those four terms were missing here. `collidingspike` and the insta
-    // reads were present; `soldierAnti` and "the tick is completely quiet" were
-    // not, so the drain went on during any threat that was not already lethal —
-    // which is the tick before the one that is. Both come from the survival
-    // engine, which scans on demand, so asking for them here does not depend on
-    // module order.
-    notSave() {
-      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
-      const survival = ModuleHandler.staticModules.autoHeal;
-      if (survival !== void 0 && survival.threatPending()) {
-        return true;
-      }
-      return ModuleHandler.forceHat === 40 || EnemyManager2.instaThreat() || EnemyManager2.collidingSpike || myPlayer.wasTrapped() || ModuleHandler.currentType === 2;
-    }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler} = this.client;
-      if (Settings_default._autoheal && !this.notSave() && (this.shouldReset || this.tickToggle)) {
-        this.tickToggle = true;
-        ModuleHandler.moduleActive = true;
-        ModuleHandler.forceHat = 7;
-      }
-    }
-    healthUpdate() {
-      if (this.client.myPlayer.isDmgOverTime) {
-        this.tickToggle = false;
-      }
-    }
+    postTick() {}
   }
   const ShameReset_default = ShameReset;
   // ══════════════════════════════════════════════════════════════════════════
-  //  SURVIVAL ENGINE — Auto Heal
+  //  NOVASTORM SURVIVAL BLOCK
   // ══════════════════════════════════════════════════════════════════════════
   //
-  //  Novastorm's whole survival block, rebuilt on RYN's own state.
+  //  Novastorm's survival system, ported whole. Not a system informed by it.
   //
-  //  Novastorm keeps one flat function: a run of `if`s inside updatePlayers
-  //  that accumulates `spikeDmgPot`, `hitDmgPot`, `turretDmgPot`, `secDmgPot`
-  //  and `poisonDmgPot` into `totalDmgPot`, decides a hat from it, adjusts the
-  //  total for that hat, and then eats. There is no damage model underneath it
-  //  and no notion of when anything lands — every term is "this tick".
+  //  Every number in the pot is computed the way novastorm computes it, from
+  //  novastorm's own reload model, its own gates and its own five buckets, in
+  //  its own order:
   //
-  //  Rebuilding that here does not mean copying the run of ifs. RYN already
-  //  carries most of what novastorm re-derives:
+  //      poison
+  //      spike tick while trapped          (with the 0.75 reversal)
+  //      the movement sweep                (spikes, cactuses)
+  //      per enemy:
+  //          predict hit                   (four gates)
+  //          predict turret                (three gates)
+  //          velocity tick anti
+  //          knockback anti                (from the extrapolated position)
+  //          knockback anti                (from the interpolated position)
+  //          anti normal instakill
+  //          anti spike tick               (36 angles, two gates)
+  //      total = spike + hit + turret + sec + poison, clamped to 140
+  //      soldierAnti at 100
+  //      shame reset
+  //      hats
+  //      the hat adjusts the total
+  //      heal
   //
-  //    EnemyManager.potentialDamage        melee, secondary and turret from
-  //                                        every visible enemy, plus every live
-  //                                        projectile aimed at us
-  //    EnemyManager.potentialSpikeDamage   the spike we are standing in
-  //    EnemyManager.collidingSpike         ...that we are standing in one
-  //    Player.receivedDamage               the clock the server's shame window
-  //                                        is measured against
-  //    Player.shameCount / shameActive     the server's shame model, mirrored
-  //    Player.poisonCount / bullTick       the 1000ms damage-over-time phase
-  //    Reloading                           our own reloads, ping-compensated
-  //    MovementSimulation                  where we will be next tick
+  //  It does not read EnemyManager.potentialDamage and it does not add anything
+  //  to it. RYN's threat sum counts a different set of things under different
+  //  conditions — any reloaded primary inside weapon range plus 130,
+  //  unconditionally, every projectile in the air, a flat five on every ninth
+  //  tick — and a pot built on top of that is RYN's pot with novastorm terms
+  //  bolted on. It does not heal when novastorm heals. RYN's sum is still
+  //  computed and still drives RYN's own modules; this one belongs to the
+  //  survival engine and nothing else reads it.
   //
-  //  So this engine does not recount any of it. It computes the *delta*:
-  //  every novastorm term RYN has no equivalent for, added on top of RYN's own
-  //  sum, with the overlaps named explicitly at each site. That is the whole
-  //  reason `Player.countedPrimary/countedSecondary/countedTurret` exist — a
-  //  term RYN already paid for must not be paid for twice, and guessing at it
-  //  from the outside is how a survival engine ends up healing into a threat
-  //  that was never there.
+  //  RYN-native is the state and the wire: Player, the object grid,
+  //  PacketManager, ModuleHandler, the Reloading module. It is not RYN's
+  //  arithmetic.
   //
-  //  What it adds that RYN had nothing for:
-  //
-  //    · knockback into a spike or cactus       (deleted from RYN, see
-  //                                              EnemyManager.checkCollision)
-  //    · walking into a spike or cactus, swept
-  //    · the spike tick, with its soldier multiplier reversed and its repeat
-  //    · the next poison tick, one tick before it lands
-  //    · secondary + turret read off a melee hit that just landed
-  //    · a turret shot in flight whose owner's primary is also ready
-  //    · a spike an enemy can drop onto where we will be
-  //    · low-health turret finish
-  //    · future health across a horizon derived from the threats themselves
-  //
-  //  The scan is memoised per tick and pulled on demand, so ShameReset can ask
-  //  it what it knows without depending on module order.
-  //
-  const SURVIVE_HEAL_PACKETS = 3;
-  const SURVIVE_SHAME_WINDOW = 120;
-  const SURVIVE_SHAME_LIMIT = 7;
-  const SURVIVE_DOT_PERIOD = 9;
-  const SURVIVE_POISON_DAMAGE = 5;
-  const SURVIVE_CACTUS_DAMAGE = 35;
-  const SURVIVE_TURRET_DAMAGE = Projectiles[1].damage;
-  const SURVIVE_POT_CEILING = 140;
-  const SURVIVE_SOLDIER_ANTI = 100;
-  const SURVIVE_INSTA_RANGE = 400;
-  const SURVIVE_TURRET_RANGE = 350;
-  const SURVIVE_TURRET_ANTI_MIN = 200;
-  const SURVIVE_TURRET_ANTI_MAX = 300;
-  const SURVIVE_LOW_HEALTH = 70;
-  const SURVIVE_CALM_TICKS = 3;
-  const SURVIVE_MAX_HORIZON = 9;
-  const SURVIVE_EPS = .02;
-  // Every damage number a spike in this game can put on a player, taken from
-  // the item table rather than written down: 20 / 35 / 30 / 45 today, and
-  // whatever the table says tomorrow. The cactus is not an item, so its 35
-  // comes from Resource.getDamage.
-  const SURVIVE_SPIKE_DAMAGES = (() => {
-    const out = [ SURVIVE_CACTUS_DAMAGE ];
+  const NS_POT_CEILING = 140;
+  const NS_SOLDIER_ANTI = 100;
+  const NS_SHAME_LIMIT = 7;
+  const NS_DOT_PERIOD = 9;
+  const NS_POISON_DAMAGE = 5;
+  const NS_CACTUS_DAMAGE = 35;
+  const NS_TURRET_DAMAGE = Projectiles[1].damage;
+  const NS_INSTA_RANGE = 400;
+  const NS_TURRET_RANGE = 350;
+  const NS_VELOCITY_MIN = 150;
+  const NS_VELOCITY_MAX = 350;
+  const NS_TURRET_GEAR = 53;
+  const NS_SPIKE_TICK_ID = 9;
+  const NS_SPIKE_ANGLES = 36;
+  const NS_LOW_HEALTH = 70;
+  const NS_MOVE_EPSILON = 2;
+  const NS_COLLIDE_PAD = 10;
+  const NS_EPS = .02;
+  const NS_DAMAGE_MEMORY = 64;
+  // `[20, 30, 35, 45]` and the same four through a soldier helmet, which is how
+  // novastorm recognises a spike. Read off the item table rather than written
+  // down, and the 0.75 off the helmet.
+  const NS_SPIKE_DAMAGES = (() => {
+    const out = [ NS_CACTUS_DAMAGE ];
     for (const item of Items) {
       if (item && item.itemGroup === 2 && typeof item.damage === "number" && out.indexOf(item.damage) === -1) {
         out.push(item.damage);
@@ -18404,911 +18343,786 @@ window.grbtp = 35;
   class AutoHeal {
     moduleName="autoHeal";
     client;
-    // ── scan output, rebuilt once per tick ────────────────────────────────
+    // Novastorm's `tick`, incremented once per server update exactly as `tick++`
+    // at the top of updatePlayers is, and `damageTick`, which is `tick + 1` at
+    // the moment health dropped.
+    tick=0;
     scanTick=-1;
-    rawPot=0;
-    pot=0;
-    events=[];
-    horizon=1;
-    plannedHat=0;
+    damageTick=0;
+    // `damages` is novastorm's, and it is sticky on purpose: distributionDamages
+    // only ever splices out the values it can explain, and nothing clears the
+    // rest. Capped here because the alternative is an array that grows for the
+    // length of a session; the cap cannot change a decision, because the only
+    // thing that ever reads an old entry is the poison scan and `sawPoison`
+    // carries that answer separately.
+    damages=[];
+    observed=[];
+    damagesByHits=[];
+    damagesByShoots=[];
+    spikeDamages=[];
+    // Declared in novastorm and never filled. It appears in exactly one
+    // condition — the movement gate — where it is therefore always false. Kept
+    // so that condition reads the way novastorm's reads.
+    damagesByTurrets=[];
+    deathDamages=[];
+    damageByPoisonTick=0;
+    sawPoison=false;
+    // The five buckets.
+    spikeDmgPot=0;
+    hitDmgPot=0;
+    turretDmgPot=0;
+    secDmgPot=0;
+    poisonDmgPot=0;
+    totalDmgPot=0;
+    // The flags, with novastorm's names.
+    healing=false;
     soldierAnti=false;
     spikeTickAnti=false;
+    shouldResetShame=false;
+    collidingspike=false;
+    lastcolliding=false;
+    willcollide=false;
+    predicted=false;
+    lastPredicted=false;
     canStillGather=false;
-    emergency=false;
-    urgent=false;
-    calmTicks=0;
-    // ── classification of what actually landed this tick ──────────────────
-    //
-    // `observed` is filled the moment a health packet arrives and drained by the
-    // scan, so what it holds is exactly the damage that has landed since the
-    // last decision — whatever order the server puts the health frame and the
-    // player frame in. Stamping it with a tick counter instead would depend on
-    // that order, and the two orderings disagree by a whole tick.
-    observed=[];
-    tookDamage=false;
-    lastDamageScan=-1;
-    hits=[];
-    shots=[];
-    spikeHits=[];
-    poisonHit=false;
-    unclaimed=[];
-    // Turret damage charged by a branch that is not itself a turret read —
-    // today only the low-health half of the spike-placement threat. Kept out of
-    // the spike contact pool, which is a max across readings of one spike.
-    extraTurret=0;
-    // ── damage-over-time model ───────────────────────────────────────────
-    dotTick=-SURVIVE_DOT_PERIOD;
-    dotSeen=false;
-    poisonRemaining=0;
-    // ── history ──────────────────────────────────────────────────────────
-    deathDamages=[];
-    // Consecutive ticks of spike contact, which is novastorm's `spikeDmgCount`.
-    // One touch is a collision; a run of them is a trap holding us against a
-    // spike, and the two want different hats.
-    spikeStreak=0;
-    healsThisTick=0;
+    lastShouldResetShame=false;
+    imTrapped=false;
+    iWasTrapped=false;
+    spikeDmgCount=0;
+    spikeDmg=0;
+    lastPosX=0;
+    lastPosY=0;
+    currentHat=0;
+    healedThisTick=0;
+    // Novastorm's `lastPrimaryReload`: whether this enemy's primary was ready at
+    // the end of the previous tick. RYN's `reload[].previous` is not that — it
+    // is overwritten to equal `current` at the end of every update — so the
+    // engine keeps the snapshot itself, which is what novastorm does too.
+    wasPrimaryReady=new Map;
     constructor(client2) {
       this.client = client2;
     }
     reset() {
+      this.tick = 0;
       this.scanTick = -1;
-      this.rawPot = 0;
-      this.pot = 0;
-      this.events.length = 0;
-      this.horizon = 1;
+      this.damageTick = 0;
+      this.damages.length = 0;
+      this.observed.length = 0;
+      this.damagesByHits.length = 0;
+      this.damagesByShoots.length = 0;
+      this.spikeDamages.length = 0;
+      this.deathDamages.length = 0;
+      this.damageByPoisonTick = 0;
+      this.sawPoison = false;
+      this.spikeDmgPot = 0;
+      this.hitDmgPot = 0;
+      this.turretDmgPot = 0;
+      this.secDmgPot = 0;
+      this.poisonDmgPot = 0;
+      this.totalDmgPot = 0;
+      this.healing = false;
       this.soldierAnti = false;
       this.spikeTickAnti = false;
+      this.shouldResetShame = false;
+      this.lastShouldResetShame = false;
+      this.collidingspike = false;
+      this.lastcolliding = false;
+      this.willcollide = false;
+      this.predicted = false;
+      this.lastPredicted = false;
       this.canStillGather = false;
-      this.emergency = false;
-      this.urgent = false;
-      this.calmTicks = 0;
-      this.observed.length = 0;
-      this.tookDamage = false;
-      this.lastDamageScan = -1;
-      this.hits.length = 0;
-      this.shots.length = 0;
-      this.spikeHits.length = 0;
-      this.unclaimed.length = 0;
-      this.poisonHit = false;
-      this.extraTurret = 0;
-      this.dotTick = -SURVIVE_DOT_PERIOD;
-      this.dotSeen = false;
-      this.poisonRemaining = 0;
-      this.deathDamages.length = 0;
-      this.spikeStreak = 0;
-      this.healsThisTick = 0;
+      this.imTrapped = false;
+      this.iWasTrapped = false;
+      this.spikeDmgCount = 0;
+      this.spikeDmg = 0;
+      this.lastPosX = 0;
+      this.lastPosY = 0;
+      this.currentHat = 0;
+      this.healedThisTick = 0;
+      this.wasPrimaryReady.clear();
     }
     // ── observation ───────────────────────────────────────────────────────
     //
-    // Called from ClientPlayer.updateHealth, the one place a health change is
-    // known to be ours. Novastorm keeps `deathDamages` for the same reason:
-    // when a sequence kills you, the only record of what it was made of is the
-    // list of numbers it arrived as.
+    //     if (damage > 0) {
+    //         damageTick = (tick + 1);
+    //         damages.push(fixTo(damage, 2));
+    //         deathDamages.push({ damage: fixTo(damage, 2), tick: damageTick });
+    //     } else if (tmpObj == myPlayer && tmpObj.health == 100) {
+    //         deathDamages = []; spikeDmg = 0;
+    //     }
+    //
+    // The push is buffered rather than written straight into `damages`, because
+    // the server does not promise whether the health frame or the player frame
+    // comes first and the two orderings put the same damage a tick apart. The
+    // scan drains the buffer, so what it reads is what landed since the last
+    // decision either way.
     healthUpdate(previous, current) {
+      const myPlayer = this.client.myPlayer;
       if (current < previous) {
         const damage = fixTo(previous - current, 2);
         this.observed.push(damage);
+        this.damageTick = this.tick + 1;
         this.deathDamages.push({
           damage: damage,
-          tick: this.client.myPlayer.tickCount
+          tick: this.damageTick
         });
         if (this.deathDamages.length > 32) {
           this.deathDamages.shift();
         }
-      } else if (current >= this.client.myPlayer.maxHealth) {
-        // Novastorm clears its damage history and its spike counter the moment
-        // health is full again: nothing that happened before a full heal is
-        // evidence about what is happening now.
+      } else if (current >= myPlayer.maxHealth) {
         this.deathDamages.length = 0;
-        this.spikeStreak = 0;
+        this.spikeDmg = 0;
       }
     }
-    // What the sequence that killed us was made of. Novastorm prints this to
-    // its chat log; there is no chat log to add to here and no UI to grow, so
-    // it goes to the console the way every other diagnostic in this client
-    // does, and only for the player who can read it.
+    //     addChatLog(`Mod: Predict Damages before death ${totalDmgPot}`)
+    //     addChatLog(`Mod: Damages before death ${deathDamages}`)
     reportDeath() {
       if (!this.client.isOwner || this.deathDamages.length === 0) {
         return;
       }
-      Logger.log(`[autoheal] predicted ${fixTo(this.pot, 2)} — damages before death ${JSON.stringify(this.deathDamages)}`);
+      Logger.log(`[autoheal] predict damages before death ${fixTo(this.totalDmgPot, 2)}`);
+      Logger.log(`[autoheal] damages before death ${JSON.stringify(this.deathDamages)}`);
       this.deathDamages.length = 0;
     }
-    // ── helpers ───────────────────────────────────────────────────────────
-    get soldierMult() {
-      return Hats[6].dmgMult;
+    // ── getPlayerInfo ─────────────────────────────────────────────────────
+    //
+    // Novastorm's helper. `primaryDmg` is `weapon.dmg * 1.5 * variant` — the 1.5
+    // is the bull multiplier and it is applied to every enemy whether or not
+    // they are wearing it, because the pot is a worst case and the hat can go on
+    // between the read and the swing. That is a decision, not a missing check,
+    // and it is kept.
+    _primaryID(player) {
+      const id = player.weapon.primary;
+      return id === null || id === void 0 ? 5 : id;
     }
-    // A damage number as it would have arrived through whatever was on our head
-    // when it landed, reversed. Novastorm does this for spikes and only for
-    // spikes, because the pot it feeds is a raw pot that gets multiplied by
-    // 0.75 again at the end — adding an already-reduced number would apply the
-    // helmet twice and under-read the threat by a quarter.
-    _unmitigate(value) {
-      const mult = this.soldierMult;
-      for (let i = 0; i < SURVIVE_SPIKE_DAMAGES.length; i++) {
-        const base = SURVIVE_SPIKE_DAMAGES[i];
-        if (Math.abs(value - base) < SURVIVE_EPS) {
-          return base;
+    _secondaryID(player) {
+      const id = player.weapon.secondary;
+      return id === null || id === void 0 ? 15 : id;
+    }
+    _variantVal(player, id) {
+      return WeaponVariants[player.getWeaponVariant(id).current].val;
+    }
+    _primaryDamage(player) {
+      const id = this._primaryID(player);
+      return DataHandler_default.getWeapon(id).damage * Hats[7].dmgMultO * this._variantVal(player, id);
+    }
+    _primaryRange(player) {
+      return DataHandler_default.getWeapon(this._primaryID(player)).range;
+    }
+    // `111 * (.3 + knock)`, one server tick of knockback travel. RYN's weapon
+    // table already holds that product in `knockback`, so it is read rather
+    // than recomputed: 33.3 for a bare weapon, 55.6 for a polearm, 111.1 for a
+    // bat, 44.4 for daggers.
+    _primaryKnockback(player) {
+      return DataHandler_default.getWeapon(this._primaryID(player)).knockback;
+    }
+    _isHammer(player) {
+      return this._secondaryID(player) === 10;
+    }
+    // hammer, musket, crossbow, repeater crossbow, bow — novastorm's list, which
+    // is every secondary that can deal damage.
+    _secondaryDangerous(player) {
+      const id = this._secondaryID(player);
+      return id === 10 || DataHandler_default.isShootable(id);
+    }
+    _secondaryDamage(player) {
+      const id = this._secondaryID(player);
+      if (id === 10) {
+        return DataHandler_default.getWeapon(id).damage * Hats[7].dmgMultO * this._variantVal(player, id);
+      }
+      if (DataHandler_default.isShootable(id)) {
+        return DataHandler_default.getProjectile(id).damage;
+      }
+      return 0;
+    }
+    // ── reloads ───────────────────────────────────────────────────────────
+    //
+    // Novastorm carries `primaryReload[sid]`, `secondaryReload[sid]` and
+    // `turretReload[sid]` as fractions where 1 is ready; RYN carries the same
+    // three per player as ticks where `current >= max` is ready. `== 1` and
+    // `< 1` below are those two tests.
+    _primaryReady(player) {
+      return player.reload[0].current >= player.reload[0].max;
+    }
+    _secondaryReady(player) {
+      return player.reload[1].current >= player.reload[1].max;
+    }
+    _turretReady(player) {
+      return player.reload[2].current >= player.reload[2].max;
+    }
+    _wasPrimaryReady(player) {
+      return this.wasPrimaryReady.get(player.id) === true;
+    }
+    _mySecondaryReady() {
+      return this.client._ModuleHandler.staticModules.reloading.isReloaded(1);
+    }
+    // ── damage distribution ───────────────────────────────────────────────
+    //
+    // distributionDamages, all three branches. A number that landed is matched
+    // against what could have produced it and taken out of the list; whatever
+    // cannot be explained stays, which is what makes the poison latch below.
+    _take(value) {
+      for (let i = 0; i < this.damages.length; i++) {
+        if (Math.abs(this.damages[i] - value) < NS_EPS) {
+          this.damages.splice(i, 1);
+          return true;
         }
-        if (Math.abs(value - base * mult) < SURVIVE_EPS) {
-          return base;
+      }
+      return false;
+    }
+    _spikeLike(value) {
+      const mult = Hats[6].dmgMult;
+      for (let i = 0; i < NS_SPIKE_DAMAGES.length; i++) {
+        const base = NS_SPIKE_DAMAGES[i];
+        if (Math.abs(value - base) < NS_EPS || Math.abs(value - base * mult) < NS_EPS) {
+          return true;
+        }
+      }
+      return false;
+    }
+    _reversed(value) {
+      const mult = Hats[6].dmgMult;
+      for (let i = 0; i < NS_SPIKE_DAMAGES.length; i++) {
+        const base = NS_SPIKE_DAMAGES[i];
+        if (Math.abs(value - base * mult) < NS_EPS) {
+          return value / mult;
         }
       }
       return value;
     }
-    _isSpikeValue(value) {
-      const mult = this.soldierMult;
-      for (let i = 0; i < SURVIVE_SPIKE_DAMAGES.length; i++) {
-        const base = SURVIVE_SPIKE_DAMAGES[i];
-        if (Math.abs(value - base) < SURVIVE_EPS || Math.abs(value - base * mult) < SURVIVE_EPS) {
-          return true;
-        }
-      }
-      return false;
-    }
-    _isPoisonValue(value) {
-      return Math.abs(value - SURVIVE_POISON_DAMAGE) < SURVIVE_EPS || Math.abs(value - SURVIVE_POISON_DAMAGE * this.soldierMult) < SURVIVE_EPS;
-    }
-    // Anti Venom Gear refuses the *application* of poison, not a dose already
-    // running — the server tests `skin.poisonRes` where it sets dmgOverTime and
-    // nowhere else — so the hat that matters is the one being worn when the
-    // poison would be applied, which is the one on our head now.
-    get _poisonResistant() {
-      return this.client.myPlayer.hatID === 23;
-    }
-    // Novastorm's `distributionDamages`: take the numbers that landed and give
-    // each one a source, so the engine knows whether it is being hit, shot,
-    // stood on a spike or poisoned rather than knowing only that 45 happened.
-    //
-    // Order matters and is novastorm's: a melee hit is matched first because
-    // its expected value is the most specific (weapon x variant x the attacker's
-    // bull and tail, through our own helmet), then projectiles, then the spike
-    // magnitudes, then the poison tick. Whatever is left is unclaimed and is
-    // reported as such rather than being forced into the nearest bucket.
-    _classify() {
-      const {myPlayer: myPlayer, PlayerManager: PlayerManager2} = this.client;
-      this.hits.length = 0;
-      this.shots.length = 0;
-      this.spikeHits.length = 0;
-      this.unclaimed.length = 0;
-      this.poisonHit = false;
-      this.tookDamage = this.observed.length > 0;
-      if (!this.tookDamage) {
-        return;
-      }
-      this.lastDamageScan = myPlayer.tickCount;
-      const taken = this.unclaimed;
+    _distribute() {
+      const {myPlayer: myPlayer, PlayerManager: PlayerManager2, ProjectileManager: ProjectileManager2} = this.client;
+      this.damagesByHits.length = 0;
+      this.damagesByShoots.length = 0;
+      this.spikeDamages.length = 0;
       for (let i = 0; i < this.observed.length; i++) {
-        taken.push(this.observed[i]);
+        this.damages.push(this.observed[i]);
       }
       this.observed.length = 0;
-      const ourHat = Hats[myPlayer.hatID] || Hats[0];
-      const ourTail = Accessories[myPlayer.accessoryID] || Accessories[0];
-      const ourMult = ("dmgMult" in ourHat ? ourHat.dmgMult : 1) * ("dmgMult" in ourTail ? ourTail.dmgMult : 1);
-      // MELEE — an enemy whose swing animation arrived this tick, at the damage
-      // that swing would do to us. Novastorm's own expression, term for term:
-      //
-      //     dmg = weapon.dmg * variant.val
-      //     dmg *= attackerHat.dmgMultO; dmg *= attackerTail.dmgMultO
-      //     dmg *= myHat.dmgMult
-      //
-      // Not getMaxWeaponDamage, which hardcodes the bull multiplier: an enemy in
-      // a Bloodthirster multiplies by 1.2, and reading that swing as a bull swing
-      // would fail to match it and leave a 24 sitting unclaimed.
-      for (let e = 0; e < PlayerManager2.enemies.length; e++) {
-        const enemy = PlayerManager2.enemies[e];
+      while (this.damages.length > NS_DAMAGE_MEMORY) {
+        this.damages.shift();
+      }
+      const myHat = Hats[myPlayer.hatID] || Hats[0];
+      const myMult = "dmgMult" in myHat ? myHat.dmgMult : 1;
+      //     damage = items.weapons[weapon].dmg * config.weaponVariants[...].val
+      //     damage *= getHatInStore(player.skinIndex).dmgMultO || 1
+      //     damage *= getAccInStore(player.tailIndex).dmgMultO || 1
+      //     damage *= getHatInStore(myPlayer.skinIndex).dmgMult || 1
+      for (let i = 0; i < PlayerManager2.enemies.length; i++) {
+        const enemy = PlayerManager2.enemies[i];
         if (enemy.lastAttacked !== myPlayer.tickCount) {
           continue;
         }
-        const weaponID = enemy.weapon.current;
+        const weaponID = enemy.lastAttackWeapon === null ? enemy.weapon.current : enemy.lastAttackWeapon;
         if (!DataHandler_default.isMelee(weaponID)) {
           continue;
         }
-        const theirHat = Hats[enemy.hatID] || Hats[0];
-        const theirTail = Accessories[enemy.accessoryID] || Accessories[0];
-        let expected = DataHandler_default.getWeapon(weaponID).damage * WeaponVariants[enemy.getWeaponVariant(weaponID).current].val;
-        if ("dmgMultO" in theirHat) {
-          expected *= theirHat.dmgMultO;
+        const hat = Hats[enemy.hatID] || Hats[0];
+        const tail = Accessories[enemy.accessoryID] || Accessories[0];
+        let damage = DataHandler_default.getWeapon(weaponID).damage * this._variantVal(enemy, weaponID);
+        if ("dmgMultO" in hat) {
+          damage *= hat.dmgMultO;
         }
-        if ("dmgMultO" in theirTail) {
-          expected *= theirTail.dmgMultO;
+        if ("dmgMultO" in tail) {
+          damage *= tail.dmgMultO;
         }
-        expected = fixTo(expected * ourMult, 2);
-        if (this._take(taken, expected)) {
-          this.hits.push({
+        damage = fixTo(damage * myMult, 2);
+        if (this._take(damage)) {
+          this.damagesByHits.push({
+            damage: damage,
             player: enemy,
-            weapon: weaponID,
-            damage: expected
+            weapon: weaponID
           });
         }
       }
-      // PROJECTILES — every arrow or bullet the projectile manager is holding
-      // as aimed at us.
-      for (const projectile of this.client.ProjectileManager.dangerProjectiles) {
-        const expected = fixTo(projectile.damage * ourMult, 2);
-        if (this._take(taken, expected)) {
-          this.shots.push({
+      //     damage = projectile.dmg * (getHatInStore(myPlayer.skinIndex).dmgMult || 1)
+      //
+      // Novastorm runs this over the projectiles the server has just removed.
+      // RYN clears that list before the modules run, so the match is made
+      // against the projectiles the projectile manager is holding as aimed at
+      // us, which is the same set one tick earlier. The only reader of the
+      // result is the movement gate below.
+      for (const projectile of ProjectileManager2.dangerProjectiles) {
+        const damage = fixTo(projectile.damage * myMult, 2);
+        if (this._take(damage)) {
+          this.damagesByShoots.push({
             projectile: projectile,
-            damage: expected
+            damage: damage
           });
         }
       }
-      // SPIKES — the magnitudes only a spike or a cactus can produce, each one
-      // with the helmet taken back off it.
-      for (let i = taken.length - 1; i >= 0; i--) {
-        if (this._isSpikeValue(taken[i])) {
-          const raw = this._unmitigate(taken[i]);
-          this.spikeHits.push(raw);
-          taken.splice(i, 1);
-          // A poison spike puts a dose on us as well as its damage. The server
-          // sets dmgOverTime.time to 5 where it applies it, and refuses when
-          // poisonRes is on our head, so both are read from the item table and
-          // the hat rather than assumed.
-          if (!this._poisonResistant) {
-            for (let k = 0; k < Items.length; k++) {
-              const item = Items[k];
-              if (item && item.itemGroup === 2 && item.poisonDamage > 0 && Math.abs(item.damage - raw) < SURVIVE_EPS) {
-                this.poisonRemaining = 5;
-                break;
-              }
-            }
+      for (let i = 0; i < this.damages.length; i++) {
+        if (this._spikeLike(this.damages[i])) {
+          this.spikeDamages.push(this.damages[i]);
+        }
+      }
+      for (let i = 0; i < this.spikeDamages.length; i++) {
+        const index = this.damages.indexOf(this.spikeDamages[i]);
+        if (index >= 0) {
+          this.damages.splice(index, 1);
+        }
+      }
+      if (!this.sawPoison) {
+        for (let i = 0; i < this.damages.length; i++) {
+          if (Math.abs(this.damages[i] - NS_POISON_DAMAGE) < NS_EPS || Math.abs(this.damages[i] - NS_POISON_DAMAGE * Hats[6].dmgMult) < NS_EPS) {
+            this.sawPoison = true;
+            break;
           }
         }
       }
-      // POISON / DRAIN — the 1000ms timer. Novastorm looks for it in the same
-      // list and never removes it, which is why its own poison prediction stops
-      // working after the first tick of poison. Taken out here, so the next
-      // tick's list is the next tick's damage.
-      for (let i = taken.length - 1; i >= 0; i--) {
-        if (this._isPoisonValue(taken[i])) {
-          this.poisonHit = true;
-          taken.splice(i, 1);
-        }
-      }
-      if (this.poisonHit) {
-        this.dotSeen = true;
-        this.dotTick = myPlayer.tickCount;
-        if (this.poisonRemaining > 0) {
-          this.poisonRemaining -= 1;
-        }
-      }
     }
-    _take(list, value) {
-      for (let i = 0; i < list.length; i++) {
-        if (Math.abs(list[i] - value) < SURVIVE_EPS) {
-          list.splice(i, 1);
-          return true;
-        }
-      }
-      return false;
-    }
-    // ── prediction ────────────────────────────────────────────────────────
-    _push(damage, source, delay, confidence, repeat) {
-      if (!(damage > 0)) {
-        return 0;
-      }
-      this.events.push({
-        damage: damage,
-        source: source,
-        tick: delay,
-        confidence: confidence,
-        repeat: repeat || 0
-      });
-      return damage;
-    }
-    // Every damaging thing the segment from->to passes through. Novastorm sums
-    // across all of them rather than taking the worst: the server resolves a
-    // player's movement in up to four substeps and pushes them out of each
-    // object it finds, so two spikes set one player-width apart really do both
-    // land inside one tick — which is the whole point of the double-spike setups
-    // this client's own placer builds. The sum is bounded by the pot ceiling.
-    _sweep(from, to, search) {
+    // ── hazards ───────────────────────────────────────────────────────────
+    //
+    // Novastorm keeps `spikes_enemy` and `cactuses` as arrays rebuilt every tick
+    // out of everything inside 1000 units, and then only ever asks geometric
+    // questions about the few that are near. RYN keeps the same objects in a
+    // grid, so the question goes to the grid — the same objects answer it, and
+    // the filter is the same one: an enemy-owned item in the spike group, or a
+    // cactus.
+    _forEachHazard(x, y, search, fn) {
       const {ObjectManager: ObjectManager2, myPlayer: myPlayer} = this.client;
-      let total = 0;
-      const cx = (from.x + to.x) / 2;
-      const cy = (from.y + to.y) / 2;
-      ObjectManager2.grid2D.query(cx, cy, search, id => {
+      ObjectManager2.grid2D.query(x, y, search, id => {
         const object = ObjectManager2.objects.get(id);
         if (object === void 0) {
           return;
         }
-        const damage = object.getDamage();
-        if (!(damage > 0)) {
-          return;
+        if (object instanceof PlayerObject) {
+          if (object.itemGroup !== 2 || !myPlayer.isEnemyByID(object.ownerID)) {
+            return;
+          }
+          return fn(object, DataHandler_default.getItem(object.type).damage, true);
         }
-        if (object instanceof PlayerObject && !myPlayer.isEnemyByID(object.ownerID)) {
-          return;
-        }
-        const radius = myPlayer.collisionScale + object.collisionScale;
-        const p = object.pos.current;
-        if (!lineInRect(p.x - radius, p.y - radius, p.x + radius, p.y + radius, from.x, from.y, to.x, to.y)) {
-          return;
-        }
-        total += damage;
-      });
-      return total;
-    }
-    // Novastorm's knockback anti, restored. EnemyManager.checkCollision used to
-    // carry this and the feature was deleted outright — its own comment says so
-    // — leaving the client counting nothing at all for being shoved onto a
-    // spike, which is the single most common way a fight is actually lost.
-    //
-    //     posX = myPlayer.xVel + 111 * (.3 + knock) * cos(angle away from enemy)
-    //
-    // `111 * (.3 + knock)` is already what Weapons[].knockback holds in this
-    // client, so the distance comes straight off the weapon. Novastorm sweeps
-    // from both the interpolated and the extrapolated position; both are here,
-    // because which one is right depends on whether the hit lands before or
-    // after the server has moved us.
-    //
-    // Only the spike is added. Novastorm also adds the attacker's primary on
-    // this branch, but RYN has already counted that primary in
-    // canPossiblyInstakill — it counts any reloaded primary inside weapon range
-    // plus 130 — and paying for it twice would read a 45 as a 90.
-    _knockbackThreat(enemy) {
-      const {myPlayer: myPlayer} = this.client;
-      if (myPlayer.isTrapped) {
-        return 0;
-      }
-      if (!enemy.isReloaded(0, 1)) {
-        return 0;
-      }
-      const primary = enemy.weapon.primary;
-      if (primary === null || !DataHandler_default.isMelee(primary)) {
-        return 0;
-      }
-      const weapon = DataHandler_default.getWeapon(primary);
-      const reach = weapon.range + myPlayer.hitScale;
-      // Novastorm's own reach test is the plain current-position one, and this
-      // is the branch where being generous costs an apple a tick against an
-      // enemy who is merely walking past.
-      if (!myPlayer.collidingSimple(enemy, reach)) {
-        return 0;
-      }
-      const distance = weapon.knockback;
-      if (!(distance > 0)) {
-        return 0;
-      }
-      const current = myPlayer.pos.current;
-      const future = myPlayer.pos.future;
-      const away1 = enemy.pos.current.angle(current);
-      const away2 = enemy.pos.future.angle(future);
-      // The worse of the two readings, not their sum: it is one shove, and the
-      // two sweeps are two guesses at where it lands us.
-      const damage = Math.max(this._sweep(current, current.addDirection(away1, distance), 2), this._sweep(future, future.addDirection(away2, distance), 2));
-      if (damage > 0) {
-        this.canStillGather = true;
-      }
-      return damage;
-    }
-    // Novastorm's `willcollide`: the segment we are about to walk, against every
-    // enemy spike and cactus it crosses. RYN has `willCollideSpike`, but that is
-    // a proximity flag with no damage attached and no segment in it — it cannot
-    // tell a spike we are sliding past from one we are about to run into.
-    //
-    // Gated the way novastorm gates it: only when we actually moved, or when
-    // something already hit us this tick. A player standing still is not walking
-    // into anything.
-    _velocityThreat() {
-      const {myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
-      if (myPlayer.isTrapped && EnemyManager2.collidingSpike) {
-        return 0;
-      }
-      const moved = myPlayer.speed > 2;
-      if (!moved && !this.tookDamage) {
-        return 0;
-      }
-      return this._sweep(myPlayer.pos.current, myPlayer.pos.future, 2);
-    }
-    // The spike tick. Trapped, standing in a spike, and taking its damage every
-    // tick for as long as the trap holds.
-    //
-    // Novastorm reverses the soldier multiplier off each observed value before
-    // adding it, because the total is multiplied by 0.75 again at the end. That
-    // reversal is `_unmitigate`, done at classification time, so what arrives
-    // here is already the raw number. The repeat is novastorm's too, implicitly:
-    // it re-reads the damage every tick because the spike keeps landing, and the
-    // horizon below makes that explicit instead of implicit.
-    _spikeTickThreat() {
-      const {myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
-      const colliding = EnemyManager2.collidingSpike;
-      if (colliding && this.spikeHits.length > 0) {
-        this.spikeStreak += 1;
-      } else if (!colliding) {
-        this.spikeStreak = 0;
-      }
-      if (!myPlayer.isTrapped || !colliding || this.spikeHits.length === 0) {
-        return 0;
-      }
-      let total = 0;
-      for (let i = 0; i < this.spikeHits.length; i++) {
-        total += this.spikeHits[i];
-      }
-      return total;
-    }
-    // The next poison tick, one server tick before it lands.
-    //
-    // Novastorm writes this as `(tick - damageByPoisonTick) % 9 == 8`, which is
-    // right — the server's regen timer is 1000ms and a server tick is 1000/9 —
-    // but it never removes the 5 from its damage list, so `damageByPoisonTick`
-    // is rewritten to the current tick on every tick after the first and the
-    // remainder never reaches 8 again. The intent is kept; the classifier taking
-    // the value out of the list is what makes it work.
-    //
-    // RYN already phases the same timer through `bullTick`, and
-    // `isBullTickTime(-1)` is "the next tick is a period boundary", so the
-    // prediction is asked of RYN's own clock rather than a second one.
-    _poisonThreat() {
-      const {myPlayer: myPlayer} = this.client;
-      const active = myPlayer.poisonCount > 0 || this.poisonRemaining > 0;
-      if (!active) {
-        return 0;
-      }
-      const ours = this.dotSeen && (myPlayer.tickCount - this.dotTick) % SURVIVE_DOT_PERIOD === SURVIVE_DOT_PERIOD - 1;
-      if (!ours && !myPlayer.isBullTickTime(-1)) {
-        return 0;
-      }
-      return SURVIVE_POISON_DAMAGE;
-    }
-    // Novastorm's anti normal instakill. An enemy carrying a hammer or anything
-    // that shoots, who has just landed a melee hit on us, inside 400: the
-    // follow-up is the secondary and the turret on the same tick, and by the
-    // time either is inside its own range it is already in flight.
-    //
-    // RYN counts a secondary only once it is inside secondary range and a turret
-    // only once the primary or a melee secondary is inside theirs, so both are
-    // uncounted at exactly the distance this fires at. `countedSecondary` and
-    // `countedTurret` are what canPossiblyInstakill decided, so the two engines
-    // cannot both pay for the same weapon.
-    _instaComboThreat(enemy) {
-      const {myPlayer: myPlayer} = this.client;
-      if (this.hits.length === 0) {
-        return 0;
-      }
-      let sawHit = false;
-      for (let i = 0; i < this.hits.length; i++) {
-        if (this.hits[i].player === enemy) {
-          sawHit = true;
-          break;
-        }
-      }
-      if (!sawHit) {
-        return 0;
-      }
-      if (!myPlayer.collidingSimple(enemy, SURVIVE_INSTA_RANGE)) {
-        return 0;
-      }
-      if (enemy.lookingShield) {
-        return 0;
-      }
-      const secondary = enemy.weapon.secondary;
-      let total = 0;
-      if (enemy.isReloaded(2, 1) && !enemy.countedTurret) {
-        // Marked as counted, so the reads further down this tick see that this
-        // enemy's turret has already been paid for. The flag is rewritten from
-        // scratch by canPossiblyInstakill on every tick, so writing to it here
-        // cannot leak into the next one.
-        enemy.countedTurret = true;
-        total += SURVIVE_TURRET_DAMAGE;
-      }
-      if (secondary !== null && enemy.isReloaded(1, 1) && !enemy.countedSecondary) {
-        enemy.countedSecondary = true;
-        // Novastorm divides a hammer's damage by 1.5 here and nowhere else:
-        // `getPlayerInfo(..., "secondaryDmg")` reports hammer damage with the
-        // bull multiplier already in it, and the follow-up is not a bull swing —
-        // the bull hat is on the primary that just landed, and it cannot be on
-        // two swings in the same tick. So no bull on this term. A shootable
-        // secondary ignores the flag anyway; its damage is the projectile's.
-        total += enemy.getMaxWeaponDamage(secondary, false, false);
-      }
-      return total;
-    }
-    // The obstacle half of novastorm's `canShoot`. A projectile only counts if
-    // nothing is standing between it and us, and the game's own rule for that is
-    // `projectile.layer <= object.layer` plus ignoreCollision — a turret shot
-    // (layer 1) is stopped by a windmill, a turret or a platform and by trees
-    // and bushes, and passes over stone and over everything on layer -1.
-    //
-    // Novastorm applies this test on exactly this path and nowhere else, so that
-    // is where it is applied: RYN's own projectile accounting, which feeds every
-    // other module through potentialDamage, is left as it is.
-    _projectileBlocked(projectile) {
-      const {ObjectManager: ObjectManager2, myPlayer: myPlayer} = this.client;
-      const from = projectile.pos.current;
-      const to = myPlayer.pos.current;
-      const reach = from.distance(to);
-      const data = Projectiles[projectile.type];
-      const layer = data === void 0 ? 0 : data.layer;
-      let blocked = false;
-      ObjectManager2.grid2D.query((from.x + to.x) / 2, (from.y + to.y) / 2, Math.min(4, Math.ceil(reach / 200) + 1), id => {
-        const object = ObjectManager2.objects.get(id);
-        if (object === void 0 || object.canMoveOnTop() || layer > object.layer) {
-          return;
-        }
-        const p = object.pos.current;
-        const radius = object.collisionScale;
-        if (!lineInRect(p.x - radius, p.y - radius, p.x + radius, p.y + radius, from.x, from.y, to.x, to.y)) {
-          return;
-        }
-        if (from.distance(p) < reach) {
-          blocked = true;
-          return true;
+        if (object instanceof Resource && object.isCactus) {
+          return fn(object, NS_CACTUS_DAMAGE, false);
         }
       });
-      return blocked;
-    }
-    // Novastorm's `projectileHandle`/`antiOneTick`: a turret shot from 200-300
-    // away, on a path that really reaches us, whose owner's primary is also
-    // ready — the shot and the swing land together.
-    //
-    // Novastorm sets a timer flag for this and then never reads it, so the
-    // detection has no effect there at all. The behaviour it was reaching for is
-    // the one implemented: the projectile's own damage is already in
-    // ProjectileManager.totalDamage, so what this adds is the primary that
-    // arrives with it, and only when RYN has not already counted that primary.
-    _turretInstaThreat(enemy) {
-      const {myPlayer: myPlayer, ProjectileManager: ProjectileManager2} = this.client;
-      if (enemy.countedPrimary || enemy.lookingShield) {
-        return 0;
-      }
-      if (!enemy.isReloaded(0, 1)) {
-        return 0;
-      }
-      const distance = myPlayer.pos.current.distance(enemy.pos.current);
-      if (distance <= SURVIVE_TURRET_ANTI_MIN || distance >= SURVIVE_TURRET_ANTI_MAX) {
-        return 0;
-      }
-      let inbound = false;
-      for (const projectile of ProjectileManager2.dangerProjectiles) {
-        if (projectile.isTurret && projectile.ownerClient === enemy && !this._projectileBlocked(projectile)) {
-          inbound = true;
-          break;
-        }
-      }
-      if (!inbound) {
-        return 0;
-      }
-      const primary = enemy.weapon.primary;
-      if (primary === null || !DataHandler_default.isMelee(primary)) {
-        return 0;
-      }
-      enemy.countedPrimary = true;
-      return enemy.getMaxWeaponDamage(primary, false, enemy.hatID === 7);
-    }
-    // Novastorm's anti spike tick: an enemy who can put a spike down on top of
-    // where we are about to be, and hit us on the same tick.
-    //
-    // RYN's Player.detectSpikeInsta asks the same question about where we are
-    // now and has already answered it into EnemyManager.potentialSpikeDamage.
-    // The one it does not ask is novastorm's — the velocity point, which is
-    // where a spike placed this tick actually catches a moving player — so that
-    // is what is added, and as a max against what RYN already counted rather
-    // than on top of it, because it is the same spike.
-    //
-    // Both of novastorm's gates are kept. The first only raises the helmet; the
-    // second is the one that pays, and it divides our health by 0.75 rather than
-    // multiplying the damage, because the question is whether the sequence kills
-    // us through the helmet we are about to put on.
-    _spikePlacementThreat(enemy) {
-      const {myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
-      if (this.client.EnemyManager.collidingSpike) {
-        return 0;
-      }
-      const spikeID = enemy.globalInventory[4] === null || enemy.globalInventory[4] === void 0 ? 9 : enemy.globalInventory[4];
-      const item = Items[spikeID];
-      if (item === void 0 || !(item.damage > 0)) {
-        return 0;
-      }
-      const future = myPlayer.pos.future;
-      const place = enemy.getItemPlaceScale(spikeID);
-      const straight = enemy.pos.current.addDirection(enemy.pos.current.angle(future), place);
-      if (future.distance(straight) > myPlayer.collisionScale + item.scale) {
-        return 0;
-      }
-      if (!ObjectManager2.canPlaceItem(spikeID, straight)) {
-        return 0;
-      }
-      const spikeDamage = item.damage;
-      const primary = enemy.weapon.primary;
-      const primaryDamage = primary !== null && DataHandler_default.isMelee(primary) ? enemy.getMaxWeaponDamage(primary, enemy.lookingShield, enemy.hatID === 7) : 0;
-      const inReach = primary !== null && myPlayer.collidingSimple(enemy, DataHandler_default.getWeapon(primary).range + myPlayer.hitScale);
-      if (inReach && enemy.isReloaded(0, 1)) {
-        if (myPlayer.maxHealth <= primaryDamage + spikeDamage) {
-          this.spikeTickAnti = true;
-        }
-        if (myPlayer.currentHealth / this.soldierMult <= primaryDamage + spikeDamage) {
-          return spikeDamage;
-        }
-        return 0;
-      }
-      // Novastorm's second branch: too hurt to take the spike, and already
-      // bleeding from a hit this tick, so the turret behind it counts too. The
-      // spike is returned into the contact pool, where it competes with the
-      // other readings of the same spike; the turret is a separate weapon and
-      // goes to its own accumulator rather than into that max.
-      if (myPlayer.currentHealth <= SURVIVE_LOW_HEALTH && this.hits.length > 0) {
-        if (enemy.isReloaded(2, 1) && !enemy.countedTurret) {
-          enemy.countedTurret = true;
-          this.extraTurret += SURVIVE_TURRET_DAMAGE;
-        }
-        return spikeDamage;
-      }
-      return 0;
-    }
-    // Novastorm's autosteal turret read: at 25 health or less, with nothing else
-    // adding up to 25, any turret inside 350 finishes us. RYN counts a turret
-    // only once its owner is inside weapon range, so at 350 it counts nothing.
-    _lowHealthTurretThreat(enemy, runningTotal) {
-      const {myPlayer: myPlayer} = this.client;
-      if (myPlayer.currentHealth > SURVIVE_TURRET_DAMAGE || runningTotal >= SURVIVE_TURRET_DAMAGE) {
-        return 0;
-      }
-      if (enemy.countedTurret || enemy.lookingShield || !enemy.isReloaded(2, 1)) {
-        return 0;
-      }
-      if (!myPlayer.collidingSimple(enemy, SURVIVE_TURRET_RANGE)) {
-        return 0;
-      }
-      enemy.countedTurret = true;
-      return SURVIVE_TURRET_DAMAGE;
     }
     // ── the scan ──────────────────────────────────────────────────────────
-    //
-    // Memoised on the tick counter. ShameReset pulls it before this module's
-    // own postTick runs and gets the same answer the heal decision will get.
     scan() {
-      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2, _ModuleHandler: ModuleHandler} = this.client;
+      const {myPlayer: myPlayer, PlayerManager: PlayerManager2, _ModuleHandler: ModuleHandler} = this.client;
       if (this.scanTick === myPlayer.tickCount) {
         return;
       }
       this.scanTick = myPlayer.tickCount;
-      this.events.length = 0;
+      this.tick += 1;
+      //     if (soldierAnti) soldierAnti = false;
+      //     healing = false;
       this.soldierAnti = false;
-      this.spikeTickAnti = false;
-      this.canStillGather = false;
-      this.extraTurret = 0;
-      this.rawPot = 0;
-      this.pot = 0;
-      this.horizon = 1;
+      this.healing = false;
+      this.spikeDmgPot = 0;
+      this.hitDmgPot = 0;
+      this.turretDmgPot = 0;
+      this.secDmgPot = 0;
+      this.poisonDmgPot = 0;
+      this.totalDmgPot = 0;
+      this.shouldResetShame = false;
+      this.willcollide = false;
+      this.predicted = false;
       if (!myPlayer.inGame) {
-        this.emergency = false;
-        this.urgent = false;
+        this.observed.length = 0;
         return;
       }
-      this._classify();
-      if (this._poisonResistant) {
-        this.poisonRemaining = 0;
-      }
-      // RYN's own sum, taken whole rather than recomputed: melee, secondary and
-      // turret per enemy, every live projectile, and the drain on a bull tick.
-      let total = EnemyManager2.potentialDamage;
-      // EnemyManager charges a flat 5 on every damage-over-time boundary tick,
-      // and it charges it whether or not anything is actually draining us —
-      // `bullTick` starts at zero, so from spawn it fires every ninth tick at a
-      // player with nothing on them. Novastorm's pot carries no such term: its
-      // +5 comes from the hat, after the hat has been chosen, which is where it
-      // is re-added below. Taken back out here so the drain is paid for once,
-      // and so the shame drain is not talked out of its own bull tick by a
-      // threat that is the bull hat it just put on.
-      if (myPlayer.isBullTickTime()) {
-        total -= Math.abs(Hats[7].healthRegen);
-      }
-      if (total < 0) {
-        total = 0;
-      }
-      this._push(total, "ryn", 1, 1, 0);
-      // One pool for spike contact, because the three readings below are three
-      // views of the same event and only one of them can be true:
-      //
-      //   · the spike EnemyManager says we are already touching
-      //   · the spike the segment we are about to walk crosses
-      //   · the spike an enemy can drop where we are about to be
-      //
-      // Standing on a spike satisfies the first two at once — the swept segment
-      // of a player who is not moving is a point inside the spike they are in —
-      // so summing them would read one 45 as 90 and heal into damage that is not
-      // coming. The knockback read below is kept out of this pool on purpose: it
-      // is a different event with a different cause, and novastorm sums it too.
-      let contact = 0;
-      const spikeTick = this._spikeTickThreat();
-      if (spikeTick > 0) {
-        total += spikeTick;
-        // It lands again next tick, and the tick after, for as long as the trap
-        // holds us against it.
-        this._push(spikeTick, "spikeTick", 1, 1, 1);
+      this._distribute();
+      //     distributionDamages({ type: "spikes" });
+      //     if (spikeDamages.length > 0) { spikeDmgCount++; for (i in spikeDamages) spikeDmg++; }
+      //     else spikeDmgCount = 0;
+      if (this.spikeDamages.length > 0) {
+        this.spikeDmgCount += 1;
+        this.spikeDmg += this.spikeDamages.length;
       } else {
-        contact = Math.max(EnemyManager2.potentialSpikeDamage, this._velocityThreat());
+        this.spikeDmgCount = 0;
       }
-      const poison = this._poisonThreat();
-      if (poison > 0) {
-        total += poison;
-        this._push(poison, "poison", 1, 1, SURVIVE_DOT_PERIOD);
+      this.imTrapped = myPlayer.isTrapped;
+      const pos = myPlayer.pos.current;
+      const vel = myPlayer.pos.future;
+      const myScale = myPlayer.scale;
+      // ── DAMAGE BY POISON / PREDICT POISON DAMAGE ──────────────────────
+      //
+      //     for (damage of damages) if (damage == 5 || damage == 3.75) damageByPoisonTick = tick;
+      //     if ((tick - damageByPoisonTick) % 9 == 8 || (tick - damageByPoisonTick) % 9 == 9) poisonDmgPot = 5;
+      //
+      // distributionDamages has no branch that explains a poison tick, so the 5
+      // stays in `damages` and this loop rewrites damageByPoisonTick to the
+      // current tick on every tick after the first one. The remainder is then
+      // always zero and the prediction stops firing; before any poison has ever
+      // landed it fires once every nine ticks. That is novastorm's behaviour,
+      // and `sawPoison` is how the latch is reproduced without keeping an array
+      // that grows for the length of the session.
+      //
+      // `% 9 == 9` cannot be true. It is novastorm's, and it is left as written.
+      if (this.sawPoison) {
+        this.damageByPoisonTick = this.tick;
       }
+      const poisonStep = (this.tick - this.damageByPoisonTick) % NS_DOT_PERIOD;
+      if (poisonStep === NS_DOT_PERIOD - 1 || poisonStep === NS_DOT_PERIOD) {
+        this.poisonDmgPot = NS_POISON_DAMAGE;
+      }
+      // ── COLLISION WHILE TRAPPED ───────────────────────────────────────
+      //
+      //     if (imTrapped) if (spikeDamages.length > 0)
+      //         for (spike of spikes_enemy)
+      //             if (getDistance(myPlayer, spike) <= spike.scale + myPlayer.scale + 10)
+      //                 collidingspike = true;
+      this.collidingspike = false;
+      if (this.imTrapped && this.spikeDamages.length > 0) {
+        this._forEachHazard(pos.x, pos.y, 2, (object, damage, isSpike) => {
+          if (!isSpike || this.collidingspike) {
+            return;
+          }
+          if (pos.distance(object.pos.current) <= object.scale + myScale + NS_COLLIDE_PAD) {
+            this.collidingspike = true;
+            return true;
+          }
+        });
+      }
+      //     if (collidingspike && spikeDamages.length > 0)
+      //         for (dmg of spikeDamages)
+      //             spikeDmgPot += (dmg is a 0.75 value) ? dmg / 0.75 : dmg;
+      //
+      // The reversal is the whole point: the pot is multiplied by 0.75 again
+      // once the helmet is chosen, and adding an already-reduced number would
+      // apply the helmet twice and under-read the spike by a quarter.
+      if (this.collidingspike && this.spikeDamages.length > 0) {
+        for (let i = 0; i < this.spikeDamages.length; i++) {
+          this.spikeDmgPot += this._reversed(this.spikeDamages[i]);
+        }
+      }
+      // ── KNOCKBACKS PREDICTIONS ────────────────────────────────────────
+      //
+      //     if (!(imTrapped && collidingspike)) {
+      //         distance = |lastPos - pos|
+      //         if (distance > 2 || damagesByHits.length || damagesByShoots.length
+      //             || damagesByTurrets.length || spikeDamages.length) {
+      //             for (spike of spikes_enemy)
+      //                 if (lineInRect(spike ± (myScale + spike.scale), x2,y2, xVel,yVel))
+      //                     { willcollide = true; spikeDmgPot += spike.dmg; }
+      //             for (cactus of cactuses)
+      //                 if (lineInRect(cactus ± (myScale + cactus.scale), x2,y2, xVel,yVel))
+      //                     { willcollide = true; spikeDmgPot += 35; }
+      //         }
+      //     }
+      //     lastPosX = x2; lastPosY = y2;
+      if (!(this.imTrapped && this.collidingspike)) {
+        const dx = this.lastPosX - pos.x;
+        const dy = this.lastPosY - pos.y;
+        const moved = Math.sqrt(dx * dx + dy * dy);
+        if (moved > NS_MOVE_EPSILON || this.damagesByHits.length > 0 || this.damagesByShoots.length > 0 || this.damagesByTurrets.length > 0 || this.spikeDamages.length > 0) {
+          this._forEachHazard((pos.x + vel.x) / 2, (pos.y + vel.y) / 2, 2, (object, damage) => {
+            const p = object.pos.current;
+            const r = myScale + object.scale;
+            if (lineInRect(p.x - r, p.y - r, p.x + r, p.y + r, pos.x, pos.y, vel.x, vel.y)) {
+              this.willcollide = true;
+              this.spikeDmgPot += damage;
+            }
+          });
+        }
+      }
+      this.lastPosX = pos.x;
+      this.lastPosY = pos.y;
+      // ── PREDICTION FOR ALL ENEMIES ────────────────────────────────────
       for (let i = 0; i < PlayerManager2.enemies.length; i++) {
         const enemy = PlayerManager2.enemies[i];
-        const knockback = this._knockbackThreat(enemy);
-        if (knockback > 0) {
-          total += knockback;
-          this._push(knockback, "knockback", 1, .8, 0);
+        const enemyPos = enemy.pos.current;
+        const enemyVel = enemy.pos.future;
+        const primaryDamage = this._primaryDamage(enemy);
+        const primaryReady = this._primaryReady(enemy);
+        const inPrimaryRange = pos.distance(enemyPos) <= myPlayer.hitScale + this._primaryRange(enemy);
+        // ── PREDICT HIT ──────────────────────────────────────────────
+        //
+        //     if (primaryReload[enemy] == 1 && inPrimaryRange) {
+        //         if (collidingspike) {
+        //             if (!lastcolliding) hitDmgPot += primaryDmg;
+        //             else if (enemy.lastPrimaryReload < 1) hitDmgPot += primaryDmg;
+        //             else if (secondaryReload[me] == 1 && !lastPredicted) { predicted = true; hitDmgPot += primaryDmg; }
+        //         }
+        //         else if (willcollide) hitDmgPot += primaryDmg;
+        //         else if (myPlayer.health <= primaryDmg) hitDmgPot += primaryDmg;
+        //     }
+        if (primaryReady && inPrimaryRange) {
+          if (this.collidingspike) {
+            if (!this.lastcolliding) {
+              this.hitDmgPot += primaryDamage;
+            } else if (!this._wasPrimaryReady(enemy)) {
+              this.hitDmgPot += primaryDamage;
+            } else if (this._mySecondaryReady() && !this.lastPredicted) {
+              this.predicted = true;
+              this.hitDmgPot += primaryDamage;
+            }
+          } else if (this.willcollide) {
+            this.hitDmgPot += primaryDamage;
+          } else if (myPlayer.currentHealth <= primaryDamage) {
+            this.hitDmgPot += primaryDamage;
+          }
         }
-        const combo = this._instaComboThreat(enemy);
-        if (combo > 0) {
-          total += combo;
-          this._push(combo, "insta", 1, .7, 0);
+        // ── PREDICT TURRET HIT ───────────────────────────────────────
+        //
+        //     if (getDistance(enemy, me) <= 350 && turretReload[enemy] == 1) {
+        //         if (collidingspike && enemy.lastPrimaryReload == 1 && primaryReload[enemy] < 1) turretDmgPot += 25;
+        //         else if (willcollide && primaryReload[enemy] < 1) turretDmgPot += 25;
+        //         else if (myPlayer.health <= 25 && (hitDmgPot + turretDmgPot + spikeDmgPot) < 25) turretDmgPot += 25;
+        //     }
+        if (pos.distance(enemyPos) <= NS_TURRET_RANGE && this._turretReady(enemy)) {
+          if (this.collidingspike && this._wasPrimaryReady(enemy) && !primaryReady) {
+            this.turretDmgPot += NS_TURRET_DAMAGE;
+          } else if (this.willcollide && !primaryReady) {
+            this.turretDmgPot += NS_TURRET_DAMAGE;
+          } else if (myPlayer.currentHealth <= NS_TURRET_DAMAGE && this.hitDmgPot + this.turretDmgPot + this.spikeDmgPot < NS_TURRET_DAMAGE) {
+            this.turretDmgPot += NS_TURRET_DAMAGE;
+          }
         }
-        const turretInsta = this._turretInstaThreat(enemy);
-        if (turretInsta > 0) {
-          total += turretInsta;
-          this._push(turretInsta, "turretInsta", 2, .7, 0);
+        // ── VELOCITY TICK ANTI ───────────────────────────────────────
+        //
+        //     if (getDistance(enemy.xVel, enemy.yVel, myPlayer.xVel, myPlayer.yVel) > 150 && < 350)
+        //         if (turretReload[enemy] < 1 && primaryReload[enemy] == 1 && enemy.skinIndex == 53)
+        //             { turretDmgPot += 25; hitDmgPot += primaryDmg; }
+        const closing = enemyVel.distance(vel);
+        if (closing > NS_VELOCITY_MIN && closing < NS_VELOCITY_MAX) {
+          if (!this._turretReady(enemy) && primaryReady && enemy.hatID === NS_TURRET_GEAR) {
+            this.turretDmgPot += NS_TURRET_DAMAGE;
+            this.hitDmgPot += primaryDamage;
+          }
         }
-        const placed = this._spikePlacementThreat(enemy);
-        if (placed > contact) {
-          contact = placed;
+        // ── KNOCKBACK ANTI ───────────────────────────────────────────
+        //
+        // Twice, from the extrapolated position and then from the interpolated
+        // one, because which of the two is right depends on whether the swing
+        // lands before or after the server has moved us. Both are novastorm's,
+        // in this order, and each adds the spike and the swing that put us on
+        // it. The cactus box is the cactus alone here, and the spike box is the
+        // spike plus our own scale — the two loops do not use the same radius
+        // in novastorm, and they do not here.
+        //
+        //     canStillGather = false;
+        //     if (!imTrapped && primaryReload[enemy] == 1 && inPrimaryRange) { ... }
+        this.canStillGather = false;
+        if (!this.imTrapped && primaryReady && inPrimaryRange) {
+          const knock = this._primaryKnockback(enemy);
+          this._knockbackSweep(vel, enemyVel, knock, primaryDamage, myScale);
+          this._knockbackSweep(pos, enemyPos, knock, primaryDamage, myScale);
         }
-        const lowTurret = this._lowHealthTurretThreat(enemy, total);
-        if (lowTurret > 0) {
-          total += lowTurret;
-          this._push(lowTurret, "turret", 1, .6, 0);
+        // ── ANTI NORMAL INSTAKILL ────────────────────────────────────
+        //
+        //     if (enemy secondary is hammer/musket/crossbow/repeater/bow) {
+        //         if (damagesByHits.length > 0 && getDistance(enemy, me) <= 400) {
+        //             if (turretReload[enemy] == 1) {
+        //                 turretDmgPot += 25;
+        //                 if (secondaryReload[enemy] == 1)
+        //                     secDmgPot += hammer ? secondaryDmg / 1.5 : secondaryDmg;
+        //             }
+        //             else if (secondaryReload[enemy] == 1) secDmgPot += secondaryDmg;
+        //         }
+        //     }
+        //
+        // The `/ 1.5` on the hammer takes the bull multiplier back off, because
+        // getPlayerInfo put it there and a follow-up swing is not the bull
+        // swing.
+        if (this._secondaryDangerous(enemy)) {
+          if (this.damagesByHits.length > 0 && pos.distance(enemyPos) <= NS_INSTA_RANGE) {
+            const secondaryDamage = this._secondaryDamage(enemy);
+            if (this._turretReady(enemy)) {
+              this.turretDmgPot += NS_TURRET_DAMAGE;
+              if (this._secondaryReady(enemy)) {
+                this.secDmgPot += this._isHammer(enemy) ? secondaryDamage / Hats[7].dmgMultO : secondaryDamage;
+              }
+            } else if (this._secondaryReady(enemy)) {
+              this.secDmgPot += secondaryDamage;
+            }
+          }
+        }
+        // ── ANTI SPIKE TICK ──────────────────────────────────────────
+        //
+        //     if (!collidingspike) for (i = 0; i < 36; i++) {
+        //         angle = toRad(i * 10); id = 9;
+        //         config = enemy + (35 + items[9].scale + placeOffset) * dir(angle)
+        //         if (checkItemLocation(config, 0.6, 9, false, enemy, visibleObjects))
+        //             if (getDistance(myPlayer.xVel, myPlayer.yVel, config) <= 35 + config.scale) {
+        //                 if (inPrimaryRange && primaryReload[enemy] == 1) {
+        //                     if (100 <= primaryDmg + 45) spikeTickAnti = true;
+        //                     if (myPlayer.health / 0.75 <= primaryDmg + 45)
+        //                         { spikeDmgPot += 45; hitDmgPot += primaryDmg; break; }
+        //                 }
+        //                 else if (myPlayer.health <= 70 && damagesByHits.length > 0) {
+        //                     spikeDmgPot += 45;
+        //                     if (turretReload[enemy]) turretDmgPot += 25;
+        //                 }
+        //             }
+        //     }
+        if (!this.collidingspike) {
+          this._antiSpikeTick(enemy, inPrimaryRange, primaryReady, primaryDamage, vel);
         }
       }
-      if (contact > 0) {
-        total += contact;
-        this._push(contact, "spike", 1, .9, 0);
+      //     lastcolliding = collidingspike;
+      //     iWasTrapped = imTrapped;
+      //     lastPredicted = predicted;
+      this.lastcolliding = this.collidingspike;
+      this.iWasTrapped = this.imTrapped;
+      this.lastPredicted = this.predicted;
+      this.wasPrimaryReady.clear();
+      for (let i = 0; i < PlayerManager2.enemies.length; i++) {
+        const enemy = PlayerManager2.enemies[i];
+        this.wasPrimaryReady.set(enemy.id, this._primaryReady(enemy));
       }
-      if (this.extraTurret > 0) {
-        total += this.extraTurret;
-        this._push(this.extraTurret, "turret", 1, .6, 0);
+      //     totalDmgPot = spikeDmgPot + hitDmgPot + turretDmgPot + secDmgPot + poisonDmgPot;
+      //     if (totalDmgPot > 140) totalDmgPot = 140;
+      //     if (totalDmgPot >= 100) soldierAnti = true;
+      let total = this.spikeDmgPot + this.hitDmgPot + this.turretDmgPot + this.secDmgPot + this.poisonDmgPot;
+      if (total > NS_POT_CEILING) {
+        total = NS_POT_CEILING;
       }
-      // Novastorm's ceiling. Past 140 the number stops being a prediction and
-      // starts being a sum of every unlikely thing at once; capping it keeps the
-      // soldier test and the heal test reading the same scale they were written
-      // against.
-      if (total > SURVIVE_POT_CEILING) {
-        total = SURVIVE_POT_CEILING;
+      this.totalDmgPot = total;
+      if (total >= NS_SOLDIER_ANTI) {
+        this.soldierAnti = true;
       }
-      this.rawPot = total;
-      // Novastorm's soldierAnti, and its place in the order: raised from the raw
-      // pot, before any hat is chosen, and it is the last word on what goes on
-      // our head. ModuleHandler applies it after every module has had its say,
-      // which is the same priority hatFc gives it.
-      this.soldierAnti = total >= SURVIVE_SOLDIER_ANTI;
-      // hatFc's other soldier rule, the one before the gather branch:
+      //     if (myPlayer.shameCount > 0 && !soldierAnti && !collidingspike
+      //         && poisonDmgPot == 0 && totalDmgPot == 0) shouldResetShame = true;
+      if (myPlayer.shameCount > 0 && !this.soldierAnti && !this.collidingspike && this.poisonDmgPot === 0 && this.totalDmgPot === 0) {
+        this.shouldResetShame = true;
+      }
+      // ── hatFc ─────────────────────────────────────────────────────────
       //
-      //     if (((imTrapped && spikeDmgCount > 0) || spikeTickAnti)
-      //         && isBoughtHat(6, 0)) currentHat = 6;
+      // The three rules in hatFc that belong to the survival block, in
+      // novastorm's order:
       //
-      // Held against a spike inside a trap, or about to have one dropped on us.
-      // Novastorm puts it mid-priority, where the gather branch can still take
-      // the hat off again for a swing; here it joins the same override as
-      // soldierAnti, because the gather branch it would lose to is the one that
-      // puts a tank hat on a player standing in a spike.
-      const heldOnSpike = myPlayer.isTrapped && this.spikeStreak > 0;
-      if (this.soldierAnti || this.spikeTickAnti || heldOnSpike) {
+      //     if (isBoughtHat(7,0)) if (shouldResetShame) currentHat = 7;
+      //     if (((imTrapped && spikeDmgCount > 0) || spikeTickAnti) && isBoughtHat(6,0)) currentHat = 6;
+      //     ...
+      //     if (isBoughtHat(6,0)) if (soldierAnti) currentHat = 6;
+      //
+      // The first two sit above the gather branch and the insta rules, so an
+      // insta that has already claimed the hat this tick keeps it — which is
+      // what setForceHat means here. The third is the last line of hatFc and
+      // beats everything, so it goes to the override ModuleHandler applies after
+      // every module has run. The first two cannot both hold: the drain needs
+      // totalDmgPot to be zero and being held on a spike is never zero.
+      if (this.shouldResetShame && ModuleHandler.canBuy(0, 7)) {
+        ModuleHandler.setForceHat(7);
+      }
+      if ((this.imTrapped && this.spikeDmgCount > 0 || this.spikeTickAnti) && ModuleHandler.canBuy(0, 6)) {
+        ModuleHandler.setForceHat(6);
+      }
+      if (this.soldierAnti && ModuleHandler.canBuy(0, 6)) {
         ModuleHandler.soldierAnti = true;
       }
-      // The hat that will actually be worn this tick, asked of the same fields
-      // Autohat will read. Novastorm adjusts its pot for the hat after hatFc has
-      // run, for the same reason: what is about to be on our head decides how
-      // much of the incoming damage arrives.
-      this.plannedHat = ModuleHandler.plannedHat();
-      let adjusted = total;
-      if (this.plannedHat === 6) {
-        adjusted *= this.soldierMult;
+      //     spikeTickAnti = false; shouldResetShame = false;
+      //
+      // Both, after hatFc has read them. The drain's answer is kept in
+      // `lastShouldResetShame` because the module that reports it runs later in
+      // the tick and novastorm has no module to report to.
+      this.lastShouldResetShame = this.shouldResetShame;
+      this.spikeTickAnti = false;
+      this.shouldResetShame = false;
+      //     if (currentHat == 6) totalDmgPot *= 0.75;
+      //     if (currentHat == 7) totalDmgPot += 5;
+      //     if (myPlayer.health <= totalDmgPot) healing = true;
+      this.currentHat = ModuleHandler.plannedHat();
+      if (this.currentHat === 6) {
+        this.totalDmgPot *= Hats[6].dmgMult;
       }
-      if (this.plannedHat === 7) {
-        // Bull drains 5 a period. Wearing it while something is incoming means
-        // the drain lands on top of whatever else does.
-        adjusted += Math.abs(Hats[7].healthRegen);
+      if (this.currentHat === 7) {
+        this.totalDmgPot += Math.abs(Hats[7].healthRegen);
       }
-      this.pot = adjusted;
-      this._resolveHorizon();
+      if (myPlayer.currentHealth <= this.totalDmgPot) {
+        this.healing = true;
+      }
     }
-    // Novastorm evaluates one future tick. This evaluates several, and derives
-    // how many from the threats themselves rather than picking a number: the
-    // furthest event that is actually scheduled, bounded by one damage-over-time
-    // period, because past that the world has changed more than the prediction
-    // is worth.
+    // One half of the knockback anti: project where the swing puts us and sweep
+    // the segment. Spikes take our scale into the box, cactuses do not — that
+    // difference is novastorm's and it is deliberate enough to keep.
+    _knockbackSweep(fromPos, enemyPos, knock, primaryDamage, myScale) {
+      if (!(knock > 0)) {
+        return;
+      }
+      const away = enemyPos.angle(fromPos);
+      const to = fromPos.addDirection(away, knock);
+      let hitSpike = false;
+      let hitCactus = false;
+      this._forEachHazard((fromPos.x + to.x) / 2, (fromPos.y + to.y) / 2, 2, (object, damage, isSpike) => {
+        if (isSpike && hitSpike || !isSpike && hitCactus) {
+          return;
+        }
+        const p = object.pos.current;
+        const r = isSpike ? myScale + object.scale : object.scale;
+        if (!lineInRect(p.x - r, p.y - r, p.x + r, p.y + r, fromPos.x, fromPos.y, to.x, to.y)) {
+          return;
+        }
+        if (isSpike) {
+          hitSpike = true;
+        } else {
+          hitCactus = true;
+        }
+        this.spikeDmgPot += damage;
+        this.hitDmgPot += primaryDamage;
+        this.canStillGather = true;
+      });
+    }
+    // The 36-angle scan. Novastorm walks every angle around the enemy looking
+    // for a spinning spike it could legally place that would reach our velocity
+    // point; the loop only breaks out of the branch that pays.
     //
-    // It changes no ported decision. The emergency test below is still the
-    // single-tick one novastorm makes — healing early costs shame, and shame is
-    // paid for surviving this tick, not a tick five away. What the longer view
-    // buys is the ordering: a sequence that kills us in three ticks makes the
-    // heal urgent, which is what decides whether it gets the packets when the
-    // budget is tight.
-    _resolveHorizon() {
-      let furthest = 1;
-      for (let i = 0; i < this.events.length; i++) {
-        const event = this.events[i];
-        if (event.tick > furthest) {
-          furthest = event.tick;
-        }
-        if (event.repeat > 0) {
-          furthest = SURVIVE_MAX_HORIZON;
-        }
+    // The scan is skipped when no angle can possibly qualify: the spike is
+    // placed 82 units from the enemy and has to land within 87 of our velocity
+    // point, so an enemy further than the sum of those two cannot reach it. That
+    // is an exact short-circuit, not an approximation — no angle inside the loop
+    // could have passed.
+    _antiSpikeTick(enemy, inPrimaryRange, primaryReady, primaryDamage, vel) {
+      const {myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
+      const spike = Items[NS_SPIKE_TICK_ID];
+      const placeLength = enemy.getItemPlaceScale(NS_SPIKE_TICK_ID);
+      const reach = myPlayer.scale + spike.scale;
+      const enemyPos = enemy.pos.current;
+      if (enemyPos.distance(vel) > placeLength + reach) {
+        return;
       }
-      const {myPlayer: myPlayer} = this.client;
-      // A projectile already in the air sets its own horizon: it lands when it
-      // lands, and healing before it does is the whole point.
-      for (const projectile of this.client.ProjectileManager.dangerProjectiles) {
-        const flown = Math.max(0, 9 - projectile.life);
-        const eta = Math.ceil(myPlayer.pos.current.distance(projectile.pos.current) / (projectile.speed * this.client.SocketManager.TICK)) - flown;
-        if (eta > furthest) {
-          furthest = eta;
-        }
-      }
-      this.horizon = clamp(furthest, 1, SURVIVE_MAX_HORIZON);
-    }
-    // Health at t ticks from now, with everything scheduled to land by then
-    // taken off it, through the hat that will be worn.
-    futureHealth(ticks) {
-      const {myPlayer: myPlayer} = this.client;
-      let damage = 0;
-      for (let i = 0; i < this.events.length; i++) {
-        const event = this.events[i];
-        if (event.tick > ticks) {
+      const turretReady = this._turretReady(enemy);
+      for (let i = 0; i < NS_SPIKE_ANGLES; i++) {
+        const angle = toRadians(i * (360 / NS_SPIKE_ANGLES));
+        const config = enemyPos.addDirection(angle, placeLength);
+        // Novastorm asks these two the other way round. They are both pure and
+        // the body needs both, so the cheap one goes first: a grid query for an
+        // angle that could not reach us either way is work for nothing.
+        if (vel.distance(config) > reach) {
           continue;
         }
-        damage += event.damage;
-        if (event.repeat > 0) {
-          const repeats = Math.floor((ticks - event.tick) / event.repeat);
-          damage += event.damage * repeats;
+        if (!ObjectManager2.canPlaceItem(NS_SPIKE_TICK_ID, config)) {
+          continue;
+        }
+        if (inPrimaryRange && primaryReady) {
+          if (myPlayer.maxHealth <= primaryDamage + spike.damage) {
+            this.spikeTickAnti = true;
+          }
+          if (myPlayer.currentHealth / Hats[6].dmgMult <= primaryDamage + spike.damage) {
+            this.spikeDmgPot += spike.damage;
+            this.hitDmgPot += primaryDamage;
+            break;
+          }
+        } else if (myPlayer.currentHealth <= NS_LOW_HEALTH && this.damagesByHits.length > 0) {
+          this.spikeDmgPot += spike.damage;
+          if (turretReady) {
+            this.turretDmgPot += NS_TURRET_DAMAGE;
+          }
         }
       }
-      if (damage > SURVIVE_POT_CEILING) {
-        damage = SURVIVE_POT_CEILING;
-      }
-      if (this.plannedHat === 6) {
-        damage *= this.soldierMult;
-      }
-      if (this.plannedHat === 7) {
-        damage += Math.abs(Hats[7].healthRegen);
-      }
-      return myPlayer.currentHealth - damage;
-    }
-    // Anything at all worth not putting the bull hat on for. Novastorm's shame
-    // drain waits on `totalDmgPot == 0 && poisonDmgPot == 0 && !soldierAnti`;
-    // this is that test, asked of this engine instead of four globals.
-    threatPending() {
-      if (!Settings_default._autoheal) {
-        return false;
-      }
-      this.scan();
-      return this.rawPot > 0 || this.client.EnemyManager.collidingSpike;
     }
     // ── the decision ──────────────────────────────────────────────────────
     postTick() {
       const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
-      this.healsThisTick = 0;
+      this.healedThisTick = 0;
       if (!Settings_default._autoheal || !myPlayer.inGame) {
         return;
       }
       this.scan();
-      // Recovery. Novastorm has no state to leave, because it re-derives
-      // everything every tick; what it does have is a pot that falls to zero and
-      // a heal that stops. The counter is here so the emergency state cannot
-      // flicker on and off between two ticks of the same fight — it leaves only
-      // after the threat has been gone for three ticks, or the moment health is
-      // full again.
-      if (this.rawPot <= 0) {
-        this.calmTicks += 1;
-      } else {
-        this.calmTicks = 0;
-      }
-      const health = myPlayer.currentHealth;
-      const lethalNow = health <= this.pot || this.futureHealth(1) <= 0;
-      this.urgent = lethalNow || this.futureHealth(this.horizon) <= 0;
-      if (lethalNow) {
-        this.emergency = true;
-      } else if (health >= myPlayer.maxHealth || this.calmTicks >= SURVIVE_CALM_TICKS) {
-        this.emergency = false;
-      }
-      if (health >= myPlayer.maxHealth) {
-        return;
-      }
-      // The server's 30-second lockout. `shameTimer <= 0` is the gate on
-      // `item.consume` in buildItem, so while it is running an apple is three
-      // packets and a wasted food with no health at the end of it.
-      if (myPlayer.shameActive) {
+      //     let damageHealed = false;
+      //     if (((healing && myPlayer.shameCount < 7) || (tick - damageTick) > 0)
+      //         && myPlayer.health < 100) {
+      //         heal(100 - myPlayer.health);
+      //         damageHealed = true;
+      //     }
+      //
+      // No packet budget and no wall clock. Novastorm gates its placer on
+      // `packets + 5 > 119` and never gates the heal, and the only timing on the
+      // free branch is `(tick - damageTick) > 0` — one whole server tick since
+      // the damage landed.
+      if (myPlayer.currentHealth >= myPlayer.maxHealth) {
         return;
       }
       if (ModuleHandler.healedOnce) {
@@ -19317,68 +19131,28 @@ window.grbtp = 35;
       if (!myPlayer.canPlace(2)) {
         return;
       }
-      //     if (((healing && myPlayer.shameCount < 7) || (tick - damageTick) > 0)
-      //         && myPlayer.health < 100) heal(100 - myPlayer.health);
-      //
-      // Two branches, and they are not the same decision.
-      //
-      // The first is the emergency: predicted damage is at or over our health,
-      // so we eat now and take the shame, because +1 shame beats dying. The
-      // limit is novastorm's — at 7 the next one puts the server's count at 8
-      // and locks eating out for thirty seconds, which is worse than the hit.
-      //
-      // The second is the ordinary top-up, and it is free. `lastDamageScan` is
-      // the tick the last damage was consumed on, so `tickCount` being past it
-      // is novastorm's `(tick - damageTick) > 0` — at least one whole server
-      // tick, 111ms, since the hit. At any ping worth playing on that is already
-      // outside the server's 120ms window, but 111 is not 120, so the wall clock
-      // is checked as well, against the same `receivedDamage` stamp the shame
-      // model itself is measured from. The emergency branch is deliberately not
-      // held back by it: a heal that arrives one tick late because it was
-      // waiting to be polite is a death.
-      const clean = myPlayer.tickCount > this.lastDamageScan;
-      const outsideShameWindow = myPlayer.receivedDamage === null || Date.now() - myPlayer.receivedDamage > SURVIVE_SHAME_WINDOW;
-      let shouldHeal = false;
-      if (lethalNow && myPlayer.shameCount < SURVIVE_SHAME_LIMIT) {
-        shouldHeal = true;
-      } else if (clean && outsideShameWindow) {
-        shouldHeal = true;
-      }
-      if (!shouldHeal) {
+      const healing = this.healing && myPlayer.shameCount < NS_SHAME_LIMIT;
+      const clean = this.tick - this.damageTick > 0;
+      if (!healing && !clean) {
         return;
       }
-      // The emergency state, not the single-tick reading, is what guarantees an
-      // apple against an exhausted packet budget. A lethal tick followed by a
-      // tick that reads 99 is the same fight, and refusing the second one on a
-      // technicality is the failure the recovery window exists to prevent.
-      // `urgent` is the horizon's answer to the same question — dead across the
-      // window rather than dead this tick — and it buys the same guarantee.
-      const count = this._healCount(health, this.emergency || this.urgent);
+      //     function heal(value) {
+      //         for (let i = 0; i < value; i += items.list[myPlayer.items[0]].heal)
+      //             place(myPlayer.items[0], null);
+      //     }
+      const count = this._healCount(myPlayer.maxHealth - myPlayer.currentHealth);
       if (count <= 0) {
         return;
       }
       for (let i = 0; i < count; i++) {
         ModuleHandler.heal();
       }
-      this.healsThisTick = count;
-      // What novastorm's `damageHealed` is for. Eating re-selects the weapon
-      // afterwards, and the direction the server has on file for us is whatever
-      // the last attack packet carried; UpdateAngle reads `healedOnce` and
-      // forces the angle back out, exactly as novastorm sends its "D" after a
-      // heal.
+      this.healedThisTick = count;
+      //     if (predictObjects.length > 0 || damageHealed) io.send("D", angle);
       ModuleHandler.healedOnce = true;
     }
-    // How many to eat. Novastorm chains to full:
-    //
-    //     for (let i = 0; i < value; i += items.list[myPlayer.items[0]].heal)
-    //
-    // which is ceil(missing / restore) apples in one tick. Every one after the
-    // first is shame-free whatever the timing, because buildItem clears hitTime
-    // on the first consume and the shame arithmetic only runs while it is set —
-    // so a chain costs at most the one point the first apple was going to cost
-    // anyway.
-    _healCount(health, emergency) {
-      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+    _healCount(missing) {
+      const myPlayer = this.client.myPlayer;
       const foodID = myPlayer.getItemByType(2);
       if (foodID === null || foodID === void 0) {
         return 0;
@@ -19388,10 +19162,15 @@ window.grbtp = 35;
       if (!(restore > 0)) {
         return 0;
       }
-      let count = Math.ceil((myPlayer.maxHealth - health) / restore);
-      if (count < 1) {
-        count = 1;
+      let count = 0;
+      for (let i = 0; i < missing; i += restore) {
+        count += 1;
       }
+      // Novastorm has no resource test: the loop runs and the server refuses the
+      // ones there is no food for. The refusals are free on the wire but they
+      // are not free in the packet count, and RYN knows what it is carrying, so
+      // the ones that could not land are not sent. Nothing else about the chain
+      // changes.
       if (!myPlayer.isSandbox) {
         const cost = item.cost.food;
         if (cost > 0) {
@@ -19400,27 +19179,6 @@ window.grbtp = 35;
             count = affordable;
           }
         }
-      }
-      if (count <= 0) {
-        return 0;
-      }
-      // The packet budget, and the reason the survival engine is scheduled
-      // ahead of every placement module rather than after it: whatever it spends
-      // here is gone from the budget the placer reads, so the placer backs off
-      // for the heal instead of the heal backing off for the placer. That is
-      // novastorm's order too — it heals at the top of the tick and gates only
-      // placement on `packets + 5 > 119`.
-      //
-      // One apple is always allowed through when the prediction is lethal. The
-      // alternative is refusing to heal on exactly the busiest tick of the
-      // fight, which is the tick that produced the damage.
-      const budget = ModuleHandler.packetLimit - ModuleHandler.packetCount;
-      const affordablePackets = Math.floor(budget / SURVIVE_HEAL_PACKETS);
-      if (affordablePackets < count) {
-        count = affordablePackets;
-      }
-      if (count < 1 && emergency) {
-        count = 1;
       }
       return count < 0 ? 0 : count;
     }
@@ -23667,19 +23425,25 @@ window.grbtp = 35;
       this.whichWeapon(this._getPredictWeapon());
       return true;
     }
-    // novastorm's heal is a bare send — `place(myPlayer.items[0], null)` — with
-    // no budget test and no shame handling of its own. The shame rule is served
-    // entirely by the caller's `(tick - damageTick) > 0`, which is already two
-    // ticks clear of the 120ms window.
+    // novastorm's heal is `place(myPlayer.items[0], null)`, and place is four
+    // sends:
     //
-    // What stood here instead: a 130ms wall-clock guard that parked apples in a
-    // queue and drained them later, plus a `budget < 3` refusal. Both are gone.
-    // The queue delayed the emergency heal — the one case where eating +1 shame
-    // is the correct trade — and the refusal silently dropped apples on exactly
-    // the busy ticks that produce the damage worth healing.
+    //     selectToBuild(id)            z(id, false)
+    //     sendAtck(1, angle)           F(1, null)
+    //     sendAtck(0, angle)           F(0, null)
+    //     selectWeapon(predictWeapon)  z(predictWeapon, true)
+    //
+    // All four, including the release. Leaving it out left the attack state hot
+    // and made the heal depend on UpdateAttack tidying up after it later in the
+    // tick, which is not the same thing as novastorm's sequence.
+    //
+    // No budget test and no shame handling of its own: novastorm gates its
+    // placer on `packets + 5 > 119` and never gates the heal, and the shame rule
+    // belongs entirely to the caller's `(tick - damageTick) > 0`.
     heal() {
       this.selectItem(2);
       this.attack(null, 1);
+      this.stopAttack(null);
       this.whichWeapon(this._getHealWeapon());
     }
     // The slot to come back to after an apple, guaranteed to be one this player

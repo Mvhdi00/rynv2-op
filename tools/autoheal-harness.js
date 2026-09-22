@@ -39,7 +39,7 @@ function build() {
     sliceBetween(lines, "  class Entity {", "  const Entity_default = Entity;"),
     sliceBetween(lines, "  const scale_value = window.grbtp;", "  const Player_default = Player;"),
     // the engine
-    sliceBetween(lines, "  const SURVIVE_HEAL_PACKETS = 3;", "  const AutoHeal_default = AutoHeal;")
+    sliceBetween(lines, "  const NS_POT_CEILING = 140;", "  const AutoHeal_default = AutoHeal;")
   ];
 
   const prelude = `
@@ -71,14 +71,14 @@ function build() {
       Entity: Entity_default,
       Settings: Settings_default,
       constants: {
-        SURVIVE_HEAL_PACKETS: SURVIVE_HEAL_PACKETS,
-        SURVIVE_SHAME_WINDOW: SURVIVE_SHAME_WINDOW,
-        SURVIVE_SHAME_LIMIT: SURVIVE_SHAME_LIMIT,
-        SURVIVE_DOT_PERIOD: SURVIVE_DOT_PERIOD,
-        SURVIVE_POT_CEILING: SURVIVE_POT_CEILING,
-        SURVIVE_SOLDIER_ANTI: SURVIVE_SOLDIER_ANTI,
-        SURVIVE_SPIKE_DAMAGES: SURVIVE_SPIKE_DAMAGES,
-        SURVIVE_TURRET_DAMAGE: SURVIVE_TURRET_DAMAGE
+        NS_POT_CEILING: NS_POT_CEILING,
+        NS_SOLDIER_ANTI: NS_SOLDIER_ANTI,
+        NS_SHAME_LIMIT: NS_SHAME_LIMIT,
+        NS_DOT_PERIOD: NS_DOT_PERIOD,
+        NS_SPIKE_DAMAGES: NS_SPIKE_DAMAGES,
+        NS_TURRET_DAMAGE: NS_TURRET_DAMAGE,
+        NS_INSTA_RANGE: NS_INSTA_RANGE,
+        NS_TURRET_RANGE: NS_TURRET_RANGE
       }
     };
   `;
