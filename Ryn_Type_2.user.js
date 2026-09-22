@@ -1,16 +1,16 @@
 // ==UserScript==
 // @name           ! Ryn Type 2
 // @author          By : Raptor
-// @description     ! have fun — Type 2 teaches auto place, preplace and replace the primary-knockback spike chain from Novastorm, plus LRC AI: automatic synced lyrics, translated to English and cached per song
+// @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
-// @icon            https://i.postimg.cc/d0mMvHYF/ryn5.webp
+// @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
 // @version         2.1
 // @run-at          document-start
 // @grant           none
 // @license         MIT
 // ==/UserScript==
 
-const RYN_FAVICON_URL = "https://i.postimg.cc/yY4X1kc4/ryn.png";
+const RYN_FAVICON_URL = "https://i.postimg.cc/1t4HB4W1/ryntype2.png";
 
 function _applyRynBranding() {
   if (document.title !== "Ryn Type 2") document.title = "Ryn Type 2";
@@ -1698,16 +1698,62 @@ window.grbtp = 35;
     }
   }
   const Header_default = "";
-  const Navbar_default = "<div id=\"navbar-container\">\n  <div class=\"rail-brand\">\n    <span class=\"rail-mark\">RYN</span>\n    <span class=\"rail-sub\">Type 2</span>\n  </div>\n\n  <div id=\"ryn-search-wrap\">\n    <input id=\"ryn-search-input\" type=\"text\" placeholder=\"Search settings\" autocomplete=\"off\" spellcheck=\"false\">\n    <span id=\"ryn-search-clear\" title=\"Clear\">&#10005;</span>\n    <div id=\"ryn-search-dropdown\"></div>\n  </div>\n\n  <div class=\"rail-label\">Categories</div>\n  <nav>\n    <button data-id=\"1\" class=\"open-menu active\"><span class=\"nav-index\">01</span><span class=\"nav-label\">Keybinds</span></button>\n    <button data-id=\"3\" class=\"open-menu\"><span class=\"nav-index\">02</span><span class=\"nav-label\">Visual</span></button>\n    <button data-id=\"2\" class=\"open-menu\"><span class=\"nav-index\">03</span><span class=\"nav-label\">Combat</span></button>\n    <button data-id=\"4\" class=\"open-menu\"><span class=\"nav-index\">04</span><span class=\"nav-label\">Misc</span></button>\n    <button data-id=\"7\" class=\"open-menu\"><span class=\"nav-index\">05</span><span class=\"nav-label\">Music</span></button>\n    <button data-id=\"5\" class=\"open-menu\"><span class=\"nav-index\">06</span><span class=\"nav-label\">Bots</span></button>\n  </nav>\n\n  <div class=\"rail-label\">In this category</div>\n  <div id=\"nav-outline\"></div>\n\n  <div class=\"rail-foot\">\n    <span id=\"ryn-version\">Ryn Type 2</span>\n    <svg id=\"close-button\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" title=\"Close menu\">\n      <line x1=\"5\" y1=\"5\" x2=\"19\" y2=\"19\" stroke-linecap=\"round\"/>\n      <line x1=\"19\" y1=\"5\" x2=\"5\" y2=\"19\" stroke-linecap=\"round\"/>\n    </svg>\n  </div>\n</div>";
+  const Navbar_default = "<div id=\"navbar-container\">\n  <div class=\"rail-brand\">\n    <span class=\"rail-mark\">RYN</span>\n    <span class=\"rail-sub\">Type 2</span>\n  </div>\n\n  <div id=\"ryn-search-wrap\">\n    <input id=\"ryn-search-input\" type=\"text\" placeholder=\"Search settings\" autocomplete=\"off\" spellcheck=\"false\">\n    <span id=\"ryn-search-clear\" title=\"Clear\">&#10005;</span>\n    <div id=\"ryn-search-dropdown\"></div>\n  </div>\n\n  <div class=\"rail-label\">Categories</div>\n  <nav>\n    <button data-id=\"1\" class=\"open-menu active\"><span class=\"nav-index\">01</span><span class=\"nav-label\">Keybinds</span></button>\n    <button data-id=\"3\" class=\"open-menu\"><span class=\"nav-index\">02</span><span class=\"nav-label\">Visual</span></button>\n    <button data-id=\"2\" class=\"open-menu\"><span class=\"nav-index\">03</span><span class=\"nav-label\">Combat</span></button>\n    <button data-id=\"8\" class=\"open-menu\"><span class=\"nav-index\">04</span><span class=\"nav-label\">Auto Heal</span></button>\n    <button data-id=\"4\" class=\"open-menu\"><span class=\"nav-index\">05</span><span class=\"nav-label\">Misc</span></button>\n    <button data-id=\"7\" class=\"open-menu\"><span class=\"nav-index\">06</span><span class=\"nav-label\">Music</span></button>\n    <button data-id=\"5\" class=\"open-menu\"><span class=\"nav-index\">07</span><span class=\"nav-label\">Bots</span></button>\n  </nav>\n\n  <div class=\"rail-label\">In this category</div>\n  <div id=\"nav-outline\"></div>\n\n  <div class=\"rail-foot\">\n    <span id=\"ryn-version\">Ryn Type 2</span>\n    <svg id=\"close-button\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" title=\"Close menu\">\n      <line x1=\"5\" y1=\"5\" x2=\"19\" y2=\"19\" stroke-linecap=\"round\"/>\n      <line x1=\"19\" y1=\"5\" x2=\"5\" y2=\"19\" stroke-linecap=\"round\"/>\n    </svg>\n  </div>\n</div>";
   const Devtool_default = "";
-  const Keybinds_default = "<div class=\"menu-page opened\" data-id=\"1\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Keybinds</h1>\n        <p class=\"page-description\">Click a key to start editing, then press the key or mouse button you want. Backspace clears a binding. A key used twice is marked as a conflict on both rows.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Items &amp; Weapons<span class=\"sec-sub\">Hotbar placement and the weapon slots.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Food</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_food\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Wall</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_wall\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spike\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Windmill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_windmill\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Farm</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_farm\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Trap</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_trap\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Turret</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_turret\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spawn</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spawn\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Client<span class=\"sec-sub\">Opening this menu and firing the instakill sequence.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Menu</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_toggleMenu\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Instakill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_instakill\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Quick Actions<span class=\"sec-sub\">One-press build patterns and on/off switches for the automations.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Quad Spikes</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_fourSpikes\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Quad Traps</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_fourTraps\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Boost Spike Rush</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_boostSpikes\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Automill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoMillKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Dash</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_dashMovementKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Auto Grind</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoGrindKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Autoplacer</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoplacerKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Controls<span class=\"sec-sub\">Everything that commands the bots you have connected.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spawn Bot</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spawnBot\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Kill All Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_killAllBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Hold Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_holdBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Release Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_releaseBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Bot Auto-Attack</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAutoAttack\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Auto Farm</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAutoFarm\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Repel Alts</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_repelAlts\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Bot Random Movement</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_scatterBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Avoid Shield Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAvoidShieldKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Volley Fire</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botVolleyKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Freeze Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_freezeBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Lock bot position</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_lockBotPosition\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n    <div class=\"section\">\n        <div class=\"section-title\">Possession<span class=\"sec-sub\">Which of your characters you are controlling. These three keys are taken before anything else sees them &mdash; the game maps the arrows to movement, so letting one through would walk the character you just left.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Next character</span>\n                    <span class=\"opt-desc\">Steps forward through you and every bot that is in the game.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessNext\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Previous character</span>\n                    <span class=\"opt-desc\">The same ring, backwards.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessPrev\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Back to your own character</span>\n                    <span class=\"opt-desc\">Jumps straight back to you from wherever you are.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessMain\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n</div>";
-  const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Combat</h1>\n        <p class=\"page-description\">Every automation the client runs during a fight, ordered by the moment it fires: the kill sequence first, then how it places, how it survives, and what it does with the rest of the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Kill Sequences<span class=\"sec-sub\">Timed weapon and hat chains that try to finish a target outright.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_toolSpearInsta\">Tool Spear Insta</label>\n                    <span class=\"opt-desc\">Tool hammer into polearm burst.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_toolSpearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeGearInsta\">Spike Gear Insta</label>\n                    <span class=\"opt-desc\">Spike placement combined with a gear swap on the same tick.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeGearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\n                    <span class=\"opt-desc\">Ranged finisher chaining musket and bow shots.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_musketBowInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Sync<span class=\"sec-sub\">Landing separate sources of damage on the same server tick.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\n                    <span class=\"opt-desc\">Lines up your hits with whatever else is about to damage the target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\n                    <span class=\"opt-desc\">Times your swing to a turret shot landing.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_velocityTick\">Velocity Tick</label>\n                    <span class=\"opt-desc\">Uses the target's movement to predict the tick worth hitting.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_velocityTick\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSync\">Spike sync</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSyncHammer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeSync2\">Spike Sync 2</label>\n                    <span class=\"opt-desc\">Runs with Autopush. While a shove is walking a trapped target onto a spike - the purple line - Spike KB is held, because its knockback moves them away from you, which is off the line the shove is walking them down. Then the tick they actually touch the spike, the swing goes out on that same tick: they are trapped, pinned against it and already taking its damage, so the hit lands with the spike's own. The turret shot follows on the next tick. Like Spike KB, but where Spike KB fires on a knockback that would put them in a spike, this waits until they are in it - and it needs the shove to have been live, so an enemy merely standing near a spike is still Spike KB's. Runs on this switch alone; Velocity Tick keeps its own conditions and turning it off does not affect this. Needs Autopush on, and a diamond polearm with the turret.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync2\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Placement<span class=\"sec-sub\">Where spikes and traps go, and how fast they get replaced.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacer\">Autoplacer</label>\n                    <span class=\"opt-desc\">Keeps spikes going down around you without holding the key.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoplacer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoplacer radius</span>\n                    <span class=\"opt-desc\">How far from you the autoplacer is allowed to build.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Placer scanners</span>\n                    <span class=\"opt-desc\">How many spots the autoplacer looks at once. The first one is aimed at the enemy; each of the others owns its own slice of the ring around you and never builds in another's, so the open ground on your other sides gets used instead of ignored. 1 is the enemy-facing scanner alone.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerScanners\" type=\"range\" step=\"1\" min=\"1\" max=\"6\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacerResolution\">Placer resolution</label>\n                    <span class=\"opt-desc\">How finely the autoplacer cuts the ring around you when it looks for ground. A spike on the ring blocks about 153 degrees of it, so what is left is a few arcs and the slots between builds are thin - finer steps find slots a coarser pass walks straight past. One step moves the landing point 13.8 units at 36, 6.9 at 72, 3.4 at 144 and 2.5 at 200, and the furthest a wanted direction can sit from a sample is half of that. 144 is the resolution this client shipped on and reproduces it exactly; 200 is the default. Nothing else changes between them - same validation, same collision solve, same scoring, same prediction, same scheduler. Legality is solved for the whole ring at once rather than asked one angle at a time, and the sin/cos table is built once for the whole session, so the finer settings cost no trigonometry and no allocation per tick. Preplace and replace draw candidates from this same table, so raising it makes the prediction finer as well as the placement. Used flat, every tick.</span>\n                </div>\n                <select id=\"_autoplacerResolution\" class=\"ryn-select\">\n                    <option value=\"36\">36 - coarse</option>\n                    <option value=\"72\">72 - balanced</option>\n                    <option value=\"144\">144 - original</option>\n                    <option value=\"200\">200 - default</option>\n                </select>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_prePlace\">Preplace</label>\n                    <span class=\"opt-desc\">Puts the next spike down before the target arrives at it.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_prePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spamPrePlace\">Spam Preplace</label>\n                    <span class=\"opt-desc\">Sends a preplace on its forecast rather than waiting for the break it is predicting, and lets one refused for being a tick early try the same slot again on the next tick instead of being locked out of it by its own send. This is what takes an enemy build's ground on the tick it falls: the placement is already at the server, instead of starting a round trip when the deletion packet arrives. Costs packets on the guesses that miss.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spamPrePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <span class=\"option-title\">Retrap Resend</span>\n                        <span class=\"opt-desc\">Extra sends of the same replacement while an enemy is breaking out of your trap, timed into the rest of the tick and offset for your ping. It starts early and gets louder: four swings out it is already holding the slot with one send, two swings out it spends half, and on the last tick all of them, swept back across the window from a ping-compensated anchor so the same claim exists at several moments rather than one. The trap they are standing in is also looked further ahead than any other build, so the replacement is booked - and the ground reserved - well before the break instead of arriving to contest it afterwards. It is the same claim sent again, not a second placement, so it takes no extra ground and files nothing; only the packets are new. Worth it here and nowhere else: a trapped enemy cannot walk away from the ground being fought over, so this is the one forecast their movement cannot spoil, and the trap they are breaking is the most valuable slot on the board. 0 turns it off. Needs Spam Preplace on.</span>\n                    </div>\n                    <label class=\"slider\">\n                        <span class=\"slider-value\"></span>\n                        <input id=\"_retrapResend\" type=\"range\" step=\"1\" min=\"0\" max=\"6\">\n                    </label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_replace\">Replace</label>\n                    <span class=\"opt-desc\">Rebuilds a broken spike the moment it goes down.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_replace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <span class=\"option-title\">Replace Burst</span>\n                        <span class=\"opt-desc\">How many builds one deletion may put down. A freed slot is ground, not a point, and one build is one thing to refuse - the enemy takes the slot beside it and the ground is theirs anyway. Several non-overlapping builds around the same opening cannot all be answered. This raises only the ceiling: the value floor, the reservation ledger, the per-item caps, the non-overlap rule and the packet budget still apply to every build in the burst, so an opening worth one build still gets one. Only a deletion plans this deep; an ordinary tick is unchanged.</span>\n                    </div>\n                    <label class=\"slider\">\n                        <span class=\"slider-value\"></span>\n                        <input id=\"_replaceBurst\" type=\"range\" step=\"1\" min=\"3\" max=\"6\">\n                    </label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\n                    <span class=\"opt-desc\">Builds to block an incoming placement against you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_placementDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapKB\">Trap KB</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapKB\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeKB\">Spike KB</label>\n                    <span class=\"opt-desc\">Swings the primary when the knockback would put them in one of your spikes, or when they are already standing in one. Katana or polearm.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeKB\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Healing, shielding and the hats that keep you alive.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\n                    <span class=\"opt-desc\">Predicts what can land this tick and eats before it does, not after.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoheal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_healPriority\">Heal Priority</label>\n                        <span class=\"opt-desc\">Decides which hat the heal happens behind, instead of only when to eat. On a tick the prediction says is lethal it forces soldier and eats behind it; when the count is already carrying shame and nothing lethal is coming it holds the food a tick or two so the server does not charge you for it. Off, the autoheal eats exactly as it did before.</span>\n                    </div>\n                    <label class=\"switch-checkbox\"><input id=\"_healPriority\" type=\"checkbox\"><span></span></label>\n                </div>\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_soldierEMP\">EMP Anti</label>\n                        <span class=\"opt-desc\">Wears the EMP helmet instead of soldier when the lethal half of the tick is turret fire. Turrets will not shoot someone wearing it, so it removes that damage rather than reducing it - but only that damage, which is why it is asked for only when every source that has hit you this tick is one it answers. It needs the helmet owned, soldier already on, and the tick to be survivable once the turret's 25 is taken out. Needs Heal Priority on.</span>\n                    </div>\n                    <label class=\"switch-checkbox\"><input id=\"_soldierEMP\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoShield\">Auto Shield</label>\n                    <span class=\"opt-desc\">Raises the shield against incoming melee.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_rangedShield\">Ranged Shield</label>\n                    <span class=\"opt-desc\">Also shields against projectiles.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_rangedShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_empDefense\">Emp Defense</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_empDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoemp\">Auto emp</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoemp\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_soldierDefault\">Soldier default</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_soldierDefault\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeSoldier\">Safe Soldier</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeSoldier\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeWalk\">Safe walk</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeWalk\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Anti Systems<span class=\"sec-sub\">Reactions to what other players and the world do to you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\n                    <span class=\"opt-desc\">Reacts to an enemy closing in on you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_antienemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antianimal\">Anti animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antianimal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antispike\">Anti spike</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antispike\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiSpikePush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiRetrap\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you wear, and when it changes.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\n                    <span class=\"opt-desc\">Swaps to the hat that suits the biome you are standing in.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_biomehats\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\n                    <span class=\"opt-desc\">Picks gear from the threat in front of you rather than a fixed set.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_adaptiveGearSwitching\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_tailPriority\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_cowboyWhenSafe\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\n                    <span class=\"opt-desc\">Pushes a target toward your own spikes.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto Push Range</span>\n                    <span class=\"opt-desc\">How close a target has to be before autopush engages.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_trapStandoff\">Trap Standoff</label>\n                    <span class=\"opt-desc\">Keeps you off an enemy held in your trap. Your body is the only thing that can push a trapped player out - a weapon hit cannot, because the trap zeroes their velocity, but walking into them moves their position directly. Blocks only the part of your movement that closes the gap, so you still circle and reposition normally. Auto Push does the opposite on purpose and takes priority when it is on.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_trapStandoff\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Trap Standoff Distance</span>\n                    <span class=\"opt-desc\">The closest you will get. The game starts pushing at 70, so 70 and up stops the push outright; under 70 you still overlap and still shove them, and the number only caps how deep the overlap gets. Holding a direction against the line orbits outward a little before turning back in, so you sit between this number and about 28 above it - and a melee swing reaches weapon range plus 63, which is 128 for the shortest primary in the game, so every weapon stays in reach across the whole slider.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_trapStandoffRange\" type=\"range\" step=\"1\" min=\"50\" max=\"90\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\n                    <span class=\"opt-desc\">Short burst movement instead of a steady walk.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_dashMovement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\n                    <span class=\"opt-desc\">Breaks the structures standing between you and a target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autobreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_breakPosition\">Break Position</label>\n                        <span class=\"opt-desc\">Which trap Autobreak takes. Inside: only the trap you are caught in. Outside: only traps you are not in. Spikes break the same either way.</span>\n                    </div>\n                    <select id=\"_breakPosition\" class=\"ryn-select\">\n                        <option value=\"inside\">Inside</option>\n                        <option value=\"outside\">Outside</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_automill\">Automill</label>\n                    <span class=\"opt-desc\">Leaves windmills behind you while you move.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_automill\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\n                    <span class=\"opt-desc\">Gathers resources on its own when nothing is threatening you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoGrind\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetPrimary\">Grind Until (primary)</label>\n                        <span class=\"opt-desc\">Which variant to take your primary weapon to. Grinding idles once both slots reach their target, and picks straight back up if you raise one.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetPrimary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                    </select>\n                </div>\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetSecondary\">Grind Until (secondary)</label>\n                        <span class=\"opt-desc\">The same for your secondary. Only the great hammer is ground here, so this does nothing while you carry anything else.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetSecondary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPlay\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_turretSteal\">Turret steal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSteal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapAnimal\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
-  const Visuals_default = "<div class=\"menu-page\" data-id=\"3\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Visual</h1>\n        <p class=\"page-description\">Everything the client draws over the game. Turn off what you do not read during a fight — the fewer overlays are on, the less there is between you and the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Names<span class=\"sec-sub\">How players are labelled on the field.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">My Name</span>\n                    <span class=\"opt-desc\">Draws your own nickname in a colour of your choosing.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_myNameColorValue\" type=\"color\" title=\"Select Color\">\n                    <label class=\"switch-checkbox\"><input id=\"_myNameColor\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Mark RYN Players</span>\n                    <span class=\"opt-desc\">Flags other players running this client.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_markRynPlayers\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Player ID</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_showPlayerID\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Player HUD<span class=\"sec-sub\">Readouts drawn on and around players.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Weapon Reload Ring</span>\n                    <span class=\"opt-desc\">Draws what is left of each weapon's cooldown as a white edge inside its own tile in the item bar.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_weaponReloadRing\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Render HP</span>\n                    <span class=\"opt-desc\">Draws a health value on players instead of a bar alone.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_renderHP\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Position Prediction</span>\n                    <span class=\"opt-desc\">Marks where a moving player is expected to be on the next tick.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_positionPrediction\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">My Turret Reload Bar</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_playerTurretReloadBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Display player angle</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_displayPlayerAngle\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">World<span class=\"sec-sub\">Tint and weather drawn over the map itself.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Purple Tint</span>\n                    <span class=\"opt-desc\">Recolours world objects so structures read faster.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_objectTint\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Tint Transparency</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_objectTintOpacity\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_weather\">Rain &amp; Snow</label>\n                    <span class=\"opt-desc\">Rain across the map, turning to snow inside the snow biome.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_weather\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Intensity</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_weatherAmount\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_deathCorpse\">Death Corpses</label>\n                    <span class=\"opt-desc\">Leaves a body where a player you killed died, wearing a halo and angel wings &mdash; or a cowboy hat and a devil tail if they were the one carrying the skull. It holds on the spot, then floats up and fades away. Local and visual only.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_deathCorpse\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Structures<span class=\"sec-sub\">Who owns a building, and how much of it is left.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Structure Readout (Mine/Clan)</span>\n                    <span class=\"opt-desc\">Owner name and a health bar over your own and your clan's structures, within 500 units.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_itemHealthBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Structure Readout (Enemy)</span>\n                    <span class=\"opt-desc\">The same over everything that is not yours.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_itemHealthBarEnemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Health Bar Colour</span>\n                    <span class=\"opt-desc\">The fill inside the bar, for every structure.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_itemHealthBarColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Structure Colours<span class=\"sec-sub\">Spikes and traps recoloured by who placed them.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_structureColors\">Structure Colours</label>\n                    <span class=\"opt-desc\">Tints every spike and trap by its owner, so an enemy build reads at a glance. Ownership is the client's own team detection. Purely visual.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_structureColors\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Colour Strength</span>\n                    <span class=\"opt-desc\">How much of the original sprite the tint covers.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_structureColorStrength\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Own Spike</span>\n                    <span class=\"opt-desc\">Spikes you placed.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_ownSpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Ally Spike</span>\n                    <span class=\"opt-desc\">Spikes placed by your clan.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_allySpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enemy Spike</span>\n                    <span class=\"opt-desc\">Everyone else's spikes.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_enemySpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Own Trap</span>\n                    <span class=\"opt-desc\">Traps you placed.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_ownTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Ally Trap</span>\n                    <span class=\"opt-desc\">Traps placed by your clan.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_allyTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enemy Trap</span>\n                    <span class=\"opt-desc\">Everyone else's traps.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_enemyTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Hitboxes<span class=\"sec-sub\">Debug outlines. Useful while learning a range, noisy otherwise.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Weapon hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_weaponHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Collision hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_collisionHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Placement hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_placementHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Possible placement</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_possiblePlacement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Interface<span class=\"sec-sub\">The game's own interface and how much it draws.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Hide game HUD</span>\n                    <span class=\"opt-desc\">Removes moomoo's own interface and leaves the map alone.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_hideHUD\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Melee Animation</span>\n                    <span class=\"opt-desc\">Grip-based swing, thrust and chop animations for melee weapons. Off restores moomoo's own spin. Shields, every bow and the musket are never touched either way.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_meleeAnimation\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_visualSmoothing\">Visual Smoothing</label>\n                    <span class=\"opt-desc\">Keeps motion even rather than dropping frames to keep up. Off lets Low Quality Mode skip every second frame when the rate collapses.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_visualSmoothing\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_renderOptimization\">Rendering Optimization</label>\n                    <span class=\"opt-desc\">Caches the canvas contexts and skips canvas state writes that would not change anything.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_renderOptimization\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_performanceOptimization\">Performance Optimization</label>\n                    <span class=\"opt-desc\">Skips per-object overlay work for overlays that are switched off. Never touches anything the modules act on.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_performanceOptimization\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Low Quality Mode</span>\n                    <span class=\"opt-desc\">Cuts rendering detail. Turn this on if the game drops frames.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_lowQuality\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
-  const Misc_default = "<div class=\"menu-page\" data-id=\"4\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Misc</h1>\n        <p class=\"page-description\">Everything around the fight: what happens on a kill, what gets typed into chat for you and for the bots, how this menu behaves, and the counters the client has kept since you installed it.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Match<span class=\"sec-sub\">What the client does when a round starts or ends.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Kill Message</span>\n                    <span class=\"opt-desc\">Sends this line in chat every time you get a kill.</span>\n                </div>\n                <div class=\"option-content\">\n                    <input id=\"_killMessageText\" class=\"input\" type=\"text\" maxlength=\"30\" placeholder=\"Message\">\n                    <label class=\"switch-checkbox\"><input id=\"_killMessage\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Provoke on Kill</span>\n                    <span class=\"opt-desc\">Reacts in chat when someone kills you instead.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_deathProvoke\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autospawn</span>\n                    <span class=\"opt-desc\">Respawns you as soon as the death screen appears.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autospawn\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoaccept</span>\n                    <span class=\"opt-desc\">Accepts incoming clan requests without asking.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoaccept\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Auto Chat<span class=\"sec-sub\">Lines you post on a timer. They cycle in the order listed.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enable</span>\n                    <span class=\"opt-desc\">Starts posting your messages while you are in game.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoChat\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Interval</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoChatInterval\" type=\"range\" step=\"1\" min=\"1\" max=\"60\" data-suffix=\"s\">\n                </label>\n            </div>\n            <div id=\"autoChatMsgList\"></div>\n            <div class=\"content-option centered\">\n                <button id=\"addAutoChatMsg\" class=\"option-button\">Add message</button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Auto Chat<span class=\"sec-sub\">The same thing, typed by every connected bot.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enable Player Chat</span>\n                    <span class=\"opt-desc\">Lets the bots post their own list of lines.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoBotChat\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div id=\"autoBotChatMsgList\"></div>\n            <div class=\"content-option centered\">\n                <button id=\"addAutoBotChatMsg\" class=\"option-button\">Add player message</button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Menu<span class=\"sec-sub\">How this interface itself behaves.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">See through the menu</span>\n                    <span class=\"opt-desc\">Lets the game show faintly behind this panel while it is open.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_menuTransparency\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Session<span class=\"sec-sub\">Counters kept by the client. They persist between games.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Total kills</span></div>\n                <span id=\"_totalKills\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Global kills with bots</span></div>\n                <span id=\"_globalKills\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Deaths</span></div>\n                <span id=\"_deaths\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Autosync</span></div>\n                <span id=\"_autoSyncTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike sync hammer</span></div>\n                <span id=\"_spikeSyncHammerTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike sync</span></div>\n                <span id=\"_spikeSyncTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Velocity tick</span></div>\n                <span id=\"_velocityTickTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Client</span></div>\n                <span id=\"author\" class=\"text-value\">Ryn Type 2</span>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Reset<span class=\"sec-sub\">Puts every setting on every page back to its shipped value.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Reset all settings</span>\n                    <span class=\"opt-desc\">Keybinds, combat, visual, misc and bot options all return to defaults. Your music library is not touched.</span>\n                </div>\n                <button id=\"resetSettings\" class=\"option-button red\">Reset settings</button>\n            </div>\n        </div>\n    </div>\n</div>";
+  const Keybinds_default = "<div class=\"menu-page opened\" data-id=\"1\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Keybinds</h1>\n        <p class=\"page-description\">Click a key to start editing, then press the key or mouse button you want. Backspace clears a binding. A key used twice is marked as a conflict on both rows.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Items &amp; Weapons<span class=\"sec-sub\">Hotbar placement and the weapon slots.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Food</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_food\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Wall</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_wall\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spike\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Windmill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_windmill\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Farm</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_farm\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Trap</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_trap\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Turret</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_turret\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spawn</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spawn\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Client<span class=\"sec-sub\">Opening this menu and firing the instakill sequence.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Menu</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_toggleMenu\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Instakill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_instakill\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Chat Log</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_chatLogKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Quick Actions<span class=\"sec-sub\">One-press build patterns and on/off switches for the automations.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Quad Spikes</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_fourSpikes\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Quad Traps</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_fourTraps\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Boost Spike Rush</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_boostSpikes\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Automill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoMillKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Dash</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_dashMovementKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Auto Grind</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoGrindKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Autoplacer</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoplacerKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Controls<span class=\"sec-sub\">Everything that commands the bots you have connected.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spawn Bot</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spawnBot\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Kill All Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_killAllBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Hold Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_holdBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Release Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_releaseBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Bot Auto-Attack</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAutoAttack\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Auto Farm</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAutoFarm\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Repel Alts</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_repelAlts\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Bot Random Movement</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_scatterBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Avoid Shield Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAvoidShieldKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Volley Fire</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botVolleyKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Freeze Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_freezeBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Lock bot position</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_lockBotPosition\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n    <div class=\"section\">\n        <div class=\"section-title\">Possession<span class=\"sec-sub\">Which of your characters you are controlling. These three keys are taken before anything else sees them &mdash; the game maps the arrows to movement, so letting one through would walk the character you just left.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Next character</span>\n                    <span class=\"opt-desc\">Steps forward through you and every bot that is in the game.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessNext\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Previous character</span>\n                    <span class=\"opt-desc\">The same ring, backwards.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessPrev\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Back to your own character</span>\n                    <span class=\"opt-desc\">Jumps straight back to you from wherever you are.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessMain\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n</div>";
+  const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Combat</h1>\n        <p class=\"page-description\">Every automation the client runs during a fight, ordered by the moment it fires: the kill sequence first, then how it places, how it survives, and what it does with the rest of the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Kill Sequences<span class=\"sec-sub\">Timed weapon and hat chains that try to finish a target outright.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_toolSpearInsta\">Tool Spear Insta</label>\n                    <span class=\"opt-desc\">Tool hammer into polearm burst.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_toolSpearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeGearInsta\">Spike Gear Insta</label>\n                    <span class=\"opt-desc\">Spike placement combined with a gear swap on the same tick.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeGearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\n                    <span class=\"opt-desc\">Ranged finisher chaining musket and bow shots.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_musketBowInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Sync<span class=\"sec-sub\">Landing separate sources of damage on the same server tick.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\n                    <span class=\"opt-desc\">Lines up your hits with whatever else is about to damage the target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\n                    <span class=\"opt-desc\">Times your swing to a turret shot landing.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_velocityTick\">Velocity Tick</label>\n                    <span class=\"opt-desc\">Uses the target's movement to predict the tick worth hitting.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_velocityTick\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSync\">Spike sync</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSyncHammer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeSync2\">Spike Sync 2</label>\n                    <span class=\"opt-desc\">Runs with Autopush. While a shove is walking a trapped target onto a spike - the purple line - Spike KB is held, because its knockback moves them away from you, which is off the line the shove is walking them down. Then the tick they actually touch the spike, the swing goes out on that same tick: they are trapped, pinned against it and already taking its damage, so the hit lands with the spike's own. The turret shot follows on the next tick. Like Spike KB, but where Spike KB fires on a knockback that would put them in a spike, this waits until they are in it - and it needs the shove to have been live, so an enemy merely standing near a spike is still Spike KB's. Runs on this switch alone; Velocity Tick keeps its own conditions and turning it off does not affect this. Needs Autopush on, and a diamond polearm with the turret.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync2\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Placement<span class=\"sec-sub\">Where spikes and traps go, and how fast they get replaced.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacer\">Autoplacer</label>\n                    <span class=\"opt-desc\">Keeps spikes going down around you without holding the key.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoplacer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoplacer radius</span>\n                    <span class=\"opt-desc\">How far from you the autoplacer is allowed to build.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Placer scanners</span>\n                    <span class=\"opt-desc\">How many spots the autoplacer looks at once. The first one is aimed at the enemy; each of the others owns its own slice of the ring around you and never builds in another's, so the open ground on your other sides gets used instead of ignored. 1 is the enemy-facing scanner alone.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerScanners\" type=\"range\" step=\"1\" min=\"1\" max=\"6\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacerResolution\">Placer resolution</label>\n                    <span class=\"opt-desc\">How finely the autoplacer cuts the ring around you when it looks for ground. A spike on the ring blocks about 153 degrees of it, so what is left is a few arcs and the slots between builds are thin - finer steps find slots a coarser pass walks straight past. One step moves the landing point 13.8 units at 36, 6.9 at 72, 3.4 at 144 and 2.5 at 200, and the furthest a wanted direction can sit from a sample is half of that. 144 is the resolution this client shipped on and reproduces it exactly; 200 is the default. Nothing else changes between them - same validation, same collision solve, same scoring, same prediction, same scheduler. Legality is solved for the whole ring at once rather than asked one angle at a time, and the sin/cos table is built once for the whole session, so the finer settings cost no trigonometry and no allocation per tick. Preplace and replace draw candidates from this same table, so raising it makes the prediction finer as well as the placement. Used flat, every tick.</span>\n                </div>\n                <select id=\"_autoplacerResolution\" class=\"ryn-select\">\n                    <option value=\"36\">36 - coarse</option>\n                    <option value=\"72\">72 - balanced</option>\n                    <option value=\"144\">144 - original</option>\n                    <option value=\"200\">200 - default</option>\n                </select>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_prePlace\">Preplace</label>\n                    <span class=\"opt-desc\">Puts the next spike down before the target arrives at it.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_prePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spamPrePlace\">Spam Preplace</label>\n                    <span class=\"opt-desc\">Sends a preplace on its forecast rather than waiting for the break it is predicting, and lets one refused for being a tick early try the same slot again on the next tick instead of being locked out of it by its own send. This is what takes an enemy build's ground on the tick it falls: the placement is already at the server, instead of starting a round trip when the deletion packet arrives. Costs packets on the guesses that miss.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spamPrePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <span class=\"option-title\">Retrap Resend</span>\n                        <span class=\"opt-desc\">Extra sends of the same replacement while an enemy is breaking out of your trap, timed into the rest of the tick and offset for your ping. It starts early and gets louder: four swings out it is already holding the slot with one send, two swings out it spends half, and on the last tick all of them, swept back across the window from a ping-compensated anchor so the same claim exists at several moments rather than one. The trap they are standing in is also looked further ahead than any other build, so the replacement is booked - and the ground reserved - well before the break instead of arriving to contest it afterwards. It is the same claim sent again, not a second placement, so it takes no extra ground and files nothing; only the packets are new. Worth it here and nowhere else: a trapped enemy cannot walk away from the ground being fought over, so this is the one forecast their movement cannot spoil, and the trap they are breaking is the most valuable slot on the board. 0 turns it off. Needs Spam Preplace on.</span>\n                    </div>\n                    <label class=\"slider\">\n                        <span class=\"slider-value\"></span>\n                        <input id=\"_retrapResend\" type=\"range\" step=\"1\" min=\"0\" max=\"6\">\n                    </label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_replace\">Replace</label>\n                    <span class=\"opt-desc\">Rebuilds a broken spike the moment it goes down.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_replace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <span class=\"option-title\">Replace Burst</span>\n                        <span class=\"opt-desc\">How many builds one deletion may put down. A freed slot is ground, not a point, and one build is one thing to refuse - the enemy takes the slot beside it and the ground is theirs anyway. Several non-overlapping builds around the same opening cannot all be answered. This raises only the ceiling: the value floor, the reservation ledger, the per-item caps, the non-overlap rule and the packet budget still apply to every build in the burst, so an opening worth one build still gets one. Only a deletion plans this deep; an ordinary tick is unchanged.</span>\n                    </div>\n                    <label class=\"slider\">\n                        <span class=\"slider-value\"></span>\n                        <input id=\"_replaceBurst\" type=\"range\" step=\"1\" min=\"3\" max=\"6\">\n                    </label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\n                    <span class=\"opt-desc\">Builds to block an incoming placement against you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_placementDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapKB\">Trap KB</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapKB\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeKB\">Spike KB</label>\n                    <span class=\"opt-desc\">Swings the primary when the knockback would put them in one of your spikes, or when they are already standing in one. Katana or polearm.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeKB\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Healing, shielding and the hats that keep you alive.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoShield\">Auto Shield</label>\n                    <span class=\"opt-desc\">Raises the shield against incoming melee.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_rangedShield\">Ranged Shield</label>\n                    <span class=\"opt-desc\">Also shields against projectiles.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_rangedShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_empDefense\">Emp Defense</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_empDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoemp\">Auto emp</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoemp\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_soldierDefault\">Soldier default</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_soldierDefault\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeSoldier\">Safe Soldier</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeSoldier\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeWalk\">Safe walk</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeWalk\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Anti Systems<span class=\"sec-sub\">Reactions to what other players and the world do to you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\n                    <span class=\"opt-desc\">Reacts to an enemy closing in on you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_antienemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antianimal\">Anti animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antianimal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antispike\">Anti spike</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antispike\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiSpikePush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiRetrap\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you wear, and when it changes.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\n                    <span class=\"opt-desc\">Swaps to the hat that suits the biome you are standing in.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_biomehats\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\n                    <span class=\"opt-desc\">Picks gear from the threat in front of you rather than a fixed set.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_adaptiveGearSwitching\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_tailPriority\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_cowboyWhenSafe\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\n                    <span class=\"opt-desc\">Pushes a target toward your own spikes.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto Push Range</span>\n                    <span class=\"opt-desc\">How close a target has to be before autopush engages.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_trapStandoff\">Trap Standoff</label>\n                    <span class=\"opt-desc\">Keeps you off an enemy held in your trap. Your body is the only thing that can push a trapped player out - a weapon hit cannot, because the trap zeroes their velocity, but walking into them moves their position directly. Blocks only the part of your movement that closes the gap, so you still circle and reposition normally. Auto Push does the opposite on purpose and takes priority when it is on.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_trapStandoff\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Trap Standoff Distance</span>\n                    <span class=\"opt-desc\">The closest you will get. The game starts pushing at 70, so 70 and up stops the push outright; under 70 you still overlap and still shove them, and the number only caps how deep the overlap gets. Holding a direction against the line orbits outward a little before turning back in, so you sit between this number and about 28 above it - and a melee swing reaches weapon range plus 63, which is 128 for the shortest primary in the game, so every weapon stays in reach across the whole slider.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_trapStandoffRange\" type=\"range\" step=\"1\" min=\"50\" max=\"90\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\n                    <span class=\"opt-desc\">Short burst movement instead of a steady walk.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_dashMovement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\n                    <span class=\"opt-desc\">Breaks the structures standing between you and a target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autobreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_breakPosition\">Break Position</label>\n                        <span class=\"opt-desc\">Which trap Autobreak takes. Inside: only the trap you are caught in. Outside: only traps you are not in. Spikes break the same either way.</span>\n                    </div>\n                    <select id=\"_breakPosition\" class=\"ryn-select\">\n                        <option value=\"inside\">Inside</option>\n                        <option value=\"outside\">Outside</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_automill\">Automill</label>\n                    <span class=\"opt-desc\">Leaves windmills behind you while you move.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_automill\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\n                    <span class=\"opt-desc\">Gathers resources on its own when nothing is threatening you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoGrind\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetPrimary\">Grind Until (primary)</label>\n                        <span class=\"opt-desc\">Which variant to take your primary weapon to. Grinding idles once both slots reach their target, and picks straight back up if you raise one.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetPrimary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                    </select>\n                </div>\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetSecondary\">Grind Until (secondary)</label>\n                        <span class=\"opt-desc\">The same for your secondary. Only the great hammer is ground here, so this does nothing while you carry anything else.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetSecondary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPlay\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_turretSteal\">Turret steal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSteal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapAnimal\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
+  // ==========================================================================
+  // Kill animation styles — the one list
+  //
+  // The menu's options, the saved setting's valid values and the renderer's
+  // dispatch all come off this table, in this order, so the three cannot
+  // disagree about what exists. Index is the identity: 0 is the animation this
+  // client already had, 1..KILL_STYLE_COUNT are the styles added beside it, and
+  // the last entry is Random, which is not an animation but a choice made at
+  // the moment of a kill.
+  //
+  // `life` is the whole of an animation's duration in milliseconds and the only
+  // per-style number kept here; 0 means "as long as the corpse", which is the
+  // one style whose timing is not this table's to set. Everything else about a
+  // style lives in its draw function next to the renderer.
+  // ==========================================================================
+  const KILL_STYLES = [
+    { id: "current",          label: "Current",           life: 0 },
+    { id: "bloodMark",        label: "Blood Mark",        life: 1500 },
+    { id: "skullReveal",      label: "Skull Reveal",      life: 1900 },
+    { id: "shatter",          label: "Shatter Kill",      life: 1650 },
+    { id: "teleport",         label: "Teleport Death",    life: 1400 },
+    { id: "masked",           label: "Masked Death",      life: 1850 },
+    { id: "shadow",           label: "Shadow Death",      life: 1750 },
+    { id: "angel",            label: "Angel Ascension",   life: 2400 },
+    { id: "eye",              label: "Eye of Death",      life: 1950 },
+    { id: "execution",        label: "Execution",         life: 1250 },
+    { id: "targetLock",       label: "Target Lock",       life: 1600 },
+    { id: "soul",             label: "Soul Extraction",   life: 2200 },
+    { id: "reverseExplosion", label: "Reverse Explosion", life: 1450 },
+    { id: "burnOut",          label: "Burn Out",          life: 2050 },
+    { id: "timeBreak",        label: "Time Break",        life: 1800 },
+    { id: "mirror",           label: "Mirror Death",      life: 1700 },
+    { id: "lightning",        label: "Lightning Mark",    life: 1350 },
+    { id: "web",              label: "Web / Thread",      life: 2000 },
+    { id: "triangle",         label: "Triangle Collapse", life: 1550 },
+    { id: "ink",              label: "Ink Death",         life: 2100 },
+    { id: "comet",            label: "Comet Death",       life: 1300 },
+    { id: "random",           label: "Random",            life: 0 }
+  ];
+  // Random draws from the styles between the two entries that are not styles.
+  const KILL_STYLE_RANDOM = KILL_STYLES.length - 1;
+  const KILL_STYLE_COUNT = KILL_STYLE_RANDOM - 1;
+  const KILL_STYLE_BY_ID = new Map(KILL_STYLES.map((style, index) => [ style.id, index ]));
+  const KILL_STYLE_OPTIONS = KILL_STYLES.map(style => `<option value="${style.id}">${style.label}</option>`).join("");
+
+  const Visuals_default = "<div class=\"menu-page\" data-id=\"3\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Visual</h1>\n        <p class=\"page-description\">Everything the client draws over the game. Turn off what you do not read during a fight — the fewer overlays are on, the less there is between you and the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Names<span class=\"sec-sub\">How players are labelled on the field.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">My Name</span>\n                    <span class=\"opt-desc\">Draws your own nickname in a colour of your choosing.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_myNameColorValue\" type=\"color\" title=\"Select Color\">\n                    <label class=\"switch-checkbox\"><input id=\"_myNameColor\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Mark RYN Players</span>\n                    <span class=\"opt-desc\">Flags other players running this client.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_markRynPlayers\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Player ID</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_showPlayerID\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Player HUD<span class=\"sec-sub\">Readouts drawn on and around players.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Weapon Reload Ring</span>\n                    <span class=\"opt-desc\">Draws what is left of each weapon's cooldown as a white edge inside its own tile in the item bar.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_weaponReloadRing\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Render HP</span>\n                    <span class=\"opt-desc\">Draws a health value on players instead of a bar alone.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_renderHP\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Position Prediction</span>\n                    <span class=\"opt-desc\">Marks where a moving player is expected to be on the next tick.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_positionPrediction\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">My Turret Reload Bar</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_playerTurretReloadBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Display player angle</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_displayPlayerAngle\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">World<span class=\"sec-sub\">Tint and weather drawn over the map itself.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Purple Tint</span>\n                    <span class=\"opt-desc\">Recolours world objects so structures read faster.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_objectTint\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Tint Transparency</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_objectTintOpacity\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_weather\">Rain &amp; Snow</label>\n                    <span class=\"opt-desc\">Rain across the map, turning to snow inside the snow biome.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_weather\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Intensity</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_weatherAmount\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_deathCorpse\">Death Corpses</label>\n                    <span class=\"opt-desc\">Leaves a body where a player you killed died, wearing a halo and angel wings &mdash; or a cowboy hat and a devil tail if they were the one carrying the skull. It holds on the spot, then floats up and fades away. Local and visual only.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_deathCorpse\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_killAnimation\">Kill Animation</label>\n                        <span class=\"opt-desc\">Which animation the body goes out on. The choice holds until you change it; Random draws a new one for every kill.</span>\n                    </div>\n                    <select id=\"_killAnimation\" class=\"ryn-select\">" + KILL_STYLE_OPTIONS + "</select>\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Structures<span class=\"sec-sub\">Who owns a building, and how much of it is left.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Structure Readout (Mine/Clan)</span>\n                    <span class=\"opt-desc\">Owner name and a health bar over your own and your clan's structures, within 500 units.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_itemHealthBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Structure Readout (Enemy)</span>\n                    <span class=\"opt-desc\">The same over everything that is not yours.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_itemHealthBarEnemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Health Bar Colour</span>\n                    <span class=\"opt-desc\">The fill inside the bar, for every structure.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_itemHealthBarColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Structure Colours<span class=\"sec-sub\">Spikes and traps recoloured by who placed them.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_structureColors\">Structure Colours</label>\n                    <span class=\"opt-desc\">Tints every spike and trap by its owner, so an enemy build reads at a glance. Ownership is the client's own team detection. Purely visual.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_structureColors\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Colour Strength</span>\n                    <span class=\"opt-desc\">How much of the original sprite the tint covers.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_structureColorStrength\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Own Spike</span>\n                    <span class=\"opt-desc\">Spikes you placed.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_ownSpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Ally Spike</span>\n                    <span class=\"opt-desc\">Spikes placed by your clan.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_allySpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enemy Spike</span>\n                    <span class=\"opt-desc\">Everyone else's spikes.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_enemySpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Own Trap</span>\n                    <span class=\"opt-desc\">Traps you placed.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_ownTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Ally Trap</span>\n                    <span class=\"opt-desc\">Traps placed by your clan.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_allyTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enemy Trap</span>\n                    <span class=\"opt-desc\">Everyone else's traps.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_enemyTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Hitboxes<span class=\"sec-sub\">Debug outlines. Useful while learning a range, noisy otherwise.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Weapon hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_weaponHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Collision hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_collisionHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Placement hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_placementHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Possible placement</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_possiblePlacement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Interface<span class=\"sec-sub\">The game's own interface and how much it draws.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Hide game HUD</span>\n                    <span class=\"opt-desc\">Removes moomoo's own interface and leaves the map alone.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_hideHUD\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Melee Animation</span>\n                    <span class=\"opt-desc\">Grip-based swing, thrust and chop animations for melee weapons. Off restores moomoo's own spin. Shields, every bow and the musket are never touched either way.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_meleeAnimation\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_visualSmoothing\">Visual Smoothing</label>\n                    <span class=\"opt-desc\">Keeps motion even rather than dropping frames to keep up. Off lets Low Quality Mode skip every second frame when the rate collapses.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_visualSmoothing\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_renderOptimization\">Rendering Optimization</label>\n                    <span class=\"opt-desc\">Caches the canvas contexts and skips canvas state writes that would not change anything.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_renderOptimization\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_performanceOptimization\">Performance Optimization</label>\n                    <span class=\"opt-desc\">Skips per-object overlay work for overlays that are switched off. Never touches anything the modules act on.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_performanceOptimization\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Low Quality Mode</span>\n                    <span class=\"opt-desc\">Cuts rendering detail. Turn this on if the game drops frames.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_lowQuality\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
+  const Misc_default = "<div class=\"menu-page\" data-id=\"4\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Misc</h1>\n        <p class=\"page-description\">Everything around the fight: what happens on a kill, what gets typed into chat for you and for the bots, how this menu behaves, and the counters the client has kept since you installed it.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Match<span class=\"sec-sub\">What the client does when a round starts or ends.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Kill Message</span>\n                    <span class=\"opt-desc\">Sends this line in chat every time you get a kill.</span>\n                </div>\n                <div class=\"option-content\">\n                    <input id=\"_killMessageText\" class=\"input\" type=\"text\" maxlength=\"30\" placeholder=\"Message\">\n                    <label class=\"switch-checkbox\"><input id=\"_killMessage\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Provoke on Kill</span>\n                    <span class=\"opt-desc\">Reacts in chat when someone kills you instead.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_deathProvoke\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autospawn</span>\n                    <span class=\"opt-desc\">Respawns you as soon as the death screen appears.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autospawn\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoaccept</span>\n                    <span class=\"opt-desc\">Accepts incoming clan requests without asking.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoaccept\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Auto Chat<span class=\"sec-sub\">Lines you post on a timer. They cycle in the order listed.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enable</span>\n                    <span class=\"opt-desc\">Starts posting your messages while you are in game.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoChat\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Interval</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoChatInterval\" type=\"range\" step=\"1\" min=\"1\" max=\"60\" data-suffix=\"s\">\n                </label>\n            </div>\n            <div id=\"autoChatMsgList\"></div>\n            <div class=\"content-option centered\">\n                <button id=\"addAutoChatMsg\" class=\"option-button\">Add message</button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Auto Chat<span class=\"sec-sub\">The same thing, typed by every connected bot.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enable Player Chat</span>\n                    <span class=\"opt-desc\">Lets the bots post their own list of lines.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoBotChat\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div id=\"autoBotChatMsgList\"></div>\n            <div class=\"content-option centered\">\n                <button id=\"addAutoBotChatMsg\" class=\"option-button\">Add player message</button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Chat Log<span class=\"sec-sub\">The log in the corner: what was said, who arrived, who left, who died, and who formed or joined a clan. Size, opacity, font, filters and mutes live behind the gear on the panel itself.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Show Chat Log</span>\n                    <span class=\"opt-desc\">Closing it only puts the panel away. It keeps recording, and everything from the last fifteen minutes is still there when you open it again.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_chatLogOpen\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot messages</span>\n                    <span class=\"opt-desc\">Whether chat from your own bots is listed. Off by default &mdash; forty bots fill a log quickly.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_chatLogBotMsg\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot events</span>\n                    <span class=\"opt-desc\">Whether your bots joining, leaving and dying is listed.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_chatLogBotEvents\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Lock position</span>\n                    <span class=\"opt-desc\">Stops the panel being dragged by accident. Resizing still works.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_chatLogLock\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Menu<span class=\"sec-sub\">How this interface itself behaves.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">See through the menu</span>\n                    <span class=\"opt-desc\">Lets the game show faintly behind this panel while it is open.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_menuTransparency\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Session<span class=\"sec-sub\">Counters kept by the client. They persist between games.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Total kills</span></div>\n                <span id=\"_totalKills\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Global kills with bots</span></div>\n                <span id=\"_globalKills\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Deaths</span></div>\n                <span id=\"_deaths\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Autosync</span></div>\n                <span id=\"_autoSyncTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike sync hammer</span></div>\n                <span id=\"_spikeSyncHammerTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike sync</span></div>\n                <span id=\"_spikeSyncTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Velocity tick</span></div>\n                <span id=\"_velocityTickTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Client</span></div>\n                <span id=\"author\" class=\"text-value\">Ryn Type 2</span>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Reset<span class=\"sec-sub\">Puts every setting on every page back to its shipped value.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Reset all settings</span>\n                    <span class=\"opt-desc\">Keybinds, combat, visual, misc and bot options all return to defaults. Your music library is not touched.</span>\n                </div>\n                <button id=\"resetSettings\" class=\"option-button red\">Reset settings</button>\n            </div>\n        </div>\n    </div>\n</div>";
   const Bots_default = "<div class=\"menu-page\" data-id=\"5\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Bots</h1>\n        <p class=\"page-description\">Connect alternate clients, name them, and decide how they follow, fight, build and farm. Everything below applies to every bot you have connected.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Fleet<span class=\"sec-sub\">Add a bot, give it a name, connect it. Connected bots appear underneath.</span></div>\n        <div class=\"section-content\">\n            <div id=\"bot-container\"></div>\n            <div id=\"dynamic-bot-list\"></div>\n            <div class=\"content-option stacked\" id=\"_botBulkRow\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Name every bot</span>\n                    <span class=\"opt-desc\">One name for the whole fleet. Every new row is pre-filled with it, so bots you add from here on join under it. <b>Apply to all</b> also gives it to the rows and bots you already have &mdash; a bot that is alive keeps the name it spawned with until it next respawns.</span>\n                </div>\n                <div class=\"inline\">\n                    <input id=\"_botBulkName\" class=\"input\" type=\"text\" maxlength=\"15\" placeholder=\"Enter name\" autocomplete=\"off\" spellcheck=\"false\">\n                    <button id=\"_botBulkNameApply\" class=\"option-button\">Apply to all</button>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Number the fleet</span>\n                    <span class=\"opt-desc\">Off, every bot joins under the name exactly as typed. On, each bot gets its slot number appended &mdash; base <b>555</b> becomes 5551, 5552, 5553 and so on. Applied when a bot spawns, so turning it off puts them back on their next respawn.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botNameNumbering\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">First number</span></div>\n                <div class=\"inline\"><input id=\"_botNameNumberStart\" class=\"input\" type=\"number\" min=\"0\" max=\"99\" step=\"1\" value=\"1\"></div>\n            </div>\n            <div class=\"content-option centered\">\n                <button id=\"add-bot-dynamic\" class=\"option-button primary tall\">Add bot</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Clan joins</span>\n                    <span class=\"opt-desc\">Restarts the join rotation for any bot that is still outside your clan. Bots already in it are skipped.</span>\n                </div>\n                <button id=\"_clanRecheck\" class=\"option-button\">Re-check clan joins</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto random bot names</span>\n                    <span class=\"opt-desc\">Pre-fills each new row with a random 1&ndash;7 character name.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoRandomBotNames\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bots own clan</span>\n                    <span class=\"opt-desc\">Each bot creates its own clan instead of joining yours.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botIndividualClans\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Behaviour<span class=\"sec-sub\">What the bots do while they are following you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Follow cursor</span>\n                    <span class=\"opt-desc\">Bots move toward where you are pointing rather than to you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_followCursor\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Stop movement radius</span>\n                    <span class=\"opt-desc\">How close a bot gets to its target point before it stops.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_movementRadius\" type=\"range\" step=\"25\" min=\"25\" max=\"250\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Auto Break</span>\n                    <span class=\"opt-desc\">Bots break structures standing in their way.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAutoBreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Ranged Kiting</span>\n                    <span class=\"opt-desc\">Bots holding a ranged weapon back off instead of closing.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botRangedKite\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Kite distance</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botKiteDistance\" type=\"range\" step=\"25\" min=\"150\" max=\"1200\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Volley Fire</span>\n                    <span class=\"opt-desc\">Bots fire in waves rather than all at once.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botVolley\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">First wave size</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botVolleyWave\" type=\"range\" step=\"1\" min=\"1\" max=\"20\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Avoid Shield Bots</span>\n                    <span class=\"opt-desc\">Bots steer away from a target that is holding a shield up.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAvoidShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Be Angel</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_botBeAngel\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Formation<span class=\"sec-sub\">The shape the fleet holds around you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Shape</span>\n                    <span class=\"opt-desc\">Pick a formation, and bind a key to any of them from inside the picker.</span>\n                </div>\n                <div id=\"_formationGrid\"></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Circle rotation</span>\n                    <span class=\"opt-desc\">Rotates the formation around you instead of holding it still.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_circleRotation\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Circle radius</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_circleRadius\" type=\"range\" step=\"25\" min=\"50\" max=\"600\">\n                </label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Loadout<span class=\"sec-sub\">What each bot carries. &ldquo;Copy from me&rdquo; mirrors your own weapon.</span></div>\n        <div class=\"section-content\">\n            <div class=\"stack\">\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Primary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-weapon-selector\">\n                        <div class=\"bot-weapon-btn\" data-wid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"0\" title=\"Tool Hammer\">Tool Hammer</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"1\" title=\"Hand Axe\">Hand Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"2\" title=\"Great Axe\">Great Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"3\" title=\"Short Sword\">Short Sword</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"4\" title=\"Katana\">Katana</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"5\" title=\"Polearm\">Polearm</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"6\" title=\"Bat\">Bat</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"7\" title=\"Daggers\">Daggers</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"8\" title=\"Stick\">Stick</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Secondary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-sec-weapon-selector\">\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"9\" title=\"Hunting Bow\">Hunting Bow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"10\" title=\"Great Hammer\">Great Hammer</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"11\" title=\"Wooden Shield\">Wooden Shield</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"12\" title=\"Crossbow\">Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"13\" title=\"Repeater Crossbow\">Repeater Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"14\" title=\"Mc Grabby\">Mc Grabby</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"15\" title=\"Musket\">Musket</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-sec-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Age 4 building</div>\n                    <div class=\"wpn-grid\" id=\"bot-age4-selector\">\n                        <div class=\"bot-weapon-btn\" data-age4id=\"0\" title=\"Trap\">Trap</div>\n                        <div class=\"bot-weapon-btn\" data-age4id=\"1\" title=\"Boost Pad\">Boost Pad</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-age4-label\">Trap (default)</span></div>\n                </div>\n            </div>\n\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Platform w/ Musket</span>\n                    <span class=\"opt-desc\">Bots carrying a musket build a platform to shoot from.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_platformMusket\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Auto Farm<span class=\"sec-sub\">Bots gather on their own and come back when they are done.</span></div>\n        <div class=\"section-content\">\n            <div class=\"stack\">\n                <div class=\"field\">\n                    <div class=\"field-head\">Farm mode</div>\n                    <div class=\"seg\">\n                        <button id=\"_farmModeSingle\" class=\"seg-btn\">Single</button>\n                        <button id=\"_farmModeNearest\" class=\"seg-btn\">Nearest</button>\n                    </div>\n                    <p class=\"field-note\">In <b>Single</b> mode every bot goes for one resource type. In <b>Nearest</b> mode each bot takes whatever is closest to it.</p>\n                </div>\n\n                <div class=\"field\" id=\"_farmTypeRow\">\n                    <div class=\"field-head\">Resource type</div>\n                    <div class=\"seg\">\n                        <button data-farm-type=\"0\" class=\"farm-type-btn\">Wood</button>\n                        <button data-farm-type=\"1\" class=\"farm-type-btn\">Food</button>\n                        <button data-farm-type=\"2\" class=\"farm-type-btn\">Stone</button>\n                        <button data-farm-type=\"3\" class=\"farm-type-btn\">Gold</button>\n                    </div>\n                    <input id=\"_botFarmType\" type=\"hidden\" value=\"0\">\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"field-head\">Limit</div>\n                    <div class=\"inline\">\n                        <input id=\"_botFarmLimit\" class=\"input\" type=\"number\" min=\"0\" max=\"9999\" step=\"50\" value=\"0\">\n                        <p class=\"field-note\" style=\"margin-top:0;\">Bots stop and return to you at this amount. <b>0</b> means no limit.</p>\n                    </div>\n                </div>\n            </div>\n        </div>\n    </div>\n    <div class=\"section\">\n        <div class=\"section-title\">Possession<span class=\"sec-sub\">Switch control into a bot and it becomes your character: its camera, its world, its HUD, its resources, its age, its inventory, its chat. Not a spectator view &mdash; you are that character until you switch back.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Who you are controlling</span>\n                    <span class=\"opt-desc\">Click a character to take it over. The game's own HUD, camera and minimap follow whoever is selected, and the rest of the fleet follows that character too.</span>\n                </div>\n                <div id=\"_possessList\"></div>\n            </div>\n        </div>\n    </div>\n\n</div>";
   const Music_default = "<div class=\"menu-page\" data-id=\"7\">\n<style>\n@keyframes ryn-eq{0%,100%{height:4px;}50%{height:16px;}}\n\n.rm-root{display:flex;flex-direction:column;max-width:1180px;margin:0 auto;}\n\n/* ---------- now playing ---------- */\n.rm-player{\n  display:grid;\n  grid-template-columns:auto minmax(0,1fr) auto;\n  grid-template-areas:\"art meta actions\" \"art transport transport\";\n  column-gap:26px;row-gap:22px;align-items:center;\n  padding:26px 0 30px;\n  border-bottom:1px solid var(--line);\n}\n.rm-art{\n  grid-area:art;\n  width:96px;height:96px;flex-shrink:0;\n  display:flex;align-items:flex-end;justify-content:center;gap:4px;\n  padding-bottom:22px;\n  border-radius:var(--r3);\n  background:linear-gradient(150deg,#221D33,#131320);\n  border:1px solid var(--line);\n  position:relative;\n  transition:border-color 260ms var(--ease);\n}\n.rm-art::after{\n  content:'\\266B';\n  position:absolute;inset:0;\n  display:flex;align-items:center;justify-content:center;\n  font-size:30px;color:var(--tx-4);\n  transition:opacity 220ms var(--ease);\n}\n.rm-art.playing{border-color:var(--sage-40);}\n.rm-art.playing::after{opacity:0;}\n.rm-eq{display:none;align-items:flex-end;gap:4px;height:18px;}\n.rm-art.playing .rm-eq{display:flex;}\n.rm-eq-bar{width:3px;border-radius:2px;background:var(--sage);animation:ryn-eq .95s ease-in-out infinite;}\n.rm-eq-bar:nth-child(2){animation-delay:.16s;}\n.rm-eq-bar:nth-child(3){animation-delay:.32s;}\n\n.rm-meta{grid-area:meta;min-width:0;}\n.rm-kicker{\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.24em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:9px;\n}\n.rm-title{\n  font-size:clamp(22px,2.1vw,29px);font-weight:800;line-height:1.12;\n  letter-spacing:-.028em;color:var(--tx-1);\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n}\n.rm-artist{\n  margin-top:7px;font-size:14px;font-weight:600;color:var(--tx-3);\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n}\n.rm-album-badge{\n  display:inline-block;margin-top:10px;\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--iris-hi);\n}\n.rm-album-badge:empty{display:none;}\n\n.rm-actions{grid-area:actions;display:flex;gap:8px;align-self:start;}\n.rm-like-btn,.rm-save-now-btn{\n  width:42px;height:42px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);border:1px solid var(--line);\n  font-size:16px;line-height:1;color:var(--tx-3);cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.rm-like-btn:hover,.rm-save-now-btn:hover{background:rgba(255,255,255,.08);color:var(--tx-1);border-color:var(--line-2);}\n.rm-like-btn.liked,.rm-like-btn.on{color:var(--rose);border-color:rgba(217,163,171,.4);background:var(--rose-12);}\n.rm-save-now-btn.on{color:var(--sky);border-color:var(--sky-45);background:var(--sky-12);}\n\n.rm-transport{grid-area:transport;display:flex;align-items:center;gap:24px;min-width:0;}\n.rm-ctrl{display:flex;align-items:center;gap:8px;flex-shrink:0;}\n.rm-btn{\n  width:38px;height:38px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r2);\n  background:transparent;border:1px solid transparent;\n  color:var(--tx-3);font-size:12.5px;cursor:pointer;\n  transition:background 150ms var(--ease),color 150ms var(--ease),border-color 150ms var(--ease);\n}\n.rm-btn:hover{background:rgba(255,255,255,.06);color:var(--tx-1);}\n.rm-btn.rm-on,.rm-btn.on{color:var(--sage);border-color:var(--sage-40);background:var(--sage-14);}\n.rm-play-btn{\n  width:52px;height:52px;flex-shrink:0;\n  border-radius:16px;\n  background:var(--tx-1);border:none;color:#0A0A0D;\n  font-size:15.5px;\n  transition:transform 150ms var(--ease),background 150ms var(--ease);\n}\n.rm-play-btn:hover{background:#FFFFFF;transform:scale(1.04);}\n.rm-play-btn:active{transform:scale(.97);}\n\n.rm-prog-wrap{flex:1;min-width:0;display:flex;align-items:center;gap:14px;}\n.rm-prog-rail{\n  flex:1;min-width:0;height:5px;border-radius:999px;cursor:pointer;\n  background:rgba(255,255,255,.08);position:relative;\n}\n.rm-prog-fill{\n  height:100%;border-radius:999px;width:0;\n  background:var(--sky);position:relative;\n  transition:width 120ms linear;\n}\n.rm-prog-fill::after{\n  content:'';position:absolute;right:-5px;top:50%;\n  width:11px;height:11px;border-radius:50%;background:#EEF4FA;\n  transform:translateY(-50%) scale(0);\n  transition:transform 150ms var(--ease);\n  box-shadow:0 1px 4px rgba(0,0,0,.6);\n}\n.rm-prog-wrap:hover .rm-prog-fill::after{transform:translateY(-50%) scale(1);}\n.rm-time{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);flex-shrink:0;\n}\n.rm-vol{display:flex;align-items:center;gap:10px;flex-shrink:0;}\n.rm-vol-icon{font-size:13px;color:var(--tx-4);}\n#music-volume{\n  -webkit-appearance:none;appearance:none;\n  width:110px;height:18px;background:transparent;cursor:pointer;\n}\n#music-volume::-webkit-slider-runnable-track{height:4px;border-radius:999px;background:rgba(255,255,255,.09);}\n#music-volume::-webkit-slider-thumb{\n  -webkit-appearance:none;width:12px;height:12px;margin-top:-4px;\n  border-radius:50%;background:#EEF4FA;border:1px solid rgba(0,0,0,.35);\n  transition:transform 130ms var(--ease);\n}\n#music-volume:hover::-webkit-slider-thumb{transform:scale(1.15);}\n.rm-vol-val{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);min-width:34px;text-align:right;\n}\n\n/* ---------- sections ---------- */\n.rm-sec{border-bottom:1px solid var(--line);}\n.rm-sec-head{\n  display:flex;align-items:center;gap:12px;\n  padding:22px 2px;cursor:pointer;user-select:none;\n}\n.rm-sec-dot{\n  width:5px;height:5px;border-radius:50%;flex-shrink:0;\n  background:var(--tx-4);transition:background 200ms var(--ease);\n}\n.rm-sec.open .rm-sec-dot{background:var(--iris-hi);}\n.rm-sec-title{\n  flex:1;font-family:var(--mono);font-size:11.5px;font-weight:700;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-2);\n}\n.rm-sec.open .rm-sec-title{color:var(--iris-hi);}\n.rm-sec-arrow{font-size:9px;color:var(--tx-4);transition:transform 200ms var(--ease);}\n.rm-sec.open .rm-sec-arrow{transform:rotate(180deg);}\n.rm-sec-body{display:none;flex-direction:column;gap:14px;padding:0 2px 26px;}\n.rm-sec.open .rm-sec-body{display:flex;animation:soft-in 180ms var(--ease);}\n\n/* ---------- library ---------- */\n.rm-filter-bar{display:flex;gap:7px;flex-wrap:wrap;}\n.rm-filter-btn{\n  height:34px;padding:0 16px;border-radius:999px;\n  background:rgba(255,255,255,.04);border:1px solid var(--line);\n  font-size:12.5px;font-weight:700;color:var(--tx-3);cursor:pointer;\n  transition:background 150ms var(--ease),color 150ms var(--ease),border-color 150ms var(--ease);\n}\n.rm-filter-btn:hover{background:rgba(255,255,255,.08);color:var(--tx-1);}\n.rm-filter-btn.active{background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;}\n\n#song-list{display:flex;flex-direction:column;}\n.rm-song-row{\n  display:flex;align-items:center;gap:15px;\n  padding:12px 13px;border-radius:var(--r2);cursor:pointer;\n  position:relative;\n  transition:background 140ms var(--ease);\n}\n.rm-song-row:hover{background:rgba(255,255,255,.035);}\n.rm-song-row.active{background:var(--sage-14);}\n.rm-song-row.active::before{\n  content:'';position:absolute;left:0;top:10px;bottom:10px;\n  width:2px;border-radius:0 2px 2px 0;background:var(--sage);\n}\n.rm-snum{\n  width:23px;flex-shrink:0;text-align:center;\n  font-family:var(--mono);font-size:12.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);\n}\n.rm-song-row.active .rm-snum{color:var(--sage);}\n.rm-stitle{\n  flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n}\n.rm-sartist{\n  flex-shrink:1;min-width:0;max-width:30%;\n  font-size:12.5px;font-weight:500;color:var(--tx-4);\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n}\n.rm-s-icons{display:flex;gap:4px;flex-shrink:0;opacity:0;transition:opacity 150ms var(--ease);}\n.rm-song-row:hover .rm-s-icons,.rm-song-row.active .rm-s-icons{opacity:1;}\n.rm-s-like,.rm-s-save,.rm-sdel{\n  width:30px;height:30px;flex-shrink:0;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r1);font-size:12.5px;line-height:1;\n  color:var(--tx-4);cursor:pointer;\n  transition:background 140ms var(--ease),color 140ms var(--ease);\n}\n.rm-s-like:hover,.rm-sdel:hover{background:var(--rose-12);color:var(--rose);}\n.rm-s-save:hover{background:var(--sky-12);color:var(--sky);}\n.rm-s-like.on{color:var(--rose);}\n.rm-s-save.on{color:var(--sky);}\n.rm-song-row:not(:hover) .rm-s-icons:has(.on){opacity:1;}\n.rm-empty{\n  padding:26px 0;text-align:center;\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n\n/* ---------- albums ---------- */\n.rm-album-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}\n.rm-album-card{\n  position:relative;padding:14px;border-radius:var(--r3);cursor:pointer;\n  background:rgba(255,255,255,.03);border:1px solid var(--line);\n  transition:background 160ms var(--ease),border-color 160ms var(--ease),transform 160ms var(--ease);\n}\n.rm-album-card:hover{background:rgba(255,255,255,.06);border-color:var(--line-2);transform:translateY(-2px);}\n.rm-album-card.active{background:var(--iris-12);border-color:var(--iris-45);}\n.rm-album-icon{\n  display:flex;align-items:center;justify-content:center;\n  width:100%;aspect-ratio:1.6;border-radius:var(--r2);margin-bottom:11px;\n  font-size:22px;\n  background:linear-gradient(150deg,#221D33,#131320);\n}\n.rm-album-name{font-size:13.5px;font-weight:700;color:var(--tx-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}\n.rm-album-count{margin-top:3px;font-size:11.5px;font-weight:500;color:var(--tx-4);}\n.rm-album-del{\n  position:absolute;top:8px;right:8px;\n  width:22px;height:22px;border-radius:var(--r1);\n  display:flex;align-items:center;justify-content:center;\n  background:rgba(0,0,0,.55);color:var(--tx-3);\n  font-size:10px;cursor:pointer;opacity:0;\n  transition:opacity 150ms var(--ease),color 150ms var(--ease);\n}\n.rm-album-card:hover .rm-album-del{opacity:1;}\n.rm-album-del:hover{color:var(--rose);}\n\n/* ---------- forms ---------- */\n.rm-form{display:flex;flex-direction:column;gap:9px;max-width:620px;}\n.rm-inp{\n  width:100%;height:42px;padding:0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);border:1px solid var(--line-2);\n  color:var(--tx-1);font-size:13.5px;font-weight:600;\n  outline:none;\n  transition:border-color 150ms var(--ease),background 150ms var(--ease);\n}\n.rm-inp::placeholder{color:var(--tx-4);font-weight:500;}\n.rm-inp:focus{border-color:var(--sky-45);background:var(--sky-12);}\ninput[type=\"file\"].rm-inp{padding:10px 12px;height:auto;font-size:12.5px;font-weight:500;cursor:pointer;}\n.rm-lrc{\n  padding:14px;border-radius:var(--r3);\n  background:rgba(255,255,255,.022);border:1px solid var(--line);\n}\n.rm-lrc-head{\n  display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n#lrc-status{font-family:var(--mono);font-size:11.5px;letter-spacing:0;text-transform:none;color:var(--sky);}\ntextarea.rm-inp{\n  height:98px;padding:11px 13px;resize:vertical;\n  font-family:var(--mono);font-size:12.5px;font-weight:500;line-height:1.6;\n}\n.rm-check{\n  display:flex;align-items:center;gap:9px;margin-top:11px;\n  font-size:12.5px;font-weight:600;color:var(--tx-3);cursor:pointer;\n}\n.rm-check input{accent-color:#A6D7B2;width:15px;height:15px;cursor:pointer;}\n.rm-row{display:flex;gap:9px;}\n\n/* ---------- sync ---------- */\n.rm-sync-row{\n  display:flex;align-items:center;justify-content:space-between;gap:16px;\n  padding:12px 14px;border-radius:var(--r2);\n  transition:background 140ms var(--ease);\n}\n.rm-sync-row:hover{background:rgba(255,255,255,.028);}\n.rm-sync-label{flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);}\n.rm-sync-note{padding:0 14px 8px;font-size:12.5px;font-weight:500;line-height:1.5;color:var(--tx-4);}\n.rm-badge{\n  display:inline-block;margin-left:9px;padding:2px 8px;border-radius:999px;\n  background:var(--iris-12);color:var(--iris-hi);\n  font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;\n  vertical-align:middle;\n}\n.rm-divider{height:1px;background:var(--line);margin:6px 0;}\n.rm-status{\n  font-family:var(--mono);font-size:11.5px;font-weight:500;\n  color:var(--tx-4);min-height:16px;\n}\n#bm-dbg-box{\n  margin:0;padding:11px 13px;border-radius:var(--r2);\n  background:rgba(0,0,0,.4);border:1px solid var(--line);\n  font-family:var(--mono);font-size:11.5px;color:var(--tx-3);\n  white-space:pre-wrap;max-height:150px;overflow-y:auto;\n}\n\n/* ---------- toast + guide ---------- */\n.rm-toast{\n  display:none;position:fixed;left:50%;bottom:28px;\n  transform:translateX(-50%);\n  padding:11px 20px;border-radius:999px;z-index:99999;\n  background:var(--tx-1);color:#0A0A0D;\n  font-size:12.5px;font-weight:700;\n  box-shadow:0 16px 40px -12px rgba(0,0,0,.8);\n}\n.rm-guide{\n  padding:18px 20px;margin-bottom:4px;\n  border-radius:var(--r3);\n  background:rgba(255,255,255,.022);border:1px solid var(--line);\n}\n.rm-guide summary{\n  cursor:pointer;list-style:none;\n  font-size:13.5px;font-weight:700;color:var(--tx-2);\n  display:flex;align-items:center;gap:10px;\n}\n.rm-guide summary::-webkit-details-marker{display:none;}\n.rm-guide summary::before{\n  content:'?';flex-shrink:0;width:20px;height:20px;border-radius:50%;\n  background:var(--iris-12);color:var(--iris-hi);\n  font-family:var(--mono);font-size:11px;font-weight:700;\n  display:grid;place-items:center;\n}\n.rm-guide[open] summary{margin-bottom:14px;color:var(--tx-1);}\n.rm-guide ol{margin:0;padding-left:20px;color:var(--tx-3);font-size:12.5px;line-height:2;}\n.rm-guide code{\n  background:rgba(255,255,255,.06);color:var(--sky);\n  padding:2px 7px;border-radius:5px;font-family:var(--mono);font-size:11.5px;\n}\n.rm-guide a{color:var(--sky);border-bottom:1px solid rgba(155,197,232,.35);}\n.rm-guide a:hover{color:var(--tx-1);border-bottom-color:var(--tx-1);}\n.rm-guide-note{margin-top:14px;color:var(--tx-4);font-size:11.5px;line-height:1.75;}\n</style>\n\n<div id=\"rm-toast\" class=\"rm-toast\"></div>\n\n<div class=\"page-head\">\n    <h1 class=\"page-title\">Music</h1>\n    <p class=\"page-description\">A local library that plays inside the client and can type synced lyrics into chat for you, for your bots, or for both at once.</p>\n</div>\n\n<div class=\"rm-root\">\n\n  <div class=\"rm-player\">\n    <div class=\"rm-art\" id=\"rm-art\">\n      <div class=\"rm-eq\"><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div></div>\n    </div>\n    <div class=\"rm-meta\">\n      <div class=\"rm-kicker\">Now playing</div>\n      <div id=\"music-title\" class=\"rm-title\">No song selected</div>\n      <div id=\"music-artist\" class=\"rm-artist\">--</div>\n      <div id=\"music-album-badge\" class=\"rm-album-badge\"></div>\n    </div>\n    <div class=\"rm-actions\">\n      <button id=\"rm-like-now\" class=\"rm-like-btn\" title=\"Like\">&#9825;</button>\n      <button id=\"rm-save-now\" class=\"rm-save-now-btn\" title=\"Save\">&#9733;</button>\n    </div>\n    <div class=\"rm-transport\">\n      <div class=\"rm-ctrl\">\n        <button id=\"music-prev\" class=\"rm-btn\" title=\"Previous\">&#9664;&#9664;</button>\n        <button id=\"music-play\" class=\"rm-btn rm-play-btn\" title=\"Play / pause\">&#9654;</button>\n        <button id=\"music-next\" class=\"rm-btn\" title=\"Next\">&#9654;&#9654;</button>\n        <button id=\"music-loop\" class=\"rm-btn\" title=\"Loop\">&#8635;</button>\n        <button id=\"music-shuffle\" class=\"rm-btn\" title=\"Shuffle\" style=\"font-size:10px;letter-spacing:.08em;font-weight:700;\">SHF</button>\n      </div>\n      <div class=\"rm-prog-wrap\">\n        <span id=\"music-time-current\" class=\"rm-time\">0:00</span>\n        <div id=\"music-progress-bar\" class=\"rm-prog-rail\"><div id=\"music-progress-fill\" class=\"rm-prog-fill\"></div></div>\n        <span id=\"music-time-total\" class=\"rm-time\">0:00</span>\n      </div>\n      <div class=\"rm-vol\">\n        <span class=\"rm-vol-icon\">&#9834;</span>\n        <input id=\"music-volume\" type=\"range\" min=\"0\" max=\"100\" value=\"70\">\n        <span id=\"music-volume-label\" class=\"rm-vol-val\">70%</span>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec open\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Library</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div id=\"rm-filter-bar\" class=\"rm-filter-bar\">\n        <button class=\"rm-filter-btn active\" data-filter=\"\">All songs</button>\n        <button class=\"rm-filter-btn\" data-filter=\"__liked\">&#9829; Liked</button>\n      </div>\n      <div id=\"song-list\"></div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec open\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Albums</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div id=\"rm-album-grid\" class=\"rm-album-grid\"></div>\n      <div class=\"rm-row\" style=\"max-width:480px;\">\n        <input id=\"album-name-input\" class=\"rm-inp\" type=\"text\" placeholder=\"New album name\" maxlength=\"30\">\n        <button id=\"add-album\" class=\"option-button\">Add</button>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Add song</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <details class=\"rm-guide\">\n        <summary>How to add a song with its lyrics</summary>\n        <ol>\n          <li>Find the song on <a href=\"https://www.youtube.com/\" target=\"_blank\" rel=\"noreferrer\">youtube.com</a> and copy its link.</li>\n          <li>Turn the link into a file on <a href=\"https://ytmp3.gl/\" target=\"_blank\" rel=\"noreferrer\">ytmp3.gl</a> and download the <code>.mp3</code>.</li>\n          <li>Search the same song on <a href=\"https://lrclib.net/\" target=\"_blank\" rel=\"noreferrer\">lrclib.net</a> and download the <b>synced</b> lyrics as <code>.lrc</code>.</li>\n          <li>Fill in the <b>Title</b> below and pick the <code>.mp3</code> in the file box, or paste a direct link in <b>URL</b>.</li>\n          <li>In the <b>LRC sync</b> box, pick the <code>.lrc</code> file &mdash; or paste its lines into the text area.</li>\n          <li>Press <b>Add song</b>. It shows up in the library with its lyrics attached.</li>\n        </ol>\n        <div class=\"rm-guide-note\">The <code>.lrc</code> has to be the synced kind &mdash; the one whose lines start with a timestamp like <code>[01:23.45]</code>. Plain lyrics still show up, but they will not follow the song. If the words drift, an <code>.lrc</code> from a different release of the track is usually the reason.</div>\n      </details>\n      <div class=\"rm-form\">\n        <input id=\"song-title-input\" class=\"rm-inp\" type=\"text\" placeholder=\"Title *\" maxlength=\"50\">\n        <input id=\"song-artist-input\" class=\"rm-inp\" type=\"text\" placeholder=\"Artist\" maxlength=\"30\">\n        <input id=\"song-url-input\" class=\"rm-inp\" type=\"text\" placeholder=\"URL (.mp3  .ogg  .wav)\">\n        <input id=\"song-file-input\" class=\"rm-inp\" type=\"file\" accept=\".mp3,.ogg,.wav,.flac,.aac,.m4a\">\n        <select id=\"song-album-select\" class=\"rm-inp ryn-select\"><option value=\"\">No album</option></select>\n        <div class=\"rm-lrc\">\n          <div class=\"rm-lrc-head\"><span>LRC sync</span><span id=\"lrc-status\"></span></div>\n          <input id=\"lrc-file-input\" class=\"rm-inp\" type=\"file\" accept=\".lrc,.txt\" style=\"margin-bottom:9px;\">\n          <textarea id=\"song-lyrics-input\" class=\"rm-inp\" placeholder=\"[0:15] Line 1&#10;[0:30] Line 2\"></textarea>\n          <label class=\"rm-check\"><input id=\"song-autosync\" type=\"checkbox\"> Auto-play and sync when added</label>\n        </div>\n        <div class=\"rm-row\">\n          <button id=\"add-song\" class=\"option-button primary wide\">Add song</button>\n          <button id=\"save-song-btn\" class=\"option-button\">Save lyrics</button>\n        </div>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Chat sync</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Enable chat sync</span><label class=\"switch-checkbox\"><input id=\"music-chat-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Mixed sync<span class=\"rm-badge\">Me + bots</span></span><label class=\"switch-checkbox\"><input id=\"music-mixed-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">You: line &#8594; bots: line &#8594; you &hellip;</div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Bots only sync<span class=\"rm-badge\">Bots</span></span><label class=\"switch-checkbox\"><input id=\"music-bots-only-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">Bot 1: line 1 &bull; bot 2: line 2 &bull; bot 3: line 3 &hellip;</div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Unified sync<span class=\"rm-badge\">All</span></span><label class=\"switch-checkbox\"><input id=\"music-unified-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">You and every bot post the same line at the same moment.</div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Auto delay<span id=\"bm-auto-delay-badge\" class=\"rm-badge\">off</span></span><label class=\"switch-checkbox\"><input id=\"music-auto-delay\" type=\"checkbox\" checked><span></span></label></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Sync bot<span id=\"bm-sync-bot-badge\" class=\"rm-badge\">off</span></span><button id=\"music-sync-bot-btn\" class=\"option-button\">OFF</button></div>\n      <div id=\"bm-manual-delay-row\" class=\"rm-sync-row\" style=\"display:none;\"><span class=\"rm-sync-label\">Delay</span><label class=\"slider\"><span class=\"slider-value\">0ms</span><input id=\"music-sync-delay\" type=\"range\" min=\"-3000\" max=\"3000\" step=\"50\" value=\"0\"></label></div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-row\" style=\"align-items:center;\">\n        <button id=\"bm-test-chat\" class=\"option-button\">Test chat</button>\n        <span id=\"bm-test-chat-status\" class=\"rm-status\" style=\"align-self:center;\"></span>\n      </div>\n      <button id=\"bm-send-all-lyrics\" class=\"option-button wide\">&#9836; Send All Lyrics: OFF</button>\n      <div id=\"bm-send-lyrics-status\" class=\"rm-status\" style=\"text-align:center;\"></div>\n      <div id=\"bm-dbg-wrap\" style=\"display:none;\"><pre id=\"bm-dbg-box\"></pre></div>\n      <button id=\"bm-dbg-toggle\" class=\"option-button wide\">Show Debug Log</button>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Backup &amp; restore</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <p class=\"rm-sync-note\" style=\"padding-left:0;\">Export the whole library to a JSON file and bring it back on another machine.</p>\n      <div class=\"rm-row\" style=\"max-width:420px;\">\n        <button id=\"music-export-btn\" class=\"option-button wide\">Export</button>\n        <button id=\"music-import-btn\" class=\"option-button wide\">Import</button>\n        <input id=\"music-import-file\" type=\"file\" accept=\".json\" style=\"display:none;\">\n      </div>\n      <div id=\"music-backup-status\" class=\"rm-status\"></div>\n    </div>\n  </div>\n\n</div>\n</div>";
+  const AutoHealPage_default = "<div class=\"menu-page\" data-id=\"8\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Auto Heal</h1>\n        <p class=\"page-description\">When food goes out, how much of it, and what the client wears while the bar comes back. The survival engine underneath reads every spike, swing, shot, turret and poison tick aimed at you and puts a number on it; this page decides what to do with that number.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Engine<span class=\"sec-sub\">The survival scan itself. With this off nothing else on this page runs.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\n                    <span class=\"opt-desc\">The survival engine: the damage scan, the five predictions that feed it, the soldier and bull rules, and the heal itself. Off means no automatic eating of any kind and no survival hat swaps.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoheal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoHeal\">Ryn 2 Logic</label>\n                    <span class=\"opt-desc\">Which decision takes the heal. On, it is the Ryn Type 2 one: reactive to damage that just landed, predictive against damage that has not, safe-first around spikes, throttled to a food budget per tick, and aware of healing pads. Off, the engine falls back to the original single-line gate, which heals to full whenever a whole server tick has passed since the last hit or the predicted damage already exceeds your health. Everything else on this page only applies while this is on.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoHeal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoHealMode\">Mode</label>\n                        <span class=\"opt-desc\">How much shame the heal is willing to spend. Eating within 120ms of being hit costs a shame point; eight of them locks you out of food for thirty seconds. Safe never eats after an early apple at all and waits out a hundred-damage read before feeding. Ryn 2 stops one point short of the lockout, which is the same line the original logic draws. Aggro spends points freely and stops only at the lockout itself, and it is the only mode that eats through a spike when the bar is critical.</span>\n                    </div>\n                    <select id=\"_autoHealMode\" class=\"ryn-select\">\n                        <option value=\"safe\">Safe</option>\n                        <option value=\"ryn2\">Ryn 2</option>\n                        <option value=\"aggro\">Aggro</option>\n                    </select>\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Decision<span class=\"sec-sub\">What counts as a reason to eat.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Reactive Threshold</span>\n                    <span class=\"opt-desc\">A health floor that is a reason to eat on its own, whether or not anything is predicted and whether or not anything just landed. 0 turns it off and leaves the decision to the damage read, which is the default: the engine already eats on any damage taken in the last two ticks, on a predicted hit larger than your remaining health, and on anything at or under 25. Raise it to keep the bar topped up between fights at the cost of food and, near the top of the range, shame.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoHealThreshold\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\" hp\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Predict Weight</span>\n                    <span class=\"opt-desc\">How much the predicted damage is trusted. The engine adds up every spike you are standing in, every swing in range with its cooldown up, every turret that can reach you, every knockback that would put you in something and the next poison tick, then caps the total at 140. That number is multiplied by this before it is compared to your health and before it is added to the amount of food to send. Under 1 waits for more of the damage to actually land; over 1 eats on the forecast. 0 leaves only the reactive, critical and threshold reasons.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoHealPredictWeight\" type=\"range\" step=\"0.1\" min=\"0\" max=\"2\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Max Food / Tick</span>\n                    <span class=\"opt-desc\">The ceiling on one chain. The engine works out how many it needs from the gap in your bar plus the weighted forecast, then sends the smaller of that and this. Each one is four packets and the chain never spends the tick's whole allowance, so a high number costs nothing on a tick that does not need it. Low numbers spread a big deficit across several ticks, which is slower but quieter on the wire.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoHealMaxFoodPerTick\" type=\"range\" step=\"1\" min=\"1\" max=\"10\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoHealShameRespect\">Respect Shame</label>\n                    <span class=\"opt-desc\">Stops the chain at whatever line the mode above draws, and re-checks between every apple rather than only before the first. Off, the heal ignores the count entirely and will walk you into the thirty-second lockout, which is almost always worse than the damage it was trying to undo. The server's own lockout is still obeyed either way.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoHealShameRespect\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Passive Healing<span class=\"sec-sub\">Health that costs no food, no packets and no shame.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoHealUseHealPads\">Use Heal Pads</label>\n                    <span class=\"opt-desc\">Notices when you are standing on a healing pad of your own or a teammate's. The server restores 15 a second for as long as you are on it, so a small gap with nothing predicted and nothing freshly landed is left to the pad instead of costing an apple. Anything urgent still eats, with the pad on top. Nothing is placed by this.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoHealUseHealPads\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoHealUseRegenGear\">Use Regen Gear</label>\n                    <span class=\"opt-desc\">Puts on Medic Gear once the gap is over 40, falling back to Angel Wings and then Apple Basket if the hat is not owned. None of them reduces damage taken, so it only asks while nothing is predicted, nothing has you on a spike and no spike tick is set up against you, and anything with a real claim on the hat keeps it. A hundred-damage read overrides it outright and puts the soldier helmet back on.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoHealUseRegenGear\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Diagnostics<span class=\"sec-sub\"></span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoHealDebug\">Debug Logs</label>\n                    <span class=\"opt-desc\">One console line per decision: health, the gap, the predicted damage both capped and raw, which food is equipped, the shame count, whether you are trapped, in a spike, about to collide, under a hundred-damage read or a spike tick, whether a pad is under you, and what the engine did or which gate stopped it.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoHealDebug\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
   const styles_default = "@import url(\"https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap\");\n\n/* ============================================================\n   RYN TYPE 2 — interface stylesheet\n   Ground: near-black neutral. Iris (muted purple) = navigation.\n   Sage (soft light green) = enabled. Sky (light blue) = values,\n   focus and interaction. Nothing else carries colour.\n   ============================================================ */\n\n:root{\n  --ink-0:#07070A;\n  --ink-1:#0C0C11;\n  --ink-2:#101016;\n  --ink-3:#15151C;\n  --ink-4:#1B1B24;\n\n  --line:rgba(255,255,255,0.055);\n  --line-2:rgba(255,255,255,0.10);\n  --line-3:rgba(255,255,255,0.16);\n\n  --iris:#8E76CE;\n  --iris-hi:#A894E0;\n  --iris-05:rgba(142,118,206,0.05);\n  --iris-12:rgba(142,118,206,0.12);\n  --iris-18:rgba(142,118,206,0.18);\n  --iris-45:rgba(142,118,206,0.45);\n\n  --sage:#A6D7B2;\n  --sage-14:rgba(166,215,178,0.14);\n  --sage-40:rgba(166,215,178,0.40);\n\n  --sky:#9BC5E8;\n  --sky-12:rgba(155,197,232,0.12);\n  --sky-45:rgba(155,197,232,0.45);\n\n  --rose:#D9A3AB;\n  --rose-12:rgba(217,163,171,0.12);\n\n  --tx-1:#F3F2F7;\n  --tx-2:#ACA9BA;\n  --tx-3:#726F80;\n  --tx-4:#4E4B5A;\n\n  --r1:6px;\n  --r2:10px;\n  --r3:14px;\n  --r4:22px;\n\n  --s1:4px;  --s2:8px;   --s3:12px;  --s4:16px;\n  --s5:24px; --s6:32px;  --s7:44px;  --s8:64px;\n\n  --ease:cubic-bezier(.2,.8,.3,1);\n  --font:'Manrope','Segoe UI',system-ui,sans-serif;\n  --mono:'Space Grotesk','Manrope',system-ui,sans-serif;\n\n  /* legacy aliases kept so any stray rule still resolves */\n  --accent:#8E76CE;\n  --accent2:#9BC5E8;\n  --border:rgba(255,255,255,0.055);\n  --text:#F3F2F7;\n  --text-muted:#ACA9BA;\n  --text-dim:#726F80;\n}\n\n*{box-sizing:border-box;-webkit-user-select:none;user-select:none;}\nhtml,body{margin:0;padding:0;height:100%;overflow:hidden;background:transparent;}\nbody{font-family:var(--font);color:var(--tx-1);-webkit-font-smoothing:antialiased;}\nh1,h2,h3,p{margin:0;}\nbutton{font-family:inherit;border:none;outline:none;background:none;cursor:pointer;color:inherit;}\ninput,textarea,select{font-family:inherit;}\ninput,textarea{-webkit-user-select:text;user-select:text;}\na{color:var(--sky);text-decoration:none;}\n\n@keyframes toopen{from{opacity:0;transform:translateY(8px) scale(.994);}to{opacity:1;transform:none;}}\n@keyframes toclose{from{opacity:1;transform:none;}to{opacity:0;transform:translateY(6px) scale(.994);}}\n@keyframes page-in{from{opacity:0;transform:translateX(10px);}to{opacity:1;transform:none;}}\n@keyframes cap-pulse{0%,100%{opacity:1;}50%{opacity:.55;}}\n@keyframes ripple{from{opacity:.22;transform:scale(0);}to{opacity:0;transform:scale(1.3);}}\n@keyframes soft-in{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:none;}}\n\n/* ------------------------------------------------------------------\n   SHELL\n   ------------------------------------------------------------------ */\n\n#menu-container{\n  position:absolute;inset:0;\n  display:flex;align-items:center;justify-content:center;\n  padding:18px;\n}\n\n#menu-wrapper{\n  position:relative;\n  width:min(1100px,100%);\n  height:min(690px,100%);\n  min-width:860px;min-height:520px;\n  display:flex;\n  background:var(--ink-1);\n  border:1px solid var(--line-2);\n  border-radius:var(--r4);\n  overflow:hidden;\n  box-shadow:0 48px 110px -34px rgba(0,0,0,.92),0 0 0 1px rgba(0,0,0,.4);\n  transform:scale(var(--ryn-scale,1));\n  transform-origin:center center;\n}\n#menu-container.transparent #menu-wrapper{background:rgba(12,12,17,0.90);}\n#menu-wrapper.toopen{animation:180ms var(--ease) toopen both;}\n#menu-wrapper.toclose{animation:140ms ease-in toclose both;}\n\nmain{display:flex;flex:1;min-width:0;min-height:0;}\n\n/* the old top bar is gone — everything identifying lives in the rail */\nheader{display:none;}\n\n/* ------------------------------------------------------------------\n   NAVIGATION RAIL\n   ------------------------------------------------------------------ */\n\n#navbar-container{\n  width:236px;min-width:236px;flex-shrink:0;\n  display:flex;flex-direction:column;\n  background:var(--ink-2);\n  border-right:1px solid var(--line);\n  padding:22px 12px 12px;\n}\n\n.rail-brand{display:flex;align-items:baseline;gap:9px;padding:0 12px 18px;}\n.rail-mark{\n  font-family:var(--mono);font-weight:700;font-size:25px;line-height:1;\n  letter-spacing:-.02em;color:var(--tx-1);\n}\n.rail-sub{\n  font-family:var(--mono);font-weight:600;font-size:10.5px;line-height:1;\n  letter-spacing:.24em;text-transform:uppercase;color:var(--iris-hi);\n}\n\n.rail-label{\n  font-family:var(--mono);font-weight:600;font-size:10px;\n  letter-spacing:.22em;text-transform:uppercase;color:var(--tx-4);\n  padding:0 12px;margin:20px 0 7px;\n}\n\n#navbar-container nav{display:flex;flex-direction:column;gap:2px;}\n\n.open-menu{\n  position:relative;\n  display:flex;align-items:center;gap:13px;\n  width:100%;padding:12px 13px;\n  border-radius:var(--r2);\n  background:transparent;\n  color:var(--tx-2);\n  text-align:left;\n  overflow:hidden;\n  transition:background 150ms var(--ease),color 150ms var(--ease);\n}\n.open-menu .nav-index{\n  font-family:var(--mono);font-weight:600;font-size:11px;line-height:1;\n  letter-spacing:.06em;color:var(--tx-4);\n  width:20px;flex-shrink:0;\n  transition:color 150ms var(--ease);\n}\n.open-menu .nav-label{\n  font-weight:800;font-size:15px;line-height:1.1;letter-spacing:-.012em;\n}\n.open-menu:hover{background:rgba(255,255,255,.035);color:var(--tx-1);}\n.open-menu:active{background:rgba(255,255,255,.06);}\n.open-menu.active{background:var(--iris-12);color:#FFFFFF;}\n.open-menu.active .nav-index{color:var(--iris-hi);}\n.open-menu.active::before{\n  content:'';position:absolute;left:0;top:11px;bottom:11px;\n  width:3px;border-radius:0 3px 3px 0;background:var(--iris);\n}\n.open-menu .ripple{\n  position:absolute;border-radius:50%;\n  background:rgba(255,255,255,.07);\n  opacity:0;pointer-events:none;\n  animation:ripple 420ms ease-out;\n}\n\n/* live outline of the open category */\n#nav-outline{\n  display:flex;flex-direction:column;gap:1px;\n  margin-top:4px;padding-left:6px;\n  overflow-y:auto;flex:1;min-height:0;\n}\n#nav-outline::-webkit-scrollbar{width:6px;}\n#nav-outline::-webkit-scrollbar-thumb{background:rgba(255,255,255,.07);border-radius:6px;}\n.outline-item{\n  position:relative;\n  padding:7px 10px 7px 16px;\n  border-radius:var(--r1);\n  font-size:12.5px;font-weight:600;line-height:1.3;\n  color:var(--tx-3);text-align:left;\n  transition:color 140ms var(--ease),background 140ms var(--ease);\n}\n.outline-item::before{\n  content:'';position:absolute;left:4px;top:50%;\n  width:4px;height:4px;margin-top:-2px;border-radius:50%;\n  background:var(--tx-4);\n  transition:background 160ms var(--ease),transform 160ms var(--ease);\n}\n.outline-item:hover{color:var(--tx-1);background:rgba(255,255,255,.03);}\n.outline-item.current{color:var(--tx-1);}\n.outline-item.current::before{background:var(--iris-hi);transform:scale(1.35);}\n\n.rail-foot{\n  margin-top:auto;padding-top:16px;\n  border-top:1px solid var(--line);\n  display:flex;align-items:center;gap:10px;\n}\n#ryn-version{\n  font-family:var(--mono);font-size:10.5px;font-weight:500;\n  letter-spacing:.14em;text-transform:uppercase;color:var(--tx-4);\n  padding-left:12px;margin-right:auto;\n}\n#close-button{\n  width:34px;height:34px;padding:8px;flex-shrink:0;\n  border-radius:var(--r2);\n  fill:none;stroke:var(--tx-3);stroke-width:1.9;\n  background:transparent;cursor:pointer;\n  transition:background 150ms var(--ease),stroke 150ms var(--ease);\n}\n#close-button:hover{background:rgba(255,255,255,.06);stroke:var(--tx-1);}\n#close-button:active{background:rgba(255,255,255,.09);}\n\n/* search lives in the rail head */\n#ryn-search-wrap{\n  position:relative;\n  display:flex;align-items:center;gap:8px;\n  height:40px;padding:0 13px;\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line-2);\n  border-radius:var(--r2);\n  transition:border-color 160ms var(--ease),background 160ms var(--ease),box-shadow 160ms var(--ease);\n}\n#ryn-search-wrap:focus-within{\n  border-color:var(--sky-45);\n  background:var(--sky-12);\n  box-shadow:0 0 0 3px rgba(155,197,232,.10);\n}\n#ryn-search-wrap::before{\n  content:'';flex-shrink:0;width:15px;height:15px;\n  background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23726F80' stroke-width='1.6' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='4.6'/%3E%3Cpath d='M10.4 10.4L14 14'/%3E%3C/svg%3E\");\n  background-repeat:no-repeat;background-position:center;background-size:contain;\n}\n#ryn-search-input{\n  flex:1;min-width:0;\n  background:transparent;border:none;outline:none;\n  font-size:13.5px;font-weight:600;color:var(--tx-1);\n}\n#ryn-search-input::placeholder{color:var(--tx-4);font-weight:500;}\n#ryn-search-clear{\n  display:none;flex-shrink:0;\n  font-size:11px;line-height:1;color:var(--tx-4);cursor:pointer;\n  transition:color 140ms;\n}\n#ryn-search-clear:hover{color:var(--tx-1);}\n#ryn-search-dropdown{\n  display:none;position:absolute;top:calc(100% + 8px);left:0;\n  width:320px;max-height:340px;overflow-y:auto;\n  padding:6px;\n  background:var(--ink-3);\n  border:1px solid var(--line-2);\n  border-radius:var(--r3);\n  box-shadow:0 26px 60px -18px rgba(0,0,0,.9);\n  z-index:9999;\n  animation:soft-in 150ms var(--ease);\n}\n#ryn-search-dropdown::-webkit-scrollbar{width:8px;}\n#ryn-search-dropdown::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:8px;border:2px solid transparent;background-clip:padding-box;}\n.ryn-si{\n  display:flex;flex-direction:column;gap:3px;\n  padding:9px 11px;border-radius:var(--r2);cursor:pointer;\n  transition:background 130ms var(--ease);\n}\n.ryn-si:hover,.ryn-si.ryn-fx{background:var(--iris-12);}\n.ryn-st{font-size:13px;font-weight:700;color:var(--tx-1);line-height:1.3;}\n.ryn-st mark{background:var(--iris-45);color:#fff;border-radius:3px;padding:0 2px;}\n.ryn-sp{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--tx-4);}\n.ryn-se{text-align:center;padding:22px 12px;font-size:12.5px;font-weight:600;color:var(--tx-4);}\n.ryn-sl{\n  font-family:var(--mono);font-size:9.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--iris-hi);\n  padding:9px 11px 4px;\n}\n\n/* ------------------------------------------------------------------\n   CONTENT COLUMN — one continuous vertical flow, full available width\n   ------------------------------------------------------------------ */\n\n#page-container{\n  flex:1;min-width:0;\n  overflow-y:auto;overflow-x:hidden;\n  background:var(--ink-1);\n}\n#page-container::-webkit-scrollbar{width:12px;}\n#page-container::-webkit-scrollbar-track{background:transparent;}\n#page-container::-webkit-scrollbar-thumb{\n  background:rgba(255,255,255,.09);\n  border-radius:12px;\n  border:4px solid transparent;\n  background-clip:padding-box;\n}\n#page-container::-webkit-scrollbar-thumb:hover{background:rgba(142,118,206,.55);background-clip:padding-box;}\n\n.menu-page{display:none;}\n.menu-page.opened{\n  display:block;\n  padding:34px clamp(20px,2.6vw,38px) 92px;\n  animation:page-in 190ms var(--ease);\n}\n.page-head{\n  max-width:1180px;margin:0 auto 6px;\n  padding-bottom:24px;\n  border-bottom:1px solid var(--line);\n}\n.menu-page .page-title{\n  font-size:clamp(27px,2.5vw,33px);font-weight:800;line-height:1.03;\n  letter-spacing:-.03em;color:var(--tx-1);\n}\n.page-description{\n  margin-top:12px;max-width:74ch;\n  font-size:13.5px;font-weight:500;line-height:1.6;color:var(--tx-3);\n}\n\n.section{max-width:1180px;margin:0 auto;padding-top:36px;}\n.section-title{\n  display:flex;flex-direction:column;gap:7px;\n  padding:0 2px 13px;\n  border-bottom:1px solid var(--line);\n  font-family:var(--mono);font-size:11.5px;font-weight:700;\n  letter-spacing:.19em;text-transform:uppercase;color:var(--iris-hi);\n}\nh2.section-title{font-family:var(--mono);}\n.sec-sub{\n  font-family:var(--font);font-size:12.5px;font-weight:500;\n  letter-spacing:0;text-transform:none;line-height:1.55;color:var(--tx-3);\n}\n.section-content{display:flex;flex-direction:column;padding-top:4px;}\n\n/* ------------------------------------------------------------------\n   SETTING ROW\n   ------------------------------------------------------------------ */\n\n.content-option{\n  position:relative;\n  display:flex;align-items:center;justify-content:space-between;gap:24px;\n  min-height:60px;\n  padding:13px 15px 13px 17px;\n  border-radius:var(--r2);\n  border-bottom:1px solid rgba(255,255,255,.032);\n  transition:background 150ms var(--ease);\n}\n.content-option:last-child{border-bottom:none;}\n.content-option:hover{background:rgba(255,255,255,.026);}\n.content-option::before{\n  content:'';position:absolute;left:0;top:14px;bottom:14px;\n  width:2px;border-radius:0 2px 2px 0;\n  background:var(--sage);\n  opacity:0;\n  transition:opacity 190ms var(--ease);\n}\n.content-option:has(input[type=\"checkbox\"]:checked)::before{opacity:.85;}\n\n.content-option.centered{justify-content:center;}\n.content-option.left-flex{justify-content:flex-start;gap:14px;}\n.content-option.text{justify-content:flex-start;}\n.content-option.stacked{flex-direction:column;align-items:stretch;gap:14px;}\n\n.opt-main{display:flex;flex-direction:column;gap:5px;min-width:0;flex:1;}\n.option-title{\n  font-size:15.5px;font-weight:700;line-height:1.32;\n  letter-spacing:-.008em;color:var(--tx-1);\n}\nlabel.option-title{cursor:pointer;}\nlabel.option-title:active{opacity:.75;}\n.opt-desc{\n  font-size:12.5px;font-weight:500;line-height:1.5;\n  color:var(--tx-3);max-width:74ch;\n}\n.content-option.quiet .option-title{font-size:14.5px;font-weight:600;color:var(--tx-2);}\n.content-option.quiet{min-height:54px;}\n.content-option.quiet:hover .option-title{color:var(--tx-1);}\n.option-content{display:flex;align-items:center;gap:12px;flex-shrink:0;}.ryn-select{appearance:none;-webkit-appearance:none;background:rgba(255,255,255,.06);color:inherit;border:1px solid rgba(255,255,255,.18);border-radius:7px;padding:5px 26px 5px 10px;font:inherit;font-size:12px;cursor:pointer;flex-shrink:0;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 14px) calc(50% + 1px),calc(100% - 9px) calc(50% + 1px);background-size:5px 5px,5px 5px;background-repeat:no-repeat;}.ryn-select:hover{border-color:rgba(255,255,255,.32);}.ryn-select:focus{outline:none;border-color:var(--iris);}.ryn-select option{background:#1a1526;color:#fff;}\n\n.text-value{\n  font-family:var(--mono);font-size:15px;font-weight:700;\n  color:var(--sky);font-variant-numeric:tabular-nums;\n}\n.simplified{font-size:12.5px;font-weight:500;color:var(--tx-3);line-height:1.6;}\n.highlight{color:var(--iris-hi);}\n\n/* nested detail rows under a parent toggle */\n.sub-options{\n  margin:2px 0 6px 18px;\n  padding-left:16px;\n  border-left:1px solid var(--line-2);\n  transition:opacity 200ms var(--ease);\n}\n.sub-options .content-option{min-height:50px;padding-top:9px;padding-bottom:9px;}\n.sub-options .option-title{font-size:14px;font-weight:600;color:var(--tx-2);}\n.sub-options .content-option:hover .option-title{color:var(--tx-1);}\n.content-option:has(> .switch-checkbox > input:not(:checked)) + .sub-options{\n  opacity:.32;pointer-events:none;\n}\n\n/* ------------------------------------------------------------------\n   CONTROLS\n   ------------------------------------------------------------------ */\n\n/* toggle */\n.switch-checkbox{position:relative;width:48px;height:27px;flex-shrink:0;}\n.switch-checkbox input{position:absolute;opacity:0;width:0;height:0;}\n.switch-checkbox span{\n  position:absolute;inset:0;\n  border-radius:10px;cursor:pointer;\n  background:rgba(255,255,255,.06);\n  border:1px solid rgba(255,255,255,.11);\n  transition:background 180ms var(--ease),border-color 180ms var(--ease);\n}\n.switch-checkbox span::before{\n  content:'';position:absolute;left:4px;top:50%;\n  width:18px;height:18px;border-radius:6px;\n  background:rgba(255,255,255,.32);\n  transform:translateY(-50%);\n  transition:transform 190ms var(--ease),background 190ms var(--ease);\n}\n.switch-checkbox span:hover{border-color:rgba(255,255,255,.2);}\n.switch-checkbox input:checked + span{\n  background:var(--sage-14);\n  border-color:var(--sage-40);\n}\n.switch-checkbox input:checked + span::before{\n  transform:translateY(-50%) translateX(21px);\n  background:var(--sage);\n}\n.switch-checkbox input:focus-visible + span{box-shadow:0 0 0 3px rgba(155,197,232,.20);}\n\n/* keycap */\n.hotkeyInput{\n  display:flex;align-items:center;justify-content:center;\n  min-width:82px;height:42px;padding:0 15px;\n  border-radius:10px;\n  background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.028));\n  border:1px solid rgba(255,255,255,.115);\n  box-shadow:0 2px 0 rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.10);\n  font-family:var(--mono);font-size:13.5px;font-weight:700;\n  letter-spacing:.07em;text-transform:uppercase;color:var(--tx-1);\n  transition:transform 120ms var(--ease),border-color 150ms var(--ease),\n             background 150ms var(--ease),box-shadow 150ms var(--ease),color 150ms var(--ease);\n}\n.hotkeyInput:hover{border-color:var(--sky-45);color:#fff;}\n.hotkeyInput:active{transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.06);}\n.hotkeyInput.active{\n  border-color:var(--iris);background:var(--iris-18);color:var(--iris-hi);\n  box-shadow:inset 0 1px 0 rgba(255,255,255,.08);\n  transform:translateY(2px);\n  animation:cap-pulse 1.15s ease-in-out infinite;\n}\n.hotkeyInput.red{\n  border-color:rgba(217,163,171,.5);background:var(--rose-12);color:var(--rose);\n}\n.key-state{\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--tx-4);\n  min-width:78px;text-align:right;\n}\n.key-state::after{content:'';}\n.content-option:has(.hotkeyInput.red) .key-state::after{content:'Conflict';color:var(--rose);}\n.content-option:has(.hotkeyInput.active) .key-state::after{content:'Press a key';color:var(--iris-hi);}\n.content-option:has(.hotkeyInput.red) .key-state,\n.content-option:has(.hotkeyInput.active) .key-state{color:inherit;}\n\n/* button */\n.option-button{\n  display:inline-flex;align-items:center;justify-content:center;gap:8px;\n  height:42px;padding:0 21px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.05);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);\n  font-size:13.5px;font-weight:700;letter-spacing:.005em;\n  white-space:nowrap;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),\n             transform 110ms var(--ease),color 150ms var(--ease);\n}\n.option-button:hover{background:rgba(255,255,255,.085);border-color:var(--line-3);}\n.option-button:active{transform:translateY(1px);background:rgba(255,255,255,.11);}\n.option-button:disabled{opacity:.4;pointer-events:none;}\n.option-button.primary{\n  background:var(--iris-18);border-color:var(--iris-45);color:#EFEAFF;\n}\n.option-button.primary:hover{background:rgba(142,118,206,.26);border-color:rgba(142,118,206,.7);}\n.option-button.wide{width:100%;}\n.option-button.tall{height:48px;padding:0 28px;font-size:14.5px;}\n.option-button.red,.option-button.danger{\n  background:transparent;border-color:rgba(217,163,171,.28);color:var(--rose);\n}\n.option-button.red:hover,.option-button.danger:hover{\n  background:var(--rose-12);border-color:rgba(217,163,171,.5);color:#F0CDD2;\n}\n.option-button.icon-only{width:42px;padding:0;}\n\n/* segmented control */\n.seg{display:flex;gap:6px;flex-wrap:wrap;max-width:680px;}\n.seg-btn,.farm-type-btn{\n  flex:1;min-width:92px;height:44px;padding:0 15px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line);\n  color:var(--tx-3);\n  font-family:var(--font);font-size:13.5px;font-weight:700;\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.seg-btn:hover,.farm-type-btn:hover{background:rgba(255,255,255,.06);color:var(--tx-1);}\n.seg-btn.seg-active,.farm-type-btn.seg-active{\n  background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;\n}\n\n/* text / number input */\n.input{\n  height:42px;width:235px;padding:0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);\n  font-size:13.5px;font-weight:600;text-align:left;\n  transition:border-color 150ms var(--ease),background 150ms var(--ease),box-shadow 150ms var(--ease);\n}\n.input::placeholder{color:var(--tx-4);font-weight:500;}\n.input:focus{\n  outline:none;border-color:var(--sky-45);\n  background:var(--sky-12);\n  box-shadow:0 0 0 3px rgba(155,197,232,.11);\n}\ninput[type=\"number\"].input{width:122px;font-family:var(--mono);font-variant-numeric:tabular-nums;}\n.input.invalid{border-color:rgba(217,163,171,.6);background:var(--rose-12);}\n\n/* rows the client builds for auto chat: input plus a remove control */\n.chat-row{min-height:58px;}\n.chat-row .input{flex:1;min-width:0;}\n\n/* colour */\ninput[id][type=\"color\"]{\n  width:36px;height:36px;padding:0;\n  border:none;border-radius:9px;background:transparent;cursor:pointer;\n  box-shadow:0 0 0 1px rgba(255,255,255,.16);\n  transition:box-shadow 160ms var(--ease),transform 160ms var(--ease);\n}\ninput[id][type=\"color\"]::-webkit-color-swatch-wrapper{padding:3px;}\ninput[id][type=\"color\"]::-webkit-color-swatch{border:none;border-radius:7px;}\ninput[id][type=\"color\"]:hover{transform:scale(1.06);box-shadow:0 0 0 1px rgba(255,255,255,.34);}\n.reset-color{\n  width:15px;height:15px;flex-shrink:0;\n  border-radius:50%;border:1px solid rgba(255,255,255,.22);\n  background:var(--data-color,var(--iris));\n  opacity:0;cursor:pointer;\n  transition:opacity 160ms var(--ease),transform 160ms var(--ease);\n}\n.content-option:hover .reset-color{opacity:.85;}\n.reset-color:hover{opacity:1;transform:scale(1.2);}\n\n/* slider */\n.slider{display:flex;align-items:center;gap:18px;flex-shrink:0;}\n.slider input[type=\"range\"]{order:1;}\n.slider-value{\n  order:2;\n  font-family:var(--mono);font-size:13.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;\n  color:var(--sky);min-width:58px;text-align:right;\n}\n.slider input[type=\"range\"]{\n  -webkit-appearance:none;appearance:none;\n  width:clamp(150px,17vw,250px);height:22px;\n  background:transparent;cursor:pointer;outline:none;border:none;\n}\n.slider input[type=\"range\"]::-webkit-slider-runnable-track{\n  height:4px;border-radius:999px;\n  background:linear-gradient(90deg,var(--sky) var(--val,0%),rgba(255,255,255,.09) var(--val,0%));\n}\n.slider input[type=\"range\"]::-webkit-slider-thumb{\n  -webkit-appearance:none;\n  width:15px;height:15px;margin-top:-5.5px;\n  border-radius:50%;background:#EEF4FA;\n  border:1px solid rgba(0,0,0,.35);\n  box-shadow:0 1px 4px rgba(0,0,0,.55);\n  transition:transform 130ms var(--ease),box-shadow 130ms var(--ease);\n}\n.slider input[type=\"range\"]:hover::-webkit-slider-thumb{transform:scale(1.14);}\n.slider input[type=\"range\"]:active::-webkit-slider-thumb{\n  transform:scale(1.06);box-shadow:0 0 0 6px rgba(155,197,232,.16);\n}\n\n/* select */\nselect.ryn-select{\n  height:42px;padding:0 38px 0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);font-size:13.5px;font-weight:600;\n  -webkit-appearance:none;appearance:none;cursor:pointer;\n  background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7' viewBox='0 0 11 7'%3E%3Cpath d='M1 1l4.5 4.5L10 1' stroke='%239BC5E8' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\");\n  background-repeat:no-repeat;background-position:right 14px center;\n  transition:border-color 150ms var(--ease);\n}\nselect.ryn-select:focus{outline:none;border-color:var(--sky-45);}\nselect.ryn-select option{background:var(--ink-3);color:var(--tx-1);}\n\n/* misc atoms */\n.icon{width:20px;height:20px;}\n.small-icon{width:15px;height:15px;}\n.key-badge{\n  display:inline-flex;align-items:center;justify-content:center;\n  min-width:26px;height:20px;padding:0 6px;\n  border-radius:var(--r1);\n  background:rgba(255,255,255,.05);border:1px solid var(--line-2);\n  font-family:var(--mono);font-size:10.5px;font-weight:600;color:var(--tx-2);\n}\n.note{\n  max-width:1180px;margin:14px auto 0;\n  padding:14px 18px;\n  border-left:2px solid var(--line-2);\n  font-size:12.5px;font-weight:500;line-height:1.6;color:var(--tx-3);\n}\n\n/* ------------------------------------------------------------------\n   BOTS\n   ------------------------------------------------------------------ */\n\n#bot-container{display:flex;flex-direction:column;}\n#bot-container:empty{display:none;}\n.content-option[data-bot-id]{\n  background:rgba(255,255,255,.028);\n  border:1px solid var(--line);border-bottom:1px solid var(--line);\n  margin-bottom:6px;min-height:52px;\n}\n.content-option[data-bot-id] .option-title{font-family:var(--mono);font-size:13.5px;font-weight:600;}\n.disconnect-button{\n  width:16px;height:16px;flex-shrink:0;\n  fill:var(--tx-4);cursor:pointer;\n  transition:fill 150ms var(--ease);\n}\n.content-option:hover .disconnect-button{fill:var(--tx-2);}\n.disconnect-button:hover{fill:var(--rose)!important;}\n\n#connectingBot{\n  padding:14px 18px;margin-bottom:6px;\n  border-radius:var(--r2);\n  border:1px dashed var(--line-2);\n  font-family:var(--mono);font-size:12px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--tx-4);\n}\n\n#dynamic-bot-list{display:flex;flex-direction:column;gap:8px;}\n.bot-row{\n  display:flex;align-items:center;gap:10px;\n  padding:10px 12px;\n  background:rgba(255,255,255,.028);\n  border:1px solid var(--line);\n  border-radius:var(--r2);\n  transition:border-color 150ms var(--ease),opacity 150ms var(--ease);\n}\n.bot-row:hover{border-color:var(--line-2);}\n.bot-row.connected{background:var(--sage-14);border-color:var(--sage-40);}\n.bot-row-label{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  letter-spacing:.12em;text-transform:uppercase;color:var(--tx-4);\n  min-width:74px;flex-shrink:0;\n}\n.bot-row-name{flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}\n.bot-row-name .pending{color:var(--tx-4);font-weight:600;}\n.bot-row .input{flex:1;min-width:0;width:auto;}\n.bot-row-check{width:17px;height:17px;flex-shrink:0;fill:var(--sage);}\n.icon-btn{\n  display:flex;align-items:center;justify-content:center;\n  width:42px;height:42px;flex-shrink:0;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.045);\n  border:1px solid var(--line-2);\n  font-size:15px;line-height:1;color:var(--tx-2);\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.icon-btn:hover{background:rgba(255,255,255,.08);border-color:var(--line-3);color:var(--tx-1);}\n.icon-btn.danger:hover{background:var(--rose-12);border-color:rgba(217,163,171,.45);color:var(--rose);}\n\n/* option grids (weapons, age-4 building) */\n.wpn-label{\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:12px;\n}\n.wpn-grid{\n  display:grid;grid-template-columns:repeat(auto-fill,minmax(124px,1fr));\n  gap:8px;\n}\n.bot-weapon-btn,.bot-sec-weapon-btn{\n  display:flex;align-items:center;justify-content:center;\n  min-height:54px;padding:10px 12px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.03);\n  border:1px solid var(--line);\n  color:var(--tx-3);\n  font-size:13px;font-weight:600;text-align:center;line-height:1.3;\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.bot-weapon-btn:hover,.bot-sec-weapon-btn:hover{\n  background:rgba(255,255,255,.06);border-color:var(--line-2);color:var(--tx-1);\n}\n.bot-weapon-btn.wpn-active,.bot-sec-weapon-btn.wpn-active{\n  background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;\n}\n.wpn-selected-bar{\n  display:flex;align-items:center;gap:10px;\n  margin-top:12px;padding:11px 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.025);\n  border:1px solid var(--line);\n}\n.wpn-selected-dot{\n  width:6px;height:6px;flex-shrink:0;border-radius:50%;background:var(--iris-hi);\n}\n.wpn-selected-text{font-size:13px;font-weight:600;color:var(--tx-2);}\n\n.stack{display:flex;flex-direction:column;gap:22px;padding-top:8px;}\n.field{display:flex;flex-direction:column;gap:0;}\n.field-head{\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:10px;\n}\n.field-note{margin-top:10px;font-size:12.5px;font-weight:500;line-height:1.55;color:var(--tx-3);}\n.field-note b{color:var(--tx-2);font-weight:700;}\n.inline{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}\n#_botBulkRow .input{flex:1;min-width:180px;width:auto;}\n.bot-row-id{\n  font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.06em;\n  color:var(--tx-4);flex-shrink:0;padding:0 9px;height:25px;\n  display:flex;align-items:center;white-space:nowrap;\n  border:1px solid var(--line);border-radius:var(--r2);\n}\n\n#_formationGrid{width:100%;}\n\n/* ------------------------------------------------------------------\n   FORMATION POPUP (built in JS, lives on document.body)\n   ------------------------------------------------------------------ */\n\n.fsel-trigger{\n  display:flex;align-items:center;gap:12px;\n  width:100%;padding:13px 14px;max-width:680px;\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line-2);\n  border-radius:var(--r2);\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease);\n}\n.fsel-trigger:hover{background:rgba(255,255,255,.06);border-color:var(--line-3);}\n.fsel-trigger.open{border-color:var(--iris-45);background:var(--iris-12);}\n.fsel-trigger .fsel-icon{width:26px;flex-shrink:0;text-align:center;font-size:16px;color:var(--iris-hi);}\n.fsel-trigger .fsel-label{flex:1;font-size:14.5px;font-weight:700;color:var(--tx-1);}\n.fsel-trigger .fsel-arrow{font-size:10px;color:var(--tx-4);transition:transform 170ms var(--ease);}\n.fsel-trigger.open .fsel-arrow{transform:rotate(180deg);}\n\n.fsel-popup{\n  position:fixed;z-index:99999;width:300px;\n  display:flex;flex-direction:column;overflow:hidden;\n  background:var(--ink-3);\n  border:1px solid var(--line-2);\n  border-radius:var(--r3);\n  box-shadow:0 30px 70px -20px rgba(0,0,0,.92);\n}\n.fsel-popup.toopen{animation:soft-in 160ms var(--ease);}\n.fsel-popup-header{\n  display:flex;align-items:center;gap:10px;\n  padding:12px 14px;\n  border-bottom:1px solid var(--line);\n  cursor:grab;\n}\n.fsel-popup-header:active{cursor:grabbing;}\n.fsel-popup-title{\n  flex:1;font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n.fsel-popup-close{\n  width:22px;height:22px;flex-shrink:0;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r1);font-size:11px;color:var(--tx-4);cursor:pointer;\n  transition:background 140ms,color 140ms;\n}\n.fsel-popup-close:hover{background:rgba(255,255,255,.07);color:var(--tx-1);}\n.fsel-popup-body{\n  display:grid;grid-template-columns:repeat(4,1fr);gap:8px;\n  padding:12px;max-height:280px;overflow-y:auto;\n}\n.fsel-popup-body::-webkit-scrollbar{width:8px;}\n.fsel-popup-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:8px;border:2px solid transparent;background-clip:padding-box;}\n.fcat-btn{\n  position:relative;\n  display:flex;align-items:center;justify-content:center;\n  aspect-ratio:1;border-radius:var(--r2);\n  background:rgba(255,255,255,.03);\n  border:1px solid var(--line);\n  color:var(--tx-2);font-size:17px;cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.fcat-btn:hover{background:rgba(255,255,255,.07);border-color:var(--line-2);color:var(--tx-1);}\n.fcat-btn.active{background:var(--iris-18);border-color:var(--iris-45);color:#fff;}\n.fcat-tip{\n  display:none;position:absolute;top:calc(100% + 6px);left:50%;\n  transform:translateX(-50%);\n  padding:4px 9px;border-radius:var(--r1);\n  background:var(--ink-4);border:1px solid var(--line-2);\n  font-family:var(--font);font-size:11px;font-weight:600;color:var(--tx-1);\n  white-space:nowrap;pointer-events:none;z-index:5;\n}\n.fcat-btn:hover .fcat-tip{display:block;}\n.fcat-key{\n  position:absolute;top:3px;right:3px;\n  min-width:17px;height:15px;padding:0 3px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:4px;\n  background:rgba(0,0,0,.45);border:1px solid var(--line);\n  font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--tx-3);\n  line-height:1;cursor:pointer;\n  transition:background 130ms,border-color 130ms,color 130ms;\n}\n.fcat-key:hover{background:rgba(255,255,255,.10);color:var(--tx-1);}\n.fcat-key.set{background:var(--iris-18);border-color:var(--iris-45);color:#EFEAFF;}\n.fcat-key.recording{background:var(--sky-12);border-color:var(--sky-45);color:var(--sky);animation:cap-pulse 1.1s ease-in-out infinite;}\n.fcat-reset{\n  position:absolute;bottom:3px;left:3px;\n  width:15px;height:15px;display:none;\n  align-items:center;justify-content:center;\n  border-radius:4px;\n  background:var(--rose-12);border:1px solid rgba(217,163,171,.3);\n  font-size:9px;line-height:1;color:var(--rose);cursor:pointer;\n}\n.fcat-reset.show{display:flex;}\n.fcat-reset:hover{background:rgba(217,163,171,.24);}\n.fsel-popup-footer{padding:10px 12px;border-top:1px solid var(--line);}\n.fsel-reset-all{\n  width:100%;padding:9px 0;\n  border-radius:var(--r2);\n  background:transparent;border:1px solid rgba(217,163,171,.26);\n  font-family:var(--font);font-size:12px;font-weight:700;\n  color:var(--rose);text-align:center;cursor:pointer;\n  transition:background 140ms,border-color 140ms;\n}\n.fsel-reset-all:hover{background:var(--rose-12);border-color:rgba(217,163,171,.48);}";
-  const Game_default = "#ryn-menu-frame {\r\n    position: absolute;\r\n    top: 0;\r\n    left: 0;\r\n    bottom: 0;\r\n    right: 0;\r\n    width: 100%;\r\n    height: 100%;\r\n    border: none;\r\n    outline: none;\r\n    z-index: 10;\r\n}\r\n\r\n#promoImgHolder,\r\n.menuHeader,\r\n.menuText,\r\n#guideCard,\r\n#gameName,\r\n#pingDisplay,\r\n#partyButton,\r\n#onetrust-consent-sdk,\r\n.adMenuCard,\r\n#topInfoHolder > div:not([id]):not([class]),\r\n#touch-controls-fullscreen,\r\n#altcha,\r\n#joinPartyButton {\r\n    display: none!important;\r\n}\r\n\r\n.menuCard {\r\n    box-shadow: none;\r\n}\r\n\r\n#setupCard {\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 12px;\r\n    background: rgba(25,25,25,0.45);\r\n    backdrop-filter: blur(25px);\r\n    -webkit-backdrop-filter: blur(25px);\r\n    border: 1px solid rgba(255,255,255,0.2);\r\n    border-radius: 20px;\r\n    box-shadow: 0 8px 32px 0 rgba(0,0,0,0.2), inset 0 1px 1px rgba(255,255,255,0.1);\r\n    max-height: auto;\r\n    width: 280px;\r\n}\r\n\r\n#setupCard > * {\r\n    margin: 0!important;\r\n}\r\n\r\n#linksContainer2 {\r\n    background: #6d6d6d77;\r\n}\r\n\r\n#bottomContainer {\r\n    bottom: 20px;\r\n}\r\n\r\n#topInfoHolder {\r\n    display: flex;\r\n    flex-direction: column;\r\n    justify-content: right;\r\n    align-items: flex-end;\r\n    gap: 10px;\r\n}\r\n\r\n#killCounter, #totalKillCounter {\r\n    position: static;\r\n    margin: 0;\r\n    background-image: url(../img/icons/skull.png);\r\n}\r\n\r\n.actionBarItem {\r\n    position: relative;\r\n    margin: 3px 5px !important;\r\n    border: 1.5px solid rgba(255,255,255,0.16) !important;\r\n    border-radius: 13px !important;\r\n    background-color: rgba(18,17,24,0.40) !important;\r\n    box-shadow: 0 3px 10px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.07) !important;\r\n    transition: transform 130ms ease, border-color 130ms ease, box-shadow 130ms ease !important;\r\n}\r\n\r\n.actionBarItem:hover {\r\n    transform: translateY(-2px) !important;\r\n    border-color: rgba(255,255,255,0.38) !important;\r\n    box-shadow: 0 6px 16px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.10) !important;\r\n}\r\n\r\n/* The weapon's reload, inside its own tile: a white edge that runs the tile's\r\n   outline, drawn whole the moment you swing and draining away as the weapon\r\n   comes back, so a bare tile is a ready weapon. It is one SVG path stroked\r\n   around a rounded square, with the dash pattern doing the drawing —\r\n   stroke-dasharray on a path is as old as SVG itself, so there is nothing here\r\n   a browser can quietly not support. The path starts at the top left corner\r\n   and runs clockwise. */\r\n.ryn-reload-ring {\r\n    position: absolute !important;\r\n    top: -1px !important;\r\n    left: -1px !important;\r\n    width: calc(100% + 2px) !important;\r\n    height: calc(100% + 2px) !important;\r\n    display: block !important;\r\n    overflow: visible !important;\r\n    pointer-events: none !important;\r\n    z-index: 9 !important;\r\n    filter: drop-shadow(0 0 2px rgba(0,0,0,0.75)) !important;\r\n}\r\n/* The stroke and nothing else. How much of it is drawn is set inline on the\r\n   path every tick, and it has to be: a stylesheet rule outranks an SVG\r\n   presentation attribute, so a stroke-dashoffset written here would pin every\r\n   ring at whatever it said and no attribute could move it. */\r\n.ryn-reload-edge {\r\n    fill: none;\r\n    stroke: #ffffff;\r\n    stroke-width: 6;\r\n    stroke-linecap: butt;\r\n    /* The reload advances once a game tick, about 110ms, so the edge would\r\n       otherwise step 25, 50, 75. Handing the interpolation to the browser is\r\n       what makes it continuous without a frame loop of our own: one property,\r\n       two small paths, and no javascript between the ticks. */\r\n    transition: stroke-dashoffset 110ms linear;\r\n}\r\n\r\n.itemCounter {\r\n    position: absolute;\r\n    top: 3px;\r\n    right: 3px;\r\n    font-size: 0.95em;\r\n    color: white;\r\n    text-shadow: #3d3f42 2px 0px 0px, #3d3f42 1.75517px 0.958851px 0px, #3d3f42 1.0806px 1.68294px 0px, #3d3f42 0.141474px 1.99499px 0px, #3d3f42 -0.832294px 1.81859px 0px, #3d3f42 -1.60229px 1.19694px 0px, #3d3f42 -1.97998px 0.28224px 0px, #3d3f42 -1.87291px -0.701566px 0px, #3d3f42 -1.30729px -1.5136px 0px, #3d3f42 -0.421592px -1.95506px 0px, #3d3f42 0.567324px -1.91785px 0px, #3d3f42 1.41734px -1.41108px 0px, #3d3f42 1.92034px -0.558831px 0px;\r\n}\r\n\r\n.itemCounter.hidden {\r\n    display: none;\r\n}\r\n\r\n#ryn-topright-hud { position: fixed; top: 12px; right: 12px; z-index: 9999; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; pointer-events: none; font-family: \"Hammersmith One\", Arial, sans-serif; }\r\n.ryn-hud-row { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 160px; }\r\n.ryn-hud-bar-bg { width: 160px; height: 8px; background: rgba(0,0,0,0.55); border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }\r\n.ryn-hud-bar-fill { height: 100%; border-radius: 4px; transition: width 0.15s ease; }\r\n#ryn-hud-hp-fill { background: linear-gradient(90deg,#cc5151,#e05151); }\r\n#ryn-hud-r1-fill { background: linear-gradient(90deg,#f0b429,#f0c060); }\r\n#ryn-hud-r2-fill { background: linear-gradient(90deg,#51cc88,#60e0a0); }\r\n.ryn-hud-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.6); text-shadow: 0 1px 3px rgba(0,0,0,0.9); }\r\n.ryn-hud-val { font-size: 11px; color: rgba(255,255,255,0.9); text-shadow: 0 1px 4px rgba(0,0,0,0.9); letter-spacing: 0.05em; }\r\n.ryn-hud-heal { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; white-space: nowrap; color: rgba(255,255,255,0.45); text-shadow: 0 1px 4px rgba(0,0,0,0.9); transition: color 0.15s ease; }\r\n\r\n#rynStats {\r\n    position: absolute;\r\n    color: rgb(225, 210, 255);\r\n    font: 13px \"Hammersmith One\";\r\n    bottom: 210px;\r\n    left: 20px;\r\n\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 5px;\r\n}\r\n\r\n.hidden {\r\n    display: none!important;\r\n}";
+  const Game_default = "#ryn-menu-frame {\r\n    position: absolute;\r\n    top: 0;\r\n    left: 0;\r\n    bottom: 0;\r\n    right: 0;\r\n    width: 100%;\r\n    height: 100%;\r\n    border: none;\r\n    outline: none;\r\n    z-index: 10;\r\n}\r\n\r\n#promoImgHolder,\r\n.menuHeader,\r\n.menuText,\r\n#guideCard,\r\n#gameName,\r\n#pingDisplay,\r\n#partyButton,\r\n#onetrust-consent-sdk,\r\n.adMenuCard,\r\n#topInfoHolder > div:not([id]):not([class]),\r\n#touch-controls-fullscreen,\r\n#altcha,\r\n#joinPartyButton {\r\n    display: none!important;\r\n}\r\n\r\n.menuCard {\r\n    box-shadow: none;\r\n}\r\n\r\n#setupCard {\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 12px;\r\n    background: rgba(25,25,25,0.45);\r\n    backdrop-filter: blur(25px);\r\n    -webkit-backdrop-filter: blur(25px);\r\n    border: 1px solid rgba(255,255,255,0.2);\r\n    border-radius: 20px;\r\n    box-shadow: 0 8px 32px 0 rgba(0,0,0,0.2), inset 0 1px 1px rgba(255,255,255,0.1);\r\n    max-height: auto;\r\n    width: 280px;\r\n}\r\n\r\n#setupCard > * {\r\n    margin: 0!important;\r\n}\r\n\r\n#linksContainer2 {\r\n    background: #6d6d6d77;\r\n}\r\n\r\n#bottomContainer {\r\n    bottom: 20px;\r\n}\r\n\r\n#topInfoHolder {\r\n    display: flex;\r\n    flex-direction: column;\r\n    justify-content: right;\r\n    align-items: flex-end;\r\n    gap: 10px;\r\n}\r\n\r\n#killCounter, #totalKillCounter {\r\n    position: static;\r\n    margin: 0;\r\n    background-image: url(../img/icons/skull.png);\r\n}\r\n\r\n.actionBarItem {\r\n    position: relative;\r\n    margin: 3px 5px !important;\r\n    border: 1.5px solid rgba(255,255,255,0.16) !important;\r\n    border-radius: 13px !important;\r\n    background-color: rgba(18,17,24,0.40) !important;\r\n    box-shadow: 0 3px 10px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.07) !important;\r\n    transition: transform 130ms ease, border-color 130ms ease, box-shadow 130ms ease !important;\r\n}\r\n\r\n.actionBarItem:hover {\r\n    transform: translateY(-2px) !important;\r\n    border-color: rgba(255,255,255,0.38) !important;\r\n    box-shadow: 0 6px 16px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.10) !important;\r\n}\r\n\r\n/* The weapon's reload, inside its own tile: a white edge that runs the tile's\r\n   outline, drawn whole the moment you swing and draining away as the weapon\r\n   comes back, so a bare tile is a ready weapon. It is one SVG path stroked\r\n   around a rounded square, with the dash pattern doing the drawing —\r\n   stroke-dasharray on a path is as old as SVG itself, so there is nothing here\r\n   a browser can quietly not support. The path starts at the top left corner\r\n   and runs clockwise. */\r\n.ryn-reload-ring {\r\n    position: absolute !important;\r\n    top: -1px !important;\r\n    left: -1px !important;\r\n    width: calc(100% + 2px) !important;\r\n    height: calc(100% + 2px) !important;\r\n    display: block !important;\r\n    overflow: visible !important;\r\n    pointer-events: none !important;\r\n    z-index: 9 !important;\r\n    filter: drop-shadow(0 0 2px rgba(0,0,0,0.75)) !important;\r\n}\r\n/* The stroke and nothing else. How much of it is drawn is set inline on the\r\n   path every tick, and it has to be: a stylesheet rule outranks an SVG\r\n   presentation attribute, so a stroke-dashoffset written here would pin every\r\n   ring at whatever it said and no attribute could move it. */\r\n.ryn-reload-edge {\r\n    fill: none;\r\n    stroke: #ffffff;\r\n    stroke-width: 6;\r\n    stroke-linecap: butt;\r\n    /* The reload advances once a game tick, about 110ms, so the edge would\r\n       otherwise step 25, 50, 75. Handing the interpolation to the browser is\r\n       what makes it continuous without a frame loop of our own: one property,\r\n       two small paths, and no javascript between the ticks. */\r\n    transition: stroke-dashoffset 110ms linear;\r\n}\r\n\r\n.itemCounter {\r\n    position: absolute;\r\n    top: 3px;\r\n    right: 3px;\r\n    font-size: 0.95em;\r\n    color: white;\r\n    text-shadow: #3d3f42 2px 0px 0px, #3d3f42 1.75517px 0.958851px 0px, #3d3f42 1.0806px 1.68294px 0px, #3d3f42 0.141474px 1.99499px 0px, #3d3f42 -0.832294px 1.81859px 0px, #3d3f42 -1.60229px 1.19694px 0px, #3d3f42 -1.97998px 0.28224px 0px, #3d3f42 -1.87291px -0.701566px 0px, #3d3f42 -1.30729px -1.5136px 0px, #3d3f42 -0.421592px -1.95506px 0px, #3d3f42 0.567324px -1.91785px 0px, #3d3f42 1.41734px -1.41108px 0px, #3d3f42 1.92034px -0.558831px 0px;\r\n}\r\n\r\n.itemCounter.hidden {\r\n    display: none;\r\n}\r\n\r\n#ryn-topright-hud { position: fixed; top: 12px; right: 12px; z-index: 9999; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; pointer-events: none; font-family: \"Hammersmith One\", Arial, sans-serif; }\r\n.ryn-hud-row { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 160px; }\r\n.ryn-hud-bar-bg { width: 160px; height: 8px; background: rgba(0,0,0,0.55); border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }\r\n.ryn-hud-bar-fill { height: 100%; border-radius: 4px; transition: width 0.15s ease; }\r\n#ryn-hud-hp-fill { background: linear-gradient(90deg,#cc5151,#e05151); }\r\n#ryn-hud-r1-fill { background: linear-gradient(90deg,#f0b429,#f0c060); }\r\n#ryn-hud-r2-fill { background: linear-gradient(90deg,#51cc88,#60e0a0); }\r\n.ryn-hud-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.6); text-shadow: 0 1px 3px rgba(0,0,0,0.9); }\r\n.ryn-hud-val { font-size: 11px; color: rgba(255,255,255,0.9); text-shadow: 0 1px 4px rgba(0,0,0,0.9); letter-spacing: 0.05em; }\r\n\r\n#rynStats {\r\n    position: absolute;\r\n    color: rgb(225, 210, 255);\r\n    font: 13px \"Hammersmith One\";\r\n    bottom: 210px;\r\n    left: 20px;\r\n\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 5px;\r\n}\r\n\r\n.hidden {\r\n    display: none!important;\r\n}";
   const Store_default = "#ryn-store-container {\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 10px;\r\n    max-width: 400px;\r\n    width: 100%;\r\n\r\n    position: absolute;\r\n    top: 50%;\r\n    left: 50%;\r\n    transform: translate(-50%, -50%) scale(0.9);\r\n}\r\n\r\n#ryn-store-toggle {\r\n    display: flex;\r\n    justify-content: center;\r\n    align-items: center;\r\n    padding: 10px;\r\n    background-color: rgba(0, 0, 0, 0.15);\r\n    color: #fff;\r\n    border-radius: 4px;\r\n    cursor: pointer;\r\n    font-size: 20px;\r\n    pointer-events: all;\r\n}\r\n\r\n#ryn-store-items {\r\n    background-color: rgba(0, 0, 0, 0.15);\r\n    max-height: 200px;\r\n    height: 100%;\r\n    padding: 10px;\r\n    overflow-y: scroll;\r\n    border-radius: 4px;\r\n    pointer-events: all;\r\n    scrollbar-width: none;\r\n}\r\n\r\n#ryn-store-items::-webkit-scrollbar {\r\n    display: none;\r\n    width: 0;\r\n    height: 0;\r\n    background: transparent;\r\n}\r\n\r\n.storeItemContainer {\r\n    display: flex;\r\n    align-items: center;\r\n    gap: 10px;\r\n    padding: 5px;\r\n    height: 50px;\r\n    box-sizing: border-box;\r\n    overflow: hidden;\r\n}\r\n\r\n.storeHat {\r\n    display: flex;\r\n    justify-content: center;\r\n    align-items: center;\r\n    width: 45px;\r\n    height: 45px;\r\n    margin-top: -5px;\r\n    pointer-events: none;\r\n}\r\n\r\n.storeItemName {\r\n    color: #fff;\r\n    font-size: 20px;\r\n}\r\n\r\n.equipButton {\r\n    margin-left: auto;\r\n    color: #80eefc;\r\n    cursor: pointer;\r\n    font-size: 35px;\r\n}";
   const Hats = {
     [0]: {
@@ -3387,6 +3433,12 @@ window.grbtp = 35;
     potentialDamage=0;
     primaryDamage=0;
     spikeDamage=0;
+    // The weapon the last attack animation carried, alongside `lastAttacked`
+    // which was already here. Novastorm's damage distribution matches an
+    // observed number against the swing that produced it, and the swing's
+    // weapon is what decides the number — the weapon in hand at update time is
+    // not always the one that was swung.
+    lastAttackWeapon=null;
     dangerList=[];
     danger=0;
     prevDanger=0;
@@ -3395,6 +3447,20 @@ window.grbtp = 35;
     shameActive=false;
     shameTimer=0;
     shameCount=0;
+    // The server's own latch, from player.buildItem:
+    //
+    //     if (timeSinceHit <= 120) {
+    //         this.shameCount++;
+    //         if (this.shameCount > 0) this.shameAbuse = true;
+    //         ...
+    //     }
+    //
+    // Set the first time an apple lands inside the 120 ms window and never
+    // cleared while the player object lives — only a respawn makes a new one.
+    // It is a marker that this player has eaten early at least once, not a
+    // lockout, so it is recorded here and read only by the strictest Auto Heal
+    // mode. See AutoHeal.isHealBlocked.
+    shameAbuse=false;
     receivedDamage=null;
     bullTick=0;
     poisonCount=0;
@@ -3581,14 +3647,6 @@ window.grbtp = 35;
           this.damages.length = 0;
         }
         this.tickDamage += difference;
-        // novastorm's `damages.push(UTILS.fixTo(damage, 2))`. The array was
-        // already declared and cleared here and never written to; NovastormHeal
-        // reads it as the tick's damage bucket and splits it into hits, shots
-        // and spikes the way novastorm's distributionDamages does. Rounded to
-        // two places for the same reason novastorm rounds: the numbers are
-        // matched against computed weapon damage, and float drift would stop
-        // them matching.
-        this.damages.push(Math.round(difference * 100) / 100);
         this.damageTick = this.tickCount + 1;
         if (isEnemy) {
           PlayerManager.lastEnemyReceivedDamage[0] = this.id;
@@ -3610,6 +3668,7 @@ window.grbtp = 35;
         // many clean heals to walk back down.
         if (step <= 120) {
           this.shameCount += 1;
+          this.shameAbuse = true;
         } else {
           this.shameCount = Math.max(0, this.shameCount - 2);
         }
@@ -6939,13 +6998,22 @@ window.grbtp = 35;
       if (!this.inGame) {
         return;
       }
+      const before = this.currentHealth;
       super.updateHealth(health);
-      if (this.shameActive) {
-        return;
-      }
-      if (health < 100) {
-        const {_ModuleHandler: ModuleHandler} = this.client;
-        ModuleHandler.staticModules.shameReset.healthUpdate();
+      const {_ModuleHandler: ModuleHandler} = this.client;
+      // novastorm's updateHealth, the myPlayer half:
+      //
+      //     if (damage > 0) { damages.push(...); deathDamages.push(...); }
+      //     else if (tmpObj == myPlayer && tmpObj.health == 100)
+      //         { deathDamages = []; spikeDmg = 0; }
+      //
+      // Ahead of the shameActive return, because a shamed player is exactly the
+      // one whose damage list is worth keeping. Guarded because this runs inside
+      // the socket's message handler: whatever the engine could ever do wrong,
+      // taking the rest of the frame down with it is not one of them.
+      const survival = ModuleHandler.staticModules && ModuleHandler.staticModules.autoHeal;
+      if (survival !== void 0 && survival !== null) {
+        survival.healthUpdate(before, health);
       }
     }
     playerInit(id) {
@@ -6971,6 +7039,11 @@ window.grbtp = 35;
     }
     playerSpawn() {
       this.inGame = true;
+      if (this.client.isOwner) {
+        try {
+          ChatLog_default.setInGame(true);
+        } catch (_) {}
+      }
       if (!this.client.isOwner) {
         const ownerID = this.client.ownerClient?.myPlayer?.id;
         if (ownerID !== undefined && ownerID !== -1) {
@@ -7140,8 +7213,26 @@ window.grbtp = 35;
       this.resetInventory();
       this.resetWeaponXP();
       const {_ModuleHandler: ModuleHandler, PlayerManager: PlayerManager} = this.client;
+      // Before ModuleHandler.reset, which clears the list this reads. Novastorm
+      // prints the same thing on the same event — what the sequence that killed
+      // you was actually made of, next to what the engine had predicted — and it
+      // is the only way to tell a threat that was read wrong from one that was
+      // read right and arrived anyway.
+      if (!first) {
+        const survival = ModuleHandler.staticModules && ModuleHandler.staticModules.autoHeal;
+        if (survival !== void 0 && survival !== null) {
+          survival.reportDeath();
+        }
+      }
       ModuleHandler.reset();
       this.inGame = false;
+      // Dying puts moomoo back on its own menu card, so the panel goes with it
+      // and returns on the next spawn.
+      if (this.client.isOwner) {
+        try {
+          ChatLog_default.setInGame(false);
+        } catch (_) {}
+      }
       this.wasDead = true;
       this.upgradeOrder.length = 0;
       this.upgradeIndex = 0;
@@ -7154,6 +7245,9 @@ window.grbtp = 35;
       this.shameActive = false;
       this.shameCount = 0;
       this.shameTimer = 0;
+      // A respawn is a new player object on the server, so its latch starts
+      // clear too.
+      this.shameAbuse = false;
       this.deathPosition.setVec(this.pos.current);
       this.diedOnce = true;
       this.client.StatsManager.deaths = 1;
@@ -7261,6 +7355,7 @@ window.grbtp = 35;
       const {hatID: hatID, reload: reload} = player;
       const {myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
       player.lastAttacked = myPlayer.tickCount;
+      player.lastAttackWeapon = weaponID;
       const isMyPlayer = myPlayer.isMyPlayerByID(id);
       if (isMyPlayer && !myPlayer.inGame) {
         return;
@@ -7311,7 +7406,18 @@ window.grbtp = 35;
         const id = buffer[i];
         const player = this.playerData.get(id);
         this.players.push(player);
+        // The clan the server last reported for this player, held across the
+        // update so the real membership transition the update carries can be
+        // seen. buffer[i + 7] is that field; the comparison is against what
+        // update() writes from it rather than against the buffer, so it is the
+        // client's own notion of the player's clan that is being watched.
+        const prevClanName = player.clanName;
         player.update(id, buffer[i + 1], buffer[i + 2], buffer[i + 3], buffer[i + 4], buffer[i + 5], buffer[i + 6], buffer[i + 7], buffer[i + 8], buffer[i + 9], buffer[i + 10], buffer[i + 11], buffer[i + 12]);
+        if (isOwner && player.clanName !== prevClanName) {
+          try {
+            ChatLog_default.onClanChange(this.client, player, prevClanName);
+          } catch (_) {}
+        }
         player.corpseSeenTick = corpseTick;
         if (!this.client.isBotByID(id) && !myPlayer.isMyPlayerByID(id) && myPlayer.isTeammateByID(id) && EnemyManager2.isNear(player, this.nearestTeammate, myPlayer)) {
           this.nearestTeammate = player;
@@ -7355,6 +7461,12 @@ window.grbtp = 35;
       ObjectManager2.postTick();
       if (myPlayer.inGame) {
         myPlayer.tickUpdate();
+        // Reads the same kill flag the corpse renderer does, and leaves after
+        // two property reads on every tick where nobody died. Runs first
+        // because CorpseHandler consumes corpseSeenTick when it claims a body.
+        try {
+          ChatLog_default.tick(this);
+        } catch (_) {}
         // Purely visual, and last: it reads the kill flag tickUpdate has just
         // raised and writes nothing any module will see.
         CorpseHandler.tick(this);
@@ -7844,6 +7956,14 @@ window.grbtp = 35;
         break;
 
        case "P":
+        // Ahead of the reset, which clears the state the entry is named from.
+        // The server telling this client it died is the one death there can be
+        // no argument about.
+        if (this.client.isOwner) {
+          try {
+            ChatLog_default.onOwnDeath(this.client);
+          } catch (_) {}
+        }
         myPlayer.reset();
         this.client.InputHandler.reset();
         break;
@@ -7869,15 +7989,44 @@ window.grbtp = 35;
           // bundle on a possession switch. It is the server's own payload, so
           // the replay is exact rather than reconstructed.
           player._rynSpawnRaw = data2;
+          // A connection's first "D" is an arrival; every later one is that
+          // player respawning. The Chat Log tells them apart by the connection
+          // id in data2[0], which is also how a leave is matched back to a
+          // player id.
+          if (this.client.isOwner) {
+            try {
+              ChatLog_default.onSpawn(this.client, data2);
+            } catch (_) {}
+          }
           this.handlePlayerInit(player);
           break;
         }
+
+       // Nothing in the client needed this: a player it stops being told
+       // about simply stops being drawn, so the case never existed. It is the
+       // only packet that means gone-for-good, which is exactly what separates
+       // a leave from a death and from a respawn, so the Chat Log reads it
+       // here. The client's own model is untouched.
+       case "E":
+        if (this.client.isOwner) {
+          try {
+            ChatLog_default.onRemove(this.client, temp[1]);
+          } catch (_) {}
+        }
+        break;
 
        case "O":
         {
           const player = PlayerManager2.playerData.get(temp[1]);
           if (player !== void 0) {
             player.updateHealth(temp[2]);
+          }
+          // Zero health is the server stating a player is dead — the one death
+          // signal this protocol carries for somebody else's character.
+          if (this.client.isOwner) {
+            try {
+              ChatLog_default.onHealth(this.client, temp[1], temp[2]);
+            } catch (_) {}
           }
           break;
         }
@@ -8012,6 +8161,11 @@ window.grbtp = 35;
 
        case "g":
         PlayerManager2.createClan(temp[1].sid, temp[1].owner);
+        if (this.client.isOwner) {
+          try {
+            ChatLog_default.onClanCreated(this.client, temp[1].sid, temp[1].owner);
+          } catch (_) {}
+        }
         break;
 
        case "1":
@@ -8060,6 +8214,11 @@ window.grbtp = 35;
           const player = PlayerManager2.playerData.get(id);
           if (this.client.isOwner) {
             RYNLink.handleChat(this.client, id, player, message);
+          }
+          if (this.client.isOwner) {
+            try {
+              ChatLog_default.onChat(this.client, id, player, message);
+            } catch (_) {}
           }
           if (player != null && player.isLeader && player.clanName !== null && myPlayer.isEnemyByID(player.id) && /owner/i.test(player.clanName) && /bee op then your hack/.test(message) && this.client.isOwner) {
             this.client.removeBots();
@@ -8183,10 +8342,6 @@ window.grbtp = 35;
     rotation=true;
     instaToggle=false;
     instakillTarget=null;
-    // Held, not toggled: the fast heal key is a "keep eating while I hold this"
-    // key, and NovastormHeal reads the flag once a tick. keydown ignores
-    // repeats, so this is set once on the way down and cleared on the way up.
-    fastHealPress=false;
     constructor(client2) {
       this.client = client2;
       this.reset();
@@ -8198,7 +8353,6 @@ window.grbtp = 35;
     reset() {
       this.hotkeys.clear();
       this.move = 0;
-      this.fastHealPress = false;
       this.instaReset();
     }
     init() {
@@ -8209,11 +8363,6 @@ window.grbtp = 35;
       window.addEventListener("mousemove", event => this.handleMouseMove(event), true);
       window.addEventListener("mouseover", event => this.handleMouseMove(event), true);
       window.addEventListener("wheel", event => ZoomHandler_default.handler(event), true);
-      // Alt-tabbing away with the key down never delivers the keyup, and a held
-      // fast heal that nothing can release would eat the whole hotbar.
-      window.addEventListener("blur", () => {
-        this.fastHealPress = false;
-      }, true);
     }
     // Every input path below reads the entity being controlled rather than
     // the connection this handler belongs to. Only the owner's handler is ever
@@ -8342,7 +8491,12 @@ window.grbtp = 35;
       if (event.code === Settings_default._toggleMenu && !isInput) {
         UI_default.toggleMenu();
       }
-      if (event.code === Settings_default._toggleChat && !UI_default.isMenuOpened) {
+      if (Settings_default._chatLogKey && event.code === Settings_default._chatLogKey && !isInput && !UI_default.isMenuOpened) {
+        try {
+          ChatLog_default.toggle();
+        } catch (_) {}
+      }
+      if (event.code === Settings_default._toggleChat && !UI_default.isMenuOpened && !ChatLog_default.ownsInput()) {
         GameUI_default.handleEnter(event);
       }
       const active = this.active;
@@ -8662,15 +8816,6 @@ window.grbtp = 35;
           syncPlacerSlaves();
         } catch (_) {}
       }
-      // Fast heal. Held rather than toggled, and it does nothing here beyond
-      // raising the flag: the heal itself belongs to NovastormHeal's tick,
-      // where the packet budget and the shame count are known and where it
-      // lands ahead of the placement modules. The key is HEAL_FAST_KEY — the
-      // food hotkey's own default, which is the pairing this was asked for:
-      // holding Q stops being one food a tick and becomes the burst.
-      if (event.code === HEAL_FAST_KEY) {
-        this.fastHealPress = true;
-      }
       if (event.code === Settings_default._boostSpikes) {
         try {
           const mh = active._ModuleHandler;
@@ -8704,12 +8849,6 @@ window.grbtp = 35;
           event.stopImmediatePropagation();
           return;
         }
-      }
-      // Cleared ahead of every guard below. A key released while dead, while
-      // the menu is open or while the chat has focus still has to drop the
-      // flag, or the next spawn starts with the burst already held down.
-      if (event.code === HEAL_FAST_KEY) {
-        this.fastHealPress = false;
       }
       const active = this.active;
       const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = active;
@@ -17822,1450 +17961,6 @@ window.grbtp = 35;
       }
     }
   }
-  // ==========================================================================
-  // Auto Heal — novastorm 1.4's system, on RYN's packets, ticks and variables.
-  //
-  // novastorm heals against a *prediction*, not against a health drop. Every
-  // tick it sums what could land on this tick — spike contact, spikes it is
-  // about to be pushed or walked into, weapon hits that have a reason to
-  // connect, turret shots, ranged secondaries, poison — caps the sum, adjusts
-  // it for the hat that is about to go on, and eats if that number reaches its
-  // health. The whole decision is one block, run once, late in the tick:
-  //
-  //     totalDmgPot = spikeDmgPot + hitDmgPot + turretDmgPot + secDmgPot + poisonDmgPot
-  //     if (totalDmgPot > 140) totalDmgPot = 140;
-  //     if (totalDmgPot >= 100) soldierAnti = true;
-  //     ...
-  //     hatFc();
-  //     if (currentHat == 6) totalDmgPot *= 0.75;
-  //     if (currentHat == 7) totalDmgPot += 5;
-  //     if (myPlayer.health <= totalDmgPot) healing = true;
-  //     if (((healing && myPlayer.shameCount < 7) || (tick - damageTick) > 0)
-  //         && myPlayer.health < 100) { heal(100 - myPlayer.health); damageHealed = true; }
-  //
-  // What this replaces: the Misery port that stood here. Misery is a fork of
-  // this same estimator with three additions, and all three are gone:
-  //
-  //   · the early spike-push branch — a second heal call placed ahead of the
-  //     tick's other packets, fired on `spikeDangerNow` before the hat terms
-  //     were applied. novastorm has one heal site, after hatFc, and reaches
-  //     the same spike push through spikeDmgPot inside the one sum.
-  //   · the shame override — Misery's Survival Preheal let a lethal prediction
-  //     spend a +1 shame to eat at shameCount 7. novastorm never crosses 7:
-  //     `healing && shameCount < 7` is the whole gate, and a shamed tick waits
-  //     for `(tick - damageTick) > 0` instead. The setting goes with it.
-  //   · the extra soldier trigger — `spikeDangerNow && totalDmgPot >= health`
-  //     put soldier on below 100 predicted. novastorm's threshold is the flat
-  //     `totalDmgPot >= 100`, and nothing else.
-  //
-  // The in-flight projectile term goes too. RYN's ProjectileManager knows what
-  // is already in the air and Misery added that as a sixth summand; novastorm's
-  // sum has five terms and no equivalent. Its turret and ranged-secondary
-  // branches predict the *next* shot from a reloaded enemy rather than the one
-  // already flying, so the shot in the air is now only healed for once it is
-  // one of those. ProjectileManager is still read, for attribution — telling a
-  // turret bolt apart from a spike tier is what makes damagesByTurrets work.
-  //
-  // Everything on RYN's side is kept whole:
-  //   · one module slot in ModuleHandler.modules, in the same tick position
-  //   · food goes out through ModuleHandler.heal() under the 119 packet/s
-  //     budget, and healedOnce still makes UpdateAngle resend the direction —
-  //     which is novastorm's `io.send("D", angle)` after a heal
-  //   · myPlayer.shameActive — never spend food the server is refusing anyway
-  //   · shame accounting stays where RYN keeps it, in Player.updateHealth,
-  //     which already implements novastorm's +1 inside 120ms / -2 outside rule
-  //   · EnemyManager is untouched: its numbers still drive every other module,
-  //     they just no longer decide when to eat
-  //
-  // Two flags leave this module for the rest of the client, both novastorm's
-  // own: soldierAnti, which joins RYN's soldier-equip condition, and
-  // shouldResetShame, which ShameReset consults before putting bull on.
-  // ==========================================================================
-  const NOVA_DMG_CAP = 140;
-  // Bull is worn to reset shame and gives up all defence for it, so the tick it
-  // goes on is worth five more damage than the sum says.
-  const NOVA_BULL_BIAS = 5;
-  const NOVA_TURRET_DMG = 25;
-  const NOVA_CACTUS_DMG = 35;
-  // novastorm's `111 * (.3 + knock)`. RYN stores knockback already multiplied
-  // by 111, so the same distance is 33.3 + weapon.knockback.
-  const NOVA_KB_BASE = 33.3;
-  const NOVA_POISON_DMG = 5;
-  const NOVA_POISON_PERIOD = 9;
-  // Poison runs five seconds, which is five 9-tick periods. novastorm has no
-  // window at all: it re-stamps damageByPoisonTick out of a `damages` array it
-  // never clears, so `(tick - damageByPoisonTick) % 9` is pinned at 0 and the
-  // term either fires forever or never. The window is what the term was meant
-  // to be — "5 damage every 9 ticks, for as long as the poison lasts".
-  const NOVA_POISON_WINDOW = NOVA_POISON_PERIOD * 5;
-  const NOVA_SEC_RANGE = 400;
-  const NOVA_TURRET_RANGE = 350;
-  const NOVA_VELOCITY_MIN_RANGE = 150;
-  const NOVA_VELOCITY_MAX_RANGE = 350;
-  // Spinning spikes: the worst thing an enemy can drop next to you, and what
-  // novastorm tests the ring with.
-  const NOVA_RING_SPIKE_ID = 9;
-  const NOVA_RING_STEPS = 36;
-  // 100px grid cells, so ±4 covers 400px — further than a hit plus its full
-  // knockback can move us inside one tick.
-  const NOVA_GRID_SEARCH = 4;
-  // ModuleHandler.heal() is selectItem + attack + whichWeapon.
-  const NOVA_HEAL_PACKET_COST = 3;
-  // Deep enough to hold a full lethal tick for the post-mortem, shallow enough
-  // that a long fight cannot grow it without bound.
-  const NOVA_DEATH_LOG_LIMIT = 32;
-  // The spike tiers a player takes, with and without soldier's 0.75.
-  const NOVA_SPIKE_TIERS = [ 20, 30, 35, 45 ];
-  // novastorm's `myPlayer.shameCount < 7`, and its `totalDmgPot >= 100`.
-  const NOVA_SHAME_LIMIT = 7;
-  const NOVA_SOLDIER_ANTI_DMG = 100;
-
-  // ==========================================================================
-  // Damage palette — Falcons' findCachedDamage / soldierRound, on RYN's numbers.
-  //
-  // novastorm attributes an incoming damage number by asking each enemy what
-  // its weapons do and matching the number exactly. RYN answers that with
-  // ClientPlayer.getMaxWeaponDamage, and the name is the problem: it is the
-  // *max*, so it already has the bull multiplier in it (`addBull = true` by
-  // default, `Hats[7].dmgMultO`). An enemy who is not wearing bull therefore
-  // hits for expected/1.5 and the match fails, the damage falls through to the
-  // spike bucket, is not a spike tier either, and is attributed to nothing —
-  // so the prediction that decides whether to heal never counts the swing that
-  // just landed.
-  //
-  // Falcons solves it the other way round: it takes the un-multiplied damage
-  // and builds every value the same swing could arrive as. Both multipliers it
-  // uses and the reduction it pairs them with are real, and all four are in
-  // the game's own tables (drivers/game-drivers.json):
-  //
-  //   x1.5   Bull Helmet (hat 7)      dmgMultO 1.5   attacker
-  //   x1.2   Bloodthirster (hat 55)   dmgMultO 1.2   attacker
-  //   x0.2   Monkey Tail (acc 11)     dmgMultO 0.2   victim, i.e. us
-  //   x0.75  Soldier Helmet (hat 6)   dmgMult 0.75   victim, i.e. us
-  //
-  // The first three are the palette (three attacker states against two of
-  // ours, six values). The fourth is applied at comparison time rather than
-  // baked in, because it depends on the hat we were wearing when the server
-  // resolved the hit, which is not necessarily the one on now.
-  // ==========================================================================
-  const NOVA_BULL_MULT = 1.5;
-  const NOVA_BLOODTHIRSTER_MULT = 1.2;
-  const NOVA_TAIL_MULT = .2;
-  const NOVA_SOLDIER_MULT = .75;
-  const NOVA_ATTACKER_MULTS = [ 1, NOVA_BULL_MULT, NOVA_BLOODTHIRSTER_MULT ];
-  const NOVA_VICTIM_MULTS = [ 1, NOVA_TAIL_MULT ];
-  // The hats this module can force, and the slots it forces them in.
-  const HEAL_SOLDIER_HAT = 6;
-  const HEAL_EMP_HAT = 22;
-  // Falcons' forceAddIndexs. A forced add-on is a hat held for a number of
-  // ticks rather than for one, because the hit it is answering lands on a tick
-  // we do not control: the decision is taken when the damage arrives and the
-  // hat has to still be on when the next one does.
-  const HEAL_FORCE_SOLDIER = 0;
-  const HEAL_FORCE_EMP = 1;
-  const HEAL_FORCE_TRAP_SOLDIER = 2;
-  const HEAL_FORCE_ONETICK_SOLDIER = 3;
-  const HEAL_FORCE_SLOTS = 4;
-  // How far Falcons looks for the player or animal an enemy's turret might be
-  // aimed at instead of us, and how close to that line we have to be before
-  // the shot is read as ours. Its own `600` and `60`.
-  const HEAL_TURRET_LINE_RANGE = 600;
-  const HEAL_TURRET_LINE_TOLERANCE = 60;
-  // Falcons' `er.shameCount < 7` heal, and the delay it takes instead when a
-  // spike worth more than 20 is close enough to land inside the wait.
-  const HEAL_ZERO_SHAME_DELAY = 2;
-  const HEAL_ZERO_SHAME_SPIKE_RANGE = 50;
-  const HEAL_ZERO_SHAME_SPIKE_DMG = 20;
-  // ==========================================================================
-  // Heal priority. novastorm has one question — "does the prediction reach my
-  // health" — and one answer, the full deficit. That is right for the tick it
-  // was written for and blunt everywhere else: at 12 health every apple is
-  // worth spending, and a spike that has been chipping 20 a tick is worth one
-  // apple rather than five.
-  //
-  // So the single question becomes four tiers, in the order they matter:
-  //
-  //   3 CRIT  health at or under 25   — everything, as fast as the budget goes
-  //   2 HIGH  the novastorm verdict   — full deficit, capped at four foods
-  //   1 CHIP  a spike is landing      — one tier's worth, two foods
-  //   0 IDLE  nothing to answer
-  //
-  // Tier 2 is exactly `health <= totalDmgPot` after the hat terms, which is the
-  // gate that was already here — with the priority system off, or at tier 2 on
-  // a deficit four foods cannot cover, the behaviour is byte for byte what it
-  // was. The caps are what is new, and they only ever spend *less*.
-  // ==========================================================================
-  const HEAL_PRIORITY_NONE = 0;
-  const HEAL_PRIORITY_CHIP = 1;
-  const HEAL_PRIORITY_HIGH = 2;
-  const HEAL_PRIORITY_CRIT = 3;
-  // The health at which the prediction stops being the deciding term: a hit
-  // this client has not predicted is still lethal from here, so eat first.
-  const HEAL_CRIT_HEALTH = 25;
-  // Foods per tick at tier 2 and tier 1. Four apples is 80 health, which is
-  // every deficit that matters at tier 2; tier 1 is answering a chip, and two
-  // is the tier a spike takes plus the one it takes next tick.
-  const HEAL_HIGH_USES = 4;
-  const HEAL_CHIP_USES = 2;
-  // Shame headroom for the chip tier. Eating inside 120ms of a hit costs +1
-  // shame, and the chip tier eats on exactly those ticks — pinned on a spike,
-  // taking a tier every tick — so left alone it would walk the count to 7 in
-  // under a second and take the lethal tiers down with it. It stops with three
-  // heals still in hand; tiers 2 and 3 keep novastorm's full wall at 7.
-  const HEAL_CHIP_SHAME_LIMIT = 4;
-  const HEAL_PRIORITY_NAMES = [ "IDLE", "CHIP", "HIGH", "CRIT" ];
-  // Milliseconds between two heals. A tick is ~111ms, so this only ever catches
-  // a second heal inside one tick — which lastHealTick catches first — and is
-  // the second wall against a spam kick rather than a rate limit on healing.
-  const HEAL_COOLDOWN_MS = 50;
-  // Foods one tick may ever send, whatever the tier asks for. Five is fifteen
-  // packets, an eighth of the second's allowance.
-  const HEAL_MAX_PER_TICK = 5;
-  // The manual heal key. A constant rather than a bindable row: Autoheal is one
-  // switch, and this is the hand on it. KeyQ is the food hotkey's own default,
-  // which is the pairing this was asked for — holding Q was already a heal, one
-  // food a tick, and now the same key covers the whole deficit at once.
-  const HEAL_FAST_KEY = "KeyQ";
-  const nearlyEqual = (a, b) => Math.abs(a - b) < .01;
-  const isNovaSpikeDamage = damage => NOVA_SPIKE_TIERS.some(tier => nearlyEqual(tier, damage) || nearlyEqual(tier * .75, damage));
-  const isNovaSoldieredSpike = damage => NOVA_SPIKE_TIERS.some(tier => nearlyEqual(tier * .75, damage));
-  class NovastormHeal {
-    // The slot, the name and the tick position are RYN's. "antiInsta" is what
-    // ModuleHandler registers, what RynPlacementEngine.priorityFor reads as
-    // DEFENSE, and what the debug HUD prints — only the rule inside changed.
-    moduleName="antiInsta";
-    client;
-    // ---- this tick's prediction -------------------------------------------
-    healing=false;
-    totalDmgPot=0;
-    spikeDmgPot=0;
-    hitDmgPot=0;
-    turretDmgPot=0;
-    secDmgPot=0;
-    poisonDmgPot=0;
-    collidingSpike=false;
-    willCollide=false;
-    soldierAnti=false;
-    spikeTickAnti=false;
-    shouldResetShame=false;
-    // novastorm's canStillGather: a knockback-into-spike we set up ourselves is
-    // not a reason to stop swinging.
-    canStillGather=false;
-    // ---- carried across ticks --------------------------------------------
-    lastColliding=false;
-    lastPredicted=false;
-    lastPosX=0;
-    lastPosY=0;
-    poisonTick=null;
-    spikeDmgCount=0;
-    // ---- the priority heal ------------------------------------------------
-    // This tick's tier, kept on the module so the HUD can read the same number
-    // the heal acted on rather than recomputing it a frame later against a
-    // prediction that has already been cleared.
-    healPriority=HEAL_PRIORITY_NONE;
-    healUses=0;
-    // The tick a food actually went out on. Every heal path tests it, so a tick
-    // can eat once and only once however many of them fire: the manual burst,
-    // the priority heal and the save-tick top-up cannot stack on one another.
-    lastHealTick=-1;
-    // Wall clock, for the cooldown. A tick is ~111ms, so this only ever catches
-    // two heals inside one tick — which lastHealTick catches first — and is
-    // here as the second wall against a spam kick.
-    lastHealTime=0;
-    // ---- this tick's damage, attributed ----------------------------------
-    spikeDamages=[];
-    damagesByHits=[];
-    damagesByShoots=[];
-    damagesByTurrets=[];
-    deathDamages=[];
-    _seenDamageTick=null;
-    // Six damage values per distinct swing, built once and reused. See
-    // _paletteFor.
-    _palette=new Map;
-    // ---- EMP anti ---------------------------------------------------------
-    // Falcons' per-enemy `canEMP`, reduced to the one answer this side needs:
-    // is every source that has hit us this tick one the EMP helmet would stop?
-    //
-    // The magnitude of what is coming is not recomputed here — RYN already
-    // solves that in calculateTotalDamage and a second damage model is the one
-    // thing this port must not add. What was genuinely missing is *which kind*
-    // of damage it is, because EMP answers turrets and nothing else.
-    empSafe=true;
-    // Ticks a forced hat is held for. Falcons' forcedAddOns, indexed by the
-    // HEAL_FORCE_* constants.
-    _forced=new Array(HEAL_FORCE_SLOTS).fill(0);
-    // Falcons' healingDelay: a heal deliberately held back a tick or two so the
-    // food lands outside the server's shame window.
-    healingDelay=0;
-    healingDelayAmount=0;
-    // ---- world, refreshed once a tick ------------------------------------
-    enemySpikes=[];
-    cactuses=[];
-    _ringPos=new Vector_default;
-    constructor(client2) {
-      this.client = client2;
-    }
-    reset() {
-      this.healing = false;
-      this.soldierAnti = false;
-      this.shouldResetShame = false;
-      this.spikeTickAnti = false;
-      this.lastColliding = false;
-      this.lastPredicted = false;
-      this.poisonTick = null;
-      this.spikeDmgCount = 0;
-      this.healPriority = HEAL_PRIORITY_NONE;
-      this.healUses = 0;
-      this.lastHealTick = -1;
-      this.lastHealTime = 0;
-      this._seenDamageTick = null;
-      this.spikeDamages.length = 0;
-      this.damagesByHits.length = 0;
-      this.damagesByShoots.length = 0;
-      this.damagesByTurrets.length = 0;
-      this.deathDamages.length = 0;
-      this.enemySpikes.length = 0;
-      this.cactuses.length = 0;
-      // Falcons clears its damage cache on respawn for the same reason: the
-      // palette is keyed on numbers, and the weapons behind those numbers are
-      // whatever the next life is carrying.
-      this._palette.clear();
-      this.empSafe = true;
-      this._forced.fill(0);
-      this.healingDelay = 0;
-      this.healingDelayAmount = 0;
-    }
-
-    // novastorm's `(tick - damageTick) > 0`. damageTick is set to tickCount + 1
-    // on damage, so this reads true two ticks (~222ms) after a hit — clear of
-    // the 120ms window in which an apple adds shame rather than removing two.
-    // It is the whole of novastorm's answer to a shamed tick: no override, just
-    // wait for a tick nothing landed on.
-    isSaveHealTick() {
-      const {tickCount: tickCount, damageTick: damageTick} = this.client.myPlayer;
-      return tickCount - damageTick > 0;
-    }
-
-    // ------------------------------------------------------------------------
-    // World cache. novastorm filters `visibleObjects` every tick into
-    // spikes_enemy and cactuses; RYN has a spatial grid, so the same two lists
-    // come out of one query around us instead of a scan of everything on screen.
-    // ------------------------------------------------------------------------
-    _isEnemyObject(object) {
-      if (!(object instanceof PlayerObject)) {
-        return true;
-      }
-      const {PlayerManager: PlayerManager, myPlayer: myPlayer} = this.client;
-      // isEnemyByID throws on an owner it has never seen. An object whose owner
-      // has left the screen is still a spike that hurts, so read it as hostile.
-      if (!PlayerManager.playerData.has(object.ownerID)) {
-        return true;
-      }
-      return PlayerManager.isEnemyByID(object.ownerID, myPlayer);
-    }
-    refreshWorld() {
-      const {ObjectManager: ObjectManager, myPlayer: myPlayer} = this.client;
-      this.enemySpikes.length = 0;
-      this.cactuses.length = 0;
-      const pos = myPlayer.pos.current;
-      const ids = ObjectManager.grid2D.queryFull(pos.x, pos.y, NOVA_GRID_SEARCH);
-      for (let i = 0; i < ids.length; i++) {
-        const object = ObjectManager.objects.get(ids[i]);
-        if (object === undefined) {
-          continue;
-        }
-        if (object instanceof PlayerObject) {
-          // novastorm's `object.id > 5 && object.id < 10`: the four spike items,
-          // which is itemGroup 2 here.
-          if (object.itemGroup === 2 && this._isEnemyObject(object)) {
-            this.enemySpikes.push(object);
-          }
-        } else if (object.isCactus) {
-          this.cactuses.push(object);
-        }
-      }
-    }
-
-    // ------------------------------------------------------------------------
-    // novastorm's distributionDamages, taken once instead of three times. RYN's
-    // Player.updateHealth keeps this damage tick's health deltas in
-    // myPlayer.damages and clears them when a new damage tick starts, so the
-    // bucket is here to be read — what is missing is which of the three things
-    // each delta came from. novastorm answers that from three separate packet
-    // handlers; the answer is the same taken once, against what RYN already
-    // knows about every enemy and every projectile aimed at us.
-    //
-    // The buckets are per tick, as novastorm's are: it clears damagesByHits and
-    // spikeDamages at the bottom of every tick. myPlayer.damages persists until
-    // the next damage tick, so the damage tick it belongs to is remembered and
-    // each one is attributed exactly once.
-    // ------------------------------------------------------------------------
-    // Every value one swing could land as, cached by the number RYN hands us.
-    //
-    // `expected` comes in with bull and the weapon variant already applied, so
-    // the un-multiplied swing is expected / 1.5 and the palette is rebuilt out
-    // from there. Keyed on the rounded value rather than on (weapon, variant)
-    // as Falcons keys it, because that is what this side has in hand and two
-    // weapons that happen to deal the same damage want the same palette
-    // anyway. Six entries, built once per distinct damage value for the life
-    // of the page.
-    _paletteFor(expected) {
-      const key = Math.round(expected * 100);
-      let palette = this._palette.get(key);
-      if (palette !== undefined) {
-        return palette;
-      }
-      const base = expected / NOVA_BULL_MULT;
-      palette = [];
-      for (const attacker of NOVA_ATTACKER_MULTS) {
-        for (const victim of NOVA_VICTIM_MULTS) {
-          palette.push(base * attacker * victim);
-        }
-      }
-      // Bounded: a fight presents a handful of distinct weapon damages, and
-      // past that the map is dropped whole rather than grown.
-      if (this._palette.size >= 64) {
-        this._palette.clear();
-      }
-      this._palette.set(key, palette);
-      return palette;
-    }
-
-    // Falcons' soldierRound, which is a comparison rather than a rounding: does
-    // this candidate explain the number that actually landed?
-    //
-    // The soldier reduction is applied here instead of being baked into the
-    // palette because it is ours, not theirs, and the hat that mattered is the
-    // one worn when the server resolved the hit. Both forms are tried for that
-    // reason — a soldier equipped this tick has not applied to a hit that
-    // landed last one, and vice versa.
-    _damageMatches(candidate, actual) {
-      if (nearlyEqual(candidate, actual)) {
-        return true;
-      }
-      return nearlyEqual(candidate * NOVA_SOLDIER_MULT, actual);
-    }
-
-    // Falcons' doTurretTargetLineMath, inverted to the question this side asks.
-    //
-    // A turret shoots whatever is nearest it, not whoever its owner is
-    // fighting. So before treating an enemy's turret as a shot coming at us,
-    // Falcons finds the nearest hostile animal and the nearest other player
-    // within 600 of them, projects our own distance along the line from the
-    // enemy to whichever is closer, and asks whether we are within 60 of that
-    // point. If we are, the shot is ours and EMP is worth wearing; if we are
-    // not, it was never going to hit us and EMP would be a wasted hat.
-    //
-    // Returns true when the shot is ours, which is why the name is the other
-    // way round from Falcons' — the caller reads better for it.
-    _turretAimedAtMe(enemy) {
-      const {myPlayer: myPlayer, PlayerManager: PlayerManager2, EnemyManager: EnemyManager2} = this.client;
-      const enemyPos = enemy.pos.current;
-      let target = null, bestDistance = Infinity;
-      const consider = entity => {
-        if (!entity || entity === enemy || entity === myPlayer) {
-          return;
-        }
-        const d = enemyPos.distance(entity.pos.current);
-        if (d > HEAL_TURRET_LINE_RANGE || d >= bestDistance) {
-          return;
-        }
-        bestDistance = d;
-        target = entity;
-      };
-      // The animals RYN already tracks, then every player that is not on their
-      // side. Falcons walks `ir` and `rr` — the full animal and player lists —
-      // and takes the nearest of each; this walks the same two sets through
-      // RYN's managers.
-      const danger = EnemyManager2.nearestDangerAnimal;
-      if (danger) {
-        consider(danger);
-      }
-      const players = PlayerManager2.players;
-      for (let i = 0; i < players.length; i++) {
-        const player = players[i];
-        if (!player || player === enemy || myPlayer.isMyPlayerByID(player.id)) {
-          continue;
-        }
-        // Hostile to *them*, which is what decides who their turret shoots —
-        // not hostile to us.
-        if (!PlayerManager2.isEnemyByID(player.id, enemy)) {
-          continue;
-        }
-        consider(player);
-      }
-      if (target === null) {
-        return true;
-      }
-      const myPos = myPlayer.pos.current;
-      const myDistance = myPos.distance(enemyPos);
-      // Further from them than their target is: the shot stops before us.
-      if (myDistance > bestDistance) {
-        return false;
-      }
-      const dir = enemyPos.angle(target.pos.current);
-      const alongX = enemyPos.x + Math.cos(dir) * myDistance;
-      const alongY = enemyPos.y + Math.sin(dir) * myDistance;
-      return hyp(myPos.x - alongX, myPos.y - alongY) <= HEAL_TURRET_LINE_TOLERANCE;
-    }
-
-    // ---- forced add-ons ----------------------------------------------------
-    // Falcons' addForcedAddOnValue / resetForcedAddOn. A hat held for a count
-    // of ticks rather than for the one tick that asked for it, because the hit
-    // being answered lands on a tick we do not choose.
-    forceAddOn(index, ticks) {
-      if (index < 0 || index >= HEAL_FORCE_SLOTS) {
-        return;
-      }
-      if (ticks > this._forced[index]) {
-        this._forced[index] = ticks;
-      }
-    }
-    resetAddOn(index) {
-      if (index < 0 || index >= HEAL_FORCE_SLOTS) {
-        return;
-      }
-      this._forced[index] = 0;
-    }
-    // Falcons' onlySoldier(): every forced slot except the EMP one.
-    get forcedSoldier() {
-      return this._forced[HEAL_FORCE_SOLDIER] > 0 || this._forced[HEAL_FORCE_TRAP_SOLDIER] > 0 || this._forced[HEAL_FORCE_ONETICK_SOLDIER] > 0;
-    }
-    get forcedEMP() {
-      return this._forced[HEAL_FORCE_EMP] > 0;
-    }
-    _tickForced() {
-      for (let i = 0; i < this._forced.length; i++) {
-        if (this._forced[i] > 0) {
-          this._forced[i] -= 1;
-        }
-      }
-    }
-
-    attributeDamages() {
-      // No evidence yet. EMP is a response to damage that actually arrived —
-      // Falcons only ever evaluates canEMP from entries in `damages` — so a
-      // tick that attributed nothing must not read as "every source this tick
-      // was a turret". Set true only once something has been attributed and
-      // nothing has disqualified it.
-      this.empSafe = false;
-      this.spikeDamages.length = 0;
-      this.damagesByHits.length = 0;
-      this.damagesByShoots.length = 0;
-      this.damagesByTurrets.length = 0;
-      const {myPlayer: myPlayer, PlayerManager: PlayerManager, ProjectileManager: ProjectileManager} = this.client;
-      const damageTick = myPlayer.damageTick;
-      const damages = myPlayer.damages;
-      if (damages.length === 0 || damageTick === this._seenDamageTick) {
-        this.spikeDmgCount = 0;
-        return;
-      }
-      this._seenDamageTick = damageTick;
-      // Something landed, so the question is live. Any melee or spike source
-      // below turns it back off.
-      this.empSafe = true;
-      const pending = damages.slice();
-      // Falcons' fitsPalette, against RYN's already-bull-multiplied number.
-      // Every value the same swing could have arrived as is tried, not just
-      // the one the attacker would deal at full strength — see the palette
-      // note above NOVA_ATTACKER_MULTS for why the exact match was losing
-      // hits from anyone not wearing bull.
-      const take = expected => {
-        if (!(expected > 0)) {
-          return null;
-        }
-        const palette = this._paletteFor(expected);
-        for (let i = 0; i < pending.length; i++) {
-          for (let k = 0; k < palette.length; k++) {
-            if (this._damageMatches(palette[k], pending[i])) {
-              return pending.splice(i, 1)[0];
-            }
-          }
-        }
-        return null;
-      };
-      // "hit": an enemy melee swing whose damage number is in the bucket.
-      for (const enemy of PlayerManager.enemies) {
-        const lookingShield = PlayerManager.lookingShield(myPlayer, enemy);
-        const {primary: primary, secondary: secondary} = enemy.weapon;
-        for (const weaponID of [ primary, secondary ]) {
-          if (weaponID === null || !DataHandler_default.isMelee(weaponID)) {
-            continue;
-          }
-          const damage = take(enemy.getMaxWeaponDamage(weaponID, lookingShield));
-          if (damage !== null) {
-            this.damagesByHits.push({
-              damage: damage,
-              player: enemy,
-              weapon: weaponID
-            });
-            // Falcons' canEMP, on the branch that decides it.
-            //
-            // A melee hit is not something the EMP helmet stops, so the only
-            // question is whether the *rest* of what this enemy is about to do
-            // is turret work. Falcons keeps EMP alive for a primary hit when
-            // their secondary is a projectile and their turret is pointed at
-            // somebody else — then the follow-up genuinely is a turret shot,
-            // and EMP is the hat that answers it. A secondary hit is never
-            // EMP-safe: the follow-up is the primary, and no hat stops that.
-            if (weaponID === secondary) {
-              this.empSafe = false;
-            } else if (secondary === null || !DataHandler_default.isShootable(secondary) || this._turretAimedAtMe(enemy)) {
-              this.empSafe = false;
-            }
-          }
-        }
-      }
-      // "shoot": a projectile aimed at us whose damage is in the bucket. RYN
-      // tracks these, so the turret ones can be told apart — which is what
-      // novastorm's own damagesByTurrets was declared for and never filled. Only
-      // still-airborne shots are matched: ProjectileManager.postTick runs earlier
-      // in the tick and drops one as it lands, so a shot that arrived ahead of
-      // its removal packet is caught here and the rest fall through unattributed,
-      // which costs nothing — 25 and 50 are not spike tiers.
-      for (const projectile of ProjectileManager.dangerProjectiles) {
-        const damage = take(projectile.damage);
-        if (damage === null) {
-          continue;
-        }
-        const entry = {
-          projectile: projectile,
-          damage: damage
-        };
-        this.damagesByShoots.push(entry);
-        if (projectile.isTurret) {
-          this.damagesByTurrets.push(entry);
-        }
-      }
-      // "spikes": whatever is left that lands on a spike tier.
-      for (const damage of pending) {
-        if (isNovaSpikeDamage(damage)) {
-          this.spikeDamages.push(damage);
-          // Spike damage is ground, not a turret. EMP does nothing about it,
-          // so the tick stops being one EMP can answer.
-          this.empSafe = false;
-        }
-      }
-      // novastorm counts consecutive spike ticks so hatFc can read
-      // `imTrapped && spikeDmgCount > 0` as "pinned on spikes, wear soldier".
-      this.spikeDmgCount = this.spikeDamages.length > 0 ? this.spikeDmgCount + 1 : 0;
-      // Poison arrives as a bare 5 (3.75 under soldier) that nothing else
-      // claims. Stamp the tick so the term below can run its 9-tick cycle.
-      for (const damage of pending) {
-        if (nearlyEqual(damage, NOVA_POISON_DMG) || nearlyEqual(damage, NOVA_POISON_DMG * .75)) {
-          this.poisonTick = myPlayer.tickCount;
-        }
-      }
-      for (const damage of damages) {
-        if (this.deathDamages.length >= NOVA_DEATH_LOG_LIMIT) {
-          this.deathDamages.shift();
-        }
-        this.deathDamages.push({
-          damage: damage,
-          tick: damageTick
-        });
-      }
-    }
-
-    // ---- small readers over RYN's per-player state ------------------------
-    _wasReloaded(player, type, tick) {
-      const reload = player.reload[type];
-      return reload.previous >= reload.max - tick;
-    }
-    _primaryDamage(enemy, lookingShield) {
-      return enemy.getMaxWeaponDamage(enemy.weapon.primary, lookingShield);
-    }
-    // novastorm's `111 * (.3 + primaryKnockback)`.
-    _primaryKnockback(enemy) {
-      const primary = enemy.weapon.primary;
-      if (primary === null) {
-        return NOVA_KB_BASE;
-      }
-      return NOVA_KB_BASE + DataHandler_default.getWeapon(primary).knockback;
-    }
-    // The swept movement test: our box, dragged from where we are to where we
-    // are about to be, against every enemy spike and cactus it crosses.
-    _sweptDamage(fromX, fromY, toX, toY) {
-      const myScale = this.client.myPlayer.scale;
-      let damage = 0;
-      for (const spike of this.enemySpikes) {
-        const pos = spike.pos.current;
-        const box = myScale + spike.scale;
-        if (lineInRect(pos.x - box, pos.y - box, pos.x + box, pos.y + box, fromX, fromY, toX, toY)) {
-          damage += spike.getDamage();
-        }
-      }
-      for (const cactus of this.cactuses) {
-        const pos = cactus.pos.current;
-        const box = myScale + cactus.scale;
-        if (lineInRect(pos.x - box, pos.y - box, pos.x + box, pos.y + box, fromX, fromY, toX, toY)) {
-          damage += NOVA_CACTUS_DMG;
-        }
-      }
-      return damage;
-    }
-    // "They swing, we fly, we land on a spike." novastorm runs this twice, once
-    // off xVel/yVel and once off x2/y2 — velocity and position, not one or the
-    // other — because a knockback resolved from either can be the one that
-    // lands. Note the cactus box here is drawn without the player's scale,
-    // unlike the movement sweep above: kept as written, both numbers are load
-    // bearing.
-    _knockbackIntoSpike(enemy, fromX, fromY, useFuture, lookingShield) {
-      const {myPlayer: myPlayer} = this.client;
-      const origin = useFuture ? enemy.pos.future : enemy.pos.current;
-      const distance = this._primaryKnockback(enemy);
-      const angle = Math.atan2(fromY - origin.y, fromX - origin.x);
-      const toX = fromX + distance * Math.cos(angle);
-      const toY = fromY + distance * Math.sin(angle);
-      const myScale = myPlayer.scale;
-      for (const spike of this.enemySpikes) {
-        const pos = spike.pos.current;
-        const box = myScale + spike.scale;
-        if (lineInRect(pos.x - box, pos.y - box, pos.x + box, pos.y + box, fromX, fromY, toX, toY)) {
-          this.spikeDmgPot += spike.getDamage();
-          this.hitDmgPot += this._primaryDamage(enemy, lookingShield);
-          this.canStillGather = true;
-          return;
-        }
-      }
-      for (const cactus of this.cactuses) {
-        const pos = cactus.pos.current;
-        const box = cactus.scale;
-        if (lineInRect(pos.x - box, pos.y - box, pos.x + box, pos.y + box, fromX, fromY, toX, toY)) {
-          this.spikeDmgPot += NOVA_CACTUS_DMG;
-          this.hitDmgPot += this._primaryDamage(enemy, lookingShield);
-          this.canStillGather = true;
-          return;
-        }
-      }
-    }
-    // novastorm's ring test: can this enemy drop a spinning spike around itself
-    // that our next position would already be standing in? The spike is not on
-    // the map yet, so no swept test can see it.
-    _spikeRingThreat(enemy, inPrimaryRange, primaryReloaded, lookingShield) {
-      const {myPlayer: myPlayer, ObjectManager: ObjectManager} = this.client;
-      const item = Items[NOVA_RING_SPIKE_ID];
-      const ringR = myPlayer.scale + item.scale + (item.placeOffset || 0);
-      const reach = myPlayer.scale + item.scale;
-      const myFuture = myPlayer.pos.future;
-      const enemyPos = enemy.pos.current;
-      // Nothing on a ring of radius ringR around the enemy can come within reach
-      // of us from further away than ringR + reach. Exact, so it prunes without
-      // changing an answer.
-      if (myFuture.distance(enemyPos) > ringR + reach) {
-        return;
-      }
-      const health = myPlayer.tempHealth;
-      const soldierDefense = Hats[6].dmgMult;
-      const spikeDamage = item.damage;
-      const primaryDamage = this._primaryDamage(enemy, lookingShield);
-      const ringPos = this._ringPos;
-      for (let i = 0; i < NOVA_RING_STEPS; i++) {
-        const angle = i * (Math.PI * 2 / NOVA_RING_STEPS);
-        ringPos._setXY(enemyPos.x + ringR * Math.cos(angle), enemyPos.y + ringR * Math.sin(angle));
-        if (myFuture.distance(ringPos) > reach) {
-          continue;
-        }
-        if (!ObjectManager.canPlaceItem(NOVA_RING_SPIKE_ID, ringPos)) {
-          continue;
-        }
-        if (inPrimaryRange && primaryReloaded) {
-          if (100 <= primaryDamage + spikeDamage) {
-            this.spikeTickAnti = true;
-            // Falcons' antiSpikeTick: the same finding, held for two ticks
-            // instead of one, and only while their trap is the thing holding
-            // us. A ring spike dropped under a pinned player and swung on is
-            // resolved over two server ticks — the place and the hit — so a
-            // soldier that comes off after one is off for the half that
-            // actually lands.
-            if (myPlayer.isTrapped) {
-              this.forceAddOn(HEAL_FORCE_TRAP_SOLDIER, 2);
-            }
-          }
-          if (health / soldierDefense <= primaryDamage + spikeDamage) {
-            this.spikeDmgPot += spikeDamage;
-            this.hitDmgPot += primaryDamage;
-            return;
-          }
-        } else if (health <= 70 && this.damagesByHits.length > 0) {
-          // novastorm has no break on this branch, so a wide open ring charges
-          // 45 once per free angle and the sum saturates on the cap. One spike
-          // is one spike: counted once, like the branch above it.
-          this.spikeDmgPot += spikeDamage;
-          if (enemy.isReloaded(2, 1)) {
-            this.turretDmgPot += NOVA_TURRET_DMG;
-          }
-          return;
-        }
-      }
-    }
-
-    // ------------------------------------------------------------------------
-    // novastorm's damage prediction, whole. Section order and every branch
-    // condition are its own; only the primitives underneath are RYN's.
-    // ------------------------------------------------------------------------
-    calculateTotalDamage() {
-      const {myPlayer: myPlayer, PlayerManager: PlayerManager} = this.client;
-      this.spikeDmgPot = 0;
-      this.hitDmgPot = 0;
-      this.turretDmgPot = 0;
-      this.secDmgPot = 0;
-      this.poisonDmgPot = 0;
-      this.collidingSpike = false;
-      this.willCollide = false;
-      this.canStillGather = false;
-      const tickCount = myPlayer.tickCount;
-      const myPos = myPlayer.pos.current;
-      const myFuture = myPlayer.pos.future;
-      const myScale = myPlayer.scale;
-      const health = myPlayer.tempHealth;
-      const imTrapped = myPlayer.isTrapped;
-
-      // Poison: 5 a period for five periods, predicted on the tick before it
-      // lands so the food is already in flight when it does.
-      if (this.poisonTick !== null) {
-        const elapsed = tickCount - this.poisonTick;
-        if (elapsed > NOVA_POISON_WINDOW) {
-          this.poisonTick = null;
-        } else if (elapsed % NOVA_POISON_PERIOD === NOVA_POISON_PERIOD - 1) {
-          this.poisonDmgPot = NOVA_POISON_DMG;
-        }
-      }
-
-      // Pinned on a spike while trapped: we are about to take again exactly what
-      // we just took, so read it off spikeDamages rather than guessing the tier.
-      // The 0.75 is divided back out because the hat term is applied once, at the
-      // end, against the hat that is about to go on.
-      if (imTrapped && this.spikeDamages.length > 0) {
-        for (const spike of this.enemySpikes) {
-          if (myPos.distance(spike.pos.current) <= spike.scale + myScale + 10) {
-            this.collidingSpike = true;
-            break;
-          }
-        }
-      }
-      if (this.collidingSpike) {
-        for (const damage of this.spikeDamages) {
-          this.spikeDmgPot += isNovaSoldieredSpike(damage) ? damage / .75 : damage;
-        }
-      }
-
-      // Walking into one. Only worth testing while we are actually moving or
-      // already being hit — otherwise a spike we have been parked beside all game
-      // reads as incoming damage on every tick.
-      if (!(imTrapped && this.collidingSpike)) {
-        const dx = this.lastPosX - myPos.x;
-        const dy = this.lastPosY - myPos.y;
-        const moved = Math.sqrt(dx * dx + dy * dy);
-        if (moved > 2 || this.damagesByHits.length > 0 || this.damagesByShoots.length > 0 || this.damagesByTurrets.length > 0 || this.spikeDamages.length > 0) {
-          const swept = this._sweptDamage(myPos.x, myPos.y, myFuture.x, myFuture.y);
-          if (swept > 0) {
-            this.willCollide = true;
-            this.spikeDmgPot += swept;
-          }
-        }
-      }
-      this.lastPosX = myPos.x;
-      this.lastPosY = myPos.y;
-
-      let predicted = false;
-      for (const enemy of PlayerManager.enemies) {
-        const lookingShield = PlayerManager.lookingShield(myPlayer, enemy);
-        const primary = enemy.weapon.primary;
-        const secondary = enemy.weapon.secondary;
-        const primaryDamage = this._primaryDamage(enemy, lookingShield);
-        const primaryReloaded = enemy.isReloaded(0, 1);
-        const turretReloaded = enemy.isReloaded(2, 1);
-        const enemyPos = enemy.pos.current;
-        const distance = myPos.distance(enemyPos);
-        const primaryRange = primary === null ? 0 : DataHandler_default.getWeapon(primary).range;
-        const inPrimaryRange = distance <= myScale * 1.8 + primaryRange;
-
-        // A weapon hit only counts when there is a reason it lands: we are on a
-        // spike, we are about to be, or that hit alone takes the bar off.
-        if (primaryReloaded && inPrimaryRange) {
-          if (this.collidingSpike) {
-            if (!this.lastColliding) {
-              this.hitDmgPot += primaryDamage;
-            } else if (!this._wasReloaded(enemy, 0, 1)) {
-              this.hitDmgPot += primaryDamage;
-            } else if (myPlayer.isReloaded(1, 1) && !this.lastPredicted) {
-              predicted = true;
-              this.hitDmgPot += primaryDamage;
-            }
-          } else if (this.willCollide) {
-            this.hitDmgPot += primaryDamage;
-          } else if (health <= primaryDamage) {
-            this.hitDmgPot += primaryDamage;
-          }
-        }
-
-        // Turret, on the same three reasons.
-        if (distance <= NOVA_TURRET_RANGE && turretReloaded) {
-          if (this.collidingSpike && this._wasReloaded(enemy, 0, 1) && !primaryReloaded) {
-            this.turretDmgPot += NOVA_TURRET_DMG;
-          } else if (this.willCollide && !primaryReloaded) {
-            this.turretDmgPot += NOVA_TURRET_DMG;
-          } else if (health <= NOVA_TURRET_DMG && this.hitDmgPot + this.turretDmgPot + this.spikeDmgPot < NOVA_TURRET_DMG) {
-            this.turretDmgPot += NOVA_TURRET_DMG;
-          }
-        }
-
-        // Velocity tick: turret gear, turret mid-cycle, primary ready, closing
-        // from beyond melee reach. The swing lands as they arrive, so neither of
-        // the range tests above can see it coming.
-        const closing = myFuture.distance(enemy.pos.future);
-        if (closing > NOVA_VELOCITY_MIN_RANGE && closing < NOVA_VELOCITY_MAX_RANGE) {
-          if (!turretReloaded && primaryReloaded && enemy.hatID === 53) {
-            this.turretDmgPot += NOVA_TURRET_DMG;
-            this.hitDmgPot += primaryDamage;
-          }
-        }
-
-        // Knockback into a spike or cactus, from our velocity and from our
-        // position — novastorm's two blocks, in its order.
-        if (!imTrapped && primaryReloaded && inPrimaryRange) {
-          this._knockbackIntoSpike(enemy, myFuture.x, myFuture.y, true, lookingShield);
-          this._knockbackIntoSpike(enemy, myPos.x, myPos.y, false, lookingShield);
-        }
-
-        // A ranged secondary that has already hit us once and is off cooldown
-        // will be fired again. Hammer's number is the bull-multiplied melee
-        // damage, so take that one without the multiplier.
-        if (secondary !== null && (secondary === 10 || DataHandler_default.isShootable(secondary))) {
-          if (this.damagesByHits.length > 0 && distance <= NOVA_SEC_RANGE) {
-            const secondaryDamage = enemy.getMaxWeaponDamage(secondary, lookingShield, secondary !== 10);
-            if (turretReloaded) {
-              this.turretDmgPot += NOVA_TURRET_DMG;
-              if (enemy.isReloaded(1, 1)) {
-                this.secDmgPot += secondaryDamage;
-              }
-            } else if (enemy.isReloaded(1, 1)) {
-              this.secDmgPot += secondaryDamage;
-            }
-          }
-        }
-
-        if (!this.collidingSpike) {
-          this._spikeRingThreat(enemy, inPrimaryRange, primaryReloaded, lookingShield);
-        }
-      }
-
-      this.lastColliding = this.collidingSpike;
-      this.lastPredicted = predicted;
-
-      // novastorm's sum, its five terms and no others:
-      //   totalDmgPot = spikeDmgPot + hitDmgPot + turretDmgPot + secDmgPot + poisonDmgPot
-      let total = this.spikeDmgPot + this.hitDmgPot + this.turretDmgPot + this.secDmgPot + this.poisonDmgPot;
-      if (total > NOVA_DMG_CAP) {
-        total = NOVA_DMG_CAP;
-      }
-      this.totalDmgPot = total;
-
-      // The flat threshold, which is the whole of novastorm's soldier trigger.
-      if (total >= NOVA_SOLDIER_ANTI_DMG) {
-        this.soldierAnti = true;
-      }
-      return total;
-    }
-
-    // ------------------------------------------------------------------------
-    // The hat the heal math is measured against. novastorm applies the 0.75 and
-    // the +5 after hatFc() has already chosen, so the term belongs to the hat
-    // that is about to go on, not the one currently worn. soldierAnti is this
-    // module's own reason for choosing soldier, so it is read here exactly where
-    // hatFc's closing `if (isBoughtHat(6, 0)) { if (soldierAnti) currentHat = 6 }`
-    // reads it — after anything that has already forced a hat, which is RYN's
-    // forceHat precedence and novastorm's last-write-wins precedence at once.
-    // ------------------------------------------------------------------------
-    // Every reason hatFc has for putting soldier on, gathered in one place so the
-    // hat term below and ModuleHandler's equip condition cannot disagree:
-    //
-    //     if (((imTrapped && spikeDmgCount > 0) || spikeTickAnti) && isBoughtHat(6,0))
-    //         currentHat = 6;
-    //     ... if (isBoughtHat(6, 0)) { if (soldierAnti) currentHat = 6; }
-    //
-    // spikeTickAnti is the ring case — an enemy who can drop a spinning spike
-    // under us and hit us on the same tick for 100 — and spikeDmgCount is being
-    // pinned on spikes inside a trap, taking the same tier every tick.
-    get wantsSoldier() {
-      return this.soldierAnti || this.spikeTickAnti || this.forcedSoldier || this.client.myPlayer.isTrapped && this.spikeDmgCount > 0;
-    }
-
-    // ------------------------------------------------------------------------
-    // EMP anti — the one thing in Falcons' heal that this client had no answer
-    // to at all.
-    //
-    // The EMP helmet is `antiTurret: 1` in the game's own table: a turret will
-    // not fire at someone wearing it. So against a tick whose lethal half is
-    // turret damage, EMP is not a smaller version of soldier — it removes the
-    // damage instead of reducing it, and it is strictly the better hat. Against
-    // anything else it does nothing at all, which is why it is gated on
-    // `empSafe` rather than offered as a general defence.
-    //
-    // Falcons' validate("emp"), condition for condition:
-    //
-    //   er.skins[22]                      we own the helmet
-    //   6 == er.skinIndex                 we are in soldier right now, so the
-    //                                     swap is soldier -> EMP rather than
-    //                                     bare -> EMP, and the tick we give up
-    //                                     is one we were already defending
-    //   er.health - (i - 25) > 1          survivable once the turret's 25 is
-    //                                     taken out of the total, which is what
-    //                                     wearing EMP actually buys
-    //   !mi.onlySoldier()                 nothing else is holding soldier on
-    // ------------------------------------------------------------------------
-    canUseEMP(total) {
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
-      if (!Settings_default._soldierEMP) {
-        return false;
-      }
-      if (!this.empSafe) {
-        return false;
-      }
-      if (!ModuleHandler.canBuy(0, HEAL_EMP_HAT)) {
-        return false;
-      }
-      if (myPlayer.hatID !== HEAL_SOLDIER_HAT) {
-        return false;
-      }
-      if (myPlayer.tempHealth - (total - NOVA_TURRET_DMG) <= 1) {
-        return false;
-      }
-      if (this.forcedSoldier) {
-        return false;
-      }
-      return true;
-    }
-    get wantsEMP() {
-      return this.forcedEMP;
-    }
-
-    // Falcons' start0ShameHeal. The server counts a food eaten inside its shame
-    // window against you, and at seven it stops feeding you altogether — so a
-    // heal that can afford to wait is worth waiting on.
-    //
-    //   mode 2   something is still coming: eat now if a spike worth more than
-    //            20 is close enough to land inside the wait, otherwise hold.
-    //   mode 1   nothing is coming: hold if the close spike cannot kill us,
-    //            otherwise eat now.
-    //
-    // "Now" is the next tick in Falcons (`Jt.nextTick`). Here it is this tick's
-    // doBestHeal, because RYN runs this module inside the tick rather than
-    // between two of them, and the food it sends lands on the same server tick
-    // Falcons' would.
-    startZeroShameHeal(mode, amount) {
-      const {myPlayer: myPlayer} = this.client;
-      const myPos = myPlayer.pos.current;
-      let closeSpike = null;
-      for (const spike of this.enemySpikes) {
-        if (spike.getDamage() <= HEAL_ZERO_SHAME_SPIKE_DMG) {
-          continue;
-        }
-        if (myPos.distance(spike.pos.current) <= spike.scale + HEAL_ZERO_SHAME_SPIKE_RANGE) {
-          closeSpike = spike;
-          break;
-        }
-      }
-      if (mode === 2) {
-        if (closeSpike !== null) {
-          return this.doBestHeal(HEAL_PRIORITY_HIGH);
-        }
-        this.healingDelay = HEAL_ZERO_SHAME_DELAY;
-        this.healingDelayAmount = amount;
-        return false;
-      }
-      if (closeSpike !== null && myPlayer.tempHealth - closeSpike.getDamage() > 0) {
-        this.healingDelay = HEAL_ZERO_SHAME_DELAY;
-        this.healingDelayAmount = amount;
-        return false;
-      }
-      return this.doBestHeal(HEAL_PRIORITY_HIGH);
-    }
-    // Falcons' autoHealing: the held food, spent when the wait is over.
-    runHealingDelay() {
-      if (this.healingDelay <= 0) {
-        return false;
-      }
-      this.healingDelay -= 1;
-      if (this.healingDelay > 0) {
-        return false;
-      }
-      this.healingDelay = 0;
-      this.healingDelayAmount = 0;
-      return this.doBestHeal(HEAL_PRIORITY_HIGH);
-    }
-
-    nextHatID() {
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
-      if (ModuleHandler.forceHat !== null) {
-        return ModuleHandler.forceHat;
-      }
-      // EMP first: it is only ever asked for on a tick whose damage it removes
-      // outright, and on that tick it outranks the hat that would merely have
-      // reduced it.
-      if (this.wantsEMP && ModuleHandler.canBuy(0, HEAL_EMP_HAT)) {
-        return HEAL_EMP_HAT;
-      }
-      if (this.wantsSoldier && ModuleHandler.canBuy(0, 6)) {
-        return 6;
-      }
-      if (ModuleHandler.useHat !== null) {
-        return ModuleHandler.useHat;
-      }
-      return myPlayer.hatID;
-    }
-
-    // ------------------------------------------------------------------------
-    // novastorm's heal(value):
-    //
-    //     for (let i = 0; i < value; i += items.list[myPlayer.items[0]].heal)
-    //         place(myPlayer.items[0], null);
-    //
-    // one food place per heal step until the deficit is covered, and no
-    // in-flight accounting — it re-sends the whole deficit every tick until the
-    // server's health echo comes back.
-    //
-    // The one thing added is RYN's packet budget, because novastorm's placer
-    // guards its own sends with `packets + 5 > 119` and never guards the heal.
-    // A heal the prediction demands is survival and spends whatever it needs;
-    // the `(tick - damageTick) > 0` top-up is the recovery heal, and that one
-    // is trimmed to what is left of the 119/s allowance.
-    // ------------------------------------------------------------------------
-    heal(value, mandatory) {
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
-      const foodID = myPlayer.getItemByType(2);
-      if (foodID === null || foodID === void 0 || !Items[foodID]) {
-        return false;
-      }
-      const restore = Items[foodID].restore;
-      if (!restore) {
-        return false;
-      }
-      let times = Math.ceil(value / restore);
-      if (times <= 0) {
-        return false;
-      }
-      if (!mandatory) {
-        const left = ModuleHandler.packetLimit - ModuleHandler.packetCount;
-        const affordable = Math.floor(left / NOVA_HEAL_PACKET_COST);
-        if (affordable < times) {
-          times = affordable;
-        }
-        if (times <= 0) {
-          return false;
-        }
-      }
-      // healedOnce is what makes UpdateAngle resend the direction this tick,
-      // which is novastorm's `io.send("D", angle)` after a heal.
-      ModuleHandler.healedOnce = true;
-      for (let i = 0; i < times; i++) {
-        ModuleHandler.heal();
-      }
-      // Every path that eats comes through here, so this is the one place the
-      // "already ate this tick" bookkeeping can be kept honest.
-      this.lastHealTick = myPlayer.tickCount;
-      this.lastHealTime = Date.now();
-      this.healUses = times;
-      return true;
-    }
-
-    // ------------------------------------------------------------------------
-    // The food in the hotbar, and what one of them is worth. null when there is
-    // none, or when the item somehow carries no restore value — every heal path
-    // treats that as "cannot eat" rather than dividing by it.
-    // ------------------------------------------------------------------------
-    foodRestore() {
-      const foodID = this.client.myPlayer.getItemByType(2);
-      if (foodID === null || foodID === void 0 || !Items[foodID]) {
-        return null;
-      }
-      const restore = Items[foodID].restore;
-      return restore ? restore : null;
-    }
-
-    // novastorm's `buildIndex >= 0`: it will not eat while a build is selected,
-    // because in the vanilla client the food swap loses the placement.
-    //
-    // RYN cannot lose a placement that way — requestPlace and resendPlace both
-    // select their own item immediately before their attack, so a heal between
-    // two placements costs packets and nothing else. The food hotkey is not a
-    // build for this purpose either: holding it is Placer's own heal, and
-    // healedOnce already keeps the two from eating twice.
-    //
-    // So the guard is kept where it costs nothing — the chip tier, which is the
-    // optional one — and refused where novastorm's reason does not apply: a
-    // lethal tick is not the moment to protect a spike.
-    isBuildingManually() {
-      const {currentType: currentType} = this.client._ModuleHandler;
-      return currentType !== null && currentType !== void 0 && currentType !== 2;
-    }
-
-    // ------------------------------------------------------------------------
-    // The tier this tick is asking for. Reads only what postTick has already
-    // computed, so it is free to call twice and safe for the HUD to call
-    // between ticks — it answers against the last prediction, which is what the
-    // HUD is showing anyway.
-    // ------------------------------------------------------------------------
-    getHealPriority() {
-      const {myPlayer: myPlayer} = this.client;
-      if (!myPlayer.inGame) {
-        return HEAL_PRIORITY_NONE;
-      }
-      const health = myPlayer.tempHealth;
-      if (health >= myPlayer.maxHealth) {
-        return HEAL_PRIORITY_NONE;
-      }
-      // Under 25 nothing needs to be predicted: one unpredicted hit is lethal
-      // from here, so this tier outranks the prediction rather than waiting on
-      // it.
-      if (health <= HEAL_CRIT_HEALTH) {
-        return HEAL_PRIORITY_CRIT;
-      }
-      // novastorm's verdict, already taken this tick against the hat that is
-      // about to go on: `myPlayer.health <= totalDmgPot`.
-      if (this.healing) {
-        return HEAL_PRIORITY_HIGH;
-      }
-      // A spike is landing on us tick after tick. Nothing here is lethal — the
-      // tier above would have caught that — so this is the cheap top-up that
-      // keeps the chip from becoming the lethal tick two ticks from now.
-      if (this.spikeDmgCount > 0) {
-        return HEAL_PRIORITY_CHIP;
-      }
-      return HEAL_PRIORITY_NONE;
-    }
-
-    // ------------------------------------------------------------------------
-    // The priority heal. One tick, one tier, one call to novastorm's own heal()
-    // with the deficit trimmed to what the tier is allowed to spend.
-    //
-    // Everything that can refuse a heal is refused here rather than inside
-    // heal(), which stays the bare sender it was:
-    //
-    //   · dead, or not in the game at all
-    //   · already at full health
-    //   · shame at 7 — novastorm's hard wall, and food the server is refusing
-    //   · shameActive — the same wall as the server sees it
-    //   · a food has already gone out this tick
-    //   · the heal cooldown has not elapsed
-    //   · the packet budget cannot afford one more food
-    //   · mid-build, for the chip tier only (see isBuildingManually)
-    //   · shame already at 4, for the chip tier only (see the constant)
-    // ------------------------------------------------------------------------
-    doBestHeal(priority = this.getHealPriority(), manual = false) {
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
-      if (!myPlayer.inGame || priority === HEAL_PRIORITY_NONE) {
-        return false;
-      }
-      const health = myPlayer.tempHealth;
-      const maxHealth = myPlayer.maxHealth;
-      if (health >= maxHealth) {
-        return false;
-      }
-      if (myPlayer.shameCount >= NOVA_SHAME_LIMIT || myPlayer.shameActive) {
-        return false;
-      }
-      if (this.lastHealTick === myPlayer.tickCount) {
-        return false;
-      }
-      if (Date.now() - this.lastHealTime < HEAL_COOLDOWN_MS) {
-        return false;
-      }
-      if (!manual && priority === HEAL_PRIORITY_CHIP) {
-        if (this.isBuildingManually() || myPlayer.shameCount >= HEAL_CHIP_SHAME_LIMIT) {
-          return false;
-        }
-      }
-      // novastorm's own `packets + 5 > 119`, taken before anything is spent.
-      if (ModuleHandler.packetCount + NOVA_HEAL_PACKET_COST > ModuleHandler.packetLimit) {
-        return false;
-      }
-      const restore = this.foodRestore();
-      if (restore === null) {
-        return false;
-      }
-      const needed = maxHealth - health;
-      const uses = Math.ceil(needed / restore);
-      const tierUses = priority === HEAL_PRIORITY_CRIT ? uses : priority === HEAL_PRIORITY_HIGH ? Math.min(uses, HEAL_HIGH_USES) : HEAL_CHIP_USES;
-      const allowed = Math.max(1, Math.min(tierUses, HEAL_MAX_PER_TICK));
-      // Mandatory means "spend past the budget trim", which is what the lethal
-      // tiers have always done. A manual press is a convenience, not a
-      // prediction, so it takes the trim like the recovery heal does.
-      const mandatory = !manual && priority >= HEAL_PRIORITY_HIGH;
-      if (!this.heal(Math.min(needed, allowed * restore), mandatory)) {
-        return false;
-      }
-      return true;
-    }
-
-    // The manual key, read off the owner's InputHandler — the only one wired to
-    // the window — and only for whichever entity the keyboard is driving, so a
-    // held key heals the character you are actually playing rather than the
-    // whole fleet.
-    fastHealPressed() {
-      const client2 = this.client;
-      if (client2 !== AC()) {
-        return false;
-      }
-      const input = (client2.ownerClient || client2).InputHandler;
-      return input !== void 0 && input !== null && input.fastHealPress === true;
-    }
-
-    // novastorm's manual heal has no equivalent — this is the key the prompt
-    // asks for: a full heal on demand, off the prediction entirely. It still
-    // stops at shame 7 and still takes the packet trim, because both of those
-    // are the server's rules rather than this client's policy.
-    manualHeal() {
-      return this.doBestHeal(HEAL_PRIORITY_CRIT, true);
-    }
-
-    postTick() {
-      const {myPlayer: myPlayer} = this.client;
-      // Falcons decrements its forced add-ons at the top of every tick, so a
-      // hat asked for on tick N is still on for tick N+1 and gone by N+2. Done
-      // before anything can ask for a new one, so a fresh request always gets
-      // its full count.
-      this._tickForced();
-      this.healing = false;
-      this.soldierAnti = false;
-      this.shouldResetShame = false;
-      this.spikeTickAnti = false;
-      // Per tick, like the prediction it is read off. A tier left over from the
-      // tick before would have the HUD showing CRIT through a heal that has
-      // already happened.
-      this.healPriority = HEAL_PRIORITY_NONE;
-      if (!myPlayer.inGame) {
-        // novastorm's post-mortem: what the last tick predicted against what
-        // actually landed. Logger.log is a no-op in a production build, so this
-        // costs nothing there and is the first thing worth reading when the
-        // autoheal let someone die.
-        if (this.deathDamages.length > 0) {
-          Logger.log(`[autoheal] predicted before death: ${this.totalDmgPot}`);
-          Logger.log(this.deathDamages.slice());
-          this.deathDamages.length = 0;
-        }
-        return;
-      }
-      const health = myPlayer.tempHealth;
-      const maxHealth = myPlayer.maxHealth;
-      const shameCount = myPlayer.shameCount;
-
-      // The manual key, first thing in the tick — ahead of the prediction, the
-      // placement modules and everything else that spends packets, which is
-      // where novastorm's own early heal sat. It is deliberately outside the
-      // `_autoheal` gate below: the key is the answer to autoheal being off.
-      if (this.fastHealPressed()) {
-        this.manualHeal();
-      }
-
-      // The prediction runs whether or not autoheal is on: soldierAnti and
-      // shouldResetShame are read by the hat systems, and novastorm computes
-      // both unconditionally, at full health included.
-      this.refreshWorld();
-      this.attributeDamages();
-      const total = this.calculateTotalDamage();
-
-      // novastorm's shame-reset condition: nothing at all is coming, so this is
-      // the tick to put bull on and walk the count back down. ShameReset reads
-      // it. Taken before the hat terms below, as novastorm takes it — the sum
-      // that has to be zero here is the raw one, not the hat-adjusted one.
-      if (shameCount > 0 && !this.soldierAnti && !this.collidingSpike && this.poisonDmgPot === 0 && total === 0) {
-        this.shouldResetShame = true;
-      }
-
-      if (!Settings_default._autoheal) {
-        return;
-      }
-      // novastorm's `myPlayer.health < 100`.
-      if (health >= maxHealth) {
-        this.deathDamages.length = 0;
-        return;
-      }
-      // RYN's, and it stays: the server is refusing food, so do not spend it.
-      if (myPlayer.shameActive) {
-        return;
-      }
-
-      // The hat terms, against the hat that is about to go on:
-      //
-      //     if (currentHat == 6) totalDmgPot *= 0.75;
-      //     if (currentHat == 7) totalDmgPot += 5;
-      //     if (myPlayer.health <= totalDmgPot) healing = true;
-      let dmgPot = total;
-      const hatID = this.nextHatID();
-      if (hatID === 6) {
-        dmgPot *= Hats[6].dmgMult;
-      }
-      if (hatID === 7) {
-        dmgPot += NOVA_BULL_BIAS;
-      }
-      this.healing = health <= dmgPot;
-      this.healPriority = this.getHealPriority();
-
-      // ── Falcons' priority ladder ────────────────────────────────────────
-      // Its main(), on this client's numbers.
-      //
-      //   er.health - n <= 0 ? (EMP | soldier | heal | 0-shame heal)
-      //                      : 0-shame heal (mode 2)
-      //
-      // `n` is the total potential, which RYN has already solved as dmgPot —
-      // the whole point of putting the ladder here rather than porting
-      // interpretDamage's arithmetic is that this client's prediction is the
-      // better of the two and there is no reason to run a second one. What
-      // Falcons has that RYN did not is what to *do* about the verdict, which
-      // is the four rungs below.
-      //
-      // The first two only ever force a hat and let the heal happen behind it;
-      // the third is the heal RYN was already doing; the fourth is the one that
-      // waits so the food does not cost shame.
-      if (Settings_default._healPriority && this.healingDelay <= 0 && health < maxHealth) {
-        if (this.healing) {
-          const deficit = maxHealth - health;
-          if (this.canUseEMP(dmgPot)) {
-            // Falcons holds it for one tick and heals behind it. The hat has
-            // to already be on when their turret resolves, which is the tick
-            // after the one that told us it was coming.
-            this.forceAddOn(HEAL_FORCE_EMP, 1);
-            this.doBestHeal(HEAL_PRIORITY_CRIT);
-          } else if (shameCount < NOVA_SHAME_LIMIT) {
-            this.forceAddOn(HEAL_FORCE_SOLDIER, 1);
-            this.doBestHeal(this.healPriority);
-          } else {
-            this.startZeroShameHeal(1, deficit);
-          }
-        } else if (shameCount > 0) {
-          // Nothing lethal is coming and we are already carrying shame, so the
-          // food can afford to wait for a tick outside the window. At zero
-          // shame there is nothing to save and the ordinary heal below runs.
-          this.startZeroShameHeal(2, maxHealth - health);
-        }
-      }
-
-      // The one heal site. Shame is a hard wall at 7 — novastorm has no
-      // override for it, and a shamed tick heals only once `(tick - damageTick)`
-      // has gone positive.
-      //
-      // The first line is the tier's own call and the second is novastorm's
-      // recovery heal, unchanged: the top-up still fires on a quiet tick at
-      // shame 7, which is the only way the count ever comes back down.
-      // doBestHeal refuses at shame 7, so the two cannot collide, and
-      // lastHealTick keeps a tick that has already eaten from eating again.
-      //
-      // novastorm's own rule is not gone, it is tier 2 — `health <= dmgPot`
-      // after the hat terms, the deficit in full — so this is that heal with
-      // two tiers around it rather than a different one.
-      this.doBestHeal(this.healPriority);
-      // Falcons' autoHealing(), which is the held food coming due. Runs after
-      // the ordinary heal so a tick that has already eaten cannot eat twice —
-      // doBestHeal's own lastHealTick guard catches it either way.
-      this.runHealingDelay();
-      if (this.lastHealTick !== myPlayer.tickCount && this.isSaveHealTick()) {
-        this.heal(maxHealth - health, false);
-      }
-    }
-  }
-  const AntiInsta_default = NovastormHeal;
   class Autohat {
     moduleName="autoHat";
     client;
@@ -19561,54 +18256,1482 @@ window.grbtp = 35;
       }
     }
   }
+  // Novastorm's shame drain is two lines: one condition in the survival block,
+  //
+  //     if (myPlayer.shameCount > 0 && !soldierAnti && !collidingspike
+  //         && poisonDmgPot == 0 && totalDmgPot == 0) shouldResetShame = true;
+  //
+  // and one rule in hatFc,
+  //
+  //     if (isBoughtHat(7, 0)) { if (shouldResetShame) currentHat = 7; }
+  //
+  // Both are in the survival engine, because hatFc resolves that rule against
+  // the rest of the hat cascade in one ordered pass and the two halves cannot be
+  // in different modules and keep that order. What was here instead was RYN's
+  // own drain: a 1-in-9 tick gate, a latch held across ticks until the drain
+  // landed, and a save condition missing two of novastorm's four terms. None of
+  // it is novastorm's, so none of it is here.
+  //
+  // The module stays as the client's handle on the drain and reports what the
+  // engine decided.
   class ShameReset {
     moduleName="shameReset";
     client;
-    tickToggle=false;
     constructor(client2) {
       this.client = client2;
     }
-    isBullTickTime() {
-      const {myPlayer: myPlayer} = this.client;
-      return !myPlayer.shameActive && myPlayer.shameCount > 0 && myPlayer.poisonCount === 0 && myPlayer.isBullTickTime();
-    }
-    // novastorm's own gate for putting bull on:
-    //
-    //     if (myPlayer.shameCount > 0 && !soldierAnti && !collidingspike
-    //         && poisonDmgPot == 0 && totalDmgPot == 0) shouldResetShame = true;
-    //     ... if (isBoughtHat(7, 0)) { if (shouldResetShame) currentHat = 7; }
-    //
-    // isBullTickTime already covers shame > 0 and poison, and notSave() covers
-    // spike contact. What RYN had no term for is "something is predicted to land
-    // this tick", which is the one that matters: bull gives up all defence, so
-    // wearing it into an incoming hit is how a shame reset kills you.
-    // NovastormHeal has already answered that on this tick — it runs immediately
-    // before this module — so read its answer rather than form a second one.
     get shouldReset() {
-      const {_ModuleHandler: ModuleHandler} = this.client;
-      const novaHeal = ModuleHandler.staticModules.antiInsta;
-      const quietTick = novaHeal === undefined || novaHeal.shouldResetShame;
-      return quietTick && this.isBullTickTime() && ModuleHandler.canBuy(0, 7);
+      const survival = this.client._ModuleHandler.staticModules.autoHeal;
+      return survival !== void 0 && survival.lastShouldResetShame;
     }
-    notSave() {
-      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
-      return ModuleHandler.forceHat === 40 || EnemyManager2.instaThreat() || EnemyManager2.collidingSpike || myPlayer.wasTrapped() || ModuleHandler.currentType === 2;
-    }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler} = this.client;
-      if (Settings_default._autoheal && !this.notSave() && (this.shouldReset || this.tickToggle)) {
-        this.tickToggle = true;
-        ModuleHandler.moduleActive = true;
-        ModuleHandler.forceHat = 7;
-      }
-    }
-    healthUpdate() {
-      if (this.client.myPlayer.isDmgOverTime) {
-        this.tickToggle = false;
-      }
-    }
+    postTick() {}
   }
   const ShameReset_default = ShameReset;
+  // ══════════════════════════════════════════════════════════════════════════
+  //  NOVASTORM SURVIVAL BLOCK
+  // ══════════════════════════════════════════════════════════════════════════
+  //
+  //  Novastorm's survival system, ported whole. Not a system informed by it.
+  //
+  //  Every number in the pot is computed the way novastorm computes it, from
+  //  novastorm's own reload model, its own gates and its own five buckets, in
+  //  its own order:
+  //
+  //      poison
+  //      spike tick while trapped          (with the 0.75 reversal)
+  //      the movement sweep                (spikes, cactuses)
+  //      per enemy:
+  //          predict hit                   (four gates)
+  //          predict turret                (three gates)
+  //          velocity tick anti
+  //          knockback anti                (from the extrapolated position)
+  //          knockback anti                (from the interpolated position)
+  //          anti normal instakill
+  //          anti spike tick               (36 angles, two gates)
+  //      total = spike + hit + turret + sec + poison, clamped to 140
+  //      soldierAnti at 100
+  //      shame reset
+  //      hats
+  //      the hat adjusts the total
+  //      heal
+  //
+  //  It does not read EnemyManager.potentialDamage and it does not add anything
+  //  to it. RYN's threat sum counts a different set of things under different
+  //  conditions — any reloaded primary inside weapon range plus 130,
+  //  unconditionally, every projectile in the air, a flat five on every ninth
+  //  tick — and a pot built on top of that is RYN's pot with novastorm terms
+  //  bolted on. It does not heal when novastorm heals. RYN's sum is still
+  //  computed and still drives RYN's own modules; this one belongs to the
+  //  survival engine and nothing else reads it.
+  //
+  //  RYN-native is the state and the wire: Player, the object grid,
+  //  PacketManager, ModuleHandler, the Reloading module. It is not RYN's
+  //  arithmetic.
+  //
+  const NS_POT_CEILING = 140;
+  const NS_SOLDIER_ANTI = 100;
+  const NS_SHAME_LIMIT = 7;
+  const NS_DOT_PERIOD = 9;
+  const NS_POISON_DAMAGE = 5;
+  const NS_CACTUS_DAMAGE = 35;
+  const NS_TURRET_DAMAGE = Projectiles[1].damage;
+  const NS_INSTA_RANGE = 400;
+  const NS_TURRET_RANGE = 350;
+  const NS_VELOCITY_MIN = 150;
+  const NS_VELOCITY_MAX = 350;
+  const NS_TURRET_GEAR = 53;
+  const NS_SPIKE_TICK_ID = 9;
+  const NS_SPIKE_ANGLES = 36;
+  const NS_LOW_HEALTH = 70;
+  const NS_MOVE_EPSILON = 2;
+  const NS_COLLIDE_PAD = 10;
+  const NS_EPS = .02;
+  const NS_DAMAGE_MEMORY = 64;
+  // ── the Ryn Type 2 layer ────────────────────────────────────────────────
+  //
+  // Everything prefixed R2_ belongs to the decision layer above the port, not
+  // to novastorm. The port computes the pot; these decide what to do with it.
+  //
+  // R2_REACTIVE_TICKS is the spec's `(tick - damageTick) <= 2`, and it is the
+  // opposite of novastorm's `> 0`: novastorm waits a whole server tick after
+  // damage before taking the free heal, this one eats inside the window right
+  // after it. 2 ticks is 222 ms and the server's shame window is 120 ms, so
+  // delta 0 and delta 1 can both cost a shame point. That is the deliberate
+  // trade in a reactive heal, and it is exactly what the shame guard and the
+  // mode ladder exist to bound.
+  const R2_REACTIVE_TICKS = 2;
+  const R2_CRITICAL_HEALTH = 25;
+  // `deficit > 40` — one apple does not cover it, so the passive regen has
+  // time to matter.
+  const R2_REGEN_DEFICIT = 40;
+  const R2_MEDIC_HAT = 13;
+  const R2_ANGEL_ACC = 13;
+  const R2_BASKET_ACC = 17;
+  const R2_HEAL_PAD = 19;
+  // One place() is four sends. The engine keeps a margin so a chain never eats
+  // the whole allowance and starves the rest of the tick.
+  const R2_HEAL_PACKETS = 4;
+  const R2_PACKET_MARGIN = 8;
+  // Health a food restores after the bite, by item id. The item table stops at
+  // `restore`; this is the other half, read off the game's own consume — see
+  // AutoHeal._foodValue for the source and for when it is allowed to count.
+  const R2_FOOD_OVER_TIME = {
+    2: 50
+  };
+  // `[20, 30, 35, 45]` and the same four through a soldier helmet, which is how
+  // novastorm recognises a spike. Read off the item table rather than written
+  // down, and the 0.75 off the helmet.
+  const NS_SPIKE_DAMAGES = (() => {
+    const out = [ NS_CACTUS_DAMAGE ];
+    for (const item of Items) {
+      if (item && item.itemGroup === 2 && typeof item.damage === "number" && out.indexOf(item.damage) === -1) {
+        out.push(item.damage);
+      }
+    }
+    return out;
+  })();
+  class AutoHeal {
+    moduleName="autoHeal";
+    client;
+    // Novastorm's `tick`, incremented once per server update exactly as `tick++`
+    // at the top of updatePlayers is, and `damageTick`, which is `tick + 1` at
+    // the moment health dropped.
+    tick=0;
+    scanTick=-1;
+    damageTick=0;
+    // `damages` is novastorm's, and it is sticky on purpose: distributionDamages
+    // only ever splices out the values it can explain, and nothing clears the
+    // rest. Capped here because the alternative is an array that grows for the
+    // length of a session; the cap cannot change a decision, because the only
+    // thing that ever reads an old entry is the poison scan and `sawPoison`
+    // carries that answer separately.
+    damages=[];
+    observed=[];
+    damagesByHits=[];
+    damagesByShoots=[];
+    spikeDamages=[];
+    // Declared in novastorm and never filled. It appears in exactly one
+    // condition — the movement gate — where it is therefore always false. Kept
+    // so that condition reads the way novastorm's reads.
+    damagesByTurrets=[];
+    deathDamages=[];
+    damageByPoisonTick=0;
+    sawPoison=false;
+    // The five buckets.
+    spikeDmgPot=0;
+    hitDmgPot=0;
+    turretDmgPot=0;
+    secDmgPot=0;
+    poisonDmgPot=0;
+    totalDmgPot=0;
+    // The flags, with novastorm's names.
+    healing=false;
+    soldierAnti=false;
+    spikeTickAnti=false;
+    // The value spikeTickAnti had this tick, kept across the reset scan() does
+    // above the heal. See the note at that reset.
+    lastSpikeTickAnti=false;
+    shouldResetShame=false;
+    collidingspike=false;
+    lastcolliding=false;
+    willcollide=false;
+    predicted=false;
+    lastPredicted=false;
+    canStillGather=false;
+    lastShouldResetShame=false;
+    imTrapped=false;
+    iWasTrapped=false;
+    spikeDmgCount=0;
+    spikeDmg=0;
+    lastPosX=0;
+    lastPosY=0;
+    currentHat=0;
+    healedThisTick=0;
+    // ── the Ryn Type 2 layer's own state ──────────────────────────────────
+    // Why the last decision went the way it did, for the debug line and for
+    // the tests. Null when nothing stopped the heal.
+    blockedReason=null;
+    // Set while standing on a friendly healing pad, so the decision can leave
+    // a small deficit to healCol instead of spending an apple and a shame
+    // point on it.
+    onHealPad=false;
+    // What the layer asked for on the last tick it ran, before the food and
+    // packet tests cut it down.
+    wantedFood=0;
+    // The weapon slot the client was going to come back to, saved across the
+    // chain so a heal cannot leave food in hand. See autoHealRyn2.
+    savedPredictWeapon=null;
+    // Novastorm's `lastPrimaryReload`: whether this enemy's primary was ready at
+    // the end of the previous tick. RYN's `reload[].previous` is not that — it
+    // is overwritten to equal `current` at the end of every update — so the
+    // engine keeps the snapshot itself, which is what novastorm does too.
+    wasPrimaryReady=new Map;
+    constructor(client2) {
+      this.client = client2;
+    }
+    reset() {
+      this.tick = 0;
+      this.scanTick = -1;
+      this.damageTick = 0;
+      this.damages.length = 0;
+      this.observed.length = 0;
+      this.damagesByHits.length = 0;
+      this.damagesByShoots.length = 0;
+      this.spikeDamages.length = 0;
+      this.deathDamages.length = 0;
+      this.damageByPoisonTick = 0;
+      this.sawPoison = false;
+      this.spikeDmgPot = 0;
+      this.hitDmgPot = 0;
+      this.turretDmgPot = 0;
+      this.secDmgPot = 0;
+      this.poisonDmgPot = 0;
+      this.totalDmgPot = 0;
+      this.healing = false;
+      this.soldierAnti = false;
+      this.spikeTickAnti = false;
+      this.lastSpikeTickAnti = false;
+      this.shouldResetShame = false;
+      this.lastShouldResetShame = false;
+      this.collidingspike = false;
+      this.lastcolliding = false;
+      this.willcollide = false;
+      this.predicted = false;
+      this.lastPredicted = false;
+      this.canStillGather = false;
+      this.imTrapped = false;
+      this.iWasTrapped = false;
+      this.spikeDmgCount = 0;
+      this.spikeDmg = 0;
+      this.lastPosX = 0;
+      this.lastPosY = 0;
+      this.currentHat = 0;
+      this.healedThisTick = 0;
+      this.blockedReason = null;
+      this.onHealPad = false;
+      this.wantedFood = 0;
+      this.savedPredictWeapon = null;
+      this.wasPrimaryReady.clear();
+    }
+    // ── observation ───────────────────────────────────────────────────────
+    //
+    //     if (damage > 0) {
+    //         damageTick = (tick + 1);
+    //         damages.push(fixTo(damage, 2));
+    //         deathDamages.push({ damage: fixTo(damage, 2), tick: damageTick });
+    //     } else if (tmpObj == myPlayer && tmpObj.health == 100) {
+    //         deathDamages = []; spikeDmg = 0;
+    //     }
+    //
+    // The push is buffered rather than written straight into `damages`, because
+    // the server does not promise whether the health frame or the player frame
+    // comes first and the two orderings put the same damage a tick apart. The
+    // scan drains the buffer, so what it reads is what landed since the last
+    // decision either way.
+    healthUpdate(previous, current) {
+      const myPlayer = this.client.myPlayer;
+      if (current < previous) {
+        const damage = fixTo(previous - current, 2);
+        this.observed.push(damage);
+        this.damageTick = this.tick + 1;
+        this.deathDamages.push({
+          damage: damage,
+          tick: this.damageTick
+        });
+        if (this.deathDamages.length > 32) {
+          this.deathDamages.shift();
+        }
+      } else if (current >= myPlayer.maxHealth) {
+        this.deathDamages.length = 0;
+        this.spikeDmg = 0;
+      }
+    }
+    //     addChatLog(`Mod: Predict Damages before death ${totalDmgPot}`)
+    //     addChatLog(`Mod: Damages before death ${deathDamages}`)
+    reportDeath() {
+      if (!this.client.isOwner || this.deathDamages.length === 0) {
+        return;
+      }
+      Logger.log(`[autoheal] predict damages before death ${fixTo(this.totalDmgPot, 2)}`);
+      Logger.log(`[autoheal] damages before death ${JSON.stringify(this.deathDamages)}`);
+      this.deathDamages.length = 0;
+    }
+    // ── getPlayerInfo ─────────────────────────────────────────────────────
+    //
+    // Novastorm's helper. `primaryDmg` is `weapon.dmg * 1.5 * variant` — the 1.5
+    // is the bull multiplier and it is applied to every enemy whether or not
+    // they are wearing it, because the pot is a worst case and the hat can go on
+    // between the read and the swing. That is a decision, not a missing check,
+    // and it is kept.
+    _primaryID(player) {
+      const id = player.weapon.primary;
+      return id === null || id === void 0 ? 5 : id;
+    }
+    _secondaryID(player) {
+      const id = player.weapon.secondary;
+      return id === null || id === void 0 ? 15 : id;
+    }
+    _variantVal(player, id) {
+      return WeaponVariants[player.getWeaponVariant(id).current].val;
+    }
+    _primaryDamage(player) {
+      const id = this._primaryID(player);
+      return DataHandler_default.getWeapon(id).damage * Hats[7].dmgMultO * this._variantVal(player, id);
+    }
+    _primaryRange(player) {
+      return DataHandler_default.getWeapon(this._primaryID(player)).range;
+    }
+    // `111 * (.3 + knock)`, one server tick of knockback travel. RYN's weapon
+    // table already holds that product in `knockback`, so it is read rather
+    // than recomputed: 33.3 for a bare weapon, 55.6 for a polearm, 111.1 for a
+    // bat, 44.4 for daggers.
+    _primaryKnockback(player) {
+      return DataHandler_default.getWeapon(this._primaryID(player)).knockback;
+    }
+    _isHammer(player) {
+      return this._secondaryID(player) === 10;
+    }
+    // hammer, musket, crossbow, repeater crossbow, bow — novastorm's list, which
+    // is every secondary that can deal damage.
+    _secondaryDangerous(player) {
+      const id = this._secondaryID(player);
+      return id === 10 || DataHandler_default.isShootable(id);
+    }
+    _secondaryDamage(player) {
+      const id = this._secondaryID(player);
+      if (id === 10) {
+        return DataHandler_default.getWeapon(id).damage * Hats[7].dmgMultO * this._variantVal(player, id);
+      }
+      if (DataHandler_default.isShootable(id)) {
+        return DataHandler_default.getProjectile(id).damage;
+      }
+      return 0;
+    }
+    // ── reloads ───────────────────────────────────────────────────────────
+    //
+    // Novastorm carries `primaryReload[sid]`, `secondaryReload[sid]` and
+    // `turretReload[sid]` as fractions where 1 is ready; RYN carries the same
+    // three per player as ticks where `current >= max` is ready. `== 1` and
+    // `< 1` below are those two tests.
+    _primaryReady(player) {
+      return player.reload[0].current >= player.reload[0].max;
+    }
+    _secondaryReady(player) {
+      return player.reload[1].current >= player.reload[1].max;
+    }
+    _turretReady(player) {
+      return player.reload[2].current >= player.reload[2].max;
+    }
+    _wasPrimaryReady(player) {
+      return this.wasPrimaryReady.get(player.id) === true;
+    }
+    _mySecondaryReady() {
+      return this.client._ModuleHandler.staticModules.reloading.isReloaded(1);
+    }
+    // ── damage distribution ───────────────────────────────────────────────
+    //
+    // distributionDamages, all three branches. A number that landed is matched
+    // against what could have produced it and taken out of the list; whatever
+    // cannot be explained stays, which is what makes the poison latch below.
+    _take(value) {
+      for (let i = 0; i < this.damages.length; i++) {
+        if (Math.abs(this.damages[i] - value) < NS_EPS) {
+          this.damages.splice(i, 1);
+          return true;
+        }
+      }
+      return false;
+    }
+    _spikeLike(value) {
+      const mult = Hats[6].dmgMult;
+      for (let i = 0; i < NS_SPIKE_DAMAGES.length; i++) {
+        const base = NS_SPIKE_DAMAGES[i];
+        if (Math.abs(value - base) < NS_EPS || Math.abs(value - base * mult) < NS_EPS) {
+          return true;
+        }
+      }
+      return false;
+    }
+    _reversed(value) {
+      const mult = Hats[6].dmgMult;
+      for (let i = 0; i < NS_SPIKE_DAMAGES.length; i++) {
+        const base = NS_SPIKE_DAMAGES[i];
+        if (Math.abs(value - base * mult) < NS_EPS) {
+          return value / mult;
+        }
+      }
+      return value;
+    }
+    _distribute() {
+      const {myPlayer: myPlayer, PlayerManager: PlayerManager2, ProjectileManager: ProjectileManager2} = this.client;
+      this.damagesByHits.length = 0;
+      this.damagesByShoots.length = 0;
+      this.spikeDamages.length = 0;
+      for (let i = 0; i < this.observed.length; i++) {
+        this.damages.push(this.observed[i]);
+      }
+      this.observed.length = 0;
+      while (this.damages.length > NS_DAMAGE_MEMORY) {
+        this.damages.shift();
+      }
+      const myHat = Hats[myPlayer.hatID] || Hats[0];
+      const myMult = "dmgMult" in myHat ? myHat.dmgMult : 1;
+      //     damage = items.weapons[weapon].dmg * config.weaponVariants[...].val
+      //     damage *= getHatInStore(player.skinIndex).dmgMultO || 1
+      //     damage *= getAccInStore(player.tailIndex).dmgMultO || 1
+      //     damage *= getHatInStore(myPlayer.skinIndex).dmgMult || 1
+      for (let i = 0; i < PlayerManager2.enemies.length; i++) {
+        const enemy = PlayerManager2.enemies[i];
+        if (enemy.lastAttacked !== myPlayer.tickCount) {
+          continue;
+        }
+        const weaponID = enemy.lastAttackWeapon === null ? enemy.weapon.current : enemy.lastAttackWeapon;
+        if (!DataHandler_default.isMelee(weaponID)) {
+          continue;
+        }
+        const hat = Hats[enemy.hatID] || Hats[0];
+        const tail = Accessories[enemy.accessoryID] || Accessories[0];
+        let damage = DataHandler_default.getWeapon(weaponID).damage * this._variantVal(enemy, weaponID);
+        if ("dmgMultO" in hat) {
+          damage *= hat.dmgMultO;
+        }
+        if ("dmgMultO" in tail) {
+          damage *= tail.dmgMultO;
+        }
+        damage = fixTo(damage * myMult, 2);
+        if (this._take(damage)) {
+          this.damagesByHits.push({
+            damage: damage,
+            player: enemy,
+            weapon: weaponID
+          });
+        }
+      }
+      //     damage = projectile.dmg * (getHatInStore(myPlayer.skinIndex).dmgMult || 1)
+      //
+      // Novastorm runs this over the projectiles the server has just removed.
+      // RYN clears that list before the modules run, so the match is made
+      // against the projectiles the projectile manager is holding as aimed at
+      // us, which is the same set one tick earlier. The only reader of the
+      // result is the movement gate below.
+      for (const projectile of ProjectileManager2.dangerProjectiles) {
+        const damage = fixTo(projectile.damage * myMult, 2);
+        if (this._take(damage)) {
+          this.damagesByShoots.push({
+            projectile: projectile,
+            damage: damage
+          });
+        }
+      }
+      for (let i = 0; i < this.damages.length; i++) {
+        if (this._spikeLike(this.damages[i])) {
+          this.spikeDamages.push(this.damages[i]);
+        }
+      }
+      for (let i = 0; i < this.spikeDamages.length; i++) {
+        const index = this.damages.indexOf(this.spikeDamages[i]);
+        if (index >= 0) {
+          this.damages.splice(index, 1);
+        }
+      }
+      if (!this.sawPoison) {
+        for (let i = 0; i < this.damages.length; i++) {
+          if (Math.abs(this.damages[i] - NS_POISON_DAMAGE) < NS_EPS || Math.abs(this.damages[i] - NS_POISON_DAMAGE * Hats[6].dmgMult) < NS_EPS) {
+            this.sawPoison = true;
+            break;
+          }
+        }
+      }
+    }
+    // ── hazards ───────────────────────────────────────────────────────────
+    //
+    // Novastorm keeps `spikes_enemy` and `cactuses` as arrays rebuilt every tick
+    // out of everything inside 1000 units, and then only ever asks geometric
+    // questions about the few that are near. RYN keeps the same objects in a
+    // grid, so the question goes to the grid — the same objects answer it, and
+    // the filter is the same one: an enemy-owned item in the spike group, or a
+    // cactus.
+    _forEachHazard(x, y, search, fn) {
+      const {ObjectManager: ObjectManager2, myPlayer: myPlayer} = this.client;
+      ObjectManager2.grid2D.query(x, y, search, id => {
+        const object = ObjectManager2.objects.get(id);
+        if (object === void 0) {
+          return;
+        }
+        if (object instanceof PlayerObject) {
+          if (object.itemGroup !== 2 || !myPlayer.isEnemyByID(object.ownerID)) {
+            return;
+          }
+          return fn(object, DataHandler_default.getItem(object.type).damage, true);
+        }
+        if (object instanceof Resource && object.isCactus) {
+          return fn(object, NS_CACTUS_DAMAGE, false);
+        }
+      });
+    }
+    // ── the scan ──────────────────────────────────────────────────────────
+    scan() {
+      const {myPlayer: myPlayer, PlayerManager: PlayerManager2, _ModuleHandler: ModuleHandler} = this.client;
+      if (this.scanTick === myPlayer.tickCount) {
+        return;
+      }
+      this.scanTick = myPlayer.tickCount;
+      this.tick += 1;
+      //     if (soldierAnti) soldierAnti = false;
+      //     healing = false;
+      this.soldierAnti = false;
+      this.healing = false;
+      this.spikeDmgPot = 0;
+      this.hitDmgPot = 0;
+      this.turretDmgPot = 0;
+      this.secDmgPot = 0;
+      this.poisonDmgPot = 0;
+      this.totalDmgPot = 0;
+      this.shouldResetShame = false;
+      this.willcollide = false;
+      this.predicted = false;
+      if (!myPlayer.inGame) {
+        this.observed.length = 0;
+        return;
+      }
+      this._distribute();
+      //     distributionDamages({ type: "spikes" });
+      //     if (spikeDamages.length > 0) { spikeDmgCount++; for (i in spikeDamages) spikeDmg++; }
+      //     else spikeDmgCount = 0;
+      if (this.spikeDamages.length > 0) {
+        this.spikeDmgCount += 1;
+        this.spikeDmg += this.spikeDamages.length;
+      } else {
+        this.spikeDmgCount = 0;
+      }
+      this.imTrapped = myPlayer.isTrapped;
+      const pos = myPlayer.pos.current;
+      const vel = myPlayer.pos.future;
+      const myScale = myPlayer.scale;
+      // ── DAMAGE BY POISON / PREDICT POISON DAMAGE ──────────────────────
+      //
+      //     for (damage of damages) if (damage == 5 || damage == 3.75) damageByPoisonTick = tick;
+      //     if ((tick - damageByPoisonTick) % 9 == 8 || (tick - damageByPoisonTick) % 9 == 9) poisonDmgPot = 5;
+      //
+      // distributionDamages has no branch that explains a poison tick, so the 5
+      // stays in `damages` and this loop rewrites damageByPoisonTick to the
+      // current tick on every tick after the first one. The remainder is then
+      // always zero and the prediction stops firing; before any poison has ever
+      // landed it fires once every nine ticks. That is novastorm's behaviour,
+      // and `sawPoison` is how the latch is reproduced without keeping an array
+      // that grows for the length of the session.
+      //
+      // `% 9 == 9` cannot be true. It is novastorm's, and it is left as written.
+      if (this.sawPoison) {
+        this.damageByPoisonTick = this.tick;
+      }
+      const poisonStep = (this.tick - this.damageByPoisonTick) % NS_DOT_PERIOD;
+      if (poisonStep === NS_DOT_PERIOD - 1 || poisonStep === NS_DOT_PERIOD) {
+        this.poisonDmgPot = NS_POISON_DAMAGE;
+      }
+      // ── COLLISION WHILE TRAPPED ───────────────────────────────────────
+      //
+      //     if (imTrapped) if (spikeDamages.length > 0)
+      //         for (spike of spikes_enemy)
+      //             if (getDistance(myPlayer, spike) <= spike.scale + myPlayer.scale + 10)
+      //                 collidingspike = true;
+      this.collidingspike = false;
+      if (this.imTrapped && this.spikeDamages.length > 0) {
+        this._forEachHazard(pos.x, pos.y, 2, (object, damage, isSpike) => {
+          if (!isSpike || this.collidingspike) {
+            return;
+          }
+          if (pos.distance(object.pos.current) <= object.scale + myScale + NS_COLLIDE_PAD) {
+            this.collidingspike = true;
+            return true;
+          }
+        });
+      }
+      //     if (collidingspike && spikeDamages.length > 0)
+      //         for (dmg of spikeDamages)
+      //             spikeDmgPot += (dmg is a 0.75 value) ? dmg / 0.75 : dmg;
+      //
+      // The reversal is the whole point: the pot is multiplied by 0.75 again
+      // once the helmet is chosen, and adding an already-reduced number would
+      // apply the helmet twice and under-read the spike by a quarter.
+      if (this.collidingspike && this.spikeDamages.length > 0) {
+        for (let i = 0; i < this.spikeDamages.length; i++) {
+          this.spikeDmgPot += this._reversed(this.spikeDamages[i]);
+        }
+      }
+      // ── KNOCKBACKS PREDICTIONS ────────────────────────────────────────
+      //
+      //     if (!(imTrapped && collidingspike)) {
+      //         distance = |lastPos - pos|
+      //         if (distance > 2 || damagesByHits.length || damagesByShoots.length
+      //             || damagesByTurrets.length || spikeDamages.length) {
+      //             for (spike of spikes_enemy)
+      //                 if (lineInRect(spike ± (myScale + spike.scale), x2,y2, xVel,yVel))
+      //                     { willcollide = true; spikeDmgPot += spike.dmg; }
+      //             for (cactus of cactuses)
+      //                 if (lineInRect(cactus ± (myScale + cactus.scale), x2,y2, xVel,yVel))
+      //                     { willcollide = true; spikeDmgPot += 35; }
+      //         }
+      //     }
+      //     lastPosX = x2; lastPosY = y2;
+      if (!(this.imTrapped && this.collidingspike)) {
+        const dx = this.lastPosX - pos.x;
+        const dy = this.lastPosY - pos.y;
+        const moved = Math.sqrt(dx * dx + dy * dy);
+        if (moved > NS_MOVE_EPSILON || this.damagesByHits.length > 0 || this.damagesByShoots.length > 0 || this.damagesByTurrets.length > 0 || this.spikeDamages.length > 0) {
+          this._forEachHazard((pos.x + vel.x) / 2, (pos.y + vel.y) / 2, 2, (object, damage) => {
+            const p = object.pos.current;
+            const r = myScale + object.scale;
+            if (lineInRect(p.x - r, p.y - r, p.x + r, p.y + r, pos.x, pos.y, vel.x, vel.y)) {
+              this.willcollide = true;
+              this.spikeDmgPot += damage;
+            }
+          });
+        }
+      }
+      this.lastPosX = pos.x;
+      this.lastPosY = pos.y;
+      // ── PREDICTION FOR ALL ENEMIES ────────────────────────────────────
+      for (let i = 0; i < PlayerManager2.enemies.length; i++) {
+        const enemy = PlayerManager2.enemies[i];
+        const enemyPos = enemy.pos.current;
+        const enemyVel = enemy.pos.future;
+        const primaryDamage = this._primaryDamage(enemy);
+        const primaryReady = this._primaryReady(enemy);
+        const inPrimaryRange = pos.distance(enemyPos) <= myPlayer.hitScale + this._primaryRange(enemy);
+        // ── PREDICT HIT ──────────────────────────────────────────────
+        //
+        //     if (primaryReload[enemy] == 1 && inPrimaryRange) {
+        //         if (collidingspike) {
+        //             if (!lastcolliding) hitDmgPot += primaryDmg;
+        //             else if (enemy.lastPrimaryReload < 1) hitDmgPot += primaryDmg;
+        //             else if (secondaryReload[me] == 1 && !lastPredicted) { predicted = true; hitDmgPot += primaryDmg; }
+        //         }
+        //         else if (willcollide) hitDmgPot += primaryDmg;
+        //         else if (myPlayer.health <= primaryDmg) hitDmgPot += primaryDmg;
+        //     }
+        if (primaryReady && inPrimaryRange) {
+          if (this.collidingspike) {
+            if (!this.lastcolliding) {
+              this.hitDmgPot += primaryDamage;
+            } else if (!this._wasPrimaryReady(enemy)) {
+              this.hitDmgPot += primaryDamage;
+            } else if (this._mySecondaryReady() && !this.lastPredicted) {
+              this.predicted = true;
+              this.hitDmgPot += primaryDamage;
+            }
+          } else if (this.willcollide) {
+            this.hitDmgPot += primaryDamage;
+          } else if (myPlayer.currentHealth <= primaryDamage) {
+            this.hitDmgPot += primaryDamage;
+          }
+        }
+        // ── PREDICT TURRET HIT ───────────────────────────────────────
+        //
+        //     if (getDistance(enemy, me) <= 350 && turretReload[enemy] == 1) {
+        //         if (collidingspike && enemy.lastPrimaryReload == 1 && primaryReload[enemy] < 1) turretDmgPot += 25;
+        //         else if (willcollide && primaryReload[enemy] < 1) turretDmgPot += 25;
+        //         else if (myPlayer.health <= 25 && (hitDmgPot + turretDmgPot + spikeDmgPot) < 25) turretDmgPot += 25;
+        //     }
+        if (pos.distance(enemyPos) <= NS_TURRET_RANGE && this._turretReady(enemy)) {
+          if (this.collidingspike && this._wasPrimaryReady(enemy) && !primaryReady) {
+            this.turretDmgPot += NS_TURRET_DAMAGE;
+          } else if (this.willcollide && !primaryReady) {
+            this.turretDmgPot += NS_TURRET_DAMAGE;
+          } else if (myPlayer.currentHealth <= NS_TURRET_DAMAGE && this.hitDmgPot + this.turretDmgPot + this.spikeDmgPot < NS_TURRET_DAMAGE) {
+            this.turretDmgPot += NS_TURRET_DAMAGE;
+          }
+        }
+        // ── VELOCITY TICK ANTI ───────────────────────────────────────
+        //
+        //     if (getDistance(enemy.xVel, enemy.yVel, myPlayer.xVel, myPlayer.yVel) > 150 && < 350)
+        //         if (turretReload[enemy] < 1 && primaryReload[enemy] == 1 && enemy.skinIndex == 53)
+        //             { turretDmgPot += 25; hitDmgPot += primaryDmg; }
+        const closing = enemyVel.distance(vel);
+        if (closing > NS_VELOCITY_MIN && closing < NS_VELOCITY_MAX) {
+          if (!this._turretReady(enemy) && primaryReady && enemy.hatID === NS_TURRET_GEAR) {
+            this.turretDmgPot += NS_TURRET_DAMAGE;
+            this.hitDmgPot += primaryDamage;
+          }
+        }
+        // ── KNOCKBACK ANTI ───────────────────────────────────────────
+        //
+        // Twice, from the extrapolated position and then from the interpolated
+        // one, because which of the two is right depends on whether the swing
+        // lands before or after the server has moved us. Both are novastorm's,
+        // in this order, and each adds the spike and the swing that put us on
+        // it. The cactus box is the cactus alone here, and the spike box is the
+        // spike plus our own scale — the two loops do not use the same radius
+        // in novastorm, and they do not here.
+        //
+        //     canStillGather = false;
+        //     if (!imTrapped && primaryReload[enemy] == 1 && inPrimaryRange) { ... }
+        this.canStillGather = false;
+        if (!this.imTrapped && primaryReady && inPrimaryRange) {
+          const knock = this._primaryKnockback(enemy);
+          this._knockbackSweep(vel, enemyVel, knock, primaryDamage, myScale);
+          this._knockbackSweep(pos, enemyPos, knock, primaryDamage, myScale);
+        }
+        // ── ANTI NORMAL INSTAKILL ────────────────────────────────────
+        //
+        //     if (enemy secondary is hammer/musket/crossbow/repeater/bow) {
+        //         if (damagesByHits.length > 0 && getDistance(enemy, me) <= 400) {
+        //             if (turretReload[enemy] == 1) {
+        //                 turretDmgPot += 25;
+        //                 if (secondaryReload[enemy] == 1)
+        //                     secDmgPot += hammer ? secondaryDmg / 1.5 : secondaryDmg;
+        //             }
+        //             else if (secondaryReload[enemy] == 1) secDmgPot += secondaryDmg;
+        //         }
+        //     }
+        //
+        // The `/ 1.5` on the hammer takes the bull multiplier back off, because
+        // getPlayerInfo put it there and a follow-up swing is not the bull
+        // swing.
+        if (this._secondaryDangerous(enemy)) {
+          if (this.damagesByHits.length > 0 && pos.distance(enemyPos) <= NS_INSTA_RANGE) {
+            const secondaryDamage = this._secondaryDamage(enemy);
+            if (this._turretReady(enemy)) {
+              this.turretDmgPot += NS_TURRET_DAMAGE;
+              if (this._secondaryReady(enemy)) {
+                this.secDmgPot += this._isHammer(enemy) ? secondaryDamage / Hats[7].dmgMultO : secondaryDamage;
+              }
+            } else if (this._secondaryReady(enemy)) {
+              this.secDmgPot += secondaryDamage;
+            }
+          }
+        }
+        // ── ANTI SPIKE TICK ──────────────────────────────────────────
+        //
+        //     if (!collidingspike) for (i = 0; i < 36; i++) {
+        //         angle = toRad(i * 10); id = 9;
+        //         config = enemy + (35 + items[9].scale + placeOffset) * dir(angle)
+        //         if (checkItemLocation(config, 0.6, 9, false, enemy, visibleObjects))
+        //             if (getDistance(myPlayer.xVel, myPlayer.yVel, config) <= 35 + config.scale) {
+        //                 if (inPrimaryRange && primaryReload[enemy] == 1) {
+        //                     if (100 <= primaryDmg + 45) spikeTickAnti = true;
+        //                     if (myPlayer.health / 0.75 <= primaryDmg + 45)
+        //                         { spikeDmgPot += 45; hitDmgPot += primaryDmg; break; }
+        //                 }
+        //                 else if (myPlayer.health <= 70 && damagesByHits.length > 0) {
+        //                     spikeDmgPot += 45;
+        //                     if (turretReload[enemy]) turretDmgPot += 25;
+        //                 }
+        //             }
+        //     }
+        if (!this.collidingspike) {
+          this._antiSpikeTick(enemy, inPrimaryRange, primaryReady, primaryDamage, vel);
+        }
+      }
+      //     lastcolliding = collidingspike;
+      //     iWasTrapped = imTrapped;
+      //     lastPredicted = predicted;
+      this.lastcolliding = this.collidingspike;
+      this.iWasTrapped = this.imTrapped;
+      this.lastPredicted = this.predicted;
+      this.wasPrimaryReady.clear();
+      for (let i = 0; i < PlayerManager2.enemies.length; i++) {
+        const enemy = PlayerManager2.enemies[i];
+        this.wasPrimaryReady.set(enemy.id, this._primaryReady(enemy));
+      }
+      //     totalDmgPot = spikeDmgPot + hitDmgPot + turretDmgPot + secDmgPot + poisonDmgPot;
+      //     if (totalDmgPot > 140) totalDmgPot = 140;
+      //     if (totalDmgPot >= 100) soldierAnti = true;
+      let total = this.spikeDmgPot + this.hitDmgPot + this.turretDmgPot + this.secDmgPot + this.poisonDmgPot;
+      if (total > NS_POT_CEILING) {
+        total = NS_POT_CEILING;
+      }
+      this.totalDmgPot = total;
+      if (total >= NS_SOLDIER_ANTI) {
+        this.soldierAnti = true;
+      }
+      //     if (myPlayer.shameCount > 0 && !soldierAnti && !collidingspike
+      //         && poisonDmgPot == 0 && totalDmgPot == 0) shouldResetShame = true;
+      if (myPlayer.shameCount > 0 && !this.soldierAnti && !this.collidingspike && this.poisonDmgPot === 0 && this.totalDmgPot === 0) {
+        this.shouldResetShame = true;
+      }
+      // ── hatFc ─────────────────────────────────────────────────────────
+      //
+      // The three rules in hatFc that belong to the survival block, in
+      // novastorm's order:
+      //
+      //     if (isBoughtHat(7,0)) if (shouldResetShame) currentHat = 7;
+      //     if (((imTrapped && spikeDmgCount > 0) || spikeTickAnti) && isBoughtHat(6,0)) currentHat = 6;
+      //     ...
+      //     if (isBoughtHat(6,0)) if (soldierAnti) currentHat = 6;
+      //
+      // The first two sit above the gather branch and the insta rules, so an
+      // insta that has already claimed the hat this tick keeps it — which is
+      // what setForceHat means here. The third is the last line of hatFc and
+      // beats everything, so it goes to the override ModuleHandler applies after
+      // every module has run. The first two cannot both hold: the drain needs
+      // totalDmgPot to be zero and being held on a spike is never zero.
+      if (this.shouldResetShame && ModuleHandler.canBuy(0, 7)) {
+        ModuleHandler.setForceHat(7);
+      }
+      if ((this.imTrapped && this.spikeDmgCount > 0 || this.spikeTickAnti) && ModuleHandler.canBuy(0, 6)) {
+        ModuleHandler.setForceHat(6);
+      }
+      if (this.soldierAnti && ModuleHandler.canBuy(0, 6)) {
+        ModuleHandler.soldierAnti = true;
+      }
+      //     spikeTickAnti = false; shouldResetShame = false;
+      //
+      // Both, after hatFc has read them. The drain's answer is kept in
+      // `lastShouldResetShame` because the module that reports it runs later in
+      // the tick and novastorm has no module to report to.
+      this.lastShouldResetShame = this.shouldResetShame;
+      // `spikeTickAnti` is cleared here, above the heal, in novastorm too — so
+      // novastorm's own heal never sees it, and neither would a decision that
+      // read the field directly. The Ryn Type 2 safe-first guard is written
+      // against the value this tick produced, so it is kept the same way the
+      // drain's answer is.
+      this.lastSpikeTickAnti = this.spikeTickAnti;
+      this.spikeTickAnti = false;
+      this.shouldResetShame = false;
+      //     if (currentHat == 6) totalDmgPot *= 0.75;
+      //     if (currentHat == 7) totalDmgPot += 5;
+      //     if (myPlayer.health <= totalDmgPot) healing = true;
+      this.currentHat = ModuleHandler.plannedHat();
+      if (this.currentHat === 6) {
+        this.totalDmgPot *= Hats[6].dmgMult;
+      }
+      if (this.currentHat === 7) {
+        this.totalDmgPot += Math.abs(Hats[7].healthRegen);
+      }
+      if (myPlayer.currentHealth <= this.totalDmgPot) {
+        this.healing = true;
+      }
+    }
+    // One half of the knockback anti: project where the swing puts us and sweep
+    // the segment. Spikes take our scale into the box, cactuses do not — that
+    // difference is novastorm's and it is deliberate enough to keep.
+    _knockbackSweep(fromPos, enemyPos, knock, primaryDamage, myScale) {
+      if (!(knock > 0)) {
+        return;
+      }
+      const away = enemyPos.angle(fromPos);
+      const to = fromPos.addDirection(away, knock);
+      let hitSpike = false;
+      let hitCactus = false;
+      this._forEachHazard((fromPos.x + to.x) / 2, (fromPos.y + to.y) / 2, 2, (object, damage, isSpike) => {
+        if (isSpike && hitSpike || !isSpike && hitCactus) {
+          return;
+        }
+        const p = object.pos.current;
+        const r = isSpike ? myScale + object.scale : object.scale;
+        if (!lineInRect(p.x - r, p.y - r, p.x + r, p.y + r, fromPos.x, fromPos.y, to.x, to.y)) {
+          return;
+        }
+        if (isSpike) {
+          hitSpike = true;
+        } else {
+          hitCactus = true;
+        }
+        this.spikeDmgPot += damage;
+        this.hitDmgPot += primaryDamage;
+        this.canStillGather = true;
+      });
+    }
+    // The 36-angle scan. Novastorm walks every angle around the enemy looking
+    // for a spinning spike it could legally place that would reach our velocity
+    // point; the loop only breaks out of the branch that pays.
+    //
+    // The scan is skipped when no angle can possibly qualify: the spike is
+    // placed 82 units from the enemy and has to land within 87 of our velocity
+    // point, so an enemy further than the sum of those two cannot reach it. That
+    // is an exact short-circuit, not an approximation — no angle inside the loop
+    // could have passed.
+    _antiSpikeTick(enemy, inPrimaryRange, primaryReady, primaryDamage, vel) {
+      const {myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
+      const spike = Items[NS_SPIKE_TICK_ID];
+      const placeLength = enemy.getItemPlaceScale(NS_SPIKE_TICK_ID);
+      const reach = myPlayer.scale + spike.scale;
+      const enemyPos = enemy.pos.current;
+      if (enemyPos.distance(vel) > placeLength + reach) {
+        return;
+      }
+      const turretReady = this._turretReady(enemy);
+      for (let i = 0; i < NS_SPIKE_ANGLES; i++) {
+        const angle = toRadians(i * (360 / NS_SPIKE_ANGLES));
+        const config = enemyPos.addDirection(angle, placeLength);
+        // Novastorm asks these two the other way round. They are both pure and
+        // the body needs both, so the cheap one goes first: a grid query for an
+        // angle that could not reach us either way is work for nothing.
+        if (vel.distance(config) > reach) {
+          continue;
+        }
+        if (!ObjectManager2.canPlaceItem(NS_SPIKE_TICK_ID, config)) {
+          continue;
+        }
+        if (inPrimaryRange && primaryReady) {
+          if (myPlayer.maxHealth <= primaryDamage + spike.damage) {
+            this.spikeTickAnti = true;
+          }
+          if (myPlayer.currentHealth / Hats[6].dmgMult <= primaryDamage + spike.damage) {
+            this.spikeDmgPot += spike.damage;
+            this.hitDmgPot += primaryDamage;
+            break;
+          }
+        } else if (myPlayer.currentHealth <= NS_LOW_HEALTH && this.damagesByHits.length > 0) {
+          this.spikeDmgPot += spike.damage;
+          if (turretReady) {
+            this.turretDmgPot += NS_TURRET_DAMAGE;
+          }
+        }
+      }
+    }
+    // ── the Ryn Type 2 layer ──────────────────────────────────────────────
+    //
+    //     function getTotalDmgPot() {
+    //         return spikeDmgPot + hitDmgPot + turretDmgPot + secDmgPot + poisonDmgPot;
+    //     }
+    //
+    // The five buckets, which is what `totalDmgPot` already holds after the
+    // scan: summed, clamped to 140 and adjusted for the hat that will be on our
+    // head when the damage lands (×0.75 under soldier, +5 under bull). The
+    // adjustment is the whole reason novastorm runs hatFc between the sum and
+    // the heal, so the number this returns is damage we will actually take, not
+    // damage aimed at us.
+    getTotalDmgPot() {
+      return this.totalDmgPot;
+    }
+    // The raw sum, before the ceiling and before the hat. Nothing in the
+    // decision reads it; it is what the debug line and the tests report,
+    // because a pot sitting at the ceiling hides how far over it went.
+    getRawDmgPot() {
+      return this.spikeDmgPot + this.hitDmgPot + this.turretDmgPot + this.secDmgPot + this.poisonDmgPot;
+    }
+    //     function isHealBlocked() {
+    //         return myPlayer.shameCount >= 7 || myPlayer.shameTimer > 0 || myPlayer.shameAbuse;
+    //     }
+    //
+    // All three, read against what they actually mean in this client:
+    //
+    //   shameCount >= 7   one apple from the lockout. The server's own limit is
+    //                     8; novastorm stops at 7 and so does this.
+    //   shameTimer > 0    on the server that is the countdown from 30000, and
+    //                     it is above zero only while eating is refused. RYN's
+    //                     `shameTimer` is a different quantity — it counts up
+    //                     from spawn on every tick and is only meaningful next
+    //                     to `shameActive` — so reading it literally would
+    //                     block the heal from the second tick of every game.
+    //                     `shameActive` is this client's answer to the same
+    //                     question: the server has put the Shame! hat on us.
+    //   shameAbuse        latched the first time an apple lands inside the
+    //                     120 ms window and never cleared. Read literally it
+    //                     ends healing for the rest of the life, which is not a
+    //                     safety rule, it is a shutdown — so it gates the
+    //                     strictest mode and nothing else.
+    //
+    // The mode ladder is where the three settle:
+    //
+    //   safe    all three. Never eats after an early apple.
+    //   ryn2    the count and the lockout. The default.
+    //   aggro   the lockout only. Spends shame points to stay alive.
+    isHealBlocked() {
+      const myPlayer = this.client.myPlayer;
+      if (myPlayer.shameActive) {
+        return true;
+      }
+      const mode = Settings_default._autoHealMode;
+      if (mode === "aggro") {
+        return false;
+      }
+      if (myPlayer.shameCount >= NS_SHAME_LIMIT) {
+        return true;
+      }
+      return mode === "safe" && myPlayer.shameAbuse === true;
+    }
+    //     function getBestFoodItem() { /* apple/cookie/cheese by deficit */ }
+    //
+    // There is one food slot. `myPlayer.items[0]` in novastorm and
+    // `inventory[2]` here are the same single entry, and an upgrade replaces
+    // what is in it — a player carrying cookie is not also carrying apple, so
+    // there is nothing to choose between. What the deficit decides is how many
+    // of the one food to send, which is the caller's `ceil(deficit / restore)`.
+    //
+    // Cheese is where the wording matters: it restores 30 on the bite and 50
+    // more over the next five seconds. Sizing the chain off 30 sends apples for
+    // health that is already on its way, so the over-time half is counted here.
+    getBestFoodItem() {
+      const id = this.client.myPlayer.getItemByType(2);
+      return id === null || id === void 0 ? null : id;
+    }
+    // What one of that food is worth, and whether the trailing half counts.
+    //
+    // The item table carries `restore` — the health that lands on the bite —
+    // and nothing else. Cheese's other half is in the game's own consume, not
+    // in the table:
+    //
+    //     consume: function (e) {
+    //         return e.changeHealth(30, e) || e.health < 100
+    //             ? (e.dmgOverTime.dmg = -10, e.dmgOverTime.doer = e,
+    //                e.dmgOverTime.time = 5, true)
+    //             : false;
+    //     }
+    //
+    // −10 a second for five seconds: 50, on top of the 30. So one cheese is
+    // worth 80 to a bar that has five seconds to fill, and 30 to one that has
+    // this tick — and a chain sized off 80 in a fight sends too few. The
+    // trailing half is counted only when nothing has just landed and nothing
+    // is predicted, which is the one case where five seconds is time we have.
+    _foodValue(id, urgent) {
+      const item = Items[id];
+      if (item === void 0) {
+        return 0;
+      }
+      const value = "restore" in item ? item.restore : 0;
+      if (urgent || value <= 0) {
+        return value;
+      }
+      const overTime = R2_FOOD_OVER_TIME[id];
+      return overTime > 0 ? value + overTime : value;
+    }
+    //     function getHealAmountNeeded() { return Math.max(0, 100 - myPlayer.health); }
+    //
+    // Plus the weighted pot, which is the adaptive half: what is missing is
+    // what has already landed, and the pot is what is about to. Healing only
+    // the first leaves the deficit exactly where the next hit wanted it.
+    getHealAmountNeeded() {
+      const myPlayer = this.client.myPlayer;
+      const missing = myPlayer.maxHealth - myPlayer.currentHealth;
+      const weight = this._predictWeight();
+      const ahead = this.getTotalDmgPot() * weight;
+      const need = missing + ahead;
+      if (!(need > 0)) {
+        return 0;
+      }
+      // Never ask for more than one full bar: health does not bank.
+      return Math.min(need, myPlayer.maxHealth);
+    }
+    _predictWeight() {
+      const weight = Settings_default._autoHealPredictWeight;
+      return typeof weight === "number" && weight >= 0 ? weight : 1;
+    }
+    //     function canHealNow() { /* safe-first check */ }
+    //
+    // Everything that makes a heal impossible or pointless, before anything
+    // that makes it a good idea. Each miss names itself so the debug line and
+    // the tests can say which gate closed.
+    canHealNow() {
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      if (!myPlayer.inGame) {
+        this.blockedReason = "notInGame";
+        return false;
+      }
+      if (myPlayer.currentHealth >= myPlayer.maxHealth) {
+        this.blockedReason = "full";
+        return false;
+      }
+      // One heal per tick, whoever took it. novastorm's `damageHealed`.
+      if (ModuleHandler.healedOnce) {
+        this.blockedReason = "healedOnce";
+        return false;
+      }
+      if (Settings_default._autoHealShameRespect && this.isHealBlocked()) {
+        this.blockedReason = "shame";
+        return false;
+      }
+      if (!myPlayer.canPlace(2)) {
+        this.blockedReason = "noFood";
+        return false;
+      }
+      return true;
+    }
+    //     function tryUseHealPad() {
+    //         const pad = visibleObjects.find(o => o.id === 19 && isObjectOur(o) &&
+    //             getDistance(o, myPlayer) < o.scale);
+    //         return !!pad;
+    //     }
+    //
+    // Standing on a friendly healing pad is already a heal: healCol is 15 a
+    // second, applied by the server for as long as we are on it, and it costs
+    // no food, no packets and no shame. The decision reads this to leave a
+    // small, unpressured deficit to the pad instead of spending an apple on it.
+    //
+    // Nothing is placed here. The pad has to already be on the ground — ours or
+    // a teammate's, which is what the server's own collision test accepts.
+    tryUseHealPad() {
+      if (!Settings_default._autoHealUseHealPads) {
+        return false;
+      }
+      const {myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
+      if (ObjectManager2 === void 0 || ObjectManager2.grid2D === void 0) {
+        return false;
+      }
+      const pos = myPlayer.pos.current;
+      let found = false;
+      ObjectManager2.grid2D.query(pos.x, pos.y, 1, id => {
+        const object = ObjectManager2.objects.get(id);
+        if (object === void 0 || !(object instanceof PlayerObject)) {
+          return false;
+        }
+        if (object.type !== R2_HEAL_PAD || myPlayer.isEnemyByID(object.ownerID)) {
+          return false;
+        }
+        if (pos.distance(object.pos.current) >= object.scale) {
+          return false;
+        }
+        found = true;
+        return true;
+      });
+      return found;
+    }
+    // What one second on the pad is worth.
+    _healPadRate() {
+      const pad = Items[R2_HEAL_PAD];
+      return pad !== void 0 && "healCol" in pad ? pad.healCol : 0;
+    }
+    //     function optimizeRegenGear() {
+    //         const deficit = getHealAmountNeeded();
+    //         if (deficit > 40) {
+    //             if (isBoughtHat(13, 0)) hat(13);
+    //             else if (isBoughtHat(13, 1)) acc(13);
+    //             else if (isBoughtHat(17, 1)) acc(17);
+    //         }
+    //     }
+    //
+    // Medic Gear is +3 health a second, Angel Wings +3, Apple Basket +1, and
+    // none of them changes damage taken — so this is free only while nothing is
+    // about to land. Two things enforce that, and both are deliberate:
+    //
+    //   setForceHat no-ops when a hat is already claimed, so the drain's bull,
+    //   the held-on-spike soldier and every insta above keep their hat;
+    //
+    //   soldierAnti is applied by ModuleHandler after every module has run, so
+    //   even a Medic that got the slot is overruled the moment the pot says a
+    //   hundred damage is coming. The explicit test below is not redundant with
+    //   that — it stops the request being made at all, which leaves the slot
+    //   free for a module that runs after this one.
+    //
+    // The accessory has no such override, so it is only taken when the hat is
+    // not available: an accessory slot spent on wings is a slot not spent on a
+    // tail, and swapping it back costs a packet on a tick that may need it.
+    optimizeRegenGear() {
+      if (!Settings_default._autoHealUseRegenGear) {
+        return false;
+      }
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      if (this.soldierAnti || this.lastSpikeTickAnti || this.collidingspike) {
+        return false;
+      }
+      const deficit = myPlayer.maxHealth - myPlayer.currentHealth;
+      if (deficit <= R2_REGEN_DEFICIT) {
+        return false;
+      }
+      if (ModuleHandler.canBuy(0, R2_MEDIC_HAT)) {
+        ModuleHandler.setForceHat(R2_MEDIC_HAT);
+        return ModuleHandler.forceHat === R2_MEDIC_HAT;
+      }
+      if (ModuleHandler.useAcc !== null) {
+        return false;
+      }
+      if (ModuleHandler.canBuy(1, R2_ANGEL_ACC)) {
+        ModuleHandler.useAcc = R2_ANGEL_ACC;
+        return true;
+      }
+      if (ModuleHandler.canBuy(1, R2_BASKET_ACC)) {
+        ModuleHandler.useAcc = R2_BASKET_ACC;
+        return true;
+      }
+      return false;
+    }
+    // ── the Ryn Type 2 decision ───────────────────────────────────────────
+    //
+    // Reactive, predictive, safe-first, state-aware, adaptive, throttled,
+    // priority-based, with the fallback one level up in postTick.
+    //
+    //     const reactive   = (tick - damageTick) <= 2;
+    //     const predictive = myPlayer.health <= totalDmgPot;
+    //     const critical   = myPlayer.health <= 25;
+    //     const shouldHeal = reactive || predictive || critical ||
+    //                        (threshold > 0 && myPlayer.health <= threshold);
+    autoHealRyn2() {
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      this.blockedReason = null;
+      this.wantedFood = 0;
+      this.onHealPad = false;
+      // ── kill switches ────────────────────────────────────────────────
+      //
+      // The lockout first, because while it is live every apple is refused by
+      // the server and every one of them still costs four packets. `shameTimer
+      // > 0` is what the brief asks for; `shameActive` is this client's reading
+      // of it — see isHealBlocked.
+      if (myPlayer.shameActive) {
+        this.blockedReason = "shameLockout";
+        this._debug("blocked by the 30s shame lockout");
+        return false;
+      }
+      // Both antis at once is the reading that a hundred damage is already on
+      // its way *and* an enemy has ground to drop a spike into the tick we
+      // would spend chewing. The apple does not arrive in time and the four
+      // packets are better spent on the soldier swap.
+      if (this.soldierAnti && this.lastSpikeTickAnti) {
+        this.blockedReason = "antiStack";
+        this._debug("blocked by soldierAnti + spikeTickAnti");
+        return false;
+      }
+      if (!this.canHealNow()) {
+        return false;
+      }
+      const health = myPlayer.currentHealth;
+      const pot = this.getTotalDmgPot() * this._predictWeight();
+      const threshold = Settings_default._autoHealThreshold;
+      const reactive = this.tick - this.damageTick <= R2_REACTIVE_TICKS;
+      const predictive = health <= pot;
+      const critical = health <= R2_CRITICAL_HEALTH;
+      const byThreshold = threshold > 0 && health <= threshold;
+      if (!(reactive || predictive || critical || byThreshold)) {
+        this.blockedReason = "noReason";
+        return false;
+      }
+      // ── safe-first ───────────────────────────────────────────────────
+      //
+      //     if (spikeTickAnti && !soldierAnti) return;
+      //     if (collidingspike && !soldierAnti && myPlayer.health > 25) return;
+      //
+      // Both say the same thing: a spike is about to be part of the damage and
+      // the soldier helmet is not on. Eating through that is how a 45 and a
+      // primary arrive together on the tick the apple was worth 20.
+      //
+      // `critical` is the exception the second line writes out, and in aggro it
+      // is the only thing left of either: that mode's whole promise is that it
+      // eats when the safe read says wait.
+      const aggro = Settings_default._autoHealMode === "aggro";
+      if (!(aggro && critical)) {
+        if (this.lastSpikeTickAnti && !this.soldierAnti) {
+          this.blockedReason = "spikeTickAnti";
+          this._debug("safe-first: spikeTickAnti without soldier");
+          return false;
+        }
+        if (this.collidingspike && !this.soldierAnti && health > R2_CRITICAL_HEALTH) {
+          this.blockedReason = "collidingSpike";
+          this._debug("safe-first: held on a spike without soldier");
+          return false;
+        }
+        // Safe adds the one the brief leaves to the reader: soldierAnti alone
+        // is a hundred damage inbound, and a tick spent eating is a tick not
+        // spent getting the helmet on. Only a critical bar overrides it.
+        if (Settings_default._autoHealMode === "safe" && this.soldierAnti && !critical) {
+          this.blockedReason = "soldierAnti";
+          this._debug("safe-first: soldierAnti, not critical");
+          return false;
+        }
+      }
+      // ── the pad ──────────────────────────────────────────────────────
+      //
+      // 15 a second, free, already running. Worth waiting for only when
+      // nothing is predicted, nothing just landed and it closes the gap on its
+      // own; anything else and the pad is a bonus on top of the apple, not a
+      // reason to skip it.
+      this.onHealPad = this.tryUseHealPad();
+      const missing = myPlayer.maxHealth - health;
+      if (this.onHealPad && !critical && !reactive && pot === 0 && missing <= this._healPadRate()) {
+        this.blockedReason = "healPad";
+        this._debug("left to the healing pad");
+        return false;
+      }
+      // ── the chain ────────────────────────────────────────────────────
+      const foodID = this.getBestFoodItem();
+      if (foodID === null) {
+        this.blockedReason = "noFood";
+        return false;
+      }
+      const perItem = this._foodValue(foodID, reactive || predictive || critical);
+      if (!(perItem > 0)) {
+        this.blockedReason = "noFood";
+        return false;
+      }
+      //     const maxItems = Math.min(autoHealMaxFoodPerTick, Math.ceil(deficit / healPerItem));
+      const deficit = this.getHealAmountNeeded();
+      const cap = Math.max(1, Math.floor(Settings_default._autoHealMaxFoodPerTick) || 1);
+      let count = Math.min(cap, Math.ceil(deficit / perItem));
+      this.wantedFood = count;
+      // Two things novastorm leaves to the server. Food it does not have is
+      // refused there, and four packets a piece is four packets whether the
+      // apple lands or not; the budget is the client's own and the chain is not
+      // allowed to spend the tick's whole allowance.
+      const affordable = this._affordableFood(foodID);
+      if (affordable < count) {
+        count = affordable;
+      }
+      const room = Math.floor((ModuleHandler.packetLimit - R2_PACKET_MARGIN - ModuleHandler.packetCount) / R2_HEAL_PACKETS);
+      if (room < count) {
+        count = room;
+      }
+      if (count <= 0) {
+        this.blockedReason = affordable <= 0 ? "noFood" : "packets";
+        this._debug(`wanted ${this.wantedFood}, sent 0 (${this.blockedReason})`);
+        return false;
+      }
+      // ── predictWeapon ────────────────────────────────────────────────
+      //
+      //     const savedWeapon = predictWeapon;
+      //     for (...) place(foodId, null);
+      //     predictWeapon = savedWeapon;
+      //
+      // novastorm's `predictWeapon` is a variable place() writes; here it is
+      // computed, and ModuleHandler.heal() already comes back to a slot after
+      // every apple. What is not guaranteed is that the slot it comes back to
+      // on the last apple is the one the client was holding before the first:
+      // the chain moves `attacking` and the reload state that _getPredictWeapon
+      // reads, so a long chain can end in a different hand than it started.
+      // Snapshotted once, restored once, and only when it actually differs —
+      // the restore is a packet and an unconditional one would cost a packet
+      // per heal for nothing.
+      this.savedPredictWeapon = ModuleHandler._getPredictWeapon();
+      let sent = 0;
+      for (let i = 0; i < count; i++) {
+        // Re-read every apple: the count was sized before any of them went
+        // out, and the one that crosses the line must not be followed.
+        if (Settings_default._autoHealShameRespect && this.isHealBlocked()) {
+          break;
+        }
+        ModuleHandler.heal();
+        sent += 1;
+      }
+      if (sent === 0) {
+        this.blockedReason = "shame";
+        return false;
+      }
+      if (ModuleHandler.currentHolding !== this.savedPredictWeapon) {
+        ModuleHandler.whichWeapon(this.savedPredictWeapon);
+      }
+      this.healedThisTick = sent;
+      //     if (predictObjects.length > 0 || damageHealed) io.send("D", angle);
+      //
+      // The brief writes `damageHealed = (tick - damageTick) <= 1` — true after
+      // recent damage whether or not anything was eaten. In this client the
+      // same flag is also the one-heal-per-tick latch that canHealNow reads, so
+      // setting it without having healed would suppress a heal that is still
+      // owed this tick. It is set on the heal, which is what it means here.
+      ModuleHandler.healedOnce = true;
+      this._debug(`sent ${sent}/${this.wantedFood}`);
+      return true;
+    }
+    // How many of this food the resources cover. Sandbox has no cost.
+    _affordableFood(id) {
+      const myPlayer = this.client.myPlayer;
+      if (myPlayer.isSandbox) {
+        return Infinity;
+      }
+      const item = Items[id];
+      const cost = item !== void 0 && item.cost !== void 0 ? item.cost.food : 0;
+      if (!(cost > 0)) {
+        return Infinity;
+      }
+      return Math.floor(myPlayer.resources.food / cost);
+    }
+    // One line a tick, and only while the switch is on. Logger.log is behind
+    // `isProd`, which is true in the shipped file, so a debug switch that
+    // routed through it would print nothing — this goes to the same console
+    // Logger uses, directly.
+    _debug(message) {
+      if (!Settings_default._autoHealDebug || !this.client.isOwner) {
+        return;
+      }
+      const myPlayer = this.client.myPlayer;
+      Logger.staticLog(`[AutoHeal Ryn2] health=${myPlayer.currentHealth} deficit=${fixTo(this.getHealAmountNeeded(), 2)} pot=${fixTo(this.getTotalDmgPot(), 2)} raw=${fixTo(this.getRawDmgPot(), 2)} food=${this.getBestFoodItem()} shame=${myPlayer.shameCount} trapped=${this.imTrapped} spike=${this.collidingspike} willcollide=${this.willcollide} soldierAnti=${this.soldierAnti} spikeTickAnti=${this.lastSpikeTickAnti} pad=${this.onHealPad} — ${message}`);
+    }
+    // ── the decision ──────────────────────────────────────────────────────
+    postTick() {
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      this.healedThisTick = 0;
+      if (!Settings_default._autoheal || !myPlayer.inGame) {
+        return;
+      }
+      this.scan();
+      //     if (window.vars.autoHeal) {
+      //         autoHealRyn2();
+      //     } else {
+      //         // the original logic as a fallback
+      //         if (((healing && myPlayer.shameCount < 7) || (tick - damageTick) > 0)
+      //             && myPlayer.health < 100) { heal(100 - myPlayer.health); }
+      //     }
+      if (Settings_default._autoHeal) {
+        // Gear before food: a hat and an accessory are not a heal, they cost
+        // no packets on a tick that does not eat, and the slot has to be asked
+        // for before the modules below this one claim it. Inside the branch,
+        // because the fallback is novastorm's decision and novastorm has no
+        // regen gear — with `_autoHeal` off, nothing here is Ryn Type 2's.
+        this.optimizeRegenGear();
+        this.autoHealRyn2();
+        return;
+      }
+      //     let damageHealed = false;
+      //     if (((healing && myPlayer.shameCount < 7) || (tick - damageTick) > 0)
+      //         && myPlayer.health < 100) {
+      //         heal(100 - myPlayer.health);
+      //         damageHealed = true;
+      //     }
+      //
+      // No packet budget and no wall clock. Novastorm gates its placer on
+      // `packets + 5 > 119` and never gates the heal, and the only timing on the
+      // free branch is `(tick - damageTick) > 0` — one whole server tick since
+      // the damage landed.
+      if (myPlayer.currentHealth >= myPlayer.maxHealth) {
+        return;
+      }
+      if (ModuleHandler.healedOnce) {
+        return;
+      }
+      if (!myPlayer.canPlace(2)) {
+        return;
+      }
+      const healing = this.healing && myPlayer.shameCount < NS_SHAME_LIMIT;
+      const clean = this.tick - this.damageTick > 0;
+      if (!healing && !clean) {
+        return;
+      }
+      //     function heal(value) {
+      //         for (let i = 0; i < value; i += items.list[myPlayer.items[0]].heal)
+      //             place(myPlayer.items[0], null);
+      //     }
+      const count = this._healCount(myPlayer.maxHealth - myPlayer.currentHealth);
+      if (count <= 0) {
+        return;
+      }
+      for (let i = 0; i < count; i++) {
+        ModuleHandler.heal();
+      }
+      this.healedThisTick = count;
+      //     if (predictObjects.length > 0 || damageHealed) io.send("D", angle);
+      ModuleHandler.healedOnce = true;
+    }
+    _healCount(missing) {
+      const myPlayer = this.client.myPlayer;
+      const foodID = myPlayer.getItemByType(2);
+      if (foodID === null || foodID === void 0) {
+        return 0;
+      }
+      const item = Items[foodID];
+      const restore = "restore" in item ? item.restore : 0;
+      if (!(restore > 0)) {
+        return 0;
+      }
+      let count = 0;
+      for (let i = 0; i < missing; i += restore) {
+        count += 1;
+      }
+      // Novastorm has no resource test: the loop runs and the server refuses the
+      // ones there is no food for. The refusals are free on the wire but they
+      // are not free in the packet count, and RYN knows what it is carrying, so
+      // the ones that could not land are not sent. Nothing else about the chain
+      // changes.
+      if (!myPlayer.isSandbox) {
+        const cost = item.cost.food;
+        if (cost > 0) {
+          const affordable = Math.floor(myPlayer.resources.food / cost);
+          if (affordable < count) {
+            count = affordable;
+          }
+        }
+      }
+      return count < 0 ? 0 : count;
+    }
+  }
+  const AutoHeal_default = AutoHeal;
   class AutoAccept {
     moduleName="autoAccept";
     client;
@@ -23430,6 +23553,11 @@ window.grbtp = 35;
     useHat=null;
     forceHat=null;
     shouldEquipSoldier=false;
+    // Novastorm's soldierAnti: raised by the survival engine when the raw
+    // predicted damage reaches 100, and the last hat rule to run in hatFc, so it
+    // beats every other choice. It is applied below, after every module has had
+    // its say, which is the same position it holds there.
+    soldierAnti=false;
     useAcc=null;
     previousWeapon=null;
     _currentAngle=0;
@@ -23481,8 +23609,8 @@ window.grbtp = 35;
         useDestroying: new UseDestroying(client2),
         useAttacking: new UseAttacking(client2),
         utilityHat: new UtilityHat(client2),
-        antiInsta: new AntiInsta_default(client2),
         shameReset: new ShameReset_default(client2),
+        autoHeal: new AutoHeal_default(client2),
         trapKB: new TrapKB(client2),
         spikeKB: new SpikeKB(client2),
         autoShield: new AutoShield(client2),
@@ -23518,7 +23646,7 @@ window.grbtp = 35;
       // them: it drives a scattered bot's movement, and Movement.postTick steps
       // aside for it on the same _scatterActive flag it always has.
       this.botModules = [ this.staticModules.tempData, this.staticModules.clanJoiner, this.staticModules.botRangedAttack, this.staticModules.botExplorer, this.staticModules.movement, this.staticModules.botAutoBreak ];
-      this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.spikeSyncHammer, this.staticModules.adaptiveGearSwitching, this.staticModules.spikeSync, this.staticModules.velocityTick, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.antiRetrap, this.staticModules.autoBreak, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.spikeKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.autoPush, this.staticModules.trapStandoff, this.staticModules.autoPlay, this.staticModules.autoPlacer, this.staticModules.placementEngine, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule, this.staticModules.rynLink ];
+      this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.spikeSyncHammer, this.staticModules.adaptiveGearSwitching, this.staticModules.spikeSync, this.staticModules.velocityTick, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.antiRetrap, this.staticModules.autoBreak, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.shameReset, this.staticModules.autoHeal, this.staticModules.trapKB, this.staticModules.spikeKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.autoPush, this.staticModules.trapStandoff, this.staticModules.autoPlay, this.staticModules.autoPlacer, this.staticModules.placementEngine, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule, this.staticModules.rynLink ];
       this.reset();
     }
     movementReset() {
@@ -23571,6 +23699,28 @@ window.grbtp = 35;
     }
     getHatStore() {
       return this.store[0];
+    }
+    // The hat that will be equipped at the end of this tick, read the same way
+    // Autohat.getNextHat reads it, plus the soldierAnti override that runs after
+    // every module below.
+    //
+    // The survival engine needs it before Autohat runs, because what is about to
+    // be on our head decides how much of the incoming damage arrives: novastorm
+    // makes exactly this call, in this order — pot, then hat, then the pot
+    // adjusted for that hat, then the heal. Every module that can still change
+    // the hat after the engine runs sets 53, which changes no damage taken, so
+    // the answer is stable at that point in the schedule.
+    plannedHat() {
+      if (this.soldierAnti && this.canBuy(0, 6)) {
+        return 6;
+      }
+      if (this.forceHat !== null) {
+        return this.forceHat;
+      }
+      if (this.useHat !== null) {
+        return this.useHat;
+      }
+      return this.client.myPlayer.hatID;
     }
     getAccStore() {
       return this.store[1];
@@ -23823,19 +23973,25 @@ window.grbtp = 35;
       this.whichWeapon(this._getPredictWeapon());
       return true;
     }
-    // novastorm's heal is a bare send — `place(myPlayer.items[0], null)` — with
-    // no budget test and no shame handling of its own. The shame rule is served
-    // entirely by the caller's `(tick - damageTick) > 0`, which is already two
-    // ticks clear of the 120ms window.
+    // novastorm's heal is `place(myPlayer.items[0], null)`, and place is four
+    // sends:
     //
-    // What stood here instead: a 130ms wall-clock guard that parked apples in a
-    // queue and drained them later, plus a `budget < 3` refusal. Both are gone.
-    // The queue delayed the emergency heal — the one case where eating +1 shame
-    // is the correct trade — and the refusal silently dropped apples on exactly
-    // the busy ticks that produce the damage worth healing.
+    //     selectToBuild(id)            z(id, false)
+    //     sendAtck(1, angle)           F(1, null)
+    //     sendAtck(0, angle)           F(0, null)
+    //     selectWeapon(predictWeapon)  z(predictWeapon, true)
+    //
+    // All four, including the release. Leaving it out left the attack state hot
+    // and made the heal depend on UpdateAttack tidying up after it later in the
+    // tick, which is not the same thing as novastorm's sequence.
+    //
+    // No budget test and no shame handling of its own: novastorm gates its
+    // placer on `packets + 5 > 119` and never gates the heal, and the shame rule
+    // belongs entirely to the caller's `(tick - damageTick) > 0`.
     heal() {
       this.selectItem(2);
       this.attack(null, 1);
+      this.stopAttack(null);
       this.whichWeapon(this._getHealWeapon());
     }
     // The slot to come back to after an apple, guaranteed to be one this player
@@ -23903,6 +24059,7 @@ window.grbtp = 35;
       this.useHat = null;
       this.forceHat = null;
       this.shouldEquipSoldier = false;
+      this.soldierAnti = false;
       this.useAcc = null;
       this.useAngle = null;
       this.shouldAttack = false;
@@ -23945,31 +24102,18 @@ window.grbtp = 35;
         // tick too late against anything that closes fast — a bull-hat rush or a
         // spike push covers the gap between reach and 300 inside one tick.
         const _safeSoldier = Settings_default._safeSoldier && _dist < SAFE_SOLDIER_RANGE;
-        // novastorm's Auto Soldier, which is its own reading of the same
-        // question, and the last hat write in its hatFc — so it wins over
-        // everything above it, biome hats and the shame-reset bull included:
+        // `soldierAnti` is the survival engine's, and novastorm puts it last in
+        // hatFc for a reason:
         //
-        //     if (totalDmgPot >= 100) soldierAnti = true;
-        //     ... if (isBoughtHat(6, 0)) { if (soldierAnti) currentHat = 6; }
+        //     if (isBoughtHat(6, 0)) { if (soldierAnti) currentHat = 6; }
         //
-        // It catches the case _isDanger cannot, because _isDanger comes from
-        // EnemyManager's eager sum and has no term for a spike push: an enemy
-        // whose swing alone is survivable but whose knockback puts us on a spike.
-        // NovastormHeal has already resolved that on this tick, so read its
-        // answer rather than a second estimate of it. wantsSoldier is hatFc's
-        // whole set of soldier reasons: the 100-damage prediction, the spike-ring
-        // tick, and being pinned on spikes inside a trap.
-        const _novaHeal = this.staticModules.antiInsta;
-        const _soldierAnti = _novaHeal !== undefined && _novaHeal.wantsSoldier;
-        // EMP outranks every soldier reason below it, and only ever asks on a
-        // tick whose lethal damage it removes outright rather than reduces —
-        // NovastormHeal.canUseEMP is the whole of that test. Taken first so the
-        // soldier branch cannot claim forceHat and leave the swap for a tick
-        // that no longer needs it.
-        if (_novaHeal !== undefined && _novaHeal.wantsEMP && this.canBuy(0, 22)) {
-          this.forceHat = 22;
-          this.shouldEquipSoldier = true;
-        } else if (Settings_default._antienemy && _isDanger || _isClose || _safeSoldier || _soldierAnti) {
+        // It is the final line of the hat function, so it beats the bull hat the
+        // shame drain wanted, the tank hat a break wanted and the turret gear an
+        // insta wanted. Here that priority means running after every module, in
+        // this block, rather than inside one of them. It does not answer to
+        // _antienemy: it is not a reaction to an enemy being near, it is the
+        // reading that a hundred damage is already on its way.
+        if (Settings_default._antienemy && _isDanger || _isClose || _safeSoldier || this.soldierAnti) {
           this.forceHat = 6;
           this.shouldEquipSoldier = true;
         } else if (this.shouldEquipSoldier) {
@@ -24112,6 +24256,7 @@ window.grbtp = 35;
         ${Keybinds_default}
         ${Visuals_default}
         ${Combat_default}
+        ${AutoHealPage_default}
         ${Misc_default}
         ${Music_default}
         ${Bots_default}
@@ -24717,6 +24862,25 @@ window.grbtp = 35;
        case "_autoplacer":
         syncPlacerSlaves();
         SaveSettings();
+        break;
+
+       case "_chatLogOpen":
+        try {
+          if (checked) ChatLog_default.show(); else ChatLog_default.hide();
+        } catch (_) {}
+        break;
+
+       case "_chatLogBotMsg":
+       case "_chatLogBotEvents":
+        try {
+          ChatLog_default.refresh();
+        } catch (_) {}
+        break;
+
+       case "_chatLogLock":
+        try {
+          ChatLog_default.refresh();
+        } catch (_) {}
         break;
 
        case "_autoAssassin":
@@ -26075,12 +26239,38 @@ window.grbtp = 35;
     _antianimal: true,
     _antispike: true,
     _empDefense: true,
+    // The survival engine, whole, behind one switch. It had sub-switches for
+    // the shame guard, the shame drain, the packet reservation and the EMP
+    // swap; they are gone. None of them was a preference — each one was a part
+    // of the same decision, and turning any of them off left the other three
+    // reasoning against a rule that was no longer true. There is one thing to
+    // turn on here, and it is called Autoheal.
     _autoheal: true,
-    // Falcons' soldierEMP and its heal priority ladder. Both default on: the
-    // EMP path only ever fires on a tick whose lethal half is turret damage,
-    // and the ladder is the existing heal with a hat decision in front of it.
-    _soldierEMP: true,
-    _healPriority: true,
+    // ── Auto Heal, the Ryn Type 2 decision layer ────────────────────────
+    //
+    // `_autoheal` above decides whether the survival engine runs at all: the
+    // scan, the five buckets, the hat rules and `soldierAnti` are all behind
+    // it, and with it off nothing below matters.
+    //
+    // These nine decide what the engine does with the answer. With `_autoHeal`
+    // on, the heal is taken by autoHealRyn2() — reactive, predictive,
+    // safe-first, state-aware, throttled. With it off the engine falls back to
+    // novastorm's own one-line gate, unchanged.
+    _autoHeal: true,
+    // ryn2 | safe | aggro. Sets how much shame the heal is willing to spend
+    // and how hard the safe-first guards bite. See AutoHeal.isHealBlocked.
+    _autoHealMode: "ryn2",
+    // 0 = predictive only. Above 0 it is a floor: any health at or under this
+    // is worth an apple whether or not anything is predicted.
+    _autoHealThreshold: 0,
+    _autoHealShameRespect: true,
+    _autoHealUseHealPads: true,
+    _autoHealUseRegenGear: true,
+    // Multiplier on the predicted damage before it is compared to health.
+    // Under 1 waits for more certainty; over 1 eats earlier.
+    _autoHealPredictWeight: 1,
+    _autoHealMaxFoodPerTick: 3,
+    _autoHealDebug: false,
     _autoSync: true,
     _adaptiveGearSwitching: false,
     _autoShield: true,
@@ -26156,6 +26346,7 @@ window.grbtp = 35;
     _weatherAmount: 45,
     _positionPrediction: false,
     _deathCorpse: true,
+    _killAnimation: "current",
     _itemHealthBar: false,
     _itemHealthBarEnemy: false,
     // One colour for every structure's bar. Whiteout colours by ownership —
@@ -26208,6 +26399,41 @@ window.grbtp = 35;
     _autoSyncTimes: 0,
     _spikeSyncHammerTimes: 0,
     _spikeSyncTimes: 0,
+    // ---- Chat Log ----------------------------------------------------
+    // Everything the panel remembers between sessions. It rides the client's
+    // own settings store — one localStorage record under "RYN", written
+    // through SaveSettings — rather than a second store of its own.
+    _chatLogOpen: true,
+    _chatLogKey: "KeyL",
+    _chatLogX: 14,
+    _chatLogY: 52,
+    // Joined to the Ryn Type 2 corner mark. Drag the panel away to separate
+    // them, drop it back under the mark to join them again.
+    _chatLogDocked: true,
+    _chatLogW: 340,
+    _chatLogH: 260,
+    _chatLogBgOpacity: 55,
+    _chatLogMsgOpacity: 100,
+    _chatLogFont: "manrope",
+    _chatLogFontSize: 12,
+    _chatLogTime: true,
+    _chatLogID: true,
+    _chatLogLock: false,
+    // Event filters. Display only — the log collects every event whatever
+    // these say, so switching one back on shows what arrived while it was off.
+    _chatLogFChat: true,
+    _chatLogFJoin: true,
+    _chatLogFLeave: true,
+    _chatLogFDeath: true,
+    _chatLogFClanNew: true,
+    _chatLogFClanJoin: true,
+    // Bots are yours and there can be forty of them, so their chat is off by
+    // default and their arrivals and departures are not.
+    _chatLogBotMsg: false,
+    _chatLogBotEvents: true,
+    // [[sid, lastKnownName], ...]. Keyed on the player id so a rename does not
+    // shake a mute off.
+    _chatLogMuted: [],
     _velocityTickTimes: 0,
   };
   const storedSettings = CustomStorage.get("RYN") || {};
@@ -26233,6 +26459,19 @@ window.grbtp = 35;
   }
   if (settings._breakPosition !== "inside" && settings._breakPosition !== "outside") {
     settings._breakPosition = "inside";
+  }
+  // Auto Heal's mode is read by name in three places and an unknown string
+  // would silently land on the ryn2 branch of each without ever matching the
+  // safe or aggro ones, so it is pinned to the three the select offers.
+  if (settings._autoHealMode !== "safe" && settings._autoHealMode !== "ryn2" && settings._autoHealMode !== "aggro") {
+    settings._autoHealMode = "ryn2";
+  }
+  // The kill animation comes back off a <select> like the other enum options,
+  // and a save written before this existed does not carry it at all. Anything
+  // that is not one of the ids in KILL_STYLES falls back to the animation this
+  // client already had, which is also what a fresh install starts on.
+  if (!KILL_STYLE_BY_ID.has(settings._killAnimation)) {
+    settings._killAnimation = "current";
   }
   // The resolution comes back off a <select>, so it is a string, and off an
   // older save it may not be there at all. Normalised to one of the supported
@@ -26350,6 +26589,9 @@ window.grbtp = 35;
     }
     SaveSettings();
     UI_default.resetFrame();
+    try {
+      ChatLog_default.reload();
+    } catch (_) {}
   };
   const Settings_default = settings;
   // Preplace and Replace are slaved to Autoplacer: they no longer have their own
@@ -26367,6 +26609,1649 @@ window.grbtp = 35;
       }
     } catch (_) {}
   }
+  const CHATLOG_CSS = "@import url(\"https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&family=Space+Grotesk:wght@500;700&display=swap\");\n\n/* ============================================================\n   RYN TYPE 2 — CHAT LOG\n   Same palette as the client menu: near-black ground, iris for\n   the brand rail, sky for identity, sage for arrivals, rose for\n   deaths. Nothing else carries colour.\n\n   Every colour, size and opacity the user can change is a custom\n   property set on #ryn-chatlog itself, so a settings change is one\n   property write and no rule rebuild. Filtering and muting are\n   pure CSS too — see the two <style> blocks the module owns — so\n   hiding a kind or a player never walks the entry list.\n   ============================================================ */\n\n#ryn-chatlog {\n  /* user-controlled */\n  --cl-w: 340px;\n  --cl-h: 260px;\n  --cl-bg-a: 0.55;\n  --cl-fg-a: 1;\n  --cl-fs: 12px;\n  --cl-font: 'Manrope', 'Segoe UI', system-ui, sans-serif;\n\n  /* palette — mirrors the menu stylesheet */\n  --cl-ink: 10, 10, 14;\n  --cl-line: rgba(255, 255, 255, 0.075);\n  --cl-line-2: rgba(255, 255, 255, 0.13);\n  --cl-line-3: rgba(255, 255, 255, 0.24);\n  --cl-iris: #8e76ce;\n  --cl-iris-hi: #a894e0;\n  --cl-sky: #9bc5e8;\n  --cl-sid: #8fb0ce;\n  --cl-sage: #a6d7b2;\n  --cl-rose: #d9a3ab;\n  --cl-tx-1: #f3f2f7;\n  --cl-tx-2: #aca9ba;\n  --cl-tx-3: #726f80;\n\n  position: fixed;\n  left: 0;\n  top: 0;\n  z-index: 9998;\n  width: var(--cl-w);\n  height: var(--cl-h);\n  min-width: 200px;\n  min-height: 110px;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n  border: 1px solid var(--cl-line);\n  border-radius: 12px;\n  background: rgba(var(--cl-ink), var(--cl-bg-a));\n  backdrop-filter: blur(14px) saturate(140%);\n  -webkit-backdrop-filter: blur(14px) saturate(140%);\n  box-shadow: 0 18px 44px -18px rgba(0, 0, 0, 0.8);\n  font-family: var(--cl-font);\n  font-size: var(--cl-fs);\n  line-height: 1.45;\n  color: var(--cl-tx-1);\n  -webkit-user-select: none;\n  user-select: none;\n  contain: layout style;\n}\n\n/* Border-box throughout, so a declared height is the height the mark is\n   centred against and the borders do not push the seam off by a pixel. */\n#ryn-chatlog, #ryn-chatlog *, #ryn-chatlog *::before, #ryn-chatlog *::after { box-sizing: border-box; }\n\n#ryn-chatlog.rcl-hidden { display: none; }\n/* The panel's own flex/grid displays outrank the UA's [hidden] rule, so the\n   attribute is given back its meaning inside the panel. Everything that opens\n   and closes in here toggles `hidden`, not an inline display. */\n#ryn-chatlog [hidden] { display: none !important; }\n\n/* ---------------- header rail ---------------- */\n\n.rcl-head {\n  display: flex;\n  align-items: center;\n  gap: 7px;\n  padding: 0 6px 0 10px;\n  height: 27px;\n  flex-shrink: 0;\n  border-bottom: 1px solid var(--cl-line);\n  background: rgba(255, 255, 255, 0.022);\n  cursor: grab;\n}\n#ryn-chatlog.rcl-lock .rcl-head { cursor: default; }\n#ryn-chatlog.rcl-drag .rcl-head { cursor: grabbing; }\n\n.rcl-mark {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-weight: 700;\n  font-size: 11px;\n  letter-spacing: 0.16em;\n  color: var(--cl-iris);\n}\n.rcl-name-lbl {\n  font-size: 10px;\n  font-weight: 600;\n  letter-spacing: 0.12em;\n  text-transform: uppercase;\n  color: var(--cl-tx-3);\n}\n.rcl-count {\n  margin-left: auto;\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 10px;\n  font-variant-numeric: tabular-nums;\n  color: var(--cl-tx-3);\n  padding-right: 2px;\n}\n\n.rcl-ic {\n  width: 20px;\n  height: 20px;\n  flex-shrink: 0;\n  display: grid;\n  place-items: center;\n  border: none;\n  border-radius: 6px;\n  background: none;\n  padding: 0;\n  cursor: pointer;\n  color: var(--cl-tx-3);\n  transition: color 130ms ease, background 130ms ease;\n}\n.rcl-ic:hover { color: var(--cl-tx-1); background: rgba(255, 255, 255, 0.07); }\n.rcl-ic.on { color: var(--cl-iris-hi); background: rgba(142, 118, 206, 0.16); }\n.rcl-ic:focus-visible { outline: 1px solid var(--cl-sky); outline-offset: 1px; }\n.rcl-ic svg { width: 12px; height: 12px; display: block; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }\n\n/* ---------------- search ---------------- */\n\n.rcl-find {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 4px 8px;\n  flex-shrink: 0;\n  border-bottom: 1px solid var(--cl-line);\n}\n.rcl-find input {\n  flex: 1;\n  min-width: 0;\n  border: none;\n  outline: none;\n  background: none;\n  font: inherit;\n  font-size: 11px;\n  color: var(--cl-tx-1);\n  -webkit-user-select: text;\n  user-select: text;\n}\n.rcl-find input::placeholder { color: var(--cl-tx-3); }\n.rcl-find .rcl-hits {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 10px;\n  font-variant-numeric: tabular-nums;\n  color: var(--cl-tx-3);\n}\n\n/* ---------------- list ---------------- */\n\n.rcl-body { position: relative; flex: 1; min-height: 0; display: flex; }\n\n.rcl-list {\n  flex: 1;\n  min-width: 0;\n  overflow-y: auto;\n  overflow-x: hidden;\n  overscroll-behavior: contain;\n  padding: 5px 9px 7px;\n  opacity: var(--cl-fg-a);\n  scrollbar-width: thin;\n  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;\n}\n.rcl-list::-webkit-scrollbar { width: 6px; }\n.rcl-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); border-radius: 3px; }\n.rcl-list::-webkit-scrollbar-track { background: transparent; }\n\n.rcl-e {\n  display: grid;\n  grid-template-columns: auto minmax(0, 1fr);\n  column-gap: 7px;\n  padding: 1px 0;\n  border-radius: 4px;\n  animation: rcl-in 150ms cubic-bezier(.2, .8, .3, 1) both;\n}\n#ryn-chatlog.rcl-notime .rcl-e { grid-template-columns: minmax(0, 1fr); }\n#ryn-chatlog.rcl-notime .rcl-time { display: none; }\n\n.rcl-e:hover { background: rgba(255, 255, 255, 0.045); }\n.rcl-e.rcl-copied { background: rgba(166, 215, 178, 0.16); }\n\n.rcl-time {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 0.85em;\n  font-variant-numeric: tabular-nums;\n  color: var(--cl-tx-3);\n  padding-top: 0.1em;\n}\n\n.rcl-txt {\n  min-width: 0;\n  overflow-wrap: anywhere;\n  word-break: break-word;\n}\n\n.rcl-who {\n  display: inline;\n  border: none;\n  background: none;\n  padding: 0;\n  margin: 0;\n  font: inherit;\n  cursor: pointer;\n  color: var(--cl-sky);\n  text-align: start;\n}\n.rcl-who:hover { text-decoration: underline; text-underline-offset: 2px; }\n.rcl-who:focus-visible { outline: 1px solid var(--cl-sky); outline-offset: 1px; }\n.rcl-nick { font-weight: 600; unicode-bidi: isolate; }\n/* The id is half the identity, not a footnote to it: one step down from the\n   name in weight and lightness, and nowhere near the dimness of the clock. */\n.rcl-sid {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 0.88em;\n  font-weight: 500;\n  font-variant-numeric: tabular-nums;\n  color: var(--cl-sid);\n  padding-inline-start: 3px;\n}\n#ryn-chatlog.rcl-noid .rcl-sid { display: none; }\n\n.rcl-sep { color: var(--cl-tx-3); }\n.rcl-msg { color: var(--cl-tx-1); unicode-bidi: isolate; }\n.rcl-act { color: var(--cl-tx-2); }\n.rcl-clan { color: var(--cl-iris-hi); font-weight: 600; unicode-bidi: isolate; }\n\n.rcl-bot {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 0.72em;\n  font-weight: 700;\n  letter-spacing: 0.08em;\n  color: var(--cl-tx-3);\n  border: 1px solid var(--cl-line-2);\n  border-radius: 4px;\n  padding: 0 3px;\n  margin-inline-end: 4px;\n  vertical-align: 1px;\n}\n\n/* the verb carries the event's colour; the name always stays sky */\n.rcl-e[data-kind=\"join\"]  .rcl-act { color: var(--cl-sage); }\n.rcl-e[data-kind=\"leave\"] .rcl-act { color: var(--cl-tx-3); }\n.rcl-e[data-kind=\"death\"] .rcl-act { color: var(--cl-rose); }\n.rcl-e[data-kind=\"clanNew\"]  .rcl-act,\n.rcl-e[data-kind=\"clanJoin\"] .rcl-act { color: var(--cl-iris-hi); }\n\n@keyframes rcl-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }\n\n/* ---------------- new-events pill ---------------- */\n\n.rcl-new {\n  position: absolute;\n  left: 50%;\n  bottom: 8px;\n  transform: translateX(-50%);\n  display: flex;\n  align-items: center;\n  gap: 5px;\n  border: 1px solid var(--cl-line-2);\n  border-radius: 999px;\n  padding: 3px 11px;\n  font: inherit;\n  font-size: 10px;\n  font-weight: 700;\n  letter-spacing: 0.1em;\n  color: var(--cl-tx-1);\n  background: rgba(var(--cl-ink), 0.92);\n  cursor: pointer;\n  box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.9);\n  animation: rcl-pill 160ms cubic-bezier(.2, .8, .3, 1) both;\n}\n.rcl-new:hover { border-color: var(--cl-iris); }\n@keyframes rcl-pill { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translate(-50%, 0); } }\n\n/* ---------------- empty state ---------------- */\n\n/* Outside the list, so clearing the log is one `textContent = \"\"` on the list\n   and cannot take the empty state with it. */\n.rcl-empty {\n  position: absolute;\n  inset: 0;\n  z-index: 1;\n  margin: 0;\n  display: grid;\n  place-items: center;\n  padding: 0 22px;\n  text-align: center;\n  font-size: 11px;\n  line-height: 1.5;\n  color: var(--cl-tx-3);\n  pointer-events: none;\n}\n\n/* ---------------- resize grip ---------------- */\n\n.rcl-grip {\n  position: absolute;\n  right: 0;\n  bottom: 0;\n  width: 15px;\n  height: 15px;\n  cursor: nwse-resize;\n  z-index: 3;\n}\n.rcl-grip::after {\n  content: \"\";\n  position: absolute;\n  right: 3px;\n  bottom: 3px;\n  width: 7px;\n  height: 7px;\n  border-right: 1.5px solid var(--cl-tx-3);\n  border-bottom: 1.5px solid var(--cl-tx-3);\n  border-bottom-right-radius: 3px;\n}\n#ryn-chatlog.rcl-lockall .rcl-grip { display: none; }\n\n/* ---------------- per-entry menu ---------------- */\n\n.rcl-menu {\n  position: absolute;\n  z-index: 6;\n  min-width: 132px;\n  padding: 4px;\n  border: 1px solid var(--cl-line-2);\n  border-radius: 9px;\n  background: #0b0b11;\n  box-shadow: 0 14px 30px -12px rgba(0, 0, 0, 0.9);\n  animation: rcl-pop 120ms cubic-bezier(.2, .8, .3, 1) both;\n}\n@keyframes rcl-pop { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }\n.rcl-menu-h {\n  padding: 3px 8px 5px;\n  font-size: 10px;\n  letter-spacing: 0.06em;\n  color: var(--cl-tx-3);\n  border-bottom: 1px solid var(--cl-line);\n  margin-bottom: 3px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.rcl-menu button {\n  display: block;\n  width: 100%;\n  text-align: start;\n  border: none;\n  background: none;\n  border-radius: 6px;\n  padding: 5px 8px;\n  font: inherit;\n  font-size: 11px;\n  color: var(--cl-tx-1);\n  cursor: pointer;\n}\n.rcl-menu button:hover { background: rgba(255, 255, 255, 0.07); }\n.rcl-menu button.danger { color: var(--cl-rose); }\n\n/* ---------------- settings sheet ---------------- */\n\n/* Opaque, unlike the panel behind it: settings are read, not glanced past, and\n   the log showing through them is noise. */\n.rcl-cfg {\n  position: absolute;\n  inset: 0;\n  z-index: 5;\n  display: flex;\n  flex-direction: column;\n  background: #0b0b11;\n  animation: rcl-sheet 160ms cubic-bezier(.2, .8, .3, 1) both;\n}\n@keyframes rcl-sheet { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }\n\n.rcl-cfg-scroll {\n  flex: 1;\n  min-height: 0;\n  overflow-y: auto;\n  overscroll-behavior: contain;\n  padding: 7px 10px 10px;\n  scrollbar-width: thin;\n  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;\n}\n.rcl-cfg-scroll::-webkit-scrollbar { width: 6px; }\n.rcl-cfg-scroll::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); border-radius: 3px; }\n\n.rcl-grp {\n  font-size: 9.5px;\n  font-weight: 700;\n  letter-spacing: 0.14em;\n  text-transform: uppercase;\n  color: var(--cl-tx-3);\n  margin: 9px 0 4px;\n}\n.rcl-grp:first-child { margin-top: 1px; }\n\n.rcl-row {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  min-height: 22px;\n  padding: 1px 0;\n}\n.rcl-row > label:first-child,\n.rcl-row > span:first-child { flex: 1; min-width: 0; font-size: 11px; color: var(--cl-tx-2); }\n.rcl-row .rcl-num {\n  font-family: 'Space Grotesk', var(--cl-font);\n  font-size: 10px;\n  font-variant-numeric: tabular-nums;\n  color: var(--cl-tx-3);\n  width: 34px;\n  text-align: end;\n}\n\n.rcl-cfg select {\n  border: 1px solid var(--cl-line-2);\n  border-radius: 6px;\n  background: rgba(255, 255, 255, 0.05);\n  color: var(--cl-tx-1);\n  font: inherit;\n  font-size: 11px;\n  padding: 2px 5px;\n  outline: none;\n  cursor: pointer;\n  max-width: 130px;\n}\n.rcl-cfg select option { background: #101016; color: #f3f2f7; }\n\n.rcl-cfg input[type=\"range\"] {\n  -webkit-appearance: none;\n  appearance: none;\n  width: 104px;\n  height: 3px;\n  border-radius: 2px;\n  background: rgba(255, 255, 255, 0.13);\n  outline: none;\n  cursor: pointer;\n}\n.rcl-cfg input[type=\"range\"]::-webkit-slider-thumb {\n  -webkit-appearance: none;\n  width: 11px; height: 11px;\n  border-radius: 50%;\n  background: var(--cl-iris);\n  cursor: pointer;\n}\n.rcl-cfg input[type=\"range\"]::-moz-range-thumb {\n  width: 11px; height: 11px; border: none;\n  border-radius: 50%;\n  background: var(--cl-iris);\n  cursor: pointer;\n}\n\n/* switch */\n.rcl-sw { position: relative; width: 26px; height: 14px; flex-shrink: 0; cursor: pointer; }\n.rcl-sw input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }\n.rcl-sw i {\n  position: absolute; inset: 0;\n  border-radius: 999px;\n  background: rgba(255, 255, 255, 0.12);\n  transition: background 150ms ease;\n  pointer-events: none;\n}\n.rcl-sw i::after {\n  content: \"\";\n  position: absolute;\n  top: 2px; left: 2px;\n  width: 10px; height: 10px;\n  border-radius: 50%;\n  background: var(--cl-tx-2);\n  transition: transform 150ms cubic-bezier(.2, .8, .3, 1), background 150ms ease;\n}\n.rcl-sw input:checked + i { background: rgba(166, 215, 178, 0.28); }\n.rcl-sw input:checked + i::after { transform: translateX(12px); background: var(--cl-sage); }\n.rcl-sw input:focus-visible + i { box-shadow: 0 0 0 2px rgba(155, 197, 232, 0.5); }\n\n.rcl-btns { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }\n.rcl-btn {\n  border: 1px solid var(--cl-line-2);\n  border-radius: 7px;\n  background: rgba(255, 255, 255, 0.04);\n  color: var(--cl-tx-2);\n  font: inherit;\n  font-size: 10.5px;\n  padding: 4px 9px;\n  cursor: pointer;\n  transition: color 130ms ease, border-color 130ms ease, background 130ms ease;\n}\n.rcl-btn:hover { color: var(--cl-tx-1); border-color: var(--cl-line-3); background: rgba(255, 255, 255, 0.075); }\n.rcl-btn.danger { color: var(--cl-rose); border-color: rgba(217, 163, 171, 0.3); }\n.rcl-btn.danger:hover { background: rgba(217, 163, 171, 0.12); }\n\n.rcl-muted { display: flex; flex-wrap: wrap; gap: 4px; }\n.rcl-chip {\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  border: 1px solid var(--cl-line-2);\n  border-radius: 999px;\n  padding: 2px 4px 2px 9px;\n  font-size: 10.5px;\n  color: var(--cl-tx-2);\n  max-width: 100%;\n}\n.rcl-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: isolate; }\n.rcl-chip button {\n  width: 14px; height: 14px;\n  flex-shrink: 0;\n  display: grid; place-items: center;\n  border: none; border-radius: 50%;\n  background: rgba(255, 255, 255, 0.08);\n  color: var(--cl-tx-2);\n  font: inherit; font-size: 9px; line-height: 1;\n  padding: 0; cursor: pointer;\n}\n.rcl-chip button:hover { background: rgba(217, 163, 171, 0.3); color: var(--cl-tx-1); }\n.rcl-none { font-size: 10.5px; color: var(--cl-tx-3); }\n\n/* ---------------- docked to the Ryn Type 2 lockup ----------------\n\n   Not two cards stacked. Two panes of glass sharing an edge each blur the page\n   behind them separately, and over a gradient the two results do not match, so\n   the join reads as a line however carefully the borders are removed.\n\n   Instead the panel keeps its own single surface and grows its header to the\n   height of the corner mark, and the mark — the client's own #ryn-v2-wrapper,\n   which already sits above everything at z-index 99999 — is moved into that\n   space. One pane of glass, no seam, and the mark's own styling, hover and\n   click are left exactly as they were. The panel stops drawing its own \"RYN\n   Chat Log\" title because the mark above it is already saying it, and the\n   count and controls move over to share the mark's row. */\n\n#ryn-v2-wrapper.rcl-docked {\n  left: var(--rcl-dock-x, 12px) !important;\n  top: var(--rcl-dock-y, 12px) !important;\n}\n/* Docking is available: shown while the panel is dragged over the mark. */\n#ryn-v2-wrapper.rcl-dock-hint .ryn-v2-mark { opacity: 1; transform: translateY(-1px) scale(1.04); }\n#ryn-v2-wrapper.rcl-dock-hint .ryn-v2-n1 { color: #ffffff; }\n\n#ryn-chatlog.rcl-docked .rcl-head {\n  height: 60px;\n  align-items: center;\n  padding: 0 6px 0 10px;\n  background: none;\n  border-bottom: 1px solid var(--cl-line);\n}\n#ryn-chatlog.rcl-docked .rcl-mark,\n#ryn-chatlog.rcl-docked .rcl-name-lbl { display: none; }\n/* The panel's own glass settles up into place as the mark takes its seat. */\n#ryn-chatlog.rcl-docked .rcl-head { animation: rcl-assemble 240ms cubic-bezier(.2, .8, .3, 1) both; }\n@keyframes rcl-assemble {\n  from { opacity: .45; }\n  to { opacity: 1; }\n}\n/* The one transition on the panel's transform, added for the length of the\n   snap and taken off again — dragging has to stay instant. */\n#ryn-chatlog.rcl-snap { transition: transform 260ms cubic-bezier(.2, .85, .3, 1.08); }\n\n/* ---------------- motion ---------------- */\n\n@media (prefers-reduced-motion: reduce) {\n  #ryn-chatlog *, #ryn-chatlog *::before, #ryn-chatlog *::after {\n    animation-duration: 1ms !important;\n    transition-duration: 1ms !important;\n  }\n}\n";
+
+  // =========================================================================
+  //  CHAT LOG
+  //
+  //  A log of the things a player actually cares about — what was said, who
+  //  arrived, who left, who died, and who formed or joined a clan — read off
+  //  the connection this client already has. Nothing here opens a socket, adds
+  //  a listener to one, polls the world, or runs a frame loop. Every entry in
+  //  it arrives because one of the six observation points below was called by
+  //  code that was going to run anyway:
+  //
+  //    SocketManager "6"  → chat            (id, message)
+  //    SocketManager "D"  → join / respawn  (socketID, sid, nickname)
+  //    SocketManager "E"  → leave           (socketID)
+  //    SocketManager "O"  → death           (sid, health) when health hits 0
+  //    SocketManager "P"  → your own death
+  //    SocketManager "g"  → clan created    (clan name, owner sid)
+  //    PlayerManager tick → clan joined, and deaths RYN credited you with
+  //
+  //  Identity is the server's own: the player sid that "D" hands out and every
+  //  later packet keys on. The nickname rides along as display metadata, so a
+  //  name change keeps the same [id] and a mute keeps pointing at the same
+  //  player.
+  //
+  //  Rendering is incremental. One event appends one row; one expiry removes
+  //  one row; a filter, a mute or a font change writes a CSS property or a
+  //  class and touches no rows at all. The only timer the whole system owns is
+  //  a single self-rescheduling setTimeout that fires when the oldest entry is
+  //  due to expire, and nothing at all runs while the log is idle.
+  // =========================================================================
+
+  const CHATLOG_LIFETIME = 15 * 60 * 1000;
+  // The secondary guard. The lifetime above is what actually bounds the log in
+  // practice; this is the ceiling that keeps a flood — a server full of bots
+  // spamming chat — from putting thousands of rows in the DOM before the first
+  // of them is fifteen minutes old.
+  const CHATLOG_MAX = 400;
+  // Death is only claimed for a player the server stopped reporting on the
+  // tick RYN was credited with a kill, and only inside this many ticks of it.
+  // Same window CorpseHandler uses, for the same reason: one tick of slack for
+  // the kill credit and the last player update arriving in either order.
+  const CHATLOG_DEATH_TICKS = 3;
+  // And only within weapon reach of where you were standing. Without it, an
+  // enemy who walked out of view on the tick you killed someone else would be
+  // logged as dead — exactly the "ordinary disappearance" a death must not be
+  // inferred from.
+  const CHATLOG_DEATH_RANGE_SQ = 320 * 320;
+
+  // Where the assembly sits, and where the client's corner mark sits inside the
+  // panel's header once it has joined it. The corner is the mark's own home
+  // (#ryn-v2-wrapper is fixed at 12,12), so docking reads as the panel arriving
+  // under it rather than the pair moving somewhere else. The insets are the
+  // panel's header padding: 10px in, and centred in a 60px row against the
+  // mark's own 44px height.
+  const CHATLOG_DOCK_X = 12;
+  const CHATLOG_DOCK_Y = 12;
+  const CHATLOG_DOCK_INSET_X = 10;
+  const CHATLOG_DOCK_INSET_Y = 8;
+
+  const CHATLOG_FONTS = {
+    manrope: "'Manrope','Segoe UI',system-ui,sans-serif",
+    grotesk: "'Space Grotesk','Manrope',system-ui,sans-serif",
+    hammersmith: "'Hammersmith One','Manrope',Arial,sans-serif",
+    system: "system-ui,'Segoe UI',Roboto,Arial,sans-serif",
+    mono: "ui-monospace,'Space Grotesk',Consolas,monospace"
+  };
+
+  // kind → [settings key that shows it, sentence the event reads as]. The empty
+  // verb on `chat` is what makes the chat row take the "name: message" shape
+  // instead of the "name <verb>" shape.
+  const CHATLOG_KINDS = {
+    chat:     { flag: "_chatLogFChat",     verb: "" },
+    join:     { flag: "_chatLogFJoin",     verb: " joined the server" },
+    leave:    { flag: "_chatLogFLeave",    verb: " left the server" },
+    death:    { flag: "_chatLogFDeath",    verb: " died" },
+    clanNew:  { flag: "_chatLogFClanNew",  verb: " created clan " },
+    clanJoin: { flag: "_chatLogFClanJoin", verb: " joined clan " }
+  };
+
+  const CHATLOG_ICONS = {
+    search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.1-4.1"/></svg>',
+    gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 14a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1v.2a2 2 0 0 1-4 0v-.1a1.6 1.6 0 0 0-2.8-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.5 13h-.2a2 2 0 0 1 0-4h.1A1.6 1.6 0 0 0 4.6 6.2l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3h.1A1.6 1.6 0 0 0 10.3 2.2V2a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8v.1a1.6 1.6 0 0 0 1.5 1h.2a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>',
+    close: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    down: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg>'
+  };
+
+  const ChatLog = new class {
+    // ---- state -----------------------------------------------------------
+    // entries is append-only at the tail and shift-only at the head, which is
+    // what lets expiry look at entries[0] alone instead of scanning.
+    entries = [];
+    seq = 0;
+    root = null;
+    ready = false;
+    _built = false;
+    // socketID → sid. "E" (leave) names a player by the connection id the game
+    // gives out in "D"[0]; every other packet names them by sid. This is the
+    // only bridge between the two, and the only reason a leave can be reported
+    // with the same [id] the player's chat carried.
+    _bySocket = new Map;
+    // socketID → true once that connection has produced a "D". A second "D" for
+    // the same connection is a respawn, not a join — the game reuses the player
+    // object and only the first one is an arrival.
+    _joined = new Set;
+    // sid → { name, clan }. The last identity seen for a player, kept so a
+    // leave or a death can still name someone the server has stopped sending.
+    _known = new Map;
+    // A clan the "g" packet has just named, so the membership transition that
+    // follows for its owner is reported as the creation it is rather than as a
+    // second, spurious join. Not deduplication: two different players joining
+    // the same clan still produce two entries, and so does the same player
+    // joining twice.
+    _createdClan = new Map;
+    _muted = new Map;
+    _expiryTimer = 0;
+    _follow = true;
+    _pending = 0;
+    _searchTerm = "";
+    _searchTimer = 0;
+    _saveTimer = 0;
+    _menu = null;
+    _cfgOpen = false;
+    _drag = null;
+    _raf = 0;
+    _pos = { x: 14, y: 52 };
+    // The panel belongs to the game, not to the menu you launch it from, so it
+    // stays out of sight until this client is actually playing. It keeps
+    // recording either way — this is visibility and nothing else.
+    _inGame = false;
+    _docked = false;
+
+    // ---- settings helpers -------------------------------------------------
+    _s(key) { return Settings_default[key]; }
+    _set(key, value) {
+      Settings_default[key] = value;
+      this._saveSoon();
+    }
+    // Position, size and the mute table change many times a second while
+    // someone is dragging a panel or a slider. They are coalesced into one
+    // write instead of one write per pixel.
+    _saveSoon() {
+      if (this._saveTimer) return;
+      this._saveTimer = setTimeout(() => {
+        this._saveTimer = 0;
+        try { SaveSettings(); } catch (_) {}
+      }, 400);
+    }
+
+    // ---- lifecycle --------------------------------------------------------
+    init() {
+      if (this._built) return;
+      try {
+        this._build();
+        this._built = true;
+        this.ready = true;
+        this._docked = !!this._s("_chatLogDocked");
+        this._applyAll();
+        this._applyVisibility();
+      } catch (e) {
+        // A chat log that cannot draw itself must not take the client with it.
+        this.ready = false;
+        try { Logger.error("ChatLog failed to initialise: " + e); } catch (_) {}
+      }
+    }
+
+    // ======================================================================
+    //  OBSERVATION — called from the packet handlers, never the other way
+    //  round. Every one of these is wrapped at the call site, and every one
+    //  returns immediately when the log is not up.
+    // ======================================================================
+
+    onChat(client2, sid, player, message) {
+      if (!this.ready) return;
+      const text = message == null ? "" : String(message);
+      if (text === "") return;
+      const name = this._name(sid, player);
+      this._remember(sid, name, player ? player.clanName : null);
+      // The message is passed through exactly as the server sent it. No
+      // filtering, no masking, no trimming of content — if the game received
+      // it, the log shows it.
+      this._push("chat", sid, name, text, "", this._isBot(client2, sid));
+    }
+
+    // "D". data[0] is the connection id, data[1] the player sid, data[2] the
+    // nickname. A connection's first "D" is an arrival; every later one is that
+    // player respawning, which is not an arrival and is not logged.
+    onSpawn(client2, data) {
+      if (!this.ready || !data) return;
+      const socketID = data[0];
+      const sid = data[1];
+      const name = String(data[2] == null ? "" : data[2]);
+      if (sid == null) return;
+      if (socketID != null) this._bySocket.set(socketID, sid);
+      this._remember(sid, name, null);
+      if (socketID != null) {
+        if (this._joined.has(socketID)) return;
+        this._joined.add(socketID);
+      }
+      this._push("join", sid, name, "", "", this._isBot(client2, sid));
+    }
+
+    // "E" — the server dropping a connection. This is the only packet that
+    // means "gone", and it is not sent for a death or a respawn, so a leave is
+    // never confused with either.
+    onRemove(client2, socketID) {
+      if (!this.ready || socketID == null) return;
+      const sid = this._bySocket.get(socketID);
+      this._bySocket.delete(socketID);
+      this._joined.delete(socketID);
+      if (sid === undefined) return;
+      const known = this._known.get(sid);
+      this._push("leave", sid, known ? known.name : "", "", "", this._isBot(client2, sid));
+      // Nothing can refer to them again until a fresh "D" reintroduces them, so
+      // the identity is released here. The entries already in the log carry
+      // their own copy of the name and are unaffected. This is what keeps the
+      // bookkeeping bounded by who is on the server rather than by how long the
+      // session has been running.
+      this.forget(sid);
+    }
+
+    // "O" — a health update. Zero or less is the server stating the player is
+    // dead, which is the one death signal the protocol carries for someone
+    // else's character.
+    onHealth(client2, sid, health) {
+      if (!this.ready) return;
+      if (typeof health !== "number" || health > 0) return;
+      const known = this._known.get(sid);
+      if (known === undefined) return;
+      this._claimDeath(client2, sid, known.name);
+    }
+
+    // "P" — the server telling this client it died. Authoritative, and the only
+    // death anyone can be certain of without a kill credit.
+    onOwnDeath(client2) {
+      if (!this.ready) return;
+      const myPlayer = client2 && client2.myPlayer;
+      if (!myPlayer || myPlayer.id === -1) return;
+      this._claimDeath(client2, myPlayer.id, myPlayer.nickname || "");
+    }
+
+    // "g" — a clan appearing. `name` is the clan's own id (moomoo keys clans by
+    // their name) and `ownerID` the sid of the player who made it.
+    onClanCreated(client2, name, ownerID) {
+      if (!this.ready || name == null || ownerID == null) return;
+      const known = this._known.get(ownerID);
+      const who = known ? known.name : "";
+      this._createdClan.set(ownerID, String(name));
+      this._push("clanNew", ownerID, who, "", String(name), this._isBot(client2, ownerID));
+    }
+
+    // The clan membership transition itself, read off the player update the
+    // client already decodes every tick. Called only when the field actually
+    // changed, so this costs one string comparison per visible player per tick
+    // inside a loop that was already running.
+    onClanChange(client2, player, previous) {
+      if (!this.ready) return;
+      const clan = player.clanName;
+      const sid = player.id;
+      const name = player.nickname || "";
+      this._remember(sid, name, clan);
+      if (clan == null || clan === "") return;
+      // Leaving one clan for another is still a join into the new one; only
+      // leaving into no clan is not an event this log reports.
+      const created = this._createdClan.get(sid);
+      if (created === clan) {
+        this._createdClan.delete(sid);
+        return;
+      }
+      this._push("clanJoin", sid, name, "", String(clan), this._isBot(client2, sid));
+    }
+
+    // Deaths RYN was credited with. Runs once a tick from PlayerManager.postTick
+    // and leaves after two property reads on every tick where nothing died,
+    // which is almost all of them.
+    tick(playerManager) {
+      if (!this.ready) return;
+      const client2 = playerManager.client;
+      if (!client2.isOwner) return;
+      const myPlayer = client2.myPlayer;
+      // `killedSomeone` is the client's own kill event; the kill-count guard is
+      // the one false positive it has — on the first tick of a new life the
+      // counter is compared against a zeroed baseline, so a kill from a
+      // previous life reads as a fresh one.
+      if (!myPlayer.killedSomeone || myPlayer.resources.kills === 0) return;
+      const tick = playerManager.corpseTick;
+      const mine = myPlayer.pos.current;
+      const cx = mine.x;
+      const cy = mine.y;
+      for (const player of playerManager.playerData.values()) {
+        const seen = player.corpseSeenTick;
+        if (seen <= 0) continue;
+        const gone = tick - seen;
+        if (gone < 1 || gone > CHATLOG_DEATH_TICKS) continue;
+        // Our own marker, so claiming a body here neither consumes nor is
+        // consumed by the corpse renderer's claim on the same tick.
+        const id = player.id;
+        if (!myPlayer.isEnemyByID(id)) continue;
+        const pos = player.pos.current;
+        const dx = pos.x - cx;
+        const dy = pos.y - cy;
+        if (dx * dx + dy * dy > CHATLOG_DEATH_RANGE_SQ) continue;
+        // _claimDeath owns the stamp, so a body the zero-health update already
+        // reported is not reported again here.
+        this._claimDeath(client2, id, player.nickname || "");
+      }
+    }
+
+    // A player's connection is gone for good — drop what was being kept for
+    // them. Called from the same place the client forgets them.
+    forget(sid) {
+      this._known.delete(sid);
+      this._createdClan.delete(sid);
+    }
+
+    // ---- identity ---------------------------------------------------------
+    _name(sid, player) {
+      if (player && player.nickname) return player.nickname;
+      const known = this._known.get(sid);
+      return known ? known.name : "";
+    }
+    _remember(sid, name, clan) {
+      const known = this._known.get(sid);
+      if (known === undefined) {
+        this._known.set(sid, { name: name || "", clan: clan == null ? null : clan });
+        return;
+      }
+      if (name) known.name = name;
+      known.clan = clan == null ? null : clan;
+    }
+    // RYN's own bot register — the set of player ids belonging to connections
+    // this client opened. Nobody else can land in it, so a real player is never
+    // classed as a bot.
+    _isBot(client2, sid) {
+      try { return !!(client2 && client2.isBotByID && client2.isBotByID(sid)); } catch (_) { return false; }
+    }
+    // One character death is one entry.
+    //
+    // Three independent signals can witness the same death — the server's own
+    // zero-health update, the "P" the server sends this client when it dies,
+    // and the kill credit RYN raises when you are the one who did it — and for
+    // an enemy you killed in view, two of them fire on the same tick. The stamp
+    // below reconciles the witnesses on the game's own tick counter so the
+    // death is written once.
+    //
+    // This is not event deduplication and does not behave like it: two separate
+    // deaths of the same player are two entries, because a player cannot die,
+    // respawn and die again inside the three ticks (a third of a second) this
+    // covers. Nothing else in the log is coalesced — repeated chat, repeated
+    // joins, repeated clan events all go in exactly as they arrive.
+    _claimDeath(client2, sid, name) {
+      const manager = client2 && client2.PlayerManager;
+      const player = manager ? manager.playerData.get(sid) : undefined;
+      if (player !== undefined && manager !== undefined) {
+        const tick = manager.corpseTick;
+        const stamped = player._chatLogDeathTick;
+        if (stamped !== undefined && tick - stamped <= CHATLOG_DEATH_TICKS) return;
+        player._chatLogDeathTick = tick;
+      }
+      const known = this._known.get(sid);
+      if (known !== undefined) {
+        if (name) known.name = name;
+      }
+      this._push("death", sid, name || (known ? known.name : ""), "", "", this._isBot(client2, sid));
+    }
+
+    // True while the log's own search box has the keyboard. The client's key
+    // handler asks before it acts on the chat key, which is the one branch it
+    // takes without first checking for a focused input.
+    ownsInput() {
+      return this.ready && document.activeElement === this._findInput;
+    }
+
+    // ======================================================================
+    //  ENTRIES
+    // ======================================================================
+
+    _push(kind, sid, name, message, clan, isBot) {
+      let entry;
+      try {
+        entry = {
+          id: ++this.seq,
+          t: Date.now(),
+          kind: kind,
+          sid: sid,
+          name: name || "",
+          msg: message || "",
+          clan: clan || "",
+          bot: !!isBot,
+          el: null
+        };
+        this.entries.push(entry);
+      } catch (_) { return; }
+      try {
+        if (this.entries.length > CHATLOG_MAX) this._dropOldest();
+        this._render(entry);
+        this._scheduleExpiry();
+        this._updateCount();
+      } catch (_) {}
+    }
+
+    _dropOldest() {
+      const gone = this.entries.shift();
+      if (gone && gone.el) {
+        gone.el.remove();
+        gone.el = null;
+      }
+    }
+
+    // One timer for the whole log, armed for the moment the oldest entry turns
+    // fifteen minutes old and rearmed from whatever is oldest after that. No
+    // interval, no per-entry timer, and nothing running at all when the log is
+    // empty.
+    _scheduleExpiry() {
+      if (this._expiryTimer) return;
+      const head = this.entries[0];
+      if (head === undefined) return;
+      const wait = head.t + CHATLOG_LIFETIME - Date.now();
+      this._expiryTimer = setTimeout(() => {
+        this._expiryTimer = 0;
+        try { this._expire(); } catch (_) {}
+        this._scheduleExpiry();
+      }, wait > 50 ? wait : 50);
+    }
+
+    _expire() {
+      const cutoff = Date.now() - CHATLOG_LIFETIME;
+      let removed = 0;
+      while (this.entries.length > 0 && this.entries[0].t <= cutoff) {
+        this._dropOldest();
+        removed++;
+      }
+      if (removed > 0) {
+        this._updateCount();
+        this._updateEmpty();
+      }
+    }
+
+    clear() {
+      const list = this._list;
+      for (let i = 0; i < this.entries.length; i++) this.entries[i].el = null;
+      this.entries.length = 0;
+      if (list) list.textContent = "";
+      this._closeMenu();
+      this._cancelScroll();
+      if (this._expiryTimer) {
+        clearTimeout(this._expiryTimer);
+        this._expiryTimer = 0;
+      }
+      this._pending = 0;
+      this._follow = true;
+      this._updateNewPill();
+      this._updateCount();
+      this._updateEmpty();
+    }
+
+    // ======================================================================
+    //  RENDERING
+    // ======================================================================
+
+    _render(entry) {
+      const list = this._list;
+      if (!list) return;
+      const doc = document;
+      const row = doc.createElement("div");
+      row.className = "rcl-e";
+      row.dataset.kind = entry.kind;
+      row.dataset.sid = String(entry.sid);
+      if (entry.bot) row.dataset.bot = "1";
+      row._clEntry = entry;
+
+      const time = doc.createElement("span");
+      time.className = "rcl-time";
+      time.textContent = this._clock(entry.t);
+      row.appendChild(time);
+
+      const text = doc.createElement("span");
+      text.className = "rcl-txt";
+
+      if (entry.bot) {
+        const tag = doc.createElement("span");
+        tag.className = "rcl-bot";
+        tag.textContent = "BOT";
+        text.appendChild(tag);
+      }
+
+      const who = doc.createElement("button");
+      who.type = "button";
+      who.className = "rcl-who";
+      const nick = doc.createElement("span");
+      nick.className = "rcl-nick";
+      nick.dir = "auto";
+      nick.textContent = entry.name || "unknown";
+      who.appendChild(nick);
+      const sid = doc.createElement("span");
+      sid.className = "rcl-sid";
+      sid.textContent = "[" + entry.sid + "]";
+      who.appendChild(sid);
+      text.appendChild(who);
+
+      if (entry.kind === "chat") {
+        const sep = doc.createElement("span");
+        sep.className = "rcl-sep";
+        sep.textContent = ": ";
+        text.appendChild(sep);
+        const msg = doc.createElement("span");
+        msg.className = "rcl-msg";
+        msg.dir = "auto";
+        msg.textContent = entry.msg;
+        text.appendChild(msg);
+      } else {
+        const act = doc.createElement("span");
+        act.className = "rcl-act";
+        act.textContent = CHATLOG_KINDS[entry.kind].verb;
+        text.appendChild(act);
+        if (entry.clan) {
+          const clan = doc.createElement("span");
+          clan.className = "rcl-clan";
+          clan.dir = "auto";
+          clan.textContent = entry.clan;
+          text.appendChild(clan);
+        }
+      }
+
+      row.appendChild(text);
+      if (this._searchTerm !== "" && !this._matches(entry)) row.style.display = "none";
+      entry.el = row;
+      list.appendChild(row);
+
+      this._updateEmpty();
+      if (this._follow) {
+        this._scrollSoon();
+      } else {
+        this._pending++;
+        this._updateNewPill();
+      }
+    }
+
+    // Following the tail means reading scrollHeight, and reading scrollHeight
+    // right after appending a row forces the browser to lay the list out there
+    // and then. Doing that once per message turns a burst into one forced
+    // layout per message; doing it once per frame is the same result at a
+    // fraction of the cost, and a frame is as often as a scroll position could
+    // be seen anyway.
+    _scrollSoon() {
+      if (this._scrollRaf) return;
+      this._scrollRaf = requestAnimationFrame(() => {
+        this._scrollRaf = 0;
+        if (!this._follow) return;
+        const list = this._list;
+        if (list) list.scrollTop = list.scrollHeight;
+      });
+    }
+
+    _cancelScroll() {
+      if (!this._scrollRaf) return;
+      cancelAnimationFrame(this._scrollRaf);
+      this._scrollRaf = 0;
+    }
+
+    _clock(ms) {
+      const d = new Date(ms);
+      const h = d.getHours();
+      const m = d.getMinutes();
+      return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
+    }
+
+    // The exact text a copy produces, and also what search reads, so the two
+    // never disagree about what an entry says.
+    _line(entry) {
+      const head = this._clock(entry.t) + " " + (entry.name || "unknown") + " [" + entry.sid + "]";
+      if (entry.kind === "chat") return head + ": " + entry.msg;
+      return head + CHATLOG_KINDS[entry.kind].verb + entry.clan;
+    }
+
+    // The immediate version, for the three places a person asked for it: the
+    // new-events pill, reopening the panel, and letting go of the resize grip.
+    _toBottom() {
+      this._cancelScroll();
+      const list = this._list;
+      if (!list) return;
+      list.scrollTop = list.scrollHeight;
+      this._pending = 0;
+      this._follow = true;
+      this._updateNewPill();
+    }
+
+    _updateNewPill() {
+      const pill = this._newPill;
+      if (!pill) return;
+      const show = !this._follow && this._pending > 0;
+      if (show) {
+        pill.lastChild.textContent = this._pending > 99 ? "99+ NEW" : this._pending + " NEW";
+        pill.hidden = false;
+      } else {
+        pill.hidden = true;
+      }
+    }
+
+    _updateCount() {
+      if (this._countEl) this._countEl.textContent = String(this.entries.length);
+    }
+
+    _updateEmpty() {
+      if (!this._emptyEl) return;
+      this._emptyEl.hidden = this.entries.length > 0;
+    }
+
+    // ======================================================================
+    //  FILTERING — all of it declarative
+    //
+    //  Kind filters and mutes are two stylesheets the module rewrites when a
+    //  switch moves. Hiding every message from a player, or every join in the
+    //  log, is therefore one string assignment regardless of how many entries
+    //  are in the DOM, and the entries themselves are never touched: the log
+    //  keeps collecting exactly what it collected before.
+    // ======================================================================
+
+    _applyFilters() {
+      if (!this._filterSheet) return;
+      let css = "";
+      for (const kind in CHATLOG_KINDS) {
+        if (!this._s(CHATLOG_KINDS[kind].flag)) {
+          css += '#ryn-chatlog .rcl-e[data-kind="' + kind + '"]{display:none}';
+        }
+      }
+      if (!this._s("_chatLogBotMsg")) {
+        css += '#ryn-chatlog .rcl-e[data-bot="1"][data-kind="chat"]{display:none}';
+      }
+      if (!this._s("_chatLogBotEvents")) {
+        css += '#ryn-chatlog .rcl-e[data-bot="1"]:not([data-kind="chat"]){display:none}';
+      }
+      this._filterSheet.textContent = css;
+    }
+
+    _applyMutes() {
+      if (!this._muteSheet) return;
+      let css = "";
+      for (const sid of this._muted.keys()) {
+        css += '#ryn-chatlog .rcl-e[data-kind="chat"][data-sid="' + sid + '"]{display:none}';
+      }
+      this._muteSheet.textContent = css;
+    }
+
+    // ---- mute -------------------------------------------------------------
+    // The one question the game bundle asks. It is answered from the sid, which
+    // is what the chat packet carries, so a player who renames themselves stays
+    // muted and a player who takes the muted player's old name does not become
+    // muted with them.
+    isMuted(sid) {
+      return this._muted.size !== 0 && this._muted.has(sid);
+    }
+
+    mute(sid, name) {
+      if (sid == null) return;
+      this._muted.set(sid, name || "");
+      this._applyMutes();
+      this._persistMutes();
+      this._renderMuteList();
+    }
+
+    unmute(sid) {
+      if (!this._muted.delete(sid)) return;
+      this._applyMutes();
+      this._persistMutes();
+      this._renderMuteList();
+    }
+
+    _persistMutes() {
+      const out = [];
+      for (const pair of this._muted) out.push([ pair[0], pair[1] ]);
+      this._set("_chatLogMuted", out);
+    }
+
+    _loadMutes() {
+      this._muted.clear();
+      const stored = this._s("_chatLogMuted");
+      if (!Array.isArray(stored)) return;
+      for (let i = 0; i < stored.length; i++) {
+        const pair = stored[i];
+        if (Array.isArray(pair) && pair[0] != null) this._muted.set(pair[0], String(pair[1] == null ? "" : pair[1]));
+      }
+    }
+
+    // ---- search -----------------------------------------------------------
+    // Debounced, and bounded by the entry cap rather than by the DOM: it walks
+    // the entry array, which is at most CHATLOG_MAX long, and writes a display
+    // value only on the rows whose visibility actually changed.
+    _search(term) {
+      this._searchTerm = term.trim().toLowerCase();
+      let hits = 0;
+      for (let i = 0; i < this.entries.length; i++) {
+        const entry = this.entries[i];
+        if (!entry.el) continue;
+        const show = this._searchTerm === "" || this._matches(entry);
+        if (show) hits++;
+        const want = show ? "" : "none";
+        if (entry.el.style.display !== want) entry.el.style.display = want;
+      }
+      if (this._hitsEl) {
+        this._hitsEl.textContent = this._searchTerm === "" ? "" : hits + (hits === 1 ? " hit" : " hits");
+      }
+    }
+
+    _matches(entry) {
+      const term = this._searchTerm;
+      if (term === "") return true;
+      if (String(entry.sid).indexOf(term) !== -1) return true;
+      if (entry.name.toLowerCase().indexOf(term) !== -1) return true;
+      if (entry.msg.toLowerCase().indexOf(term) !== -1) return true;
+      if (entry.clan.toLowerCase().indexOf(term) !== -1) return true;
+      if (entry.kind.toLowerCase().indexOf(term) !== -1) return true;
+      const verb = CHATLOG_KINDS[entry.kind].verb;
+      return verb !== "" && verb.toLowerCase().indexOf(term) !== -1;
+    }
+
+    // ======================================================================
+    //  APPEARANCE
+    // ======================================================================
+
+    _applyAll() {
+      this._loadMutes();
+      this._applyFilters();
+      this._applyMutes();
+      this._applyFont();
+      this._applyOpacity();
+      this._pos.x = this._s("_chatLogX");
+      this._pos.y = this._s("_chatLogY");
+      this._applySize();
+      this._applyToggles();
+    }
+
+    _applyFont() {
+      const root = this.root;
+      if (!root) return;
+      const family = CHATLOG_FONTS[this._s("_chatLogFont")] || CHATLOG_FONTS.manrope;
+      root.style.setProperty("--cl-font", family);
+      root.style.setProperty("--cl-fs", this._s("_chatLogFontSize") + "px");
+    }
+
+    _applyOpacity() {
+      const root = this.root;
+      if (!root) return;
+      root.style.setProperty("--cl-bg-a", (this._s("_chatLogBgOpacity") / 100).toFixed(3));
+      root.style.setProperty("--cl-fg-a", (this._s("_chatLogMsgOpacity") / 100).toFixed(3));
+      // The docked lockup is painted from the same value, so the two halves of
+      // the assembly never disagree about how transparent they are.
+      this._syncDock();
+    }
+
+    _applySize() {
+      const root = this.root;
+      if (!root) return;
+      root.style.setProperty("--cl-w", this._s("_chatLogW") + "px");
+      root.style.setProperty("--cl-h", this._s("_chatLogH") + "px");
+      // The lockup's card is as wide as the panel, so a width change has to
+      // reach it too or the seam stops lining up.
+      this._syncDock();
+      this._place();
+    }
+
+    _applyToggles() {
+      const root = this.root;
+      if (!root) return;
+      root.classList.toggle("rcl-notime", !this._s("_chatLogTime"));
+      root.classList.toggle("rcl-noid", !this._s("_chatLogID"));
+      root.classList.toggle("rcl-lock", !!this._s("_chatLogLock"));
+    }
+
+    // ======================================================================
+    //  DOCKING TO THE RYN TYPE 2 LOCKUP
+    //
+    //  Dragged up under the corner mark, the panel joins it: the lockup grows
+    //  a card the width of the panel with its bottom edge open, the panel
+    //  squares off its own top corners against it, and the panel's "RYN Chat
+    //  Log" title steps aside because the lockup above is already saying it.
+    //  The two read as one built thing rather than a badge with a window under
+    //  it.
+    //
+    //  The lockup is the client's own #ryn-v2-wrapper and is looked up fresh
+    //  each time rather than held: it is injected on a MutationObserver and may
+    //  not exist yet when the log starts. Nothing here runs on a timer — only
+    //  on a drag, a resize, or the panel appearing.
+    // ======================================================================
+
+    _lockup() {
+      return document.getElementById("ryn-v2-wrapper");
+    }
+
+    // Where the assembly lives: the same corner the mark occupies on its own,
+    // so docking looks like the panel arriving under the mark rather than the
+    // pair moving somewhere new.
+    _dockPoint() {
+      return { x: CHATLOG_DOCK_X, y: CHATLOG_DOCK_Y };
+    }
+
+    // Seats the mark inside the panel's header, or puts it back. Called when
+    // the panel is shown, hidden, docked, undocked, moved or resized — never on
+    // a timer, and never from inside a drag frame.
+    _syncDock() {
+      const on = this._docked && this.isOpen();
+      if (this.root) this.root.classList.toggle("rcl-docked", on);
+      const lockup = this._lockup();
+      if (!lockup) return;
+      if (on) {
+        // Offsets into the panel's own header box, so the mark tracks the panel
+        // if the viewport ever clamps it away from the corner.
+        lockup.style.setProperty("--rcl-dock-x", (this._pos.x + CHATLOG_DOCK_INSET_X) + "px");
+        lockup.style.setProperty("--rcl-dock-y", (this._pos.y + CHATLOG_DOCK_INSET_Y) + "px");
+      } else {
+        lockup.style.removeProperty("--rcl-dock-x");
+        lockup.style.removeProperty("--rcl-dock-y");
+      }
+      lockup.classList.toggle("rcl-docked", on);
+    }
+
+    // True while the panel is being dragged close enough to the mark that
+    // letting go would join them.
+    _nearDock(x, y) {
+      if (!this._lockup()) return false;
+      return Math.abs(x - CHATLOG_DOCK_X) <= 90 && Math.abs(y - CHATLOG_DOCK_Y) <= 90;
+    }
+
+    dock(animate) {
+      if (!this.root || !this._lockup()) return;
+      this._docked = true;
+      this._set("_chatLogDocked", true);
+      if (animate) this._snap();
+      const point = this._dockPoint();
+      this._applyPosition(point.x, point.y);
+      this._syncDock();
+      Settings_default._chatLogX = Math.round(this._pos.x);
+      Settings_default._chatLogY = Math.round(this._pos.y);
+      this._saveSoon();
+    }
+
+    undock() {
+      if (!this._docked) return;
+      this._docked = false;
+      this._set("_chatLogDocked", false);
+      this._syncDock();
+    }
+
+    // The join itself: one short slide into place. The class carries the only
+    // transition on the panel's transform, and it is taken off again as soon as
+    // the slide ends, so dragging stays instant.
+    _snap() {
+      const root = this.root;
+      if (!root) return;
+      root.classList.add("rcl-snap");
+      clearTimeout(this._snapTimer);
+      this._snapTimer = setTimeout(() => root.classList.remove("rcl-snap"), 320);
+    }
+
+    // Position the panel where it belongs right now — under the lockup when
+    // docked, at the saved coordinates otherwise.
+    _place() {
+      if (this._docked) {
+        const point = this._dockPoint();
+        if (point) {
+          this._applyPosition(point.x, point.y);
+          return;
+        }
+      }
+      this._applyPosition(this._pos.x, this._pos.y);
+    }
+
+    // Viewport-safe placement, applied on every move and on every window event
+    // that can change the viewport — a resize, a zoom step, fullscreen in or
+    // out, or a position restored from a session on a bigger monitor.
+    //
+    // While the panel fits, it is kept fully inside. When it does not — a very
+    // small window, or a size dragged past the viewport — the header stays on
+    // screen so the panel can always be grabbed and dragged back. There is no
+    // arrangement of window size and saved position that can strand it.
+    _applyPosition(x, y) {
+      const root = this.root;
+      if (!root) return;
+      const w = root.offsetWidth || this._s("_chatLogW");
+      const h = root.offsetHeight || this._s("_chatLogH");
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const nx = vw >= w
+        ? Math.min(Math.max(0, x), vw - w)
+        : Math.min(0, Math.max(vw - w, x));
+      const ny = Math.min(Math.max(0, y), Math.max(0, vh >= h ? vh - h : vh - 28));
+      this._pos.x = nx;
+      this._pos.y = ny;
+      root.style.transform = "translate3d(" + nx + "px," + ny + "px,0)";
+      // The mark rides in the panel's header, so it follows every clamp the
+      // panel takes. Two custom-property writes, and only while docked.
+      if (this._docked) {
+        const lockup = this._lockup();
+        if (lockup) {
+          lockup.style.setProperty("--rcl-dock-x", (nx + CHATLOG_DOCK_INSET_X) + "px");
+          lockup.style.setProperty("--rcl-dock-y", (ny + CHATLOG_DOCK_INSET_Y) + "px");
+        }
+      }
+    }
+
+    _savePosition() {
+      Settings_default._chatLogX = Math.round(this._pos.x);
+      Settings_default._chatLogY = Math.round(this._pos.y);
+      this._saveSoon();
+    }
+
+    // ---- open / close -----------------------------------------------------
+    // Closing hides the panel and nothing else. Every observation point above
+    // keeps running, entries keep accumulating and keep expiring on schedule,
+    // so reopening shows everything that arrived in the meantime. The same is
+    // true of the lobby: the log is collecting there too, it just has nothing
+    // to show for a game you have not joined.
+    show() {
+      if (this._s("_chatLogOpen") !== true) {
+        this._set("_chatLogOpen", true);
+        this._syncMiscSwitch(true);
+      }
+      this._applyVisibility();
+    }
+
+    hide() {
+      if (this._s("_chatLogOpen") !== false) {
+        this._set("_chatLogOpen", false);
+        this._syncMiscSwitch(false);
+      }
+      this._applyVisibility();
+    }
+
+    // Called from ClientPlayer's own spawn and reset, which are the client's
+    // real answers to "am I playing". Dying puts moomoo back on its menu card,
+    // so the panel goes with it and comes back on the next spawn.
+    setInGame(playing) {
+      if (!this.ready || this._inGame === playing) return;
+      this._inGame = playing;
+      this._applyVisibility();
+    }
+
+    // Wanted and playing, or nothing. Everything that reacts to the panel
+    // appearing or disappearing hangs off this one place.
+    _applyVisibility() {
+      const root = this.root;
+      if (!root) return;
+      const visible = this._inGame && !!this._s("_chatLogOpen");
+      root.classList.toggle("rcl-hidden", !visible);
+      this._syncDock();
+      if (visible) {
+        // Nothing laid out while it was hidden, so the list has no scroll
+        // height to speak of until now.
+        this._place();
+        if (this._follow) this._toBottom();
+      } else {
+        this._closeMenu();
+        this._cancelScroll();
+      }
+    }
+
+    // The Misc page's switch and the panel's own close button are two ways to
+    // the same setting, so whichever is used moves the other.
+    _syncMiscSwitch(open) {
+      try {
+        const doc = UI_default.frame && UI_default.frame.document;
+        if (!doc) return;
+        const box = doc.getElementById("_chatLogOpen");
+        if (box) box.checked = open;
+      } catch (_) {}
+    }
+
+    toggle() {
+      if (!this.ready) return;
+      if (this._s("_chatLogOpen")) this.hide(); else this.show();
+    }
+
+    isOpen() {
+      return !!this.root && !this.root.classList.contains("rcl-hidden");
+    }
+
+    // A Chat Log setting was changed from somewhere other than the panel — the
+    // Misc page. Re-reads the settings the panel draws from; it does not touch
+    // a single entry.
+    refresh() {
+      if (!this.ready) return;
+      this._applyFilters();
+      this._applyToggles();
+      this._syncControls();
+    }
+
+    // Every Chat Log setting changed at once, from the client's own global
+    // reset. Same as refresh, plus the ones that are not simple switches.
+    reload() {
+      if (!this.ready) return;
+      this._docked = !!this._s("_chatLogDocked");
+      this._applyAll();
+      this._syncControls();
+      this._renderMuteList();
+      this._applyVisibility();
+    }
+
+    // ---- resets -----------------------------------------------------------
+    resetPosition() {
+      Settings_default._chatLogX = defaultSettings._chatLogX;
+      Settings_default._chatLogY = defaultSettings._chatLogY;
+      this._pos.x = defaultSettings._chatLogX;
+      this._pos.y = defaultSettings._chatLogY;
+      this._saveSoon();
+      if (defaultSettings._chatLogDocked) this.dock(true); else { this.undock(); this._place(); }
+    }
+
+    resetSize() {
+      Settings_default._chatLogW = defaultSettings._chatLogW;
+      Settings_default._chatLogH = defaultSettings._chatLogH;
+      this._saveSoon();
+      this._applySize();
+      this._syncControls();
+    }
+
+    resetOpacity() {
+      Settings_default._chatLogBgOpacity = defaultSettings._chatLogBgOpacity;
+      Settings_default._chatLogMsgOpacity = defaultSettings._chatLogMsgOpacity;
+      this._saveSoon();
+      this._applyOpacity();
+      this._syncControls();
+    }
+
+    resetFont() {
+      Settings_default._chatLogFont = defaultSettings._chatLogFont;
+      Settings_default._chatLogFontSize = defaultSettings._chatLogFontSize;
+      this._saveSoon();
+      this._applyFont();
+      this._syncControls();
+    }
+
+    // Chat Log keys only. Nothing else in the client is touched — the reset
+    // list is exactly the keys this feature owns.
+    resetAll() {
+      for (const key in defaultSettings) {
+        if (key.indexOf("_chatLog") !== 0) continue;
+        if (key === "_chatLogOpen" || key === "_chatLogKey") continue;
+        const value = defaultSettings[key];
+        Settings_default[key] = Array.isArray(value) ? value.slice() : value;
+      }
+      this._saveSoon();
+      this._docked = !!defaultSettings._chatLogDocked;
+      this._loadMutes();
+      this._applyAll();
+      this._place();
+      this._syncControls();
+      this._renderMuteList();
+      this._search(this._searchTerm);
+    }
+
+    // ======================================================================
+    //  DOM
+    // ======================================================================
+
+    _build() {
+      const doc = document;
+      const host = doc.body || doc.documentElement;
+
+      const style = doc.createElement("style");
+      style.id = "ryn-chatlog-style";
+      style.textContent = CHATLOG_CSS;
+      doc.head.appendChild(style);
+
+      this._filterSheet = doc.createElement("style");
+      this._filterSheet.id = "ryn-chatlog-filters";
+      doc.head.appendChild(this._filterSheet);
+
+      this._muteSheet = doc.createElement("style");
+      this._muteSheet.id = "ryn-chatlog-mutes";
+      doc.head.appendChild(this._muteSheet);
+
+      const root = doc.createElement("div");
+      root.id = "ryn-chatlog";
+      root.className = "rcl-hidden";
+
+      // --- header
+      const head = doc.createElement("div");
+      head.className = "rcl-head";
+      const mark = doc.createElement("span");
+      mark.className = "rcl-mark";
+      mark.textContent = "RYN";
+      const label = doc.createElement("span");
+      label.className = "rcl-name-lbl";
+      label.textContent = "Chat Log";
+      const count = doc.createElement("span");
+      count.className = "rcl-count";
+      count.textContent = "0";
+      this._countEl = count;
+      head.appendChild(mark);
+      head.appendChild(label);
+      head.appendChild(count);
+
+      const findBtn = this._iconButton("search", "Search");
+      const cfgBtn = this._iconButton("gear", "Chat Log settings");
+      const closeBtn = this._iconButton("close", "Close Chat Log");
+      head.appendChild(findBtn);
+      head.appendChild(cfgBtn);
+      head.appendChild(closeBtn);
+      root.appendChild(head);
+
+      // --- search bar
+      const find = doc.createElement("div");
+      find.className = "rcl-find";
+      find.hidden = true;
+      const findInput = doc.createElement("input");
+      findInput.type = "text";
+      findInput.id = "ryn-chatlog-search";
+      findInput.placeholder = "name, id, message, event";
+      findInput.autocomplete = "off";
+      findInput.spellcheck = false;
+      this._findInput = findInput;
+      const hits = doc.createElement("span");
+      hits.className = "rcl-hits";
+      this._hitsEl = hits;
+      find.appendChild(findInput);
+      find.appendChild(hits);
+      root.appendChild(find);
+
+      // --- body
+      const body = doc.createElement("div");
+      body.className = "rcl-body";
+      const list = doc.createElement("div");
+      list.className = "rcl-list";
+      this._list = list;
+      body.appendChild(list);
+      const empty = doc.createElement("p");
+      empty.className = "rcl-empty";
+      empty.textContent = "Nothing yet. Chat, arrivals, departures, deaths and clans show up here.";
+      this._emptyEl = empty;
+      body.appendChild(empty);
+
+      const pill = doc.createElement("button");
+      pill.type = "button";
+      pill.className = "rcl-new";
+      pill.hidden = true;
+      pill.innerHTML = CHATLOG_ICONS.down;
+      pill.appendChild(doc.createTextNode("NEW"));
+      this._newPill = pill;
+      body.appendChild(pill);
+
+      this._cfg = this._buildSettings(doc);
+      body.appendChild(this._cfg);
+      root.appendChild(body);
+
+      const grip = doc.createElement("div");
+      grip.className = "rcl-grip";
+      root.appendChild(grip);
+
+      host.appendChild(root);
+      this.root = root;
+
+      // --- wiring
+      const closeFind = () => {
+        find.hidden = true;
+        findBtn.classList.remove("on");
+        findInput.value = "";
+        this._search("");
+        findInput.blur();
+      };
+      findBtn.onclick = () => {
+        if (find.hidden) {
+          find.hidden = false;
+          findBtn.classList.add("on");
+          findInput.focus();
+        } else {
+          closeFind();
+        }
+      };
+      cfgBtn.onclick = () => {
+        this._cfgOpen = !this._cfgOpen;
+        this._cfg.hidden = !this._cfgOpen;
+        cfgBtn.classList.toggle("on", this._cfgOpen);
+        if (this._cfgOpen) {
+          this._syncControls();
+          this._renderMuteList();
+        }
+      };
+      closeBtn.onclick = () => this.hide();
+
+      findInput.oninput = () => {
+        clearTimeout(this._searchTimer);
+        this._searchTimer = setTimeout(() => this._search(findInput.value), 120);
+      };
+      // The game bundle reads the keyboard off `window` in the bubble phase and
+      // guards only on whether its own chat and clan panels are open — it does
+      // not look at which element has focus. So a key typed into this box would
+      // also swing a weapon or place a spike. Stopping propagation at the input
+      // keeps it out of the bundle's handlers; the client's own handler sits in
+      // the capture phase and already declines while an input has focus.
+      const swallow = event => event.stopPropagation();
+      findInput.addEventListener("keydown", event => {
+        if (event.key === "Escape") closeFind();
+        swallow(event);
+      }, true);
+      findInput.addEventListener("keyup", swallow, true);
+      findInput.addEventListener("keypress", swallow, true);
+
+      pill.onclick = () => this._toBottom();
+
+      // Smart scroll. One passive listener, fired by the browser only when the
+      // user actually scrolls, is the whole mechanism — there is no polling of
+      // scroll position anywhere.
+      list.addEventListener("scroll", () => {
+        const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 12;
+        if (atBottom === this._follow) return;
+        this._follow = atBottom;
+        if (atBottom) {
+          this._pending = 0;
+        }
+        this._updateNewPill();
+      }, { passive: true });
+
+      list.addEventListener("click", event => this._onListClick(event));
+      list.addEventListener("dblclick", event => {
+        const row = this._rowOf(event.target);
+        if (row) this._copy(row);
+      });
+
+      head.addEventListener("pointerdown", event => this._startDrag(event), true);
+      grip.addEventListener("pointerdown", event => this._startResize(event), true);
+
+      // One listener for the window, shared by every viewport concern there is:
+      // resizing, zooming, entering and leaving fullscreen all arrive here.
+      window.addEventListener("resize", () => this._place(), { passive: true });
+
+      doc.addEventListener("pointerdown", event => {
+        if (this._menu && !this._menu.contains(event.target)) this._closeMenu();
+      }, true);
+    }
+
+    _iconButton(icon, title) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "rcl-ic";
+      button.title = title;
+      button.setAttribute("aria-label", title);
+      button.innerHTML = CHATLOG_ICONS[icon];
+      return button;
+    }
+
+    _rowOf(node) {
+      while (node && node !== this._list) {
+        if (node._clEntry !== undefined) return node;
+        node = node.parentNode;
+      }
+      return null;
+    }
+
+    _onListClick(event) {
+      const target = event.target;
+      const who = target.closest ? target.closest(".rcl-who") : null;
+      if (!who) return;
+      const row = this._rowOf(who);
+      if (row) this._openMenu(row, who);
+    }
+
+    _copy(row) {
+      const entry = row._clEntry;
+      if (!entry) return;
+      const text = this._line(entry);
+      const flash = () => {
+        row.classList.add("rcl-copied");
+        setTimeout(() => row.classList.remove("rcl-copied"), 380);
+      };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(flash, () => this._copyFallback(text, flash));
+          return;
+        }
+      } catch (_) {}
+      this._copyFallback(text, flash);
+    }
+
+    // execCommand still works where the clipboard API is refused — an insecure
+    // origin, or a document that does not have focus.
+    _copyFallback(text, done) {
+      try {
+        const area = document.createElement("textarea");
+        area.value = text;
+        area.setAttribute("readonly", "");
+        area.style.cssText = "position:fixed;top:-1000px;opacity:0";
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand("copy");
+        area.remove();
+        done();
+      } catch (_) {}
+    }
+
+    _openMenu(row, anchor) {
+      this._closeMenu();
+      const entry = row._clEntry;
+      if (!entry) return;
+      const doc = document;
+      const menu = doc.createElement("div");
+      menu.className = "rcl-menu";
+
+      const header = doc.createElement("div");
+      header.className = "rcl-menu-h";
+      header.dir = "auto";
+      header.textContent = (entry.name || "unknown") + " [" + entry.sid + "]";
+      menu.appendChild(header);
+
+      const copy = doc.createElement("button");
+      copy.type = "button";
+      copy.textContent = "Copy entry";
+      copy.onclick = () => { this._copy(row); this._closeMenu(); };
+      menu.appendChild(copy);
+
+      const muted = this.isMuted(entry.sid);
+      const mute = doc.createElement("button");
+      mute.type = "button";
+      mute.textContent = muted ? "Unmute player" : "Mute player";
+      if (!muted) mute.className = "danger";
+      mute.onclick = () => {
+        if (muted) this.unmute(entry.sid); else this.mute(entry.sid, entry.name);
+        this._closeMenu();
+      };
+      menu.appendChild(mute);
+
+      this.root.appendChild(menu);
+      const box = this.root.getBoundingClientRect();
+      const spot = anchor.getBoundingClientRect();
+      const left = Math.min(Math.max(2, spot.left - box.left), Math.max(2, box.width - menu.offsetWidth - 2));
+      const below = spot.bottom - box.top + 3;
+      const top = below + menu.offsetHeight > box.height - 2
+        ? Math.max(2, spot.top - box.top - menu.offsetHeight - 3)
+        : below;
+      menu.style.left = left + "px";
+      menu.style.top = top + "px";
+      this._menu = menu;
+    }
+
+    _closeMenu() {
+      if (!this._menu) return;
+      this._menu.remove();
+      this._menu = null;
+    }
+
+    // ---- drag / resize ----------------------------------------------------
+    // Both share one pattern: the move listener is added on pointerdown and
+    // removed on pointerup, so nothing is listening while nobody is dragging;
+    // and the move handler only records coordinates, with the single write to
+    // the element happening once per frame.
+    _startDrag(event) {
+      if (event.button !== 0 || this._s("_chatLogLock")) return;
+      if (event.target.closest && event.target.closest(".rcl-ic")) return;
+      event.preventDefault();
+      // Picking the panel up always releases it from the lockup, so the drag
+      // itself is ordinary. Letting go inside the dock zone joins them again,
+      // which makes a nudge that ends where it started a no-op rather than an
+      // accidental undock.
+      const wasDocked = this._docked;
+      if (wasDocked) this.undock();
+      this._beginPointer(event, {
+        mode: "move",
+        wasDocked: wasDocked,
+        ox: event.clientX - this._pos.x,
+        oy: event.clientY - this._pos.y
+      });
+      this.root.classList.add("rcl-drag");
+    }
+
+    _startResize(event) {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      this._beginPointer(event, {
+        mode: "size",
+        ox: event.clientX - this.root.offsetWidth,
+        oy: event.clientY - this.root.offsetHeight
+      });
+    }
+
+    _beginPointer(event, state) {
+      state.x = event.clientX;
+      state.y = event.clientY;
+      this._drag = state;
+      const move = e => {
+        if (!this._drag) return;
+        this._drag.x = e.clientX;
+        this._drag.y = e.clientY;
+        if (this._raf) return;
+        this._raf = requestAnimationFrame(() => {
+          this._raf = 0;
+          this._applyPointer();
+        });
+      };
+      const up = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        window.removeEventListener("pointercancel", up);
+        if (this._raf) {
+          cancelAnimationFrame(this._raf);
+          this._raf = 0;
+          this._applyPointer();
+        }
+        const mode = this._drag ? this._drag.mode : "";
+        this._drag = null;
+        this.root.classList.remove("rcl-drag");
+        this._hintDock(false);
+        if (mode === "move") {
+          if (this._nearDock(this._pos.x, this._pos.y)) {
+            this.dock(true);
+          } else {
+            this._savePosition();
+          }
+        } else if (mode === "size") {
+          this._saveSoon();
+          this._syncControls();
+          this._syncDock();
+          if (this._docked) this._place();
+          if (this._follow) this._toBottom();
+        }
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+      window.addEventListener("pointercancel", up);
+    }
+
+    // Lights the lockup up while the panel is over it, so it is clear before
+    // letting go that the two will join.
+    _hintDock(on) {
+      if (on === this._hinting) return;
+      this._hinting = on;
+      const lockup = this._lockup();
+      if (lockup) lockup.classList.toggle("rcl-dock-hint", on);
+    }
+
+    _applyPointer() {
+      const drag = this._drag;
+      if (!drag || !this.root) return;
+      if (drag.mode === "move") {
+        this._applyPosition(drag.x - drag.ox, drag.y - drag.oy);
+        this._hintDock(this._nearDock(this._pos.x, this._pos.y));
+        return;
+      }
+      const w = Math.round(Math.min(Math.max(200, drag.x - drag.ox), Math.max(200, window.innerWidth - this._pos.x)));
+      const h = Math.round(Math.min(Math.max(110, drag.y - drag.oy), Math.max(110, window.innerHeight - this._pos.y)));
+      Settings_default._chatLogW = w;
+      Settings_default._chatLogH = h;
+      this.root.style.setProperty("--cl-w", w + "px");
+      this.root.style.setProperty("--cl-h", h + "px");
+    }
+
+    // ======================================================================
+    //  SETTINGS SHEET
+    // ======================================================================
+
+    _buildSettings(doc) {
+      const cfg = doc.createElement("div");
+      cfg.className = "rcl-cfg";
+      cfg.hidden = true;
+      const scroll = doc.createElement("div");
+      scroll.className = "rcl-cfg-scroll";
+      cfg.appendChild(scroll);
+      this._controls = {};
+
+      const group = title => {
+        const el = doc.createElement("div");
+        el.className = "rcl-grp";
+        el.textContent = title;
+        scroll.appendChild(el);
+      };
+      const row = title => {
+        const el = doc.createElement("div");
+        el.className = "rcl-row";
+        const label = doc.createElement("span");
+        label.textContent = title;
+        el.appendChild(label);
+        scroll.appendChild(el);
+        return el;
+      };
+      const toggle = (title, key, after) => {
+        const host = row(title);
+        const wrap = doc.createElement("label");
+        wrap.className = "rcl-sw";
+        const input = doc.createElement("input");
+        input.type = "checkbox";
+        input.id = "ryn-chatlog-" + key;
+        input.checked = !!this._s(key);
+        const knob = doc.createElement("i");
+        wrap.appendChild(input);
+        wrap.appendChild(knob);
+        host.appendChild(wrap);
+        input.onchange = () => {
+          this._set(key, input.checked);
+          if (after) after();
+        };
+        this._controls[key] = input;
+        return input;
+      };
+      const slider = (title, key, min, max, step, suffix, after) => {
+        const host = row(title);
+        const input = doc.createElement("input");
+        input.type = "range";
+        input.id = "ryn-chatlog-" + key;
+        input.min = String(min);
+        input.max = String(max);
+        input.step = String(step);
+        input.value = String(this._s(key));
+        const value = doc.createElement("span");
+        value.className = "rcl-num";
+        value.textContent = this._s(key) + suffix;
+        host.appendChild(input);
+        host.appendChild(value);
+        input.oninput = () => {
+          const n = Number(input.value);
+          this._set(key, n);
+          value.textContent = n + suffix;
+          if (after) after();
+        };
+        this._controls[key] = input;
+        this._controls[key + ":out"] = value;
+        this._controls[key + ":sfx"] = suffix;
+        return input;
+      };
+      const button = (title, cls, onClick) => {
+        const el = doc.createElement("button");
+        el.type = "button";
+        el.className = "rcl-btn" + (cls ? " " + cls : "");
+        el.textContent = title;
+        el.onclick = onClick;
+        return el;
+      };
+
+      group("Appearance");
+      const fontRow = row("Font");
+      const fontSelect = doc.createElement("select");
+      fontSelect.id = "ryn-chatlog-font";
+      const fontNames = {
+        manrope: "Manrope",
+        grotesk: "Space Grotesk",
+        hammersmith: "Hammersmith One",
+        system: "System",
+        mono: "Monospace"
+      };
+      for (const key in CHATLOG_FONTS) {
+        const option = doc.createElement("option");
+        option.value = key;
+        option.textContent = fontNames[key];
+        fontSelect.appendChild(option);
+      }
+      fontSelect.value = this._s("_chatLogFont");
+      fontSelect.onchange = () => {
+        this._set("_chatLogFont", fontSelect.value);
+        this._applyFont();
+      };
+      fontRow.appendChild(fontSelect);
+      this._controls._chatLogFont = fontSelect;
+
+      slider("Font size", "_chatLogFontSize", 10, 20, 1, "px", () => this._applyFont());
+      slider("Background opacity", "_chatLogBgOpacity", 0, 100, 1, "%", () => this._applyOpacity());
+      slider("Message opacity", "_chatLogMsgOpacity", 25, 100, 1, "%", () => this._applyOpacity());
+      slider("Width", "_chatLogW", 200, 900, 5, "", () => this._applySize());
+      slider("Height", "_chatLogH", 110, 800, 5, "", () => this._applySize());
+
+      group("Display");
+      toggle("Show time", "_chatLogTime", () => this._applyToggles());
+      toggle("Show player ID", "_chatLogID", () => this._applyToggles());
+      toggle("Lock position", "_chatLogLock", () => this._applyToggles());
+
+      group("Events");
+      toggle("Messages", "_chatLogFChat", () => this._applyFilters());
+      toggle("Player join", "_chatLogFJoin", () => this._applyFilters());
+      toggle("Player leave", "_chatLogFLeave", () => this._applyFilters());
+      toggle("Player death", "_chatLogFDeath", () => this._applyFilters());
+      toggle("Clan created", "_chatLogFClanNew", () => this._applyFilters());
+      toggle("Clan join", "_chatLogFClanJoin", () => this._applyFilters());
+      toggle("Bot messages", "_chatLogBotMsg", () => this._applyFilters());
+      toggle("Bot events", "_chatLogBotEvents", () => this._applyFilters());
+
+      group("Muted players");
+      const muteList = doc.createElement("div");
+      muteList.className = "rcl-muted";
+      this._muteListEl = muteList;
+      scroll.appendChild(muteList);
+
+      group("Reset");
+      const resets = doc.createElement("div");
+      resets.className = "rcl-btns";
+      resets.appendChild(button("Position", "", () => this.resetPosition()));
+      resets.appendChild(button("Size", "", () => this.resetSize()));
+      resets.appendChild(button("Opacity", "", () => this.resetOpacity()));
+      resets.appendChild(button("Font", "", () => this.resetFont()));
+      resets.appendChild(button("Reset all", "", () => this.resetAll()));
+      resets.appendChild(button("Clear log", "danger", () => this.clear()));
+      scroll.appendChild(resets);
+
+      return cfg;
+    }
+
+    // Pulls the sheet back in line with the settings after something else
+    // changed them — a reset, a drag on the resize grip, or the Misc page.
+    _syncControls() {
+      const controls = this._controls;
+      if (!controls) return;
+      for (const key in controls) {
+        if (key.indexOf(":") !== -1) continue;
+        const control = controls[key];
+        const value = this._s(key);
+        if (control.type === "checkbox") {
+          control.checked = !!value;
+        } else {
+          control.value = String(value);
+          const out = controls[key + ":out"];
+          if (out) out.textContent = value + controls[key + ":sfx"];
+        }
+      }
+    }
+
+    _renderMuteList() {
+      const host = this._muteListEl;
+      if (!host) return;
+      host.textContent = "";
+      if (this._muted.size === 0) {
+        const none = document.createElement("span");
+        none.className = "rcl-none";
+        none.textContent = "No one is muted.";
+        host.appendChild(none);
+        return;
+      }
+      for (const pair of this._muted) {
+        const sid = pair[0];
+        const chip = document.createElement("span");
+        chip.className = "rcl-chip";
+        const label = document.createElement("span");
+        label.dir = "auto";
+        label.textContent = (pair[1] || "unknown") + " [" + sid + "]";
+        const off = document.createElement("button");
+        off.type = "button";
+        off.title = "Unmute";
+        off.setAttribute("aria-label", "Unmute " + (pair[1] || sid));
+        off.textContent = "✕";
+        off.onclick = () => this.unmute(sid);
+        chip.appendChild(label);
+        chip.appendChild(off);
+        host.appendChild(chip);
+      }
+    }
+  }();
+  const ChatLog_default = ChatLog;
+
   const GameUI = new class {
     getElements() {
       const querySelector = document.querySelector.bind(document);
@@ -26480,7 +28365,7 @@ window.grbtp = 35;
       (function() {
         var hud = document.createElement("div");
         hud.id = "ryn-topright-hud";
-        hud.innerHTML = '<div class="ryn-hud-row"><span class="ryn-hud-label"><span id="ryn-hud-hp-val" class="ryn-hud-val">100</span></span><div class="ryn-hud-bar-bg"><div id="ryn-hud-hp-fill" class="ryn-hud-bar-fill" style="width:100%"></div></div></div><div class="ryn-hud-row" id="ryn-hud-r1-row" style="display:none"><span class="ryn-hud-label"><span id="ryn-hud-r1-val" class="ryn-hud-val"></span></span><div class="ryn-hud-bar-bg"><div id="ryn-hud-r1-fill" class="ryn-hud-bar-fill" style="width:100%"></div></div></div><div class="ryn-hud-row" id="ryn-hud-heal-row" style="display:none"><span id="ryn-hud-heal" class="ryn-hud-heal"></span></div>';
+        hud.innerHTML = '<div class="ryn-hud-row"><span class="ryn-hud-label"><span id="ryn-hud-hp-val" class="ryn-hud-val">100</span></span><div class="ryn-hud-bar-bg"><div id="ryn-hud-hp-fill" class="ryn-hud-bar-fill" style="width:100%"></div></div></div><div class="ryn-hud-row" id="ryn-hud-r1-row" style="display:none"><span class="ryn-hud-label"><span id="ryn-hud-r1-val" class="ryn-hud-val"></span></span><div class="ryn-hud-bar-bg"><div id="ryn-hud-r1-fill" class="ryn-hud-bar-fill" style="width:100%"></div></div></div>';
         gameUI.appendChild(hud);
         // The note the rings leave when they cannot draw. Its own element, not a
         // row of the HUD above: that HUD hides itself whenever `window.client`
@@ -26691,50 +28576,6 @@ window.grbtp = 35;
             } catch (e3) {}
           } catch (e) {}
         }, 50);
-        // The heal line, on its own timer. The bars above are chasing a reload
-        // that moves every frame; the heal tier changes once a tick at most, so
-        // a quarter of a second is plenty and keeps this off the 50ms path.
-        //
-        // What it prints is the tier the heal module *acted* on, read off the
-        // module rather than recomputed here — a second opinion formed a frame
-        // later would disagree with the heal you just watched happen.
-        //
-        // It rides the Autoheal switch rather than carrying one of its own:
-        // with Autoheal off nothing eats for you, so a line reporting IDLE
-        // forever is noise, and it goes away with the thing it reports on.
-        setInterval(function() {
-          try {
-            var row = document.getElementById("ryn-hud-heal-row");
-            var el = document.getElementById("ryn-hud-heal");
-            if (!row || !el) return;
-            var ac = AC();
-            if (!Settings_default._autoheal || !window.client || !ac || !ac.myPlayer || !ac.myPlayer.inGame) {
-              row.style.display = "none";
-              return;
-            }
-            var mp = ac.myPlayer;
-            var mh = ac._ModuleHandler;
-            var heal = mh && mh.staticModules ? mh.staticModules.antiInsta : null;
-            var priority = heal && typeof heal.healPriority === "number" ? heal.healPriority : 0;
-            var name = HEAL_PRIORITY_NAMES[priority] || "IDLE";
-            var hp = Math.max(0, Math.round(mp.tempHealth !== void 0 ? mp.tempHealth : mp.currentHealth));
-            var maxHp = mp.maxHealth || 100;
-            // Which hat the heal is happening behind, which is the decision the
-            // priority ladder actually makes — the tier says how much to eat,
-            // this says what is being worn while it lands. WAIT is the held
-            // food: a heal deliberately sitting out a tick so it does not cost
-            // shame.
-            var mode = "";
-            if (heal) {
-              if (heal.wantsEMP) mode = " | EMP";
-              else if (heal.healingDelay > 0) mode = " | WAIT";
-              else if (heal.wantsSoldier) mode = " | SOLDIER";
-            }
-            row.style.display = "";
-            el.textContent = "HEAL: " + priority + " " + name + mode + " | HP: " + hp + "/" + maxHp + " | SHAME: " + mp.shameCount;
-            el.style.color = heal && heal.wantsEMP ? "#6fd3f5" : priority >= 2 ? "#8ef0a8" : priority === 1 ? "#f0d24b" : "rgba(255,255,255,0.45)";
-          } catch (e) {}
-        }, 250);
       })();
     }
     attachItemCount() {
@@ -27251,6 +29092,19 @@ window.grbtp = 35;
     Hook.replace("meleeWeapon", /(\w+)\((\w+)\.weapons\[(\w+)\.weaponIndex\],(\w+)\.weaponVariants\[\3\.weaponVariant\]\.src,\3\.scale,0,(\w+)\)/, "RYN._MeleeAnim._drawWeapon($1,$3,$2.weapons[$3.weaponIndex],$4.weaponVariants[$3.weaponVariant].src,$3.scale,0,$5)", "g");
     Hook.replace("meleeHands", /(\w+)\.fillStyle=(\w+)\.skinColors\[(\w+)\.skinColor\],(\w+)\(\3\.scale\*Math\.cos\((\w+)\),\3\.scale\*Math\.sin\(\5\),NUM{14}\),\4\(\3\.scale\*(\w+)\*Math\.cos\(-\5\*(\w+)\),\3\.scale\*\6\*Math\.sin\(-\5\*\7\),NUM{14}\)/, "$1.fillStyle=$2.skinColors[$3.skinColor],RYN._MeleeAnim._drawHands($4,$3,$5,$7,$6,$1)");
     Hook.replace("meleeBody", /(\w+)=\((\w+)==(\w+)\?(\w+)\(\):\2\.dir\)\+\2\.dirPlus/, "$1=($2==$3?$4():$2.dir)+RYN._MeleeAnim._bodyRot($2)");
+    // The bundle's entire chat display:
+    //
+    //     function dl(e,t){const i=Rt(e);i&&(i.chatMessage=t,i.chatCountdown=y.chatCountdown)}
+    //
+    // `e` is the sender's sid and those two assignments are the whole act of
+    // showing a message — the render loop draws the bubble for as long as
+    // chatCountdown is above zero and reads nothing else about it. So not
+    // making them for a muted sender is precisely a presentation filter: the
+    // packet still arrives and is still decoded, the socket is untouched,
+    // nothing is blocked, every other player's chat is unaffected, and what
+    // this client sends is not involved at all. A mute asks about the sid, so
+    // it holds through a rename.
+    Hook.replace("chatMute", /function (\w+)\((\w+),(\w+)\)\{const (\w+)=(\w+)\(\2\);\4&&\(\4\.chatMessage=\3,\4\.chatCountdown=(\w+)\.chatCountdown\)\}/, "function $1($2,$3){if(RYN._ChatLog&&RYN._ChatLog.isMuted($2))return;const $4=$5($2);$4&&($4.chatMessage=$3,$4.chatCountdown=$6.chatCountdown)}");
     Hook.replace("maskFRVR", /window\.FRVR/, "FRVR", "g");
     Hook.replace("scaleWidth", /=1920/, "=RYN._ZoomHandler._scale._smooth._w");
     Hook.replace("scaleHeight", /=1080/, "=RYN._ZoomHandler._scale._smooth._h");
@@ -27772,6 +29626,1286 @@ window.grbtp = 35;
   const CORPSE_LIFETIME = CORPSE_HOLD_DURATION + CORPSE_FADE_DURATION;
   const CORPSE_SKIN_COLORS = Config_default.skinColors.length;
 
+  // ==========================================================================
+  // Kill animations
+  //
+  // Twenty styles drawn over the same body the corpse system already spawns,
+  // on the same pooled slot, through the same render pass, off the same clock.
+  // There is no second loop, no second canvas and no second pool: a kill that
+  // is not the Current style takes the slot it would have taken anyway and
+  // draws something else into it.
+  //
+  // Three rules hold for every style, and between them they are why twenty
+  // animations cost about what one did:
+  //
+  //   Nothing is integrated frame to frame. Everything a style draws — the
+  //   body's alpha and scale, every particle's angle and distance, every
+  //   ring's radius — is a pure function of the slot's age and its seed. A
+  //   frame is a read, never a step, so the animation is identical at 30fps
+  //   and at 240, cannot drift, and a dropped frame costs nothing.
+  //
+  //   Nothing is stored per particle. Per-particle variation comes out of
+  //   _kfRnd(seed, i), an integer hash of the slot's seed and the particle's
+  //   index. No arrays, no particle objects, no allocation — at spawn or ever
+  //   after. A slot is the same handful of numbers it was before this.
+  //
+  //   Nothing is unbounded. Particle counts are literals in the draw functions
+  //   and the largest of them is twelve. The pool cap is unchanged, so the
+  //   ceiling on the whole system is MAX_ACTIVE_CORPSES animations at once
+  //   however many players die at the same moment: past that the oldest slot
+  //   is taken for the newest kill, exactly as it always was. The cap was
+  //   already sized against the corpse's own 3100ms, which is longer than any
+  //   style here, so none of them can crowd it harder than the corpse did.
+  //
+  // Nothing here reads or writes game state. A style is handed a canvas, a
+  // slot of primitives and a number between 0 and 1, and it draws. It cannot
+  // block a packet, a module or an input because it is not on that path — it
+  // runs inside the same render hook the corpse did, and the corpse ran there
+  // because it is the pass that does not matter.
+  //
+  // The canvas is left as it was found: every style either restores what it
+  // saved or writes only inside the save/restore the caller already holds.
+  // No shadows, no filters, no off-screen canvases, no full-screen work — the
+  // most expensive thing any of them does is a clip to one circle.
+  // ==========================================================================
+
+  // ==========================================================================
+  // Palettes
+  //
+  // One row per style, five colours each, indexed to match KILL_STYLES. They
+  // are the reason twenty animations read as twenty things rather than one
+  // effect in twenty shapes: every row carries genuinely different hues rather
+  // than five steps down one of them — a hot, a deep, a cool and a highlight
+  // that do not belong to the same family. Blood Mark runs crimson into rust
+  // and finishes on bone; Burn Out puts a blue flame base under its orange
+  // because that is what fire actually does; Mirror splits its silver into a
+  // pink and a green sheen, which is what makes it read as a reflection
+  // rather than a second body.
+  //
+  // Index 0 (Current) and the last index (Random) have no palette: the corpse
+  // draws through the bundle's own player renderer, and Random resolves to one
+  // of the rows below before anything is drawn.
+  //
+  // Read once per draw into named locals. Strings are interned literals, so a
+  // row costs nothing to hold and nothing to read.
+  // ==========================================================================
+  const KILL_PALETTES = [
+    null,                                                              // 0  Current
+    [ "#2a0410", "#b0121a", "#ff3b2f", "#bcd4e8", "#7a2f8f" ],          // 1  Blood Mark ...... clot, blood, arterial, cold bone, bruise
+    [ "#eee8dc", "#7cf5a8", "#2a1338", "#d9a441", "#6b6472" ],          // 2  Skull Reveal .... bone, spectre, socket, gold, ash
+    [ "#0f2b45", "#5ac8f0", "#cfeaff", "#ffffff", "#ff7de3" ],          // 3  Shatter ......... deep ice, cyan, frost, glint, prism
+    [ "#2a0a52", "#a86bff", "#ff4fd8", "#3ff0d0", "#ffffff" ],          // 4  Teleport ........ indigo, violet, magenta, teal, flash
+    [ "#e6dcc8", "#c0392b", "#e0b040", "#241f2b", "#4fae8a" ],          // 5  Masked .......... porcelain, lacquer, gold leaf, charcoal, jade
+    [ "#05040a", "#2b1050", "#c23fd0", "#8a6f5a", "#7fe8dd" ],          // 6  Shadow .......... void, deep, violet rim, warm ash, ghost
+    [ "#ffd77a", "#fffdf2", "#8fd4ff", "#ffb3c8", "#fff3cf" ],          // 7  Angel ........... gold, white, sky, rose, cream
+    [ "#f0e6ff", "#7b2ff7", "#ff9d2e", "#d02b4a", "#120b1e" ],          // 8  Eye ............. sclera, iris, amber, vein, pupil
+    [ "#ffffff", "#e01b2e", "#7f96b8", "#ffcf4d", "#0a0a10" ],          // 9  Execution ....... edge, blood, steel, spark, black
+    [ "#57e0ff", "#7dff8a", "#ffb020", "#ff3b52", "#ffffff" ],          // 10 Target Lock ..... scan, lock, warn, fire, white
+    [ "#8ad8ff", "#ffffff", "#12455e", "#c4a8ff", "#ffd98a" ],          // 11 Soul ............ aura, core, deep, lavender, thread
+    [ "#6a4fd0", "#ff5ce0", "#ff9a3c", "#ffffff", "#0d1040" ],          // 12 Reverse ......... violet, magenta, orange, flash, deep
+    [ "#ff7a2f", "#ffe08a", "#8f1b0c", "#6a6270", "#4fa8ff" ],          // 13 Burn Out ........ flame, yellow, char, smoke, blue base
+    [ "#9fe8ff", "#e8c063", "#ffffff", "#0e3a4a", "#ff5ce0" ],          // 14 Time Break ...... dial, brass, white, deep, glitch
+    [ "#dfe9f5", "#8fb8e0", "#ff9ad8", "#7dffc4", "#1c2430" ],          // 15 Mirror .......... silver, pale, sheen pink, sheen green, slate
+    [ "#ffffff", "#5ab8ff", "#a86bff", "#fff0a0", "#0b1630" ],          // 16 Lightning ....... core, electric, branch, gold flash, navy
+    [ "#ece8f5", "#9b7fd8", "#4fd8c0", "#2a2338", "#ffffff" ],          // 17 Web ............. silk, violet, teal, umber, white
+    [ "#7ef0d0", "#b8ff5c", "#4fa8ff", "#ffffff", "#101a3a" ],          // 18 Triangle ........ teal, lime, blue, white, indigo
+    [ "#0d0b16", "#1e1440", "#6a3fd0", "#2fa898", "#e8e0cc" ],          // 19 Ink ............. ink, indigo, violet sheen, teal sheen, cream
+    [ "#ffd98a", "#ffffff", "#5ce0ff", "#ff6ad5", "#1a1246" ],          // 20 Comet ........... gold, core, tail, spark, deep
+    null                                                               // 21 Random
+  ];
+
+  // The body's own radius, which is what every style is drawn in proportion to.
+  const KF_BODY = CORPSE_SCALE;
+  const KF_TAU = Math.PI * 2;
+  // Progress through a window of the animation: 0 before it opens, 1 after it
+  // closes, and the fraction across it in between. Almost every line below is
+  // written in terms of this, so a style reads as the list of things that
+  // happen and when.
+  const _kfSpan = (t, a, b) => t <= a ? 0 : t >= b ? 1 : (t - a) / (b - a);
+  // Flat at both ends — for anything that must not start or stop with a snap.
+  const _kfSmooth = t => t * t * (3 - 2 * t);
+  // Fast then slowing, for anything thrown or opening outward.
+  const _kfOut = t => 1 - (1 - t) * (1 - t) * (1 - t);
+  // Slow then quickening, for anything falling inward.
+  const _kfIn = t => t * t * t;
+  // Up and back down across a window — one number for anything that swells and
+  // subsides, which is most of the flashes below.
+  const _kfBump = t => { const u = t < .5 ? t * 2 : 2 - t * 2; return u * u * (3 - 2 * u); };
+  // Deterministic per-particle noise. Integer mixing rather than Math.random,
+  // because a particle's entire path has to be recomputable from the slot every
+  // frame, and rather than Math.sin because this is the hottest call in the
+  // system and it is three multiplies and three shifts. Math.imul rather than
+  // `*`: these products run past 2^53 and a plain multiply would quietly lose
+  // the low bits that are the whole of the hash.
+  const _kfRnd = (seed, i) => {
+    let h = Math.imul(seed, 374761393) + Math.imul(i, 668265263) | 0;
+    h = Math.imul(h ^ h >>> 13, 1274126177);
+    return ((h ^ h >>> 16) >>> 0) / 4294967296;
+  };
+
+  // ---- shared drawing -------------------------------------------------------
+  // Each of these draws in the slot's local space: the body's centre is the
+  // origin and screen-up is -Y, which the caller has already translated to.
+
+  const _kfDisc = (ctx, x, y, r, color, alpha) => {
+    if (alpha <= .004 || r <= .2) return;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, KF_TAU);
+    ctx.fill();
+  };
+  const _kfRing = (ctx, x, y, r, color, alpha, lw) => {
+    if (alpha <= .004 || r <= .2 || lw <= 0) return;
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, KF_TAU);
+    ctx.stroke();
+  };
+  const _kfArc = (ctx, r, a0, a1, color, alpha, lw) => {
+    if (alpha <= .004 || r <= .2 || lw <= 0) return;
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, a0, a1);
+    ctx.stroke();
+  };
+  const _kfLine = (ctx, x0, y0, x1, y1, color, alpha, lw) => {
+    if (alpha <= .004 || lw <= 0) return;
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+  };
+  // A glow, as two additive discs rather than a blur: the outer colour wide and
+  // faint, the inner one small and bright. A shadowBlur would cost more than
+  // the rest of an animation put together and this reads better, because the
+  // two discs are two different colours.
+  const _kfGlow = (ctx, x, y, r, outer, inner, alpha) => {
+    if (alpha <= .004 || r <= .2) return;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    _kfDisc(ctx, x, y, r, outer, alpha * .4);
+    _kfDisc(ctx, x, y, r * .54, inner, alpha * .9);
+    ctx.restore();
+  };
+  // A small triangular shard with a lit edge, used by everything that breaks.
+  // The fill and the edge are two colours from the style's own row, which is
+  // what keeps a break from reading as grey confetti.
+  const _kfShard = (ctx, x, y, rot, size, fill, edge, alpha) => {
+    if (alpha <= .004 || size <= .3) return;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.moveTo(-size, -size * .62);
+    ctx.lineTo(size, -size * .24);
+    ctx.lineTo(size * .18, size);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = alpha * .8;
+    ctx.strokeStyle = edge;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.restore();
+  };
+  // The victim, through the bundle's own player renderer — the same call the
+  // corpse makes, and the only thing in here that draws a player.
+  const _kfBody = (ctx, slot, alpha, scale, dx, dy, spin) => {
+    if (alpha <= .006 || scale <= .5) return;
+    const draw = RYN._hooks._renderPlayer;
+    if (typeof draw !== "function") return;
+    const view = slot.view;
+    view.scale = scale;
+    ctx.save();
+    ctx.translate(dx, dy);
+    ctx.rotate(slot.angle + spin);
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = CORPSE_OUTLINE;
+    draw(view, ctx);
+    ctx.restore();
+  };
+  // A wash over the body: a fill and a rim in two different colours. This is
+  // how a body is recoloured here — crystalline, charred, inked — without a
+  // second canvas or a composite pass per kill.
+  const _kfWash = (ctx, scale, fill, rim, alpha) => {
+    _kfDisc(ctx, 0, 0, scale, fill, alpha);
+    _kfRing(ctx, 0, 0, scale, rim, alpha * .85, 2);
+  };
+
+  // ---- 1. Blood Mark --------------------------------------------------------
+  // clot / blood / arterial / rust / bone.
+  // Impact, a mark that soaks outward, droplets that arc and land, and bone
+  // grit off the hit. The body is the last thing still on the spot.
+  const _kfBloodMark = (ctx, slot, t) => {
+    const P = KILL_PALETTES[1];
+    const clot = P[0], blood = P[1], arterial = P[2], bone = P[3], bruise = P[4];
+    const open = _kfOut(_kfSpan(t, 0, .1));
+    const soak = _kfSmooth(_kfSpan(t, .28, .68));
+    const markA = 1 - _kfSpan(t, .72, 1);
+    const mr = 8 + 30 * open + 10 * soak;
+    _kfDisc(ctx, 0, 14, mr, clot, .58 * markA);
+    _kfDisc(ctx, 0, 14, mr * .58, blood, .5 * markA);
+    _kfRing(ctx, 0, 14, mr + 2, bruise, .55 * markA, 2.5);
+    // The hit: an arterial ring with a bone flash inside it, both gone fast.
+    const hit = _kfSpan(t, 0, .16);
+    if (hit < 1) {
+      _kfRing(ctx, 0, 0, 18 + 76 * _kfOut(hit), arterial, (1 - hit) * .9, 5 - 4 * hit);
+      _kfRing(ctx, 0, 0, 10 + 52 * _kfOut(hit), bone, (1 - hit) * .55, 2);
+    }
+    // Eight droplets, thrown out and falling. Each one lands where it was
+    // always going to land and stays there as a spot.
+    const fly = _kfSpan(t, 0, .34);
+    for (let i = 0; i < 8; i++) {
+      const ang = _kfRnd(slot.seed, i) * KF_TAU;
+      const reach = 34 + 46 * _kfRnd(slot.seed, i + 32);
+      const c = Math.cos(ang), s = Math.sin(ang);
+      if (fly < 1) {
+        const d = reach * _kfOut(fly);
+        const drop = 16 * fly * fly;
+        _kfLine(ctx, c * (d - 12), s * (d - 12) + drop * .6, c * d, s * d + drop, i & 1 ? blood : arterial, 1 - fly * .5, 3);
+      } else {
+        _kfDisc(ctx, c * reach, s * reach + 16, 3.2, clot, .5 * markA);
+      }
+    }
+    const grit = _kfSpan(t, 0, .24);
+    if (grit < 1) {
+      const d = 20 + 60 * _kfOut(grit);
+      for (let i = 0; i < 5; i++) {
+        const ang = _kfRnd(slot.seed, i + 64) * KF_TAU;
+        _kfDisc(ctx, Math.cos(ang) * d, Math.sin(ang) * d, 1.8 * (1 - grit), bone, (1 - grit) * .7);
+      }
+    }
+    _kfBody(ctx, slot, .9 * (1 - _kfSpan(t, .16, .58)), KF_BODY, 0, 0, 0);
+  };
+
+  // ---- 2. Skull Reveal ------------------------------------------------------
+  // bone / spectre / socket / gold / ash.
+  // The skull rises, its sockets light, the jaw drops, and it goes out on a
+  // burst. Ash comes off the body the whole way through.
+  const _kfSkullShape = (ctx, r, alpha, bone, socket, spectre, gold, jaw, lit) => {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = bone;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, KF_TAU);
+    ctx.fill();
+    // The jaw hangs off its own hinge, so it can drop without the cranium.
+    ctx.save();
+    ctx.translate(0, r * .48);
+    ctx.rotate(jaw * .45);
+    ctx.beginPath();
+    ctx.moveTo(-r * .5, 0);
+    ctx.lineTo(r * .5, 0);
+    ctx.lineTo(r * .32, r * .62);
+    ctx.lineTo(-r * .32, r * .62);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = socket;
+    ctx.beginPath();
+    ctx.arc(-r * .36, -r * .1, r * .27, 0, KF_TAU);
+    ctx.moveTo(r * .63, -r * .1);
+    ctx.arc(r * .36, -r * .1, r * .27, 0, KF_TAU);
+    ctx.moveTo(0, r * .1);
+    ctx.lineTo(-r * .15, r * .42);
+    ctx.lineTo(r * .15, r * .42);
+    ctx.closePath();
+    ctx.fill();
+    // A gold band across the brow, and the light coming on behind the eyes.
+    _kfLine(ctx, -r * .78, -r * .52, r * .78, -r * .52, gold, alpha * .85, r * .15);
+    if (lit > .01) {
+      _kfGlow(ctx, -r * .36, -r * .1, r * .34 * lit, spectre, bone, alpha * lit);
+      _kfGlow(ctx, r * .36, -r * .1, r * .34 * lit, spectre, bone, alpha * lit);
+    }
+    ctx.restore();
+  };
+  const _kfSkullReveal = (ctx, slot, t) => {
+    const P = KILL_PALETTES[2];
+    const bone = P[0], spectre = P[1], socket = P[2], gold = P[3], ash = P[4];
+    _kfBody(ctx, slot, .7 * (1 - _kfSpan(t, .1, .52)), KF_BODY, 0, 0, 0);
+    // Ash off the body, all the way through.
+    const ashA = 1 - _kfSpan(t, .7, 1);
+    for (let i = 0; i < 7; i++) {
+      const u = (t * 1.15 + _kfRnd(slot.seed, i)) % 1;
+      _kfDisc(ctx, (_kfRnd(slot.seed, i + 16) - .5) * 40, 10 - 46 * u, 2.2 * (1 - u), ash, ashA * (1 - u) * .55);
+    }
+    const rise = _kfOut(_kfSpan(t, .04, .26));
+    const alpha = (1 - _kfSpan(t, .72, 1)) * .95;
+    ctx.save();
+    ctx.translate(0, -46 - 8 * rise);
+    ctx.rotate(Math.sin(t * 5.4) * .2);
+    _kfSkullShape(ctx, 13 * rise, alpha, bone, socket, spectre,
+      gold, _kfSmooth(_kfSpan(t, .46, .62)), _kfSmooth(_kfSpan(t, .24, .4)));
+    ctx.restore();
+    const burst = _kfSpan(t, .72, 1);
+    if (burst > 0 && burst < 1) {
+      const a = (1 - burst) * .85;
+      const d = 6 + 40 * _kfOut(burst);
+      for (let i = 0; i < 8; i++) {
+        const ang = i / 8 * KF_TAU + _kfRnd(slot.seed, i) * .7;
+        _kfDisc(ctx, Math.cos(ang) * d, -46 + Math.sin(ang) * d, 2.6 * (1 - burst) + .6, i & 1 ? spectre : bone, a);
+      }
+    }
+  };
+
+  // ---- 3. Shatter Kill ------------------------------------------------------
+  // deep ice / cyan / frost / glint / prism.
+  // Frost creeps over the body, cracks run through it, it holds one beat as
+  // glass, and then it goes — fragments turning, each catching a prism glint.
+  const _kfShatter = (ctx, slot, t) => {
+    const P = KILL_PALETTES[3];
+    const deep = P[0], cyan = P[1], frost = P[2], glint = P[3], prism = P[4];
+    if (t < .34) {
+      const ice = _kfSpan(t, 0, .22);
+      const crack = _kfSpan(t, .18, .34);
+      _kfBody(ctx, slot, 1, KF_BODY, 0, 0, 0);
+      _kfWash(ctx, KF_BODY, frost, cyan, .12 + .34 * ice);
+      // A cold core under the frost, so it does not read as a flat tint.
+      _kfDisc(ctx, 0, 0, KF_BODY * .55 * ice, deep, .3 * ice);
+      // Cracks run out from the middle and keep running.
+      for (let i = 0; i < 5; i++) {
+        const ang = _kfRnd(slot.seed, i) * KF_TAU;
+        const c = Math.cos(ang) * KF_BODY * crack, s = Math.sin(ang) * KF_BODY * crack;
+        _kfLine(ctx, 0, 0, c, s, glint, crack * .9, 2);
+        _kfLine(ctx, c * .55, s * .55, c * .55 - s * .3, s * .55 + c * .3, cyan, crack * .6, 1.4);
+      }
+      if (crack >= 1) _kfRing(ctx, 0, 0, KF_BODY, prism, _kfBump(_kfSpan(t, .3, .34)) * .8, 3);
+      return;
+    }
+    // Nine fragments. Not ninety: the silhouette reads as broken at nine, and
+    // the count is what this costs.
+    const u = _kfSpan(t, .34, 1);
+    const a = (1 - u) * .95;
+    const reach = _kfOut(u);
+    for (let i = 0; i < 9; i++) {
+      const ang = i / 9 * KF_TAU + _kfRnd(slot.seed, i) * .6;
+      const d = 12 + (46 + 42 * _kfRnd(slot.seed, i + 16)) * reach;
+      const x = Math.cos(ang) * d, y = Math.sin(ang) * d;
+      _kfShard(ctx, x, y, ang + u * 2.4, 13 - 5 * _kfRnd(slot.seed, i + 48), frost, cyan, a);
+      // Every third fragment turns its face to the light on the way out.
+      if (i % 3 === 0) _kfDisc(ctx, x, y, 2.4, prism, a * _kfBump((u + _kfRnd(slot.seed, i + 80)) % 1));
+    }
+    _kfDisc(ctx, 0, 0, 30 * (1 - u), deep, a * .3);
+  };
+
+  // ---- 4. Teleport Death ----------------------------------------------------
+  // indigo / violet / magenta / teal / flash.
+  // The portal opens under them with a counter-turning inner ring, they warp,
+  // they are pulled down into it, and it shuts on a flash and a few sparks.
+  const _kfTeleport = (ctx, slot, t) => {
+    const P = KILL_PALETTES[4];
+    const indigo = P[0], violet = P[1], magenta = P[2], teal = P[3], flash = P[4];
+    // The warp is a function of t, so it is the same judder however the frame
+    // rate moves under it.
+    const shake = t < .42 ? Math.sin(t * 108) * 3.2 * (1 - t / .42) : 0;
+    const open = _kfOut(_kfSpan(t, 0, .26));
+    const close = _kfSmooth(_kfSpan(t, .74, 1));
+    const rx = 42 * open * (1 - close);
+    if (rx > .5) {
+      ctx.save();
+      ctx.translate(0, 20);
+      ctx.scale(1, .42);
+      _kfDisc(ctx, 0, 0, rx * .86, indigo, .42);
+      _kfRing(ctx, 0, 0, rx, violet, .9, 4);
+      // The inner ring turns the other way, which is what sells it as a hole
+      // rather than a decal.
+      ctx.save();
+      ctx.rotate(-t * 7);
+      for (let i = 0; i < 6; i++) {
+        const b = i / 6 * KF_TAU;
+        _kfArc(ctx, rx * .68, b, b + .55, magenta, .75, 3);
+      }
+      ctx.restore();
+      ctx.rotate(t * 5);
+      for (let i = 0; i < 3; i++) {
+        const b = i / 3 * KF_TAU;
+        _kfArc(ctx, rx * .42, b, b + .8, teal, .7, 2);
+      }
+      ctx.restore();
+    }
+    const pull = _kfSmooth(_kfSpan(t, .3, .72));
+    _kfBody(ctx, slot, 1 - pull, KF_BODY * (1 - .9 * pull), shake, 20 * pull, pull * 1.4);
+    // Gone: a flash on the surface, then sparks off it.
+    const pop = _kfSpan(t, .68, .84);
+    if (pop > 0 && pop < 1) _kfGlow(ctx, 0, 18, 26 * (1 - pop), magenta, flash, 1 - pop);
+    const spark = _kfSpan(t, .7, 1);
+    if (spark > 0 && spark < 1) {
+      const d = 8 + 46 * _kfOut(spark);
+      for (let i = 0; i < 7; i++) {
+        const ang = _kfRnd(slot.seed, i) * KF_TAU;
+        _kfDisc(ctx, Math.cos(ang) * d, 18 + Math.sin(ang) * d * .5, 2.2 * (1 - spark) + .8, i & 1 ? teal : magenta, (1 - spark) * .85);
+      }
+    }
+  };
+
+  // ---- 5. Masked Death ------------------------------------------------------
+  // porcelain / lacquer / gold leaf / charcoal / jade.
+  // A mask forms over them, turns, cracks in two stages, and breaks. The jade
+  // is what was behind it.
+  const _kfMask = (ctx, r, alpha, porcelain, lacquer, gold, charcoal, crack) => {
+    if (alpha <= .004 || r <= .5) return;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = porcelain;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r * .78, r, 0, 0, KF_TAU);
+    ctx.fill();
+    ctx.fillStyle = charcoal;
+    ctx.beginPath();
+    ctx.ellipse(-r * .34, -r * .16, r * .2, r * .12, .3, 0, KF_TAU);
+    ctx.ellipse(r * .34, -r * .16, r * .2, r * .12, -.3, 0, KF_TAU);
+    ctx.fill();
+    // Lacquer marks down the cheeks and a gold seam across the brow.
+    _kfLine(ctx, -r * .42, r * .12, -r * .3, r * .62, lacquer, alpha * .85, r * .11);
+    _kfLine(ctx, r * .42, r * .12, r * .3, r * .62, lacquer, alpha * .85, r * .11);
+    _kfLine(ctx, -r * .6, -r * .52, r * .6, -r * .52, gold, alpha * .9, r * .1);
+    if (crack > 0) {
+      _kfLine(ctx, 0, -r, -r * .3 * crack, r * .2 * crack, charcoal, alpha * .85, 1.5);
+      _kfLine(ctx, -r * .3 * crack, r * .2 * crack, r * .14 * crack, r * .95 * crack, charcoal, alpha * .85, 1.5);
+      if (crack > .5) _kfLine(ctx, r * .5 * crack, -r * .7, r * .16, r * .1 * crack, charcoal, alpha * .7, 1.2);
+    }
+  };
+  const _kfMasked = (ctx, slot, t) => {
+    const P = KILL_PALETTES[5];
+    const porcelain = P[0], lacquer = P[1], gold = P[2], charcoal = P[3], jade = P[4];
+    _kfBody(ctx, slot, .9 * (1 - _kfSpan(t, .46, .9)), KF_BODY, 0, 0, 0);
+    const r = 20 * _kfOut(_kfSpan(t, 0, .18));
+    const broken = _kfSpan(t, .66, 1);
+    if (broken <= 0) {
+      ctx.save();
+      ctx.translate(0, -10);
+      ctx.rotate(Math.sin(t * 4.4) * .18);
+      _kfMask(ctx, r, .95, porcelain, lacquer, gold, charcoal, _kfSpan(t, .4, .66));
+      ctx.restore();
+      // A jade light behind the mask, brightest just before it goes.
+      _kfGlow(ctx, 0, -10, r * .9, jade, porcelain, _kfSpan(t, .52, .66) * .5);
+      return;
+    }
+    const a = (1 - broken) * .9;
+    const d = 6 + 46 * _kfOut(broken);
+    for (let i = 0; i < 6; i++) {
+      const ang = i / 6 * KF_TAU + _kfRnd(slot.seed, i) * .5;
+      _kfShard(ctx, Math.cos(ang) * d, -10 + Math.sin(ang) * d, ang + broken * 1.8, 7, porcelain, i & 1 ? gold : lacquer, a);
+    }
+    _kfGlow(ctx, 0, -10, 22 * (1 - broken), jade, porcelain, a * .7);
+  };
+
+  // ---- 6. Shadow Death ------------------------------------------------------
+  // void / deep / violet rim / smoke / ghost.
+  // The dark opens underneath, reaches up for them, takes them down, and
+  // closes. A ghost light leaves as it shuts.
+  const _kfShadow = (ctx, slot, t) => {
+    const P = KILL_PALETTES[6];
+    const voidc = P[0], deep = P[1], rim = P[2], ash = P[3], ghost = P[4];
+    const open = _kfOut(_kfSpan(t, 0, .26));
+    const shut = _kfSmooth(_kfSpan(t, .66, .96));
+    const r = (16 + 36 * open) * (1 - shut);
+    const poolA = 1 - _kfSpan(t, .9, 1);
+    _kfDisc(ctx, 0, 12, r, voidc, .66 * poolA);
+    _kfDisc(ctx, 0, 12, r * .62, deep, .5 * poolA);
+    _kfRing(ctx, 0, 12, r, rim, .55 * poolA, 2.5);
+    // Tendrils come up out of it and go back down with it.
+    const reach = _kfBump(_kfSpan(t, .12, .78));
+    for (let i = 0; i < 6; i++) {
+      const ang = i / 6 * KF_TAU + _kfRnd(slot.seed, i) * .5;
+      const c = Math.cos(ang), s = Math.sin(ang);
+      const h = (22 + 16 * _kfRnd(slot.seed, i + 16)) * reach;
+      _kfLine(ctx, c * r * .7, 12 + s * r * .35, c * r * .5, 12 - h, i & 1 ? rim : ash, reach * .6 * poolA, 2.4);
+    }
+    const pull = _kfSmooth(_kfSpan(t, .16, .76));
+    const alpha = 1 - pull;
+    const scale = KF_BODY * (1 - .45 * pull);
+    _kfBody(ctx, slot, alpha, scale, 0, 12 * pull, 0);
+    // Pulled under, not tinted: the wash over the body is the dark taking it.
+    ctx.save();
+    ctx.translate(0, 12 * pull);
+    _kfWash(ctx, scale, voidc, rim, .62 * alpha * _kfSmooth(_kfSpan(t, .05, .5)));
+    ctx.restore();
+    // What is left of them, going out as the hole shuts.
+    const out = _kfSpan(t, .7, .98);
+    if (out > 0 && out < 1) _kfGlow(ctx, 0, 6 - 22 * out, 11 * (1 - out), ghost, ash, (1 - out) * .8);
+  };
+
+  // ---- 7. Angel Ascension ---------------------------------------------------
+  // gold / white / sky / rose / cream.
+  // Halo, wings, a short lift and a slow fade. The rise is thirty-six units
+  // over two and a half seconds: it has to stay readable as a body on the spot
+  // it died on while a fight carries on over it.
+  const _kfAngel = (ctx, slot, t) => {
+    const P = KILL_PALETTES[7];
+    const gold = P[0], white = P[1], sky = P[2], rose = P[3], cream = P[4];
+    const y = -36 * _kfOut(t);
+    const a = (1 - _kfSpan(t, .84, 1)) * .95;
+    const spread = _kfOut(_kfSpan(t, .06, .34)) * 36;
+    // A column of light standing where they were, under everything else.
+    const beam = _kfBump(_kfSpan(t, .1, .9));
+    if (beam > .01) {
+      ctx.globalAlpha = a * beam * .16;
+      ctx.fillStyle = sky;
+      ctx.beginPath();
+      ctx.moveTo(-26, 26);
+      ctx.lineTo(26, 26);
+      ctx.lineTo(13, -96);
+      ctx.lineTo(-13, -96);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.save();
+    ctx.translate(0, y - 4);
+    ctx.lineCap = "round";
+    for (let s = -1; s <= 1; s += 2) {
+      // Two feathers per wing, the upper one gold and the lower one rose.
+      ctx.globalAlpha = a * .85;
+      ctx.strokeStyle = gold;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(s * 10, 8);
+      ctx.quadraticCurveTo(s * (14 + spread), -6, s * (8 + spread * .7), -28 - spread * .3);
+      ctx.stroke();
+      ctx.globalAlpha = a * .7;
+      ctx.strokeStyle = rose;
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(s * 10, 10);
+      ctx.quadraticCurveTo(s * (12 + spread * .8), 6, s * (6 + spread * .5), -8 - spread * .2);
+      ctx.stroke();
+    }
+    ctx.restore();
+    _kfBody(ctx, slot, .82 * (1 - _kfSpan(t, .46, .92)), KF_BODY, 0, y, 0);
+    // The halo, tilted, with a white inner edge.
+    ctx.save();
+    ctx.translate(0, y - 48);
+    ctx.scale(1, .34);
+    _kfRing(ctx, 0, 0, 17, gold, a, 4.5);
+    _kfRing(ctx, 0, 0, 13, white, a * .8, 1.6);
+    ctx.restore();
+    // Motes coming off the lift, cream and sky alternating.
+    for (let i = 0; i < 8; i++) {
+      const u = (t * 1.35 + _kfRnd(slot.seed, i)) % 1;
+      _kfDisc(ctx, (_kfRnd(slot.seed, i + 24) - .5) * 38, y + 16 + 30 * u, 2.4 * (1 - u), i & 1 ? sky : cream, a * (1 - u) * .8);
+    }
+  };
+
+  // ---- 8. Eye of Death ------------------------------------------------------
+  // sclera / iris / amber / vein / pupil.
+  // It opens, the iris narrows onto them, it pulses, the body goes to
+  // silhouette, and it closes. Veins crawl across the white while it watches.
+  const _kfEye = (ctx, slot, t) => {
+    const P = KILL_PALETTES[8];
+    const sclera = P[0], iris = P[1], amber = P[2], vein = P[3], pupil = P[4];
+    const dark = _kfSmooth(_kfSpan(t, .22, .5));
+    const bodyA = 1 - _kfSpan(t, .52, .84);
+    _kfBody(ctx, slot, bodyA * (1 - dark * .55), KF_BODY, 0, 0, 0);
+    _kfWash(ctx, KF_BODY, pupil, iris, dark * bodyA * .8);
+    // The pulse it sends down, amber outside and violet in.
+    const pulse = _kfSpan(t, .34, .56);
+    if (pulse > 0 && pulse < 1) {
+      _kfRing(ctx, 0, -46, 8 + 62 * _kfOut(pulse), amber, (1 - pulse) * .65, 3);
+      _kfRing(ctx, 0, -46, 4 + 44 * _kfOut(pulse), iris, (1 - pulse) * .5, 2);
+    }
+    // One number opens and closes it: the lid is the eye's own height.
+    const lid = _kfSmooth(_kfSpan(t, .05, .26)) * (1 - _kfSmooth(_kfSpan(t, .74, .94)));
+    const a = 1 - _kfSpan(t, .88, 1);
+    // Shut: the seam where it was, and the last thing on screen.
+    if (lid <= .01) {
+      _kfLine(ctx, -17, -46, 17, -46, sclera, a * .55, 1.8);
+      _kfLine(ctx, -9, -46, 9, -46, iris, a * .35, 1.2);
+      return;
+    }
+    const wide = Math.min(1, lid * 1.6);
+    // The iris narrows as it focuses, and widens again as the lid comes down.
+    const focus = 1 - .45 * _kfBump(_kfSpan(t, .26, .74));
+    ctx.save();
+    ctx.translate(0, -46);
+    ctx.globalAlpha = a;
+    ctx.fillStyle = sclera;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 18, 18 * lid, 0, 0, KF_TAU);
+    ctx.fill();
+    // Veins, only while it is properly open.
+    for (let i = 0; i < 4; i++) {
+      const b = _kfRnd(slot.seed, i) * KF_TAU;
+      const c = Math.cos(b), s = Math.sin(b) * lid;
+      _kfLine(ctx, c * 17, s * 17, c * 9, s * 9, vein, a * lid * .7, 1.2);
+    }
+    _kfDisc(ctx, 0, 0, 8 * wide * focus, amber, a * .9);
+    ctx.beginPath();
+    ctx.fillStyle = iris;
+    ctx.ellipse(0, 0, 6.6 * wide * focus, 6.6 * lid * focus, 0, 0, KF_TAU);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.fillStyle = pupil;
+    ctx.ellipse(0, 0, 3.2 * wide * focus, 3.6 * lid * focus, 0, 0, KF_TAU);
+    ctx.fill();
+    ctx.restore();
+  };
+
+  // ---- 9. Execution ---------------------------------------------------------
+  // edge / blood / steel / spark / black.
+  // Two cuts, crossed, a steel afterimage that slides apart along the first of
+  // them, and a spark shower off the second. Still the fastest opening of the
+  // twenty — the first cut lands inside a fifth of a second.
+  const _kfExecution = (ctx, slot, t) => {
+    const P = KILL_PALETTES[9];
+    const edge = P[0], blood = P[1], steel = P[2], spark = P[3], black = P[4];
+    const a1 = slot.angle + .9, a2 = slot.angle - .75;
+    const c1 = Math.cos(a1), s1 = Math.sin(a1);
+    const c2 = Math.cos(a2), s2 = Math.sin(a2);
+    // First cut.
+    const cut = _kfSpan(t, .04, .2);
+    if (cut > 0) {
+      const L = 60 * _kfOut(cut);
+      const fade = cut < 1 ? 1 : 1 - _kfSpan(t, .2, .5);
+      _kfLine(ctx, -c1 * L, -s1 * L, c1 * L, s1 * L, edge, fade, cut < 1 ? 3.5 : 2);
+      _kfLine(ctx, -c1 * L * .8, -s1 * L * .8, c1 * L * .8, s1 * L * .8, blood, fade * .6, 1.4);
+    }
+    // Second cut, crossing it.
+    const cut2 = _kfSpan(t, .26, .42);
+    if (cut2 > 0) {
+      const L = 54 * _kfOut(cut2);
+      const fade = cut2 < 1 ? 1 : 1 - _kfSpan(t, .42, .68);
+      _kfLine(ctx, -c2 * L, -s2 * L, c2 * L, s2 * L, edge, fade, cut2 < 1 ? 3 : 1.8);
+      _kfLine(ctx, -c2 * L * .8, -s2 * L * .8, c2 * L * .8, s2 * L * .8, blood, fade * .6, 1.4);
+    }
+    // The afterimage slides apart across the first cut.
+    const split = _kfSpan(t, .2, .72);
+    if (split < 1) {
+      const push = 13 * _kfOut(split);
+      const ga = (1 - split) * .45;
+      _kfDisc(ctx, -s1 * push, c1 * push, KF_BODY * .92, steel, ga);
+      _kfDisc(ctx, s1 * push, -c1 * push, KF_BODY * .92, black, ga * .8);
+    }
+    // Sparks off the second cut, thrown along it.
+    const sp = _kfSpan(t, .3, .82);
+    if (sp > 0 && sp < 1) {
+      for (let i = 0; i < 7; i++) {
+        const dir = i & 1 ? 1 : -1;
+        const d = (24 + 58 * _kfRnd(slot.seed, i)) * _kfOut(sp) * dir;
+        const off = (_kfRnd(slot.seed, i + 16) - .5) * 14;
+        _kfDisc(ctx, c2 * d - s2 * off, s2 * d + c2 * off, 2 * (1 - sp) + .5, i % 3 ? spark : blood, (1 - sp) * .9);
+      }
+    }
+    // What is left on the ground once the cuts are done, and the last thing to
+    // go — so the style uses the whole of its life rather than the first half.
+    _kfDisc(ctx, 0, 16, 5 + 13 * _kfOut(_kfSpan(t, .2, .58)), blood, .42 * (1 - _kfSpan(t, .55, 1)));
+    _kfBody(ctx, slot, 1 - _kfSpan(t, .1, .3), KF_BODY, 0, 0, 0);
+  };
+
+  // ---- 10. Target Lock ------------------------------------------------------
+  // scan / lock / warn / fire / white.
+  // A HUD that acquires: cyan while it sweeps, green when it locks, amber on
+  // the count, red as it fires, and then the reticle comes apart.
+  const _kfTargetLock = (ctx, slot, t) => {
+    const P = KILL_PALETTES[10];
+    const scan = P[0], lock = P[1], warn = P[2], fire = P[3], white = P[4];
+    const close = _kfSmooth(_kfSpan(t, 0, .4));
+    const r = 74 - 34 * close;
+    const broke = _kfSpan(t, .62, 1);
+    // The colour is the state, which is what makes it read as a system rather
+    // than a circle: sweeping, locked, counting, firing.
+    const phase = t < .4 ? scan : t < .52 ? lock : t < .62 ? warn : fire;
+    if (broke <= 0) {
+      _kfRing(ctx, 0, 0, r, phase, .85, 2);
+      _kfRing(ctx, 0, 0, r * .42, phase, .5, 1.2);
+      // Crosshairs.
+      _kfLine(ctx, -r - 8, 0, -r * .5, 0, phase, .7, 1.5);
+      _kfLine(ctx, r * .5, 0, r + 8, 0, phase, .7, 1.5);
+      _kfLine(ctx, 0, -r - 8, 0, -r * .5, phase, .7, 1.5);
+      _kfLine(ctx, 0, r * .5, 0, r + 8, phase, .7, 1.5);
+      ctx.save();
+      ctx.rotate(close * 1.2);
+      for (let i = 0; i < 4; i++) {
+        const b = i / 4 * KF_TAU;
+        _kfArc(ctx, r + 7, b - .3, b + .3, phase, .95, 3);
+      }
+      ctx.restore();
+      // A sweep line while it is still looking, and a white flash on the lock.
+      if (t < .4) _kfLine(ctx, 0, 0, Math.cos(t * 12) * r, Math.sin(t * 12) * r, scan, .5, 1.5);
+      const flash = _kfSpan(t, .4, .52);
+      if (flash > 0 && flash < 1) _kfRing(ctx, 0, 0, r + 4 + 14 * flash, white, (1 - flash) * .85, 2);
+      // Four ticks counting in while it is armed.
+      const arm = _kfSpan(t, .46, .62);
+      if (arm > 0) {
+        for (let i = 0; i < 4; i++) {
+          if (arm * 4 <= i) break;
+          const b = i / 4 * KF_TAU + .4;
+          _kfDisc(ctx, Math.cos(b) * (r + 16), Math.sin(b) * (r + 16), 2.6, warn, .9);
+        }
+      }
+    } else {
+      // The reticle comes apart into the four arcs it was made of.
+      const a = 1 - broke;
+      const out = _kfOut(broke);
+      for (let i = 0; i < 4; i++) {
+        const b = i / 4 * KF_TAU + .3 + broke * .8;
+        const half = .5 - broke * .3;
+        _kfArc(ctx, r + 44 * out, b - half, b + half, fire, a * .9, 2);
+      }
+      _kfGlow(ctx, 0, 0, 30 * (1 - broke), fire, white, a * .6);
+    }
+    _kfBody(ctx, slot, 1 - _kfSpan(t, .56, .88), KF_BODY, 0, 0, 0);
+  };
+
+  // ---- 11. Soul Extraction --------------------------------------------------
+  // aura / core / deep / lavender / thread.
+  // The orb pulls out of them on a gold thread, rises, turns, brightens once,
+  // and goes. The body follows it a beat later.
+  const _kfSoul = (ctx, slot, t) => {
+    const P = KILL_PALETTES[11];
+    const aura = P[0], core = P[1], deep = P[2], lavender = P[3], thread = P[4];
+    _kfBody(ctx, slot, .95 * (1 - _kfSpan(t, .58, .88)), KF_BODY, 0, 0, 0);
+    _kfWash(ctx, KF_BODY, deep, aura, _kfSmooth(_kfSpan(t, .2, .6)) * .3 * (1 - _kfSpan(t, .58, .88)));
+    const lift = _kfOut(_kfSpan(t, .1, .84));
+    const y = -6 - 44 * lift;
+    const a = (1 - _kfSpan(t, .76, .95)) * _kfSmooth(_kfSpan(t, 0, .12));
+    // The thread it is drawn out on, still attached until it is nearly gone.
+    const tether = 1 - _kfSpan(t, .58, .8);
+    if (tether > 0) {
+      ctx.globalAlpha = a * tether * .7;
+      ctx.strokeStyle = thread;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(0, 2);
+      ctx.quadraticCurveTo(7 * Math.sin(t * 6), (y + 2) * .5, 0, y);
+      ctx.stroke();
+    }
+    // One swell partway up, which is the moment it comes free.
+    const swell = 1 + .28 * _kfBump(_kfSpan(t, .4, .62)) + Math.sin(t * 13) * .09;
+    _kfGlow(ctx, 0, y, 15 * swell, aura, core, a);
+    _kfDisc(ctx, 0, y, 4.5 * swell, core, a);
+    // Its rotation, at three motes.
+    for (let i = 0; i < 3; i++) {
+      const ang = t * 6.5 + i / 3 * KF_TAU;
+      _kfDisc(ctx, Math.cos(ang) * 15, y + Math.sin(ang) * 5.5, 2.2, i ? lavender : thread, a * .85);
+    }
+    // And it lets go.
+    const gone = _kfSpan(t, .8, 1);
+    if (gone > 0 && gone < 1) {
+      const d = 6 + 34 * _kfOut(gone);
+      for (let i = 0; i < 6; i++) {
+        const ang = i / 6 * KF_TAU + _kfRnd(slot.seed, i) * .6;
+        _kfDisc(ctx, Math.cos(ang) * d, y + Math.sin(ang) * d, 2 * (1 - gone) + .7, i & 1 ? lavender : aura, (1 - gone) * .8);
+      }
+    }
+  };
+
+  // ---- 12. Reverse Explosion ------------------------------------------------
+  // violet / magenta / orange / flash / deep.
+  // Everything falls inward instead of out, spiralling as it comes, and the
+  // flash at the middle throws one ring back the other way.
+  const _kfReverse = (ctx, slot, t) => {
+    const P = KILL_PALETTES[12];
+    const violet = P[0], magenta = P[1], orange = P[2], flash = P[3], deep = P[4];
+    const u = _kfSpan(t, 0, .66);
+    // Inward and accelerating — the opposite curve to everything thrown
+    // outward above, which is the whole point of it.
+    const inward = 1 - _kfIn(u);
+    if (u < 1) {
+      // A dark well at the middle that deepens as they arrive.
+      _kfDisc(ctx, 0, 0, 20 * (1 - inward), deep, .5 * (1 - inward));
+      for (let i = 0; i < 12; i++) {
+        // The spiral: each one turns as it falls, so it curves in rather than
+        // dropping straight down a spoke.
+        const ang = i / 12 * KF_TAU + _kfRnd(slot.seed, i) * .5 + (1 - inward) * 1.9;
+        const d = (62 + 28 * _kfRnd(slot.seed, i + 16)) * inward;
+        const c = Math.cos(ang), s = Math.sin(ang);
+        const col = i % 3 === 0 ? orange : i & 1 ? magenta : violet;
+        // A short tail behind each, pointing back the way it came.
+        _kfLine(ctx, c * (d + 11), s * (d + 11), c * d, s * d, col, .45 * (1 - inward), 2);
+        _kfDisc(ctx, c * d, s * d, 2.2 + 1.8 * (1 - inward), col, .95);
+      }
+    }
+    const crush = _kfSpan(t, .36, .68);
+    _kfBody(ctx, slot, 1 - crush, KF_BODY * (1 - .35 * crush), 0, 0, crush * .8);
+    const fl = _kfSpan(t, .64, 1);
+    if (fl > 0 && fl < 1) {
+      _kfGlow(ctx, 0, 0, 34 * (1 - fl), magenta, flash, 1 - fl);
+      // One ring back outward, which is the only thing here that goes out.
+      _kfRing(ctx, 0, 0, 10 + 76 * _kfOut(fl), orange, (1 - fl) * .7, 4 - 3 * fl);
+    }
+  };
+
+  // ---- 13. Burn Out ---------------------------------------------------------
+  // flame / yellow / char / smoke / blue base.
+  // It burns inward from the edge, leaves a char ring behind the flame front,
+  // throws embers, and the smoke outlives all of it. The blue at the base of
+  // the front is what makes it read as fire rather than an orange tint.
+  const _kfBurnOut = (ctx, slot, t) => {
+    const P = KILL_PALETTES[13];
+    const flame = P[0], yellow = P[1], char = P[2], smoke = P[3], blue = P[4];
+    // Burning inward from the edges is one shrinking circular clip over the
+    // ordinary body draw. No mask canvas, no per-pixel work, no fire.
+    const burn = _kfSmooth(_kfSpan(t, .05, .68));
+    const r = KF_BODY * (1 - burn);
+    // What the front has already eaten, left as char.
+    if (burn > .01 && burn < 1) {
+      _kfRing(ctx, 0, 0, (KF_BODY + r) * .5, char, .5 * (1 - _kfSpan(t, .68, .86)), (KF_BODY - r));
+    }
+    if (r > 1) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, KF_TAU);
+      ctx.clip();
+      _kfBody(ctx, slot, 1, KF_BODY, 0, 0, 0);
+      ctx.restore();
+      // The front: blue at the base, flame over it, yellow at the lip.
+      _kfRing(ctx, 0, 0, r + 1.5, blue, .55, 4);
+      _kfRing(ctx, 0, 0, r, flame, .95, 3);
+      _kfRing(ctx, 0, 0, r - 2, yellow, .7, 1.6);
+    }
+    const a = 1 - _kfSpan(t, .8, 1);
+    const rim = KF_BODY * (1 - burn * .6);
+    for (let i = 0; i < 10; i++) {
+      const u = (t * 1.3 + _kfRnd(slot.seed, i)) % 1;
+      const ang = _kfRnd(slot.seed, i + 16) * KF_TAU;
+      const x = Math.cos(ang) * rim * .9 + (_kfRnd(slot.seed, i + 32) - .5) * 12;
+      // An ember cools as it rises: yellow, then flame, then char.
+      const col = u < .3 ? yellow : u < .68 ? flame : char;
+      _kfDisc(ctx, x, Math.sin(ang) * rim * .5 - 40 * u, 2.6 * (1 - u) + .5, col, a * (1 - u) * .95);
+    }
+    // Smoke, wide and faint, and the last thing still there.
+    for (let i = 0; i < 5; i++) {
+      const u = (t * .8 + _kfRnd(slot.seed, i + 64)) % 1;
+      _kfDisc(ctx, (_kfRnd(slot.seed, i + 80) - .5) * 30 + 9 * u, -14 - 48 * u, 5 + 15 * u, smoke, a * (1 - u) * .24);
+    }
+  };
+
+  // ---- 14. Time Break -------------------------------------------------------
+  // dial / brass / white / deep / glitch.
+  // The dial spins up, stutters backward once, and the frame it was holding
+  // cracks and falls out of it. The magenta is the stutter.
+  const _kfTimeBreak = (ctx, slot, t) => {
+    const P = KILL_PALETTES[14];
+    const dial = P[0], brass = P[1], white = P[2], deep = P[3], glitch = P[4];
+    const a = 1 - _kfSpan(t, .84, 1);
+    // One stutter backward, partway through, before it runs on again.
+    const rewind = _kfBump(_kfSpan(t, .36, .52));
+    const spin = t * 17 - rewind * 4.2;
+    _kfDisc(ctx, 0, 0, 46, deep, a * .22);
+    ctx.save();
+    ctx.globalAlpha = a * .85;
+    ctx.strokeStyle = dial;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, 46, 0, KF_TAU);
+    for (let i = 0; i < 12; i++) {
+      const b = i / 12 * KF_TAU;
+      const c = Math.cos(b), s = Math.sin(b);
+      const inner = i % 3 === 0 ? 37 : 41;
+      ctx.moveTo(c * inner, s * inner);
+      ctx.lineTo(c * 46, s * 46);
+    }
+    ctx.stroke();
+    ctx.restore();
+    // Brass hands, one fast and one slow, and a magenta ghost of the fast one
+    // left behind while it stutters.
+    _kfLine(ctx, 0, 0, Math.sin(spin) * 34, -Math.cos(spin) * 34, brass, a * .95, 2.4);
+    _kfLine(ctx, 0, 0, Math.sin(spin * .31) * 22, -Math.cos(spin * .31) * 22, brass, a * .8, 3.2);
+    if (rewind > .02) {
+      const g = spin + 1.4;
+      _kfLine(ctx, 0, 0, Math.sin(g) * 34, -Math.cos(g) * 34, glitch, a * rewind * .8, 2);
+      _kfRing(ctx, 0, 0, 46, glitch, a * rewind * .6, 2);
+    }
+    _kfDisc(ctx, 0, 0, 3.4, brass, a);
+    if (t < .6) {
+      // Held while the dial runs on over it.
+      _kfBody(ctx, slot, 1, KF_BODY, 0, 0, 0);
+      const cr = _kfSpan(t, .44, .6);
+      for (let i = 0; i < 5; i++) {
+        const b = _kfRnd(slot.seed, i) * KF_TAU;
+        const c = Math.cos(b) * KF_BODY * cr, s = Math.sin(b) * KF_BODY * cr;
+        _kfLine(ctx, 0, 0, c, s, white, cr * .9, 2);
+        _kfLine(ctx, c * .6, s * .6, c * .6 - s * .28, s * .6 + c * .28, dial, cr * .6, 1.3);
+      }
+      return;
+    }
+    const u = _kfSpan(t, .6, 1);
+    const d = 8 + 40 * _kfOut(u);
+    for (let i = 0; i < 6; i++) {
+      const b = i / 6 * KF_TAU + _kfRnd(slot.seed, i) * .4;
+      _kfShard(ctx, Math.cos(b) * d, Math.sin(b) * d, b + u * 1.6, 9, white, i & 1 ? dial : brass, (1 - u) * .9);
+    }
+  };
+
+  // ---- 15. Mirror Death -----------------------------------------------------
+  // silver / pale / sheen pink / sheen green / slate.
+  // The reflection separates, drifts the other way, catches the light in two
+  // colours, then crazes over and falls out of its own frame.
+  const _kfMirror = (ctx, slot, t) => {
+    const P = KILL_PALETTES[15];
+    const silver = P[0], pale = P[1], pink = P[2], green = P[3], slate = P[4];
+    _kfBody(ctx, slot, 1 - _kfSpan(t, .1, .5), KF_BODY, 0, 0, 0);
+    // The reflection sits behind the body along its own facing and drifts the
+    // other way — mirrored by the transform, so it is the same one draw.
+    const drift = _kfOut(_kfSpan(t, .14, .76)) * 32;
+    const c = Math.cos(slot.angle), s = Math.sin(slot.angle);
+    const mx = -c * drift, my = -s * drift;
+    const broke = _kfSpan(t, .76, 1);
+    if (broke <= 0) {
+      ctx.save();
+      ctx.translate(mx, my);
+      ctx.scale(-1, 1);
+      _kfBody(ctx, slot, .55, KF_BODY, 0, 0, 0);
+      ctx.restore();
+      // The sheen crossing it: pink one way, green the other, offset in time
+      // so the two never sit on the same edge.
+      const sweep = _kfSpan(t, .2, .7);
+      const sx = (sweep * 2 - 1) * KF_BODY;
+      _kfLine(ctx, mx + sx - 6, my - 30, mx + sx + 6, my + 30, pink, _kfBump(sweep) * .8, 5);
+      const sweep2 = _kfSpan(t, .34, .84);
+      const sx2 = (1 - sweep2 * 2) * KF_BODY;
+      _kfLine(ctx, mx + sx2 - 5, my - 28, mx + sx2 + 5, my + 28, green, _kfBump(sweep2) * .7, 4);
+      _kfRing(ctx, mx, my, KF_BODY, silver, .5, 1.6);
+      // Crazing, before it goes.
+      const cr = _kfSpan(t, .6, .76);
+      for (let i = 0; i < 4; i++) {
+        const b = _kfRnd(slot.seed, i) * KF_TAU;
+        const cc = Math.cos(b) * KF_BODY * cr, ss = Math.sin(b) * KF_BODY * cr;
+        _kfLine(ctx, mx - cc, my - ss, mx + cc, my + ss, pale, cr * .85, 1.6);
+      }
+      return;
+    }
+    const d = 10 + 40 * _kfOut(broke);
+    for (let i = 0; i < 6; i++) {
+      const b = i / 6 * KF_TAU + _kfRnd(slot.seed, i) * .5;
+      _kfShard(ctx, mx + Math.cos(b) * d, my + Math.sin(b) * d, b + broke, 8,
+        i % 3 === 0 ? pale : silver, i & 1 ? pink : green, (1 - broke) * .75);
+    }
+    _kfDisc(ctx, mx, my, 26 * (1 - broke), slate, (1 - broke) * .3);
+  };
+
+  // ---- 16. Lightning Mark ---------------------------------------------------
+  // core / electric / branch / gold flash / navy.
+  // It charges first — the mark draws sparks up off the ground — then the bolt
+  // lands, and what is left crawls around the mark before it dies.
+  const _kfLightning = (ctx, slot, t) => {
+    const P = KILL_PALETTES[16];
+    const core = P[0], electric = P[1], branch = P[2], gold = P[3], navy = P[4];
+    const markA = 1 - _kfSpan(t, .62, .92);
+    ctx.save();
+    ctx.translate(0, 16);
+    ctx.scale(1, .4);
+    _kfDisc(ctx, 0, 0, 26, navy, .4 * markA);
+    _kfRing(ctx, 0, 0, 26, electric, .85 * markA, 3);
+    _kfRing(ctx, 0, 0, 17, branch, .6 * markA, 1.6);
+    ctx.restore();
+    // Charging: sparks drawn up off the mark before anything lands.
+    const charge = _kfSpan(t, 0, .26);
+    if (charge < 1) {
+      for (let i = 0; i < 6; i++) {
+        const u = (t * 4 + _kfRnd(slot.seed, i)) % 1;
+        const x = (_kfRnd(slot.seed, i + 16) - .5) * 48;
+        _kfDisc(ctx, x, 16 - 30 * u, 1.8 * (1 - u), electric, (1 - charge) * (1 - u) * .8);
+      }
+    }
+    // The strike. Two passes over one path — a wide electric halo and a white
+    // core — plus two violet branches off it.
+    const strike = _kfSpan(t, .26, .42);
+    if (strike > 0 && strike < 1) {
+      const a = 1 - strike;
+      ctx.save();
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo((_kfRnd(slot.seed, 0) - .5) * 40, -250);
+      for (let i = 1; i <= 5; i++) {
+        const p = i / 5;
+        ctx.lineTo((_kfRnd(slot.seed, i) - .5) * 44 * (1 - p), -250 + 266 * p);
+      }
+      ctx.globalAlpha = a * .35;
+      ctx.strokeStyle = electric;
+      ctx.lineWidth = 9;
+      ctx.stroke();
+      ctx.globalAlpha = a;
+      ctx.strokeStyle = core;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      ctx.restore();
+      for (let i = 0; i < 2; i++) {
+        const p = .35 + i * .3;
+        const bx = (_kfRnd(slot.seed, i + 1) - .5) * 44 * (1 - p);
+        const by = -250 + 266 * p;
+        _kfLine(ctx, bx, by, bx + (_kfRnd(slot.seed, i + 40) - .5) * 70, by + 40, branch, a * .8, 1.8);
+      }
+      _kfGlow(ctx, 0, 16, 40 * (1 - strike), gold, core, a * .8);
+    }
+    const dark = _kfSmooth(_kfSpan(t, .28, .42));
+    const bodyA = 1 - _kfSpan(t, .42, .64);
+    _kfBody(ctx, slot, bodyA * (1 - dark * .6), KF_BODY, 0, 0, 0);
+    _kfWash(ctx, KF_BODY, navy, electric, dark * bodyA * .85);
+    // Residual arcs crawling around the mark.
+    const after = _kfSpan(t, .42, .84);
+    if (after > 0 && after < 1) {
+      for (let i = 0; i < 4; i++) {
+        const b = _kfRnd(slot.seed, i + 56) * KF_TAU + after * 3;
+        const r0 = 12, r1 = 30;
+        _kfLine(ctx, Math.cos(b) * r0, 16 + Math.sin(b) * r0 * .4, Math.cos(b + .6) * r1, 16 + Math.sin(b + .6) * r1 * .4,
+          i & 1 ? branch : electric, (1 - after) * .7, 1.5);
+      }
+    }
+  };
+
+  // ---- 17. Web / Thread Death -----------------------------------------------
+  // silk / violet / teal / umber / white.
+  // The threads attach, go taut, pull the shape apart, and snap. What they
+  // were holding falls as motes.
+  const _kfWeb = (ctx, slot, t) => {
+    const P = KILL_PALETTES[17];
+    const silk = P[0], violet = P[1], teal = P[2], umber = P[3], white = P[4];
+    const attach = _kfSmooth(_kfSpan(t, 0, .18));
+    const pull = _kfOut(_kfSpan(t, .18, .74));
+    const snap = _kfSpan(t, .74, .92);
+    const a = (1 - snap) * .9;
+    // Ten threads, each one curve. A hundred line objects would look the same
+    // and cost ten times as much, so there are ten.
+    ctx.save();
+    ctx.lineCap = "round";
+    for (let i = 0; i < 10; i++) {
+      const ang = i / 10 * KF_TAU + _kfRnd(slot.seed, i) * .35;
+      const d = (18 + (46 + 36 * _kfRnd(slot.seed, i + 16)) * pull) * attach;
+      const c = Math.cos(ang), s = Math.sin(ang);
+      // Slack while they attach, taut once they pull, and thrown loose on the
+      // snap.
+      const slack = 9 * (1 - pull) + 18 * snap * (_kfRnd(slot.seed, i + 96) - .5);
+      ctx.globalAlpha = a;
+      ctx.strokeStyle = i % 3 === 0 ? violet : silk;
+      ctx.lineWidth = i % 3 === 0 ? 1.8 : 1.3;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(c * d * .55 - s * slack, s * d * .55 + c * slack, c * d, s * d);
+      ctx.stroke();
+      // A bead at the far end, teal on the threads that are doing the work.
+      _kfDisc(ctx, c * d, s * d, 2.1, i % 3 === 0 ? teal : white, a);
+    }
+    ctx.restore();
+    // The body loses its shape as they take it: stretched along the pull and
+    // thinned across it, which is one transform rather than a deformed mesh.
+    const bodyA = 1 - _kfSpan(t, .2, .68);
+    if (bodyA > 0) {
+      ctx.save();
+      ctx.scale(1 + pull * .4, 1 - pull * .34);
+      _kfBody(ctx, slot, bodyA, KF_BODY, 0, 0, 0);
+      _kfWash(ctx, KF_BODY, umber, violet, pull * bodyA * .28);
+      ctx.restore();
+    }
+    const end = _kfSpan(t, .7, 1);
+    if (end > 0) {
+      const d = 30 + 46 * end;
+      for (let i = 0; i < 6; i++) {
+        const ang = _kfRnd(slot.seed, i + 48) * KF_TAU;
+        _kfDisc(ctx, Math.cos(ang) * d, Math.sin(ang) * d + 18 * end * end, 2.2 * (1 - end), i & 1 ? teal : white, (1 - end) * .8);
+      }
+    }
+  };
+
+  // ---- 18. Triangle Collapse ------------------------------------------------
+  // teal / lime / blue / white / indigo.
+  // circle -> triangle -> diamond -> point, each stage in its own colour and
+  // cross-faded into the next, with a counter-turning inner cage inside it.
+  const KF_TRIANGLE_SIDES = [ 0, 3, 4, 4 ];
+  // One colour per stage, built once rather than per frame.
+  const KF_TRIANGLE_HUES = [ KILL_PALETTES[18][0], KILL_PALETTES[18][1], KILL_PALETTES[18][2], KILL_PALETTES[18][3] ];
+  const _kfPoly = (ctx, r, sides, rot, color, alpha, lw) => {
+    if (alpha <= .004 || r <= .5 || lw <= 0) return;
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    if (sides < 3) {
+      ctx.arc(0, 0, r, 0, KF_TAU);
+    } else {
+      for (let i = 0; i < sides; i++) {
+        const b = rot + i / sides * KF_TAU;
+        const x = Math.cos(b) * r, y = Math.sin(b) * r;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+    }
+    ctx.stroke();
+  };
+  const _kfTriangle = (ctx, slot, t) => {
+    const P = KILL_PALETTES[18];
+    const lime = P[1], blue = P[2], white = P[3], indigo = P[4];
+    const close = _kfSmooth(_kfSpan(t, 0, .86));
+    const r = 66 - 60 * close;
+    const rot = close * .9;
+    _kfDisc(ctx, 0, 0, r, indigo, .2 * (1 - _kfSpan(t, .86, 1)));
+    // The stages are cross-faded rather than swapped, so the cage changes
+    // shape instead of popping between three of them — and each stage has its
+    // own colour, so the change is legible at a glance.
+    const phase = _kfSpan(t, 0, .8) * 3;
+    const stage = phase | 0;
+    const mix = phase - stage;
+    _kfPoly(ctx, r, KF_TRIANGLE_SIDES[stage], rot, KF_TRIANGLE_HUES[stage], (1 - mix) * .92, 2.4);
+    if (stage < 3) _kfPoly(ctx, r, KF_TRIANGLE_SIDES[stage + 1], rot, KF_TRIANGLE_HUES[stage + 1], mix * .92, 2.4);
+    // A second cage inside it, turning the other way and one stage behind.
+    _kfPoly(ctx, r * .58, KF_TRIANGLE_SIDES[stage], -rot * 1.6, blue, (1 - mix) * .45, 1.4);
+    // Nodes riding the outer cage.
+    const nodes = KF_TRIANGLE_SIDES[stage] < 3 ? 6 : KF_TRIANGLE_SIDES[stage];
+    for (let i = 0; i < nodes; i++) {
+      const b = rot + i / nodes * KF_TAU;
+      _kfDisc(ctx, Math.cos(b) * r, Math.sin(b) * r, 2.6, lime, .85 * (1 - _kfSpan(t, .8, .94)));
+    }
+    _kfBody(ctx, slot, 1 - _kfSpan(t, .34, .84), KF_BODY, 0, 0, 0);
+    const point = _kfSpan(t, .86, 1);
+    if (point > 0) _kfGlow(ctx, 0, 0, 14 * (1 - point), blue, white, 1 - point);
+  };
+
+  // ---- 19. Ink Death --------------------------------------------------------
+  // ink / indigo / violet sheen / teal sheen / cream.
+  // They melt into it, it spreads and ripples, it pulls back to a point, and
+  // one drip falls off the edge. The two sheens on the surface are what keep
+  // a black shape from reading as a hole.
+  const _kfInk = (ctx, slot, t) => {
+    const P = KILL_PALETTES[19];
+    const ink = P[0], indigo = P[1], violet = P[2], teal = P[3], cream = P[4];
+    // Eight radial points on a slow wobble, joined by curves. It is not fluid
+    // and there is nothing simulating one: it is a blob whose radius is a sine
+    // of the clock, which at this size is indistinguishable and free.
+    const spread = _kfSmooth(_kfSpan(t, 0, .5));
+    const pull = _kfSmooth(_kfSpan(t, .56, .96));
+    const base = KF_BODY * (1 + .42 * spread) * (1 - pull);
+    const a = 1 - _kfSpan(t, .92, 1);
+    if (base > .6) {
+      let fx = 0, fy = 0;
+      ctx.globalAlpha = a * .94;
+      ctx.fillStyle = ink;
+      ctx.beginPath();
+      for (let i = 0; i <= 8; i++) {
+        const b = i / 8 * KF_TAU;
+        const rr = base * (1 + .22 * Math.sin(t * 9 + i * 2.3 + slot.seed));
+        const x = Math.cos(b) * rr, y = Math.sin(b) * rr * .92;
+        if (i === 0) {
+          fx = x;
+          fy = y;
+          ctx.moveTo(x, y);
+        } else {
+          const pb = (i - .5) / 8 * KF_TAU;
+          const pr = base * 1.14;
+          ctx.quadraticCurveTo(Math.cos(pb) * pr, Math.sin(pb) * pr * .92, i === 8 ? fx : x, i === 8 ? fy : y);
+        }
+      }
+      ctx.closePath();
+      ctx.fill();
+      // Indigo under the surface, and two sheens sliding across it.
+      _kfDisc(ctx, base * .1, base * .1, base * .55, indigo, a * .5);
+      const sh = t * 2.2 % 1;
+      _kfArc(ctx, base * .82, sh * KF_TAU, sh * KF_TAU + .9, violet, a * .55, 3);
+      const sh2 = (t * 1.7 + .5) % 1;
+      _kfArc(ctx, base * .58, -sh2 * KF_TAU, -sh2 * KF_TAU + .7, teal, a * .45, 2.4);
+      // Ripples going out across it while it spreads.
+      const rip = _kfSpan(t, .18, .62);
+      if (rip > 0 && rip < 1) _kfRing(ctx, 0, 0, base * (.4 + .7 * rip), cream, (1 - rip) * .22, 1.6);
+    }
+    // One drip off the edge, which lands and is absorbed.
+    const drip = _kfSpan(t, .3, 1);
+    if (drip > 0 && drip < 1) {
+      const dx = KF_BODY * .8;
+      _kfDisc(ctx, dx, 4 + 34 * _kfIn(drip), 4.5 * (1 - drip * .5), ink, a * .9);
+    }
+    _kfBody(ctx, slot, 1 - _kfSpan(t, .04, .42), KF_BODY, 0, 0, 0);
+  };
+
+  // ---- 20. Comet Death ------------------------------------------------------
+  // gold / core / tail / spark / deep.
+  // It gathers first, then goes — a white-hot head, a cyan tail and magenta
+  // sparks shaken loose behind it, all on one heading.
+  const _kfComet = (ctx, slot, t) => {
+    const P = KILL_PALETTES[20];
+    const gold = P[0], core = P[1], tail = P[2], spark = P[3], deep = P[4];
+    // One heading for the whole kill, taken off the body's own facing, so the
+    // particles read as one thing leaving rather than a scatter.
+    const dir = slot.angle + 2.1;
+    const c = Math.cos(dir), s = Math.sin(dir);
+    // It pulls itself together before it leaves.
+    const gather = _kfSpan(t, 0, .22);
+    if (gather < 1) {
+      const d = 46 * (1 - _kfSmooth(gather));
+      for (let i = 0; i < 8; i++) {
+        const ang = _kfRnd(slot.seed, i) * KF_TAU;
+        _kfDisc(ctx, Math.cos(ang) * d, Math.sin(ang) * d, 2.4, gold, .8);
+      }
+      _kfGlow(ctx, 0, 0, 16 * gather, gold, core, gather * .8);
+    }
+    const u = _kfOut(_kfSpan(t, .22, 1));
+    const a = 1 - _kfSpan(t, .66, 1);
+    ctx.save();
+    ctx.lineCap = "round";
+    for (let i = 0; i < 8; i++) {
+      const spd = .55 + .45 * _kfRnd(slot.seed, i);
+      const off = (_kfRnd(slot.seed, i + 16) - .5) * 26;
+      const d = 330 * u * spd;
+      const x = c * d - s * off, y = s * d + c * off;
+      // The trail is one line back along the heading, clamped so it never
+      // reaches back past where the particle started. Deep under, cyan over.
+      const tl = Math.min(d, 30 + 26 * spd);
+      ctx.globalAlpha = a * .3;
+      ctx.strokeStyle = deep;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(x - c * tl, y - s * tl);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      ctx.globalAlpha = a * .6;
+      ctx.strokeStyle = tail;
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+      _kfDisc(ctx, x, y, 2.8, i % 3 === 0 ? gold : core, a);
+      // A spark shaken loose off the trail, dropping behind.
+      const sd = d * (.45 + .3 * _kfRnd(slot.seed, i + 32));
+      _kfDisc(ctx, c * sd - s * (off * 1.7), s * sd + c * (off * 1.7), 1.9 * (1 - u), spark, a * .75);
+    }
+    ctx.restore();
+    if (u > 0) _kfGlow(ctx, c * 330 * u, s * 330 * u, 13 * (1 - _kfSpan(t, .5, 1)), gold, core, a);
+    _kfBody(ctx, slot, 1 - _kfSpan(t, .12, .34), KF_BODY, 0, 0, 0);
+  };
+
+  // The dispatch. A switch on the style index rather than a table of function
+  // objects: the index is already what the slot carries, and this is the only
+  // place in the system that has to know which style is which.
+  const _kfDraw = (ctx, slot, t) => {
+    switch (slot.style) {
+     case 1: _kfBloodMark(ctx, slot, t); break;
+     case 2: _kfSkullReveal(ctx, slot, t); break;
+     case 3: _kfShatter(ctx, slot, t); break;
+     case 4: _kfTeleport(ctx, slot, t); break;
+     case 5: _kfMasked(ctx, slot, t); break;
+     case 6: _kfShadow(ctx, slot, t); break;
+     case 7: _kfAngel(ctx, slot, t); break;
+     case 8: _kfEye(ctx, slot, t); break;
+     case 9: _kfExecution(ctx, slot, t); break;
+     case 10: _kfTargetLock(ctx, slot, t); break;
+     case 11: _kfSoul(ctx, slot, t); break;
+     case 12: _kfReverse(ctx, slot, t); break;
+     case 13: _kfBurnOut(ctx, slot, t); break;
+     case 14: _kfTimeBreak(ctx, slot, t); break;
+     case 15: _kfMirror(ctx, slot, t); break;
+     case 16: _kfLightning(ctx, slot, t); break;
+     case 17: _kfWeb(ctx, slot, t); break;
+     case 18: _kfTriangle(ctx, slot, t); break;
+     case 19: _kfInk(ctx, slot, t); break;
+     case 20: _kfComet(ctx, slot, t); break;
+    }
+  };
+  // The style a kill gets, decided once at the moment of the kill and then
+  // fixed for the life of the slot. Random resolves here and nowhere else, so
+  // a Random kill picks one animation and keeps it — it cannot change under
+  // its own animation from one frame to the next.
+  const _kfResolveStyle = () => {
+    const chosen = KILL_STYLE_BY_ID.get(Settings_default._killAnimation);
+    if (chosen === undefined) return 0;
+    if (chosen !== KILL_STYLE_RANDOM) return chosen;
+    return 1 + (Math.random() * KILL_STYLE_COUNT | 0);
+  };
+
   const CorpseHandler = new class {
     // Active slots occupy [0, count); everything past it is the free pool. The
     // objects themselves are created once and never replaced, so nothing here
@@ -27787,6 +30921,13 @@ window.grbtp = 35;
             x: 0,
             y: 0,
             angle: 0,
+            // Which animation this kill drew, how long it runs for, and the
+            // seed every particle in it is derived from. Three numbers, set
+            // once at spawn and read-only after it — there is no per-particle
+            // state anywhere in the system.
+            style: 0,
+            life: 0,
+            seed: 0,
             // The descriptor handed to the bundle's player renderer. One per
             // slot, mutated in place: a fresh object literal every frame would
             // churn the heap and miss the melee animator's identity cache. The
@@ -27835,12 +30976,30 @@ window.grbtp = 35;
       const pos = player.pos.current;
       const skull = player.hasSkull;
       const skin = player.skinID;
+      // Resolved here and only here, so a Random kill picks one animation and
+      // then keeps it for as long as the slot lives.
+      const style = _kfResolveStyle();
       slot.born = now;
       slot.x = pos.x;
       slot.y = pos.y;
       slot.angle = player.angle;
-      view.skinIndex = skull ? CORPSE_HAT_SKULL : CORPSE_HAT_NORMAL;
-      view.tailIndex = skull ? CORPSE_ACC_SKULL : CORPSE_ACC_NORMAL;
+      slot.style = style;
+      slot.life = KILL_STYLES[style].life || CORPSE_LIFETIME;
+      // Kept inside 16 bits: _kfRnd mixes this with Math.imul, and a seed any
+      // wider than this buys nothing a particle index can tell apart.
+      slot.seed = Math.random() * 65536 | 0;
+      if (style === 0) {
+        // The original corpse, unchanged: a halo and angel wings, or the
+        // cowboy hat and devil tail for whoever was carrying the skull.
+        view.skinIndex = skull ? CORPSE_HAT_SKULL : CORPSE_HAT_NORMAL;
+        view.tailIndex = skull ? CORPSE_ACC_SKULL : CORPSE_ACC_NORMAL;
+      } else {
+        // Every other style dresses the body as the player actually was. The
+        // animation is what reads, and a borrowed halo under it would fight
+        // whatever the style is drawing.
+        view.skinIndex = player.hatID | 0;
+        view.tailIndex = player.accessoryID | 0;
+      }
       view.weaponIndex = player.weapon.current | 0;
       view.weaponVariant = player.variant.current | 0;
       view.skinColor = skin >= 0 && skin < CORPSE_SKIN_COLORS ? skin : 0;
@@ -27922,7 +31081,7 @@ window.grbtp = 35;
       for (let i = 0; i < this.count; i++) {
         const slot = slots[i];
         const age = now - slot.born;
-        if (age >= CORPSE_LIFETIME) {
+        if (age >= slot.life) {
           // Expired. Swap it behind the active run, shrink the run, and retest
           // the index it was holding. The slot object stays in the array and
           // is handed straight back out by the next death.
@@ -27930,6 +31089,16 @@ window.grbtp = 35;
           slots[i] = slots[last];
           slots[last] = slot;
           i--;
+          continue;
+        }
+        if (slot.style !== 0) {
+          // Every other style draws in the slot's own local space, with the
+          // body's centre at the origin and screen-up at -Y. One save/restore
+          // around it, so whatever it does to the canvas ends here.
+          ctx.save();
+          ctx.translate(slot.x - ox, slot.y - oy);
+          _kfDraw(ctx, slot, age / slot.life);
+          ctx.restore();
           continue;
         }
         let alpha = CORPSE_INITIAL_ALPHA;
@@ -30763,6 +33932,8 @@ window.grbtp = 35;
     // buttons. It answers with the main player until a bot is possessed, so
     // nothing about the bundle changes until one is.
     _Possess: Possess,
+    // Read by the bundle's chat display, and by nothing else in it.
+    _ChatLog: ChatLog_default,
     _settings: Settings_default,
     _Renderer: Renderer_default,
     _DamageText: DamageText_default,
@@ -30818,6 +33989,7 @@ window.grbtp = 35;
     GameUI_default.init();
     UI_default.init();
     StoreHandler_default.init();
+    ChatLog_default.init();
   };
   window.addEventListener("DOMContentLoaded", contentLoaded);
   if (document.readyState !== "loading") {
@@ -35910,6 +39082,7 @@ try {
     5: "Bots",
     6: "Devtool",
     7: "Music",
+    8: "Auto Heal",
     9: "Commands"
   };
   function _initRynSearch(doc) {
