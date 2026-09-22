@@ -21893,11 +21893,24 @@ window.grbtp = 35;
   const VELTICK_MIN_RANGE = 170;
   // [ping above which it applies, the floor that applies then], worst first.
   const VELTICK_MIN_BY_PING = [ [ 140, 230 ], [ 110, 210 ], [ 85, 190 ] ];
-  // Auto Spacing's own band. Inside it and outside the firing band, the module
+  // Auto Spacing's own band: inside it and outside the firing band, the module
   // walks you onto the point rather than waiting for the fight to hand it to
-  // you. Outside it the walk is not taken: further out they are not engaged
-  // with you, and nearer, backing up walks you through whatever is behind.
-  const VELTICK_SPACING_NEAR = 160;
+  // you.
+  //
+  // The floor is the whole question. Revelation's is 160, and on Revelation
+  // that is nearly the firing floor, so its walk only ever nudges. Carried over
+  // as-is it did almost nothing here: a polearm reaches 142, so a polearm fight
+  // lives at 140-177 and the walk simply did not engage at the distance the
+  // fight is actually fought at — which is the one distance it needs to.
+  //
+  // So it is 60, which covers the polearm fight and stops short of the range
+  // where you are being body-blocked or pinned and the feet belong to
+  // something else. What makes that safe is already in the client and not in
+  // this module: SafeWalk simulates the step and stops it if it would put you
+  // in a spike, and EnemyManager.shouldIgnoreModule drops this whole module —
+  // walk included — on an insta threat, a danger enemy or a spike sync threat.
+  // What is not already handled is refused in _mayStep.
+  const VELTICK_SPACING_NEAR = 60;
   const VELTICK_SPACING_FAR = 270;
   // Reads the round trip the client already measures, through the same guarded
   // reader the placement engine uses, so there is one definition of ping here.
@@ -22014,6 +22027,35 @@ window.grbtp = 35;
       if (enemy === null || enemy === void 0) return false;
       if (!this.isValidHat(enemy.hatID)) return false;
       return enemy.futureHat !== 6 && enemy.futureHat !== 22;
+    }
+    // Whether Auto Spacing may take the feet this tick.
+    //
+    // It claims ModuleHandler.moveTo, and five modules behind this one stand
+    // down when that is set: Auto Push, Trap Standoff, Auto Play, Instakill and
+    // the link. At a floor of 160 the walk almost never ran and the clash
+    // almost never happened; walking you in from polearm range means it would
+    // happen constantly, so the two cases where something behind wants the feet
+    // more are refused here.
+    //
+    // Everything else that would want them is already handled above this:
+    // shouldIgnoreModule drops the module on real danger, and Anti Retrap and
+    // Anti Spike Push never read `moveTo` at all — they gate on `moduleActive`,
+    // which the walk deliberately leaves alone.
+    _mayStep(enemy) {
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      // Pinned in a trap: the step would not happen anyway, and the claim would
+      // only silence Trap Standoff and the shove for a tick.
+      if (myPlayer.isTrapped) {
+        return false;
+      }
+      if (!Settings_default._autoPush) {
+        return true;
+      }
+      // A live shove on this same target wants the feet for the opposite
+      // reason — it is walking them onto a spike, this would walk you off
+      // them. The shove is the one already in motion, so it keeps them.
+      const shove = ModuleHandler.staticModules.autoPush.pushState();
+      return shove === null || !shove.engaged || shove.enemy !== enemy;
     }
     postTick() {
       const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
@@ -22248,24 +22290,25 @@ window.grbtp = 35;
       const inAttackRange = inRange(dist1, this.minKB, this.maxKB);
 
       // ── Auto Spacing ────────────────────────────────────────────────────
-      // Revelation's, and the reason it exists: the band is seventy-five units
-      // wide and nobody stands in it by accident. A polearm fight lives at
-      // polearm range, which is well inside the floor, so without this the
-      // module waits for the fight to drift you onto the point and mostly it
-      // never does.
+      // Revelation's, and the reason it exists: nobody stands in a
+      // seventy-five unit band by accident. A polearm reaches 142, so a polearm
+      // fight is fought at 140-177 — under the firing floor — and without this
+      // the module waits for the fight to drift you onto the point, which it
+      // mostly never does. This is what walks you back onto it, from inside the
+      // fight rather than from the edge of it.
       //
-      // Too far, walk in; too near, walk out; and only inside the window where
-      // that is the right thing to be doing — engaged with this target, able to
-      // tick them, and not already on the point. Outside VELTICK_SPACING_NEAR
-      // and _FAR it stands down, because further out they are not fighting you
-      // and nearer, backing away walks you through whatever is behind you.
+      // Too far, walk in; too near, walk out; and only where that is the right
+      // thing to be doing — able to tick them, not already on the point, inside
+      // VELTICK_SPACING_NEAR and _FAR, and with nothing behind this module that
+      // wants the feet more (_mayStep). Past _FAR they are not fighting you;
+      // under _NEAR they are on top of you and the feet belong to survival.
       //
       // It takes the feet and nothing else. `moduleActive` stays off, the same
       // way Auto Push's own approach leaves it off, so heals, places and every
       // other module still get their tick while you are walking. And it runs
       // before the reload gate below on purpose: the walk is how you spend the
       // reload, not something to start once it is already back.
-      if (!inAttackRange && canSend && inRange(dist1, VELTICK_SPACING_NEAR, VELTICK_SPACING_FAR)) {
+      if (!inAttackRange && canSend && inRange(dist1, VELTICK_SPACING_NEAR, VELTICK_SPACING_FAR) && this._mayStep(nearestEnemy)) {
         ModuleHandler.moveTo = dist1 > this.maxKB ? angle : reverseAngle(angle);
         return;
       }
