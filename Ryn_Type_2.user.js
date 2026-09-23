@@ -87,6 +87,13 @@ if (!_watchRynBranding()) {
    instead of a flicker. A load that stalls is capped and the screen leaves
    anyway; the lobby behind it is usable either way.
 
+   Step 4 is where the Cloudflare challenge lands, so the challenge is shown
+   here rather than in the lobby: the client does not open until it has been
+   answered, automatically or by hand. It is taken over while it is still an
+   empty container — moving a rendered one would mean moving an iframe, and an
+   iframe that changes parent is reloaded — and it is handed back to the
+   lobby's own slot on the way out, which is where any later challenge belongs.
+
    One element animates, on transform alone, and only while the rail is
    unfinished. When the screen goes, the element, the stylesheet, every
    observer and every timer go with it.
@@ -98,6 +105,10 @@ const RYN_BOOT = (function rynBootScreen() {
   const MIN_VISIBLE = 2300;
   const STEP_HOLD = 360;
   const HARD_CAP = 9000;
+  // Waiting on a challenge is the one wait worth giving real time to: an
+  // interactive one needs a person, and dropping into the lobby mid-challenge
+  // is what this is here to avoid.
+  const GATE_CAP = 45e3;
   const FADE = 420;
 
   const openedAt = Date.now();
@@ -217,6 +228,31 @@ html { background-color: #07070A !important; }
     color: #4E4B5A;
 }
 
+/* The challenge, centred under the rail. The box itself is Cloudflare's, in a
+   cross-origin frame, so nothing inside it can be styled from here — what can
+   be is the plate it sits on and the theme it is asked to render with. */
+#ryn-boot .rb-gate {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 11px;
+    padding: 16px 16px 14px;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    background: rgba(255,255,255,0.022);
+    animation: rb-in 420ms cubic-bezier(.2,.8,.3,1);
+}
+#ryn-boot.rb-gated .rb-gate { display: flex; }
+#ryn-boot .rb-gate-label {
+    font-family: 'Space Grotesk', 'Manrope', system-ui, sans-serif;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.26em;
+    text-transform: uppercase;
+    color: #4E4B5A;
+}
+#ryn-boot .rb-gate > *:not(.rb-gate-label) { margin: 0 auto; }
+
 #ryn-boot .rb-foot {
     position: absolute;
     left: 0; right: 0; bottom: 22px;
@@ -241,11 +277,12 @@ html { background-color: #07070A !important; }
 
   const root = document.createElement("div");
   root.id = "ryn-boot";
-  root.innerHTML = '<div class="rb-mark"><span class="rb-m1">RYN</span><span class="rb-m2">Type 2</span></div>' + '<div class="rb-rail"><div class="rb-fill"></div><div class="rb-sweep"></div></div>' + '<div class="rb-status"><span class="rb-dot"></span><span class="rb-text">' + STEPS[0] + '</span><span class="rb-step">0/' + LAST + "</span></div>" + '<div class="rb-foot">Ryn Type 2</div>';
+  root.innerHTML = '<div class="rb-mark"><span class="rb-m1">RYN</span><span class="rb-m2">Type 2</span></div>' + '<div class="rb-rail"><div class="rb-fill"></div><div class="rb-sweep"></div></div>' + '<div class="rb-status"><span class="rb-dot"></span><span class="rb-text">' + STEPS[0] + '</span><span class="rb-step">0/' + LAST + "</span></div>" + '<div class="rb-gate"><div class="rb-gate-label">Verification</div></div>' + '<div class="rb-foot">Ryn Type 2</div>';
 
   const fill = root.querySelector(".rb-fill");
   const text = root.querySelector(".rb-text");
   const step = root.querySelector(".rb-step");
+  const gateSlot = root.querySelector(".rb-gate");
 
   // <head> and <body> may both still be unparsed at document-start, so the
   // screen goes wherever it can and moves into <body> once there is one.
@@ -262,6 +299,50 @@ html { background-color: #07070A !important; }
       parent.appendChild(root);
     }
     return true;
+  };
+
+  /* The Cloudflare challenge, borrowed while this screen is up.
+   *
+   * Taken over only while it is still an empty container. Moving a rendered
+   * one would mean moving an iframe, and an iframe that changes parent is
+   * reloaded from scratch — a challenge thrown away and started again. The
+   * bundle renders into it from _a(), which runs after RYN's contentLoaded(),
+   * so calling this from stage(2) catches it empty.
+   */
+  const adoptGate = () => {
+    if (gone) {
+      return false;
+    }
+    const widget = document.getElementById("turnstileWidget");
+    if (widget === null || widget.parentNode === gateSlot || widget.firstChild !== null) {
+      return false;
+    }
+    gateSlot.appendChild(widget);
+    root.classList.add("rb-gated");
+    return true;
+  };
+
+  /* Handed back on the way out, to the lobby's own slot — a visible one, so
+   * that if the move does cost the widget its frame the client can render a
+   * new challenge into it. RYN's captcha supervisor is re-armed for exactly
+   * that: it watches for a missing token and puts a working widget back.
+   */
+  const releaseGate = () => {
+    const widget = document.getElementById("turnstileWidget");
+    if (widget === null || !gateSlot.contains(widget)) {
+      return;
+    }
+    const home = document.querySelector("#ryn-lobby .rl-gate");
+    if (home === null || home === gateSlot) {
+      return;
+    }
+    home.appendChild(widget);
+    try {
+      const login = window.RYN && window.RYN._Login;
+      if (login && typeof login._arm === "function") {
+        login._arm("challenge handed back to the lobby");
+      }
+    } catch (e) {}
   };
 
   const paint = () => {
@@ -308,6 +389,8 @@ html { background-color: #07070A !important; }
     if (gone) {
       return;
     }
+    // before anything of this screen is torn down
+    releaseGate();
     gone = true;
     clearTimeout(stepTimer);
     clearTimeout(doneTimer);
@@ -329,11 +412,27 @@ html { background-color: #07070A !important; }
     }, FADE + 60);
   }
 
+  let gateTaken = false;
+  let gateWaited = false;
+
   const stage = n => {
     if (gone || n <= reached) {
       return;
     }
     reached = Math.min(n, LAST);
+    if (!gateTaken && reached >= 2) {
+      // The interface is built, so the lobby's slot exists, and the bundle has
+      // not rendered a challenge yet — the one moment the container can be
+      // taken over for free. One attempt, whether or not it lands.
+      gateTaken = true;
+      adoptGate();
+    }
+    if (!gateWaited && reached >= 3 && reached < LAST) {
+      // Everything but the challenge is in. Give that its own, longer patience.
+      gateWaited = true;
+      clearTimeout(capTimer);
+      capTimer = setTimeout(dismiss, Math.max(1e3, GATE_CAP - (Date.now() - openedAt)));
+    }
     advance();
   };
 
@@ -405,6 +504,50 @@ html { background-color: #07070A !important; }
       });
     }
   };
+
+  /* How much of the challenge's look is ours to set.
+   *
+   * The box is Cloudflare's, drawn in a cross-origin frame, so nothing inside
+   * it — its wording, its layout, its tick — can be reached or restyled from
+   * here. What can be set is the theme it is asked to render with, which is an
+   * option on the render call, and the bundle asks for the light one: a white
+   * rectangle punched through a near-black client. This asks for the dark one
+   * instead. Every other option is passed through exactly as the caller wrote
+   * it, so the sitekey and all three callbacks are still theirs.
+   *
+   * The API object arrives with a script the bundle injects, and `render` is
+   * not always on it the moment it appears, so this looks for it on a short
+   * leash and stops the first time it succeeds.
+   */
+  const themeChallenge = () => {
+    const ts = window.turnstile;
+    if (!ts || typeof ts.render !== "function" || ts.__rynThemed) {
+      return !!(ts && ts.__rynThemed);
+    }
+    try {
+      const render = ts.render.bind(ts);
+      ts.render = function (container, options) {
+        const themed = {};
+        for (const key in options) {
+          themed[key] = options[key];
+        }
+        themed.theme = "dark";
+        return render(container, themed);
+      };
+      ts.__rynThemed = true;
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+  if (!themeChallenge()) {
+    const until = Date.now() + 2e4;
+    const looking = setInterval(() => {
+      if (themeChallenge() || Date.now() > until) {
+        clearInterval(looking);
+      }
+    }, 250);
+  }
 
   attach();
   paint();
@@ -24572,18 +24715,19 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     --rl-font: 'Manrope', 'Segoe UI', system-ui, sans-serif;
     --rl-mono: 'Space Grotesk', 'Manrope', system-ui, sans-serif;
 
-    /* A top-level element of its own, above the game's menu layer and below
-       the client menu's frame (which is z-index 10). It used to live inside
-       #menuCardHolder, which meant it inherited whatever that was nested
-       under and whatever the page stacked over it — and on the real page that
-       put it behind #mainMenu's background. Nothing about where the game
-       keeps its cards can reach it here. */
+    /* A top-level element of its own, and high enough that nothing the page
+       stacks can get in front of it. Nine was not: #mainMenu carries a
+       z-index of its own and paints over anything below it, which is why the
+       lobby first came up as a black screen (that layer painted black) and
+       then as a dimmed one (that layer painted its own background). The
+       client menu's frame is lifted past this a few rules down, because that
+       one is meant to be on top. */
     position: fixed;
     left: 0;
     top: 0;
     right: 0;
     bottom: 0;
-    z-index: 9;
+    z-index: 100000;
     display: grid;
     grid-template-columns: minmax(0, 1fr) 384px;
     font-family: var(--rl-font);
@@ -24601,6 +24745,11 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 
 /* the lobby is up when the game says it is — see the two switches it reads */
 #ryn-lobby.rl-off { display: none !important; }
+
+/* The client menu is the one thing meant to sit over the lobby. Its own rule
+   gives it z-index 10, which was above the lobby's old 9 and is below its new
+   one, so it is lifted here rather than left behind. */
+#ryn-menu-frame { z-index: 100001 !important; }
 
 #ryn-lobby *, #ryn-lobby *::before, #ryn-lobby *::after { box-sizing: border-box; }
 
