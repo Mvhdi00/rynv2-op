@@ -24580,7 +24580,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     inset: 0;
     z-index: 1;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 404px;
+    grid-template-columns: minmax(0, 1fr) 384px;
     font-family: var(--rl-font);
     color: var(--rl-tx-1);
     text-align: left;
@@ -24588,8 +24588,8 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 
     /* static paint: two gradients over flat ink, nothing animated */
     background:
-        radial-gradient(1100px 620px at 12% -6%, rgba(142,118,206,0.13), transparent 62%),
-        radial-gradient(760px 520px at 98% 108%, rgba(155,197,232,0.05), transparent 60%),
+        radial-gradient(980px 560px at 6% -8%, rgba(142,118,206,0.15), transparent 62%),
+        radial-gradient(700px 480px at 42% 112%, rgba(142,118,206,0.05), transparent 60%),
         var(--rl-ink-0);
     animation: rl-shell-in 300ms var(--rl-ease) both;
 }
@@ -24598,25 +24598,23 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 
 @keyframes rl-shell-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes rl-rise { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
-@keyframes rl-live { 0%, 100% { opacity: 1; } 50% { opacity: 0.32; } }
 
 /* ---------- left column -------------------------------------------------
 
-   No card. The controls are separate things sitting on the background, kept
-   in line by one column and told apart by a hairline and a marker each,
-   rather than by being fenced into a panel together. The launch control and
-   the footer stand clear of that column entirely, so what you press is never
-   inside the same frame as what you set.
+   Everything sits hard against the left edge: the mark in the top corner,
+   the lockup and the controls on one axis down the middle of the column,
+   the selected server in the bottom corner. Nothing is centred and nothing
+   is boxed — the alignment is what holds it together.
    ------------------------------------------------------------------------ */
 
 .rl-left {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    align-items: flex-start;
+    gap: 16px;
     min-width: 0;
     min-height: 0;
-    padding: 40px clamp(30px, 5vw, 76px);
+    padding: 40px clamp(22px, 3.4vw, 48px);
     overflow-y: auto;
     overscroll-behavior: contain;
 }
@@ -24625,142 +24623,170 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 .rl-left::-webkit-scrollbar-track { background: transparent; }
 .rl-left::-webkit-scrollbar-thumb { background: rgba(255,255,255,.07); border-radius: 8px; }
 
-.rl-col {
-    width: 100%;
-    max-width: 452px;
+/* the corner mark. It is also the way into the client menu, which is why the
+   badge that normally does that job is out of the way while the lobby is up:
+   one control, in the corner it already lived in. */
+.rl-mark {
     display: flex;
-    flex-direction: column;
-    gap: 30px;
+    align-items: baseline;
+    gap: 10px;
+    padding: 4px 8px 4px 0;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    animation: rl-rise 320ms var(--rl-ease) both;
 }
-
-.rl-brand {
-    display: flex;
-    flex-direction: column;
-    gap: 11px;
-    animation: rl-rise 340ms var(--rl-ease) both;
-}
-
-.rl-wordmark { display: flex; align-items: baseline; gap: 11px; line-height: 1; }
-.rl-wordmark .rl-w1 {
+.rl-mark-1 {
     font-family: var(--rl-mono);
+    font-size: 13px;
     font-weight: 700;
-    font-size: clamp(38px, 4.4vw, 54px);
-    letter-spacing: -0.035em;
-    color: var(--rl-tx-1);
-}
-.rl-wordmark .rl-w2 {
-    font-family: var(--rl-mono);
-    font-weight: 600;
-    font-size: clamp(12px, 1.2vw, 14px);
-    letter-spacing: 0.30em;
+    letter-spacing: 0.26em;
     text-transform: uppercase;
     color: var(--rl-iris-hi);
-    padding-bottom: 4px;
+    transition: color 160ms var(--rl-ease);
 }
-
-.rl-rule {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+.rl-mark-2 {
     font-family: var(--rl-mono);
-    font-size: 10px;
+    font-size: 10.5px;
     font-weight: 600;
     letter-spacing: 0.22em;
     text-transform: uppercase;
     color: var(--rl-tx-4);
+    transition: color 160ms var(--rl-ease);
 }
-.rl-rule::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: linear-gradient(90deg, var(--rl-line-2), transparent);
-}
+.rl-mark:hover .rl-mark-1 { color: #C6B6F0; }
+.rl-mark:hover .rl-mark-2 { color: var(--rl-tx-2); }
+.rl-mark:active { transform: translateY(1px); }
 
-/* the settings, one under the other, divided rather than boxed */
-.rl-stack {
+/* The middle band. It takes whatever room is left between the mark and the
+   status and centres itself in it — but it never shrinks below its own
+   content (flex-shrink 0), so a window too short for it makes the
+   column scroll rather than letting the band ride up over the mark or down
+   over the status. */
+.rl-body {
+    flex: 1 0 auto;
+    width: 100%;
+    min-width: 0;
     display: flex;
     flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
     animation: rl-rise 380ms var(--rl-ease) both;
     animation-delay: 40ms;
 }
 
-.rl-block { padding: 17px 0; }
-.rl-block:first-child { padding-top: 0; }
-.rl-block:last-child { padding-bottom: 0; }
-.rl-block + .rl-block { border-top: 1px solid var(--rl-line); }
-
-.rl-label {
-    position: relative;
+.rl-title {
     display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 11px;
-    padding-left: 13px;
+    flex-direction: column;
+    line-height: 0.93;
+    letter-spacing: -0.02em;
+    text-transform: uppercase;
+    font-family: var(--rl-font);
+    font-weight: 800;
+    font-size: clamp(46px, 7.2vw, 104px);
+}
+.rl-title .rl-t1 { color: var(--rl-tx-1); }
+.rl-title .rl-t2 { color: var(--rl-iris-hi); }
+
+.rl-tagline {
+    margin-top: 26px;
     font-family: var(--rl-mono);
-    font-size: 9.5px;
+    font-size: 10.5px;
     font-weight: 600;
-    letter-spacing: 0.22em;
+    letter-spacing: 0.2em;
     text-transform: uppercase;
     color: var(--rl-tx-3);
 }
-/* the same marker the menu's open category carries, so a section here reads
-   as the same kind of thing a page there does */
-.rl-label::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 1px;
-    width: 2px;
-    height: 10px;
-    border-radius: 2px;
-    background: var(--rl-iris);
-}
-.rl-label .rl-label-note { color: var(--rl-tx-4); letter-spacing: 0.14em; }
 
-/* name ------------------------------------------------------------------- */
+.rl-group { margin-top: 26px; width: 100%; }
 
-/* A line to write on rather than a field to fill in: no plate, no outline,
-   one rule underneath, and a second rule that draws itself in from the left
-   when the caret lands. The draw is a transform on one element. */
-.rl-line { position: relative; padding-left: 13px; }
-.rl-line::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 1px;
-    background: var(--rl-sky);
-    transform: scaleX(0);
-    transform-origin: left center;
-    transition: transform 240ms var(--rl-ease);
+.rl-label {
+    margin-bottom: 10px;
+    font-family: var(--rl-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--rl-iris-hi);
 }
-.rl-line:focus-within::after { transform: scaleX(1); }
+
+/* name + play, on one line ------------------------------------------------ */
+
+.rl-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 
 #ryn-lobby #nameInput {
     display: block !important;
-    width: 100% !important;
-    height: 44px !important;
+    width: 316px !important;
+    max-width: 100% !important;
+    height: 48px !important;
     margin: 0 !important;
-    padding: 0 !important;
-    background: transparent !important;
-    border: 0 !important;
-    border-bottom: 1px solid var(--rl-line-2) !important;
-    border-radius: 0 !important;
+    padding: 0 16px !important;
+    background: rgba(255,255,255,0.032) !important;
+    border: 1px solid var(--rl-line-2) !important;
+    border-radius: 12px !important;
     color: var(--rl-tx-1) !important;
-    caret-color: var(--rl-sky) !important;
+    caret-color: var(--rl-iris-hi) !important;
     font-family: var(--rl-font) !important;
-    font-size: 21px !important;
-    font-weight: 800 !important;
-    letter-spacing: -0.012em !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0 !important;
     text-align: left !important;
     outline: none !important;
     box-shadow: none !important;
-    transition: border-color 200ms var(--rl-ease), color 200ms var(--rl-ease) !important;
+    transition: border-color 160ms var(--rl-ease), background-color 160ms var(--rl-ease),
+                box-shadow 160ms var(--rl-ease) !important;
 }
-#ryn-lobby #nameInput::placeholder { color: var(--rl-tx-4) !important; font-weight: 600 !important; }
-#ryn-lobby #nameInput:hover { border-bottom-color: var(--rl-line-3) !important; }
+#ryn-lobby #nameInput::placeholder { color: var(--rl-tx-4) !important; font-weight: 500 !important; }
+#ryn-lobby #nameInput:hover { border-color: var(--rl-line-3) !important; }
+#ryn-lobby #nameInput:focus {
+    border-color: var(--rl-iris-45) !important;
+    background: rgba(142,118,206,0.10) !important;
+    box-shadow: 0 0 0 3px rgba(142,118,206,0.12) !important;
+}
+
+#ryn-lobby #enterGame {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 48px !important;
+    /* .menuButton is width:100% in the game's own stylesheet, which would put
+       the button on a line of its own instead of beside the name */
+    width: auto !important;
+    min-width: 192px !important;
+    flex: 0 0 auto !important;
+    margin: 0 !important;
+    padding: 0 26px !important;
+    border: 0 !important;
+    border-radius: 12px !important;
+    background: var(--rl-iris) !important;
+    color: #FFFFFF !important;
+    font-family: var(--rl-mono) !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.2em !important;
+    text-indent: 0.2em !important;
+    text-transform: uppercase !important;
+    text-align: center !important;
+    text-decoration: none !important;
+    cursor: pointer !important;
+    box-shadow: none !important;
+    transition: background-color 160ms var(--rl-ease), transform 120ms var(--rl-ease),
+                box-shadow 160ms var(--rl-ease) !important;
+}
+#ryn-lobby #enterGame:hover {
+    background: #A08BDC !important;
+    box-shadow: 0 10px 26px -14px rgba(142,118,206,0.95) !important;
+}
+#ryn-lobby #enterGame:active { transform: translateY(2px) !important; background: #8069C4 !important; }
+/* the bundle's own gate: the "disabled" class is on the button until
+   Turnstile hands over a token, and nothing here decides when that is */
+#ryn-lobby #enterGame.disabled {
+    background: rgba(255,255,255,0.05) !important;
+    color: var(--rl-tx-4) !important;
+    box-shadow: none !important;
+    cursor: default !important;
+    pointer-events: none !important;
+}
 
 /* colours ----------------------------------------------------------------- */
 
@@ -24768,7 +24794,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     display: flex !important;
     flex-wrap: wrap !important;
     gap: 8px !important;
-    margin: 0 0 0 13px !important;
+    margin: 0 !important;
     padding: 0 !important;
     background: none !important;
     border: 0 !important;
@@ -24776,11 +24802,11 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 
 #ryn-skin-holder .skinColorItem {
     position: relative !important;
-    width: 30px !important;
-    height: 30px !important;
+    width: 32px !important;
+    height: 32px !important;
     flex: 0 0 auto !important;
     border: 0 !important;
-    border-radius: 9px !important;
+    border-radius: 8px !important;
     cursor: pointer !important;
     box-shadow: inset 0 0 0 1px rgba(0,0,0,0.38) !important;
     /* the selection ring is drawn by outline so it never moves the swatch */
@@ -24794,214 +24820,75 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 
 /* mode -------------------------------------------------------------------- */
 
-.rl-seg { display: flex; gap: 8px; margin-left: 13px; }
+.rl-seg { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .rl-seg-btn {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    height: 50px;
-    padding: 0 13px;
-    border: 1px solid var(--rl-line);
-    border-radius: var(--rl-r2);
-    background: rgba(255,255,255,0.025);
-    cursor: pointer;
-    user-select: none;
-    -webkit-user-select: none;
-    transition: background-color 150ms var(--rl-ease), border-color 150ms var(--rl-ease),
-                transform 110ms var(--rl-ease);
-}
-.rl-seg-dot {
-    flex: 0 0 auto;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: transparent;
-    box-shadow: inset 0 0 0 1px var(--rl-tx-4);
-    transition: background-color 150ms var(--rl-ease), box-shadow 150ms var(--rl-ease);
-}
-.rl-seg-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.rl-seg-btn .rl-seg-name {
-    font-family: var(--rl-font);
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 0.01em;
-    line-height: 1;
-    color: var(--rl-tx-3);
-    transition: color 150ms var(--rl-ease);
-}
-.rl-seg-btn .rl-seg-note {
-    font-family: var(--rl-mono);
-    font-size: 8.5px;
-    font-weight: 600;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    line-height: 1;
-    color: var(--rl-tx-4);
-    transition: color 150ms var(--rl-ease);
-}
-.rl-seg-btn:hover { background: rgba(255,255,255,0.055); border-color: var(--rl-line-2); }
-.rl-seg-btn:hover .rl-seg-name { color: var(--rl-tx-1); }
-.rl-seg-btn:hover .rl-seg-dot { box-shadow: inset 0 0 0 1px var(--rl-tx-2); }
-.rl-seg-btn:active { transform: translateY(1px); }
-.rl-seg-btn.rl-on {
-    background: var(--rl-iris-12);
-    border-color: var(--rl-iris-45);
-    cursor: default;
-}
-.rl-seg-btn.rl-on .rl-seg-name { color: #FFFFFF; }
-.rl-seg-btn.rl-on .rl-seg-note { color: var(--rl-iris-hi); }
-.rl-seg-btn.rl-on .rl-seg-dot { background: var(--rl-iris-hi); box-shadow: inset 0 0 0 1px var(--rl-iris-hi); }
-
-/* launch ------------------------------------------------------------------ */
-
-/* Clear of the column above it: the one control that starts a round is not
-   sitting in the same frame as the ones that only set something. */
-.rl-launch {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    animation: rl-rise 400ms var(--rl-ease) both;
-    animation-delay: 80ms;
-}
-
-#ryn-lobby #enterGame {
-    position: relative !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    width: 100% !important;
-    height: 62px !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    border: 1px solid var(--rl-iris-45) !important;
-    border-radius: 13px !important;
-    background: var(--rl-iris-18) !important;
-    color: #F4F0FF !important;
-    font-family: var(--rl-mono) !important;
-    font-size: 15px !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.26em !important;
-    text-indent: 0.26em !important;
-    text-transform: uppercase !important;
-    text-align: center !important;
-    text-decoration: none !important;
-    cursor: pointer !important;
-    overflow: hidden !important;
-    box-shadow: 0 16px 38px -20px rgba(142,118,206,0.9) !important;
-    transition: background-color 160ms var(--rl-ease), border-color 160ms var(--rl-ease),
-                transform 120ms var(--rl-ease), box-shadow 160ms var(--rl-ease),
-                color 160ms var(--rl-ease) !important;
-}
-/* a mark that leans out on hover; one pseudo-element, moved on transform */
-#ryn-lobby #enterGame::after {
-    content: '→';
-    position: absolute;
-    right: 22px;
-    top: 50%;
-    font-size: 17px;
-    letter-spacing: 0;
-    text-indent: 0;
-    color: rgba(255,255,255,0.42);
-    transform: translate(-6px, -50%);
-    opacity: 0;
-    transition: transform 200ms var(--rl-ease), opacity 200ms var(--rl-ease);
-}
-#ryn-lobby #enterGame:hover {
-    background: rgba(142,118,206,0.28) !important;
-    border-color: rgba(142,118,206,0.72) !important;
-    color: #FFFFFF !important;
-    box-shadow: 0 20px 44px -20px rgba(142,118,206,1) !important;
-}
-#ryn-lobby #enterGame:hover::after { transform: translate(0, -50%); opacity: 1; }
-#ryn-lobby #enterGame:active {
-    transform: translateY(2px) !important;
-    background: rgba(142,118,206,0.34) !important;
-    box-shadow: 0 9px 22px -16px rgba(142,118,206,0.95) !important;
-}
-/* the bundle's own gate: the "disabled" class is on the button until
-   Turnstile hands over a token, and nothing here decides when that is */
-#ryn-lobby #enterGame.disabled {
-    background: rgba(255,255,255,0.03) !important;
-    border-color: var(--rl-line) !important;
-    color: var(--rl-tx-4) !important;
-    box-shadow: none !important;
-    cursor: default !important;
-    pointer-events: none !important;
-}
-#ryn-lobby #enterGame.disabled::after { display: none; }
-
-.rl-gate {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 0;
-}
-.rl-gate:empty { display: none; }
-.rl-gate > * { margin: 0 auto !important; }
-
-/* foot -------------------------------------------------------------------- */
-
-.rl-foot {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    animation: rl-rise 420ms var(--rl-ease) both;
-    animation-delay: 120ms;
-}
-
-.rl-ghost {
+    height: 32px;
+    padding: 0 15px;
     display: inline-flex;
     align-items: center;
-    gap: 9px;
-    height: 38px;
-    padding: 0 15px;
     border: 1px solid var(--rl-line-2);
-    border-radius: var(--rl-r2);
-    background: transparent;
-    color: var(--rl-tx-2);
-    font-family: var(--rl-font);
-    font-size: 12.5px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.028);
+    color: var(--rl-tx-3);
+    font-family: var(--rl-mono);
+    font-size: 10px;
     font-weight: 700;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    white-space: nowrap;
     cursor: pointer;
     user-select: none;
     -webkit-user-select: none;
     transition: background-color 150ms var(--rl-ease), border-color 150ms var(--rl-ease),
                 color 150ms var(--rl-ease), transform 110ms var(--rl-ease);
 }
-.rl-ghost:hover { background: rgba(255,255,255,0.06); border-color: var(--rl-line-3); color: var(--rl-tx-1); }
-.rl-ghost:active { transform: translateY(1px); background: rgba(255,255,255,0.09); }
+.rl-seg-btn:hover { background: rgba(255,255,255,0.065); color: var(--rl-tx-1); }
+.rl-seg-btn:active { transform: translateY(1px); }
+.rl-seg-btn.rl-on {
+    background: var(--rl-iris-18);
+    border-color: var(--rl-iris-45);
+    color: #FFFFFF;
+    cursor: default;
+}
 
-.rl-hint {
-    margin-left: auto;
+/* the challenge the bundle needs a token from. It has to have a rendered
+   ancestor or turnstile.render() refuses, so it gets a slot of its own rather
+   than a display:none corner; the slot collapses when the widget draws
+   nothing. */
+.rl-gate { margin-top: 22px; display: flex; align-items: center; }
+.rl-gate:empty { display: none; }
+
+/* the selected server, in the bottom corner ------------------------------- */
+
+.rl-status {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 9px;
+    max-width: 100%;
     font-family: var(--rl-mono);
-    font-size: 9.5px;
+    font-size: 10px;
     font-weight: 600;
-    letter-spacing: 0.16em;
+    letter-spacing: 0.18em;
     text-transform: uppercase;
-    color: var(--rl-tx-4);
+    color: var(--rl-tx-3);
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    animation: rl-rise 420ms var(--rl-ease) both;
+    animation-delay: 120ms;
 }
-.rl-key {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 22px;
-    height: 20px;
-    padding: 0 6px;
-    border: 1px solid var(--rl-line-2);
-    border-radius: var(--rl-r1);
-    background: rgba(255,255,255,0.05);
-    color: var(--rl-tx-2);
-    font-size: 9.5px;
-    letter-spacing: 0.08em;
+.rl-status-dot {
+    flex: 0 0 auto;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--rl-tx-4);
+    transition: background-color 200ms var(--rl-ease);
 }
+.rl-status[data-load="low"] .rl-status-dot { background: var(--rl-sage); }
+.rl-status[data-load="mid"] .rl-status-dot { background: var(--rl-sky); }
+.rl-status[data-load="high"] .rl-status-dot { background: var(--rl-rose); }
 
 /* ---------- right column: the server browser ---------------------------- */
 
@@ -25010,7 +24897,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     flex-direction: column;
     min-width: 0;
     min-height: 0;
-    background: rgba(12,12,17,0.88);
+    background: rgba(9,9,13,0.92);
     border-left: 1px solid var(--rl-line-2);
     animation: rl-rise 380ms var(--rl-ease) both;
     animation-delay: 80ms;
@@ -25019,75 +24906,58 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 .rs-head {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 26px 22px 16px;
-    border-bottom: 1px solid var(--rl-line);
+    gap: 7px;
+    padding: 28px 24px 16px;
 }
 
-.rs-title-row { display: flex; align-items: baseline; gap: 10px; }
+.rs-title-row { display: flex; align-items: baseline; gap: 12px; }
 .rs-title {
     font-family: var(--rl-mono);
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 700;
-    letter-spacing: 0.24em;
+    letter-spacing: 0.22em;
     text-transform: uppercase;
     color: var(--rl-tx-1);
 }
-.rs-realm {
+.rs-online {
     margin-left: auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
     font-family: var(--rl-mono);
-    font-size: 9.5px;
+    font-size: 11px;
     font-weight: 600;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--rl-iris-hi);
-}
-.rs-live {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--rl-sage);
-    animation: rl-live 2.4s ease-in-out infinite;
-}
-
-.rs-stats {
-    display: flex;
-    gap: 22px;
-    font-family: var(--rl-mono);
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--rl-tx-4);
-}
-.rs-stats b {
-    font-weight: 700;
-    color: var(--rl-sky);
+    letter-spacing: 0.04em;
     font-variant-numeric: tabular-nums;
+    color: var(--rl-tx-3);
+    white-space: nowrap;
+}
+.rs-online b { font-weight: 700; color: var(--rl-tx-2); }
+
+.rs-note {
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: 0.005em;
+    color: var(--rl-tx-4);
 }
 
 .rs-filters {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 7px;
+    margin-top: 11px;
 }
 
 .rs-chip {
     flex: 0 0 auto;
-    height: 27px;
-    padding: 0 11px;
+    height: 28px;
+    padding: 0 13px;
     display: inline-flex;
     align-items: center;
-    border: 1px solid var(--rl-line);
+    border: 1px solid var(--rl-line-2);
     border-radius: 999px;
-    background: rgba(255,255,255,0.03);
+    background: rgba(255,255,255,0.028);
     color: var(--rl-tx-3);
     font-family: var(--rl-mono);
-    font-size: 9.5px;
-    font-weight: 600;
+    font-size: 10px;
+    font-weight: 700;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     white-space: nowrap;
@@ -25113,7 +24983,8 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     overflow-y: auto;
     overscroll-behavior: contain;
     scroll-behavior: smooth;
-    padding: 10px 12px 14px;
+    padding: 8px 12px 16px;
+    border-top: 1px solid var(--rl-line);
     scrollbar-width: thin;
     scrollbar-color: rgba(255,255,255,.10) transparent;
 }
@@ -25129,92 +25000,77 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 
 .rs-row {
     position: relative;
-    display: grid;
-    grid-template-columns: 1fr auto;
-    grid-template-rows: auto auto;
+    display: flex;
     align-items: center;
-    gap: 7px 12px;
-    padding: 10px 12px;
+    gap: 12px;
+    min-height: 46px;
+    padding: 7px 12px;
     border: 1px solid transparent;
-    border-radius: var(--rl-r2);
+    border-radius: 10px;
     cursor: pointer;
     user-select: none;
     -webkit-user-select: none;
     transition: background-color 140ms var(--rl-ease), border-color 140ms var(--rl-ease),
                 transform 110ms var(--rl-ease);
 }
-.rs-row + .rs-row { margin-top: 2px; }
-.rs-row:hover { background: rgba(255,255,255,0.04); border-color: var(--rl-line); }
+.rs-row:hover { background: rgba(255,255,255,0.04); }
 .rs-row:active { transform: translateY(1px); background: rgba(255,255,255,0.065); }
 .rs-row.rs-hide { display: none; }
-
 .rs-row.rs-on {
     background: var(--rl-iris-12);
     border-color: var(--rl-iris-45);
 }
-.rs-row.rs-on::before {
-    content: '';
-    position: absolute;
-    left: -1px;
-    top: 9px;
-    bottom: 9px;
-    width: 3px;
-    border-radius: 0 3px 3px 0;
-    background: var(--rl-iris);
-}
 
+.rs-id { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
 .rs-name {
-    display: flex;
-    align-items: baseline;
-    gap: 7px;
-    min-width: 0;
-    font-size: 13.5px;
+    font-size: 13px;
     font-weight: 700;
-    line-height: 1.15;
-    color: var(--rl-tx-2);
+    line-height: 1.1;
+    letter-spacing: 0.01em;
+    color: var(--rl-tx-1);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    transition: color 140ms var(--rl-ease);
 }
-.rs-row:hover .rs-name, .rs-row.rs-on .rs-name { color: var(--rl-tx-1); }
-.rs-name i {
-    font-style: normal;
+.rs-row.rs-on .rs-name { color: var(--rl-iris-hi); }
+.rs-region {
     font-family: var(--rl-mono);
-    font-size: 10.5px;
+    font-size: 9px;
     font-weight: 600;
-    letter-spacing: 0.1em;
+    line-height: 1.1;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
     color: var(--rl-tx-4);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
-.rs-row.rs-on .rs-name i { color: var(--rl-iris-hi); }
 
-.rs-ping {
-    justify-self: end;
+.rs-count {
+    flex: 0 0 auto;
     font-family: var(--rl-mono);
     font-size: 11px;
     font-weight: 600;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.02em;
     font-variant-numeric: tabular-nums;
-    color: var(--rl-tx-3);
+    color: var(--rl-tx-2);
     white-space: nowrap;
 }
-.rs-ping em { font-style: normal; font-size: 8.5px; letter-spacing: 0.12em; color: var(--rl-tx-4); margin-left: 2px; }
-.rs-row[data-ping="fast"] .rs-ping { color: var(--rl-sage); }
-.rs-row[data-ping="slow"] .rs-ping { color: var(--rl-rose); }
 
 /* the load bar: one element, scaled on the compositor, never re-laid out */
 .rs-meter {
-    grid-column: 1;
-    height: 3px;
-    border-radius: 3px;
-    background: rgba(255,255,255,0.07);
+    flex: 0 0 auto;
+    width: 36px;
+    height: 4px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.08);
     overflow: hidden;
 }
 .rs-meter i {
     display: block;
     height: 100%;
     width: 100%;
-    border-radius: 3px;
+    border-radius: 4px;
     transform: scaleX(0);
     transform-origin: left center;
     background: var(--rl-sky);
@@ -25223,19 +25079,6 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 .rs-row[data-load="low"] .rs-meter i { background: var(--rl-sage); }
 .rs-row[data-load="mid"] .rs-meter i { background: var(--rl-sky); }
 .rs-row[data-load="high"] .rs-meter i { background: var(--rl-rose); }
-
-.rs-count {
-    grid-column: 2;
-    justify-self: end;
-    font-family: var(--rl-mono);
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    font-variant-numeric: tabular-nums;
-    color: var(--rl-tx-4);
-    white-space: nowrap;
-}
-.rs-row.rs-on .rs-count { color: var(--rl-tx-2); }
 
 .rs-empty {
     padding: 34px 14px;
@@ -25246,28 +25089,6 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--rl-tx-4);
-}
-
-.rs-foot {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 13px 22px 16px;
-    border-top: 1px solid var(--rl-line);
-    font-family: var(--rl-mono);
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--rl-tx-4);
-    white-space: nowrap;
-    overflow: hidden;
-}
-.rs-foot b {
-    font-weight: 700;
-    color: var(--rl-tx-2);
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 /* the select the game mounts its server list into stays in the document —
@@ -25290,17 +25111,13 @@ html.ryn-in-lobby .ryn-v2-wrapper {
    thing — and only gives up and stacks on a window too narrow to hold two
    columns at all. */
 @media (max-width: 1180px) {
-    #ryn-lobby { grid-template-columns: minmax(0, 1fr) 348px; }
-    .rl-left { padding: 34px clamp(20px, 4vw, 44px); }
+    #ryn-lobby { grid-template-columns: minmax(0, 1fr) 346px; }
 }
 
 @media (max-width: 980px) {
-    #ryn-lobby { grid-template-columns: minmax(0, 1fr) 302px; }
-    .rl-left { padding: 26px 20px; }
-    .rl-col { gap: 24px; }
-    .rs-head { padding: 20px 16px 13px; }
-    .rs-list { padding: 8px 9px 10px; }
-    .rs-foot { padding: 12px 16px 14px; }
+    #ryn-lobby { grid-template-columns: minmax(0, 1fr) 306px; }
+    .rs-head { padding: 22px 16px 13px; }
+    .rs-list { padding: 8px 9px 12px; }
 }
 
 /* Stacked, with both halves bounded: the controls scroll inside their row
@@ -25311,28 +25128,26 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         grid-template-rows: minmax(0, 1fr) minmax(168px, 40%);
         overflow: hidden;
     }
-    .rl-left { padding: 20px 18px 16px; justify-content: flex-start; }
-    .rl-col { max-width: none; gap: 20px; }
+    .rl-left { padding: 20px 18px 16px; }
     .rl-right { border-left: 0; border-top: 1px solid var(--rl-line-2); }
+    #ryn-lobby #nameInput { width: 100% !important; }
+    #ryn-lobby #enterGame { width: 100% !important; flex: 1 0 auto !important; }
 }
 
-@media (max-height: 720px) {
-    .rl-col { gap: 22px; }
-    .rl-brand { gap: 7px; }
-    .rl-wordmark .rl-w1 { font-size: 36px; }
-    .rl-block { padding: 14px 0; }
-    #ryn-lobby #enterGame { height: 54px !important; }
+@media (max-height: 760px) {
+    .rl-tagline { margin-top: 20px; }
+    .rl-group { margin-top: 20px; }
+    .rl-gate { margin-top: 16px; }
 }
 
-@media (max-height: 580px) {
-    .rl-col { gap: 16px; }
-    .rl-wordmark .rl-w1 { font-size: 30px; }
-    .rl-block { padding: 11px 0; }
-    .rl-label { margin-bottom: 8px; }
-    #ryn-lobby #nameInput { height: 38px !important; font-size: 18px !important; }
-    #ryn-lobby #enterGame { height: 46px !important; }
-    .rl-seg-btn { height: 44px; }
-    #ryn-skin-holder .skinColorItem { width: 26px !important; height: 26px !important; }
+@media (max-height: 600px) {
+    .rl-title { font-size: clamp(38px, 5.6vw, 64px); }
+    .rl-tagline { margin-top: 14px; }
+    .rl-group { margin-top: 15px; }
+    .rl-label { margin-bottom: 7px; }
+    #ryn-lobby #nameInput { height: 42px !important; }
+    #ryn-lobby #enterGame { height: 42px !important; }
+    #ryn-skin-holder .skinColorItem { width: 27px !important; height: 27px !important; }
 }
 
 /* The corner mark: the artwork and the name, and nothing around them. The card
@@ -29308,67 +29123,66 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 
       /* ---------------- left: the controls ----------------
 
-         Four things standing on the background rather than one card holding
-         everything: the mark, the settings (divided by a hairline and marked
-         one by one, not fenced in together), the launch control on its own,
-         and the footer. What starts a round is never inside the same frame as
-         what merely sets something. */
+         Everything on one axis hard against the left edge: the mark in the
+         top corner, the lockup and the controls down the middle, the server
+         you are about to join in the bottom corner. */
 
       const left = el("div", "rl-left");
-      const column = el("div", "rl-col");
-      left.appendChild(column);
 
-      const brand = el("div", "rl-brand");
-      const wordmark = el("div", "rl-wordmark");
-      wordmark.appendChild(el("span", "rl-w1", "RYN"));
-      wordmark.appendChild(el("span", "rl-w2", "Type 2"));
-      brand.appendChild(wordmark);
-      brand.appendChild(el("div", "rl-rule", isSandbox ? "Sandbox client" : "Client"));
-      column.appendChild(brand);
+      // The corner mark, which is also the way into the client menu — the
+      // badge that normally opens it is out of the way while the lobby is up,
+      // so this is the one control in the corner it already lived in.
+      const mark = el("div", "rl-mark");
+      mark.appendChild(el("span", "rl-mark-1", "RYN"));
+      mark.appendChild(el("span", "rl-mark-2", isSandbox ? "Type 2 Sandbox" : "Type 2 Client"));
+      mark.title = "Open the client menu (" + this.keyLabel(Settings_default._toggleMenu) + ")";
+      mark.addEventListener("click", () => this.openClientMenu());
+      left.appendChild(mark);
 
-      const stack = el("div", "rl-stack");
-      column.appendChild(stack);
+      const body = el("div", "rl-body");
+      left.appendChild(body);
 
-      const block = (title, note) => {
-        const wrap = el("div", "rl-block");
-        const label = el("div", "rl-label");
-        label.appendChild(el("span", null, title));
-        if (note) {
-          label.appendChild(el("span", "rl-label-note", note));
-        }
-        wrap.appendChild(label);
-        stack.appendChild(wrap);
+      const title = el("div", "rl-title");
+      title.appendChild(el("span", "rl-t1", "RYN"));
+      title.appendChild(el("span", "rl-t2", "Type 2"));
+      body.appendChild(title);
+      body.appendChild(el("div", "rl-tagline", "Pick a server · Press Enter to drop in"));
+
+      const group = label => {
+        const wrap = el("div", "rl-group");
+        wrap.appendChild(el("div", "rl-label", label));
+        body.appendChild(wrap);
         return wrap;
       };
 
-      // identity
-      const nameBlock = block("Identity", "shown in game");
-      const nameLine = el("div", "rl-line");
+      // name and play, on one line
+      const nameGroup = group("Player name");
+      const row = el("div", "rl-row");
       const nameInput = doc.getElementById("nameInput");
       if (nameInput !== null) {
-        nameInput.placeholder = "Enter a name";
-        nameLine.appendChild(nameInput);
+        nameInput.placeholder = "Enter name...";
+        row.appendChild(nameInput);
       }
-      nameBlock.appendChild(nameLine);
+      const enterGame = doc.getElementById("enterGame");
+      if (enterGame !== null) {
+        enterGame.textContent = "Enter Game";
+        row.appendChild(enterGame);
+      }
+      nameGroup.appendChild(row);
 
       // colour
-      this.createSkinColors(block("Colour", null));
+      this.createSkinColors(group("Skin colour"));
 
       // mode: the two hosts the game runs on. The bundle writes the other
       // one's address into #altServer, so the link followed here is the
       // bundle's own, with the plain hosts as the fallback.
       const altLink = doc.querySelector("#altServer a");
       const altHref = altLink !== null ? altLink.getAttribute("href") : null;
-      const modeBlock = block("Mode", isSandbox ? "sandbox" : "normal");
+      const modeGroup = group("Mode");
       const seg = el("div", "rl-seg");
       let leaving = false;
-      const addMode = (name, note, active, href) => {
-        const button = el("div", "rl-seg-btn" + (active ? " rl-on" : ""));
-        button.appendChild(el("span", "rl-seg-dot"));
-        const text = el("span", "rl-seg-text");
-        text.appendChild(el("span", "rl-seg-name", name));
-        text.appendChild(el("span", "rl-seg-note", note));
-        button.appendChild(text);
+      const addMode = (name, active, href) => {
+        const button = el("div", "rl-seg-btn" + (active ? " rl-on" : ""), name);
         if (!active && href) {
           button.addEventListener("click", () => {
             if (leaving) {
@@ -29380,17 +29194,10 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         }
         seg.appendChild(button);
       };
-      addMode("Normal", "Standard", !isSandbox, isSandbox ? altHref || "//moomoo.io/" : null);
-      addMode("Sandbox", "Free build", isSandbox, isSandbox ? null : altHref || "//sandbox.moomoo.io/");
-      modeBlock.appendChild(seg);
+      addMode("Normal", !isSandbox, isSandbox ? altHref || "//moomoo.io/" : null);
+      addMode("Sandbox", isSandbox, isSandbox ? null : altHref || "//sandbox.moomoo.io/");
+      modeGroup.appendChild(seg);
 
-      // launch, clear of the column above it
-      const launch = el("div", "rl-launch");
-      const enterGame = doc.getElementById("enterGame");
-      if (enterGame !== null) {
-        enterGame.textContent = "Enter Game";
-        launch.appendChild(enterGame);
-      }
       // The challenge the bundle needs a token from. It has to have a rendered
       // ancestor or turnstile.render() refuses, so it gets a slot of its own
       // rather than a display:none corner; the slot collapses when the widget
@@ -29400,21 +29207,14 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       if (turnstile !== null) {
         gate.appendChild(turnstile);
       }
-      launch.appendChild(gate);
-      column.appendChild(launch);
+      body.appendChild(gate);
 
-      // foot
-      const foot = el("div", "rl-foot");
-      const menuButton = el("div", "rl-ghost", "Client menu");
-      menuButton.addEventListener("click", () => this.openClientMenu());
-      foot.appendChild(menuButton);
-      const hint = el("div", "rl-hint");
-      hint.appendChild(el("span", "rl-key", "Enter"));
-      hint.appendChild(el("span", null, "play"));
-      hint.appendChild(el("span", "rl-key", this.keyLabel(Settings_default._toggleMenu)));
-      hint.appendChild(el("span", null, "menu"));
-      foot.appendChild(hint);
-      column.appendChild(foot);
+      // the server you are about to join, in the bottom corner
+      const status = el("div", "rl-status");
+      status.appendChild(el("span", "rl-status-dot"));
+      const statusText = el("span", "rl-status-text", "No server selected");
+      status.appendChild(statusText);
+      left.appendChild(status);
 
       /* ---------------- right: the server browser ---------------- */
 
@@ -29424,25 +29224,13 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       const head = el("div", "rs-head");
       const titleRow = el("div", "rs-title-row");
       titleRow.appendChild(el("span", "rs-title", "Servers"));
-      const realmTag = el("span", "rs-realm");
-      realmTag.appendChild(el("span", "rs-live"));
-      realmTag.appendChild(el("span", null, isSandbox ? "Sandbox" : "Normal"));
-      titleRow.appendChild(realmTag);
+      const online = el("span", "rs-online");
+      const onlineValue = el("b", null, "—");
+      online.appendChild(onlineValue);
+      online.appendChild(doc.createTextNode(" online"));
+      titleRow.appendChild(online);
       head.appendChild(titleRow);
-
-      const stats = el("div", "rs-stats");
-      const stat = label => {
-        const wrap = el("span");
-        const value = el("b", null, "—");
-        wrap.appendChild(value);
-        wrap.appendChild(doc.createTextNode(" " + label));
-        stats.appendChild(wrap);
-        return value;
-      };
-      const statPlayers = stat("online");
-      const statServers = stat("servers");
-      const statRegions = stat("regions");
-      head.appendChild(stats);
+      head.appendChild(el("div", "rs-note", "Live player counts, refreshed every five seconds"));
 
       const filters = el("div", "rs-filters");
       head.appendChild(filters);
@@ -29452,12 +29240,6 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       const placeholder = el("div", "rs-empty", "Waiting for the server list");
       list.appendChild(placeholder);
       right.appendChild(list);
-
-      const footBar = el("div", "rs-foot");
-      footBar.appendChild(el("span", null, "Selected"));
-      const footValue = el("b", null, "—");
-      footBar.appendChild(footValue);
-      right.appendChild(footBar);
 
       /* ---------------- assembly ---------------- */
 
@@ -29487,6 +29269,69 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       let queued = false;
 
       const selectElement = () => doc.querySelector("#serverBrowser select");
+
+      /* Live player counts.
+       *
+       * The bundle fetches its server list exactly once, at load, and then
+       * only re-pings — so the "[n/m]" in its own labels is a snapshot from
+       * before you got here and never moves. The same endpoint it used is
+       * re-read here while the lobby is on screen, and the counts on the right
+       * are the fresh ones when the read succeeds and the bundle's own when it
+       * does not.
+       *
+       * It runs only while the lobby is showing. #menuCardHolder is
+       * display:none for the whole of a round, so the moment one starts this
+       * stops, and there is nothing of it left running during play. */
+      const SERVER_API = (isSandbox ? "https://api-sandbox.moomoo.io" : "https://api.moomoo.io") + "/servers?v=1.27";
+      const LIVE_INTERVAL = 5e3;
+      let liveCounts = null;
+      let liveTimer = 0;
+      let liveBusy = false;
+
+      const readLive = () => {
+        if (liveBusy || typeof fetch !== "function") {
+          return;
+        }
+        liveBusy = true;
+        fetch(SERVER_API, {
+          cache: "no-store"
+        }).then(response => response.json()).then(listing => {
+          if (!Array.isArray(listing)) {
+            return;
+          }
+          const next = new Map();
+          for (let i = 0; i < listing.length; i++) {
+            const entry = listing[i];
+            if (!entry || entry.region === undefined || entry.name === undefined) {
+              continue;
+            }
+            next.set(String(entry.region) + ":" + String(entry.name), {
+              players: Number(entry.playerCount),
+              capacity: Number(entry.playerCapacity)
+            });
+          }
+          if (next.size > 0) {
+            liveCounts = next;
+            queueSync();
+          }
+        }).catch(() => {}).then(() => {
+          liveBusy = false;
+        });
+      };
+
+      const startLive = () => {
+        if (liveTimer !== 0) {
+          return;
+        }
+        readLive();
+        liveTimer = setInterval(readLive, LIVE_INTERVAL);
+      };
+      const stopLive = () => {
+        if (liveTimer !== 0) {
+          clearInterval(liveTimer);
+          liveTimer = 0;
+        }
+      };
 
       // One row per option the bundle rendered. The label it writes is
       //   "<region> <name> [<players>/<capacity>]" with " [<n>ms]" or " [?]"
@@ -29521,13 +29366,20 @@ html.ryn-in-lobby .ryn-v2-wrapper {
           const name = split < 0 ? "" : value.slice(split + 1);
           const load = /\[(\d+)\/(\d+)\]/.exec(text);
           const ping = /\[(\d+)ms\]/.exec(text);
+          const live = liveCounts !== null ? liveCounts.get(value) : undefined;
+          let players = load !== null ? parseInt(load[1], 10) : -1;
+          let capacity = load !== null ? parseInt(load[2], 10) : -1;
+          if (live !== undefined && isFinite(live.players) && isFinite(live.capacity)) {
+            capacity = live.capacity;
+            players = Math.min(live.players, live.capacity);
+          }
           model.push({
             value: value,
             key: key,
             name: name,
             region: region || key,
-            players: load !== null ? parseInt(load[1], 10) : -1,
-            capacity: load !== null ? parseInt(load[2], 10) : -1,
+            players: players,
+            capacity: capacity,
             ping: ping !== null ? parseInt(ping[1], 10) : -1,
             selected: current ? value === current : option.selected
           });
@@ -29601,88 +29453,65 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         applyFilter(filter);
       };
 
+      // The server's own name on top — moomoo names them "1:1", "1:2" and so
+      // on — with the region and the ping under it, then the count and a bar
+      // for how full it is.
       const buildRow = server => {
         const row = el("div", "rs-row");
         row.dataset.k = server.key;
         row.dataset.v = server.value;
-        const name = el("div", "rs-name");
-        const nameText = el("span");
-        const nameTag = el("i");
-        name.appendChild(nameText);
-        name.appendChild(nameTag);
-        const ping = el("div", "rs-ping");
-        const pingValue = el("span");
-        const pingUnit = el("em");
-        ping.appendChild(pingValue);
-        ping.appendChild(pingUnit);
-        const meter = el("div", "rs-meter");
+        const id = el("div", "rs-id");
+        const name = el("span", "rs-name");
+        const region = el("span", "rs-region");
+        id.appendChild(name);
+        id.appendChild(region);
+        const count = el("span", "rs-count");
+        const meter = el("span", "rs-meter");
         const fill = el("i");
         meter.appendChild(fill);
-        const count = el("div", "rs-count");
-        row.appendChild(name);
-        row.appendChild(ping);
-        row.appendChild(meter);
+        row.appendChild(id);
         row.appendChild(count);
+        row.appendChild(meter);
         row._parts = {
-          nameText: nameText,
-          nameTag: nameTag,
-          pingValue: pingValue,
-          pingUnit: pingUnit,
-          fill: fill,
-          count: count
+          name: name,
+          region: region,
+          count: count,
+          fill: fill
         };
         row.addEventListener("click", () => choose(server.value));
         return row;
       };
 
+      const loadBand = ratio => ratio >= .85 ? "high" : ratio >= .5 ? "mid" : "low";
+      const fillRatio = server => server.capacity > 0 ? Math.max(0, Math.min(1, server.players / server.capacity)) : 0;
+      const countText = server => server.capacity > 0 ? server.players + "/" + server.capacity : "—";
+
       // Writes only what changed. The list is re-read whenever mithril
-      // repaints the select — every five seconds while the lobby is up, as the
-      // bundle re-pings — and on most of those passes nothing here moves.
+      // repaints the select and whenever a fresh count lands, and on most of
+      // those passes nothing here moves.
       const paint = (row, server) => {
         const parts = row._parts;
-        if (parts.nameText.textContent !== server.region) {
-          parts.nameText.textContent = server.region;
+        const name = server.name || server.region;
+        if (parts.name.textContent !== name) {
+          parts.name.textContent = name;
         }
-        const tag = server.name ? "#" + server.name : "";
-        if (parts.nameTag.textContent !== tag) {
-          parts.nameTag.textContent = tag;
+        const under = server.ping >= 0 ? server.region + " · " + server.ping + "ms" : server.region;
+        if (parts.region.textContent !== under) {
+          parts.region.textContent = under;
         }
-        const count = server.capacity > 0 ? server.players + "/" + server.capacity : "—";
+        const count = countText(server);
         if (parts.count.textContent !== count) {
           parts.count.textContent = count;
         }
-        const ratio = server.capacity > 0 ? Math.max(0, Math.min(1, server.players / server.capacity)) : 0;
+        const ratio = fillRatio(server);
         const scale = ratio.toFixed(3);
         if (row._scale !== scale) {
           row._scale = scale;
           parts.fill.style.transform = "scaleX(" + scale + ")";
         }
-        const load = ratio >= .85 ? "high" : ratio >= .5 ? "mid" : "low";
+        const load = loadBand(ratio);
         if (row.dataset.load !== load) {
           row.dataset.load = load;
-        }
-        if (server.ping >= 0) {
-          const value = String(server.ping);
-          if (parts.pingValue.textContent !== value) {
-            parts.pingValue.textContent = value;
-          }
-          if (parts.pingUnit.textContent !== "ms") {
-            parts.pingUnit.textContent = "ms";
-          }
-          const band = server.ping <= 80 ? "fast" : server.ping <= 180 ? "ok" : "slow";
-          if (row.dataset.ping !== band) {
-            row.dataset.ping = band;
-          }
-        } else {
-          if (parts.pingValue.textContent !== "—") {
-            parts.pingValue.textContent = "—";
-          }
-          if (parts.pingUnit.textContent !== "") {
-            parts.pingUnit.textContent = "";
-          }
-          if (row.dataset.ping !== "none") {
-            row.dataset.ping = "none";
-          }
         }
         if (row.classList.contains("rs-on") !== server.selected) {
           row.classList.toggle("rs-on", server.selected);
@@ -29748,30 +29577,32 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         }
 
         const playerText = String(players);
-        if (statPlayers.textContent !== playerText) {
-          statPlayers.textContent = playerText;
-        }
-        const serverText = String(model.length);
-        if (statServers.textContent !== serverText) {
-          statServers.textContent = serverText;
-        }
-        const regionText = String(regions.length);
-        if (statRegions.textContent !== regionText) {
-          statRegions.textContent = regionText;
+        if (onlineValue.textContent !== playerText) {
+          onlineValue.textContent = playerText;
         }
 
-        let footText = "—";
+        // the bottom left corner: which server Play would take you to
+        let statusLine = "No server selected";
+        let statusLoad = "";
         if (selected !== null) {
-          footText = selected.region + (selected.name ? " #" + selected.name : "");
+          const parts = [ selected.region ];
+          if (selected.name) {
+            parts.push(selected.name);
+          }
           if (selected.capacity > 0) {
-            footText += " · " + selected.players + "/" + selected.capacity;
+            parts.push(countText(selected));
           }
           if (selected.ping >= 0) {
-            footText += " · " + selected.ping + "ms";
+            parts.push(selected.ping + "ms");
           }
+          statusLine = parts.join(" · ");
+          statusLoad = loadBand(fillRatio(selected));
         }
-        if (footValue.textContent !== footText) {
-          footValue.textContent = footText;
+        if (statusText.textContent !== statusLine) {
+          statusText.textContent = statusLine;
+        }
+        if (status.dataset.load !== statusLoad) {
+          status.dataset.load = statusLoad;
         }
       };
 
@@ -29817,16 +29648,19 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         doc.documentElement.classList.toggle("ryn-in-lobby", visible);
         if (visible) {
           this.seedName();
+          startLive();
           if (dirty) {
             queueSync();
           }
+        } else {
+          stopLive();
         }
       };
 
       // #menuCardHolder is display:none for the whole of a round, so the lobby
       // stops intersecting the moment one starts and starts again when it
-      // ends. That is the whole visibility story — no timer, no polling, and
-      // no work of ours between those two events.
+      // ends. That is the whole visibility story — no timer of ours outside
+      // the lobby, and no work between those two events.
       if (typeof IntersectionObserver === "function") {
         new IntersectionObserver(entries => {
           onVisible(entries[entries.length - 1].isIntersecting);
