@@ -30259,34 +30259,85 @@ window.grbtp = 35;
       rynLobbyCSS.textContent = `
 /* ============================================================
    RYN TYPE 2 — LOBBY & BOOT
-   One surface, no glass. The panels are flat fills over a fixed
-   two-stop ground, so nothing here reads the pixels behind it:
-   no backdrop-filter, no blur, no saturate. That is the whole
-   reason this repaints for free while the canvas runs.
-   Every animation below moves transform or opacity and nothing
-   else, so none of them touch layout or paint.
+   Built on the client menu's own design tokens, copied from its
+   :root verbatim so the two surfaces cannot drift apart: same
+   inks, same hairlines, same iris, same text ramp, same radii,
+   same easing, same two families.
+
+   It also borrows the menu's grammar, not just its values:
+     selected  -> iris border + --iris-18 fill + iris-hi text
+     hover     -> --sky-45 edge
+     pressed   -> translateY(2px) as the drop shadow collapses
+     headings  -> mono, uppercase, .19em, iris-hi
+   so a control here reads the same way as the one in the menu.
+
+   No backdrop-filter, no blur, no saturate: the panels are flat
+   fills over a fixed ground, which is what lets this repaint for
+   free while the canvas runs. Every transition moves transform or
+   opacity and nothing else.
    ============================================================ */
 
 #ryn-lobby, #ryn-boot {
-  --rl-ink:   #0a0a0e;
-  --rl-ink-2: #101017;
-  --rl-ink-3: #15151f;
-  --rl-line:   rgba(255,255,255,0.075);
-  --rl-line-2: rgba(255,255,255,0.13);
-  --rl-line-3: rgba(255,255,255,0.24);
-  --rl-iris:    #8e76ce;
-  --rl-iris-hi: #a894e0;
-  --rl-iris-dm: rgba(142,118,206,0.16);
-  --rl-sky:  #9bc5e8;
-  --rl-sage: #a6d7b2;
-  --rl-rose: #d9a3ab;
-  --rl-tx-1: #f3f2f7;
-  --rl-tx-2: #aca9ba;
-  --rl-tx-3: #726f80;
+  /* --- straight from the menu's :root --- */
+  --rl-ink-0: #07070A;
+  --rl-ink-1: #0C0C11;
+  --rl-ink-2: #101016;
+  --rl-ink-3: #15151C;
+  --rl-ink-4: #1B1B24;
+
+  --rl-line:   rgba(255,255,255,0.055);
+  --rl-line-2: rgba(255,255,255,0.10);
+  --rl-line-3: rgba(255,255,255,0.16);
+
+  --rl-iris:    #8E76CE;
+  --rl-iris-hi: #A894E0;
+  --rl-iris-05: rgba(142,118,206,0.05);
+  --rl-iris-12: rgba(142,118,206,0.12);
+  --rl-iris-18: rgba(142,118,206,0.18);
+  --rl-iris-45: rgba(142,118,206,0.45);
+
+  --rl-sage:    #A6D7B2;
+  --rl-sage-40: rgba(166,215,178,0.40);
+  --rl-sky:     #9BC5E8;
+  --rl-sky-45:  rgba(155,197,232,0.45);
+  --rl-rose:    #D9A3AB;
+
+  --rl-tx-1: #F3F2F7;
+  --rl-tx-2: #ACA9BA;
+  --rl-tx-3: #726F80;
+  --rl-tx-4: #4E4B5A;
+
+  --rl-r1: 6px;
+  --rl-r2: 10px;
+  --rl-r3: 14px;
+  --rl-r4: 22px;
+
   --rl-ease: cubic-bezier(.2,.8,.3,1);
-  font-family: 'Manrope', 'Segoe UI', system-ui, sans-serif;
+  --rl-font: 'Manrope','Segoe UI',system-ui,sans-serif;
+  --rl-mono: 'Space Grotesk','Manrope',system-ui,sans-serif;
+
+  font-family: var(--rl-font);
 }
 #ryn-lobby *, #ryn-boot * { box-sizing: border-box; }
+
+/* The page's own stylesheet puts a focus ring on buttons, and a ring it
+   picked is not one of these colours. focus-visible cannot answer it:
+   that selector deliberately does not match a mouse click, so clicking a
+   swatch left the site's ring showing next to the accent one and the
+   chosen colour came out edged in something else entirely. The plain
+   focus state is cleared here and every ring this lobby wants is
+   re-stated on focus-visible below, which keeps the keyboard outline. */
+#ryn-lobby button:focus,
+#ryn-lobby input:focus,
+#ryn-lobby [tabindex]:focus { outline: none; box-shadow: none; }
+#ryn-lobby .rl-go:focus { box-shadow: 0 2px 0 rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.18); }
+#ryn-lobby .rl-reg[aria-pressed="true"]:focus,
+#ryn-lobby .rl-srv[aria-current="true"]:focus { box-shadow: inset 0 1px 0 rgba(255,255,255,.08); }
+
+/* the menu's scrollbar, to the pixel */
+#ryn-lobby ::-webkit-scrollbar { width: 6px; }
+#ryn-lobby ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.07); border-radius: 6px; }
+#ryn-lobby ::-webkit-scrollbar-track { background: transparent; }
 
 /* ---------------- the ground ---------------- */
 
@@ -30297,16 +30348,14 @@ window.grbtp = 35;
   display: grid;
   grid-template-columns: minmax(0,1fr) 384px;
   color: var(--rl-tx-1);
-  /* Two fixed stops and a flat base. A gradient is rasterised once and
-     reused; it is not re-evaluated per frame. */
+  /* Fixed stops over the menu's darkest ink. Rasterised once. */
   background:
-    radial-gradient(1100px 620px at 16% 82%, rgba(142,118,206,0.13), transparent 62%),
-    radial-gradient(760px 520px at 96% 6%, rgba(155,197,232,0.07), transparent 58%),
-    var(--rl-ink);
+    radial-gradient(1100px 620px at 16% 82%, var(--rl-iris-12), transparent 62%),
+    radial-gradient(760px 520px at 96% 6%, rgba(155,197,232,0.05), transparent 58%),
+    var(--rl-ink-0);
 }
 #ryn-lobby.rl-off { display: none; }
 
-/* The one decorative mark: a hairline seam between the two halves. */
 #ryn-lobby::after {
   content: "";
   position: absolute;
@@ -30328,42 +30377,34 @@ window.grbtp = 35;
   overflow: hidden;
 }
 
-/* brand */
 .rl-brand { display: flex; align-items: baseline; gap: 12px; }
 .rl-brand-mark {
-  font-family: 'Space Grotesk', 'Manrope', sans-serif;
+  font-family: var(--rl-mono);
   font-weight: 700;
   font-size: 15px;
   letter-spacing: 0.34em;
   color: var(--rl-iris);
 }
 .rl-brand-sub {
-  font-size: 9.5px;
+  font-family: var(--rl-mono);
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.26em;
+  letter-spacing: 0.19em;
   text-transform: uppercase;
-  color: var(--rl-tx-3);
+  color: var(--rl-tx-4);
 }
 
-/* the wordmark — the lobby's one large element */
 .rl-word { margin: 0 0 4px; line-height: 0.88; }
-.rl-word-1 {
+.rl-word-1, .rl-word-2 {
   display: block;
-  font-family: 'Space Grotesk', 'Manrope', sans-serif;
+  font-family: var(--rl-mono);
   font-weight: 700;
   font-size: clamp(54px, 7.2vw, 104px);
   letter-spacing: -0.035em;
-  color: var(--rl-tx-1);
 }
-.rl-word-2 {
-  display: block;
-  font-family: 'Space Grotesk', 'Manrope', sans-serif;
-  font-weight: 700;
-  font-size: clamp(54px, 7.2vw, 104px);
-  letter-spacing: -0.035em;
-  /* The only place the accent runs at full strength. */
-  color: var(--rl-iris);
-}
+.rl-word-1 { color: var(--rl-tx-1); }
+.rl-word-2 { color: var(--rl-iris); }
+
 .rl-tag {
   font-size: 11px;
   letter-spacing: 0.2em;
@@ -30374,28 +30415,29 @@ window.grbtp = 35;
 
 .rl-stack { max-width: 520px; width: 100%; }
 
-/* field label */
+/* the menu's .section-title, at the size a field label wants */
 .rl-lab {
   display: block;
-  font-size: 9.5px;
+  font-family: var(--rl-mono);
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.19em;
   text-transform: uppercase;
-  color: var(--rl-tx-3);
-  margin-bottom: 7px;
+  color: var(--rl-iris-hi);
+  margin-bottom: 8px;
 }
 
-/* name + enter, on one rail */
 .rl-rail { display: flex; gap: 10px; align-items: stretch; margin-bottom: 22px; }
 
+/* the menu's select/field treatment */
 .rl-name {
   flex: 1;
   min-width: 0;
   height: 52px;
   padding: 0 16px;
-  border: 1px solid var(--rl-line-2);
-  border-radius: 12px;
-  background: var(--rl-ink-2);
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: var(--rl-r2);
+  background: rgba(255,255,255,.06);
   color: var(--rl-tx-1);
   font: inherit;
   font-size: 15px;
@@ -30404,42 +30446,45 @@ window.grbtp = 35;
   transition: border-color 150ms var(--rl-ease);
 }
 .rl-name::placeholder { color: var(--rl-tx-3); }
-.rl-name:focus { border-color: var(--rl-iris); }
+.rl-name:hover { border-color: var(--rl-sky-45); }
+#ryn-lobby .rl-name:focus { border-color: var(--rl-iris); }
 
-/* primary action */
+/* primary action — the menu's pressable, filled with the accent */
 .rl-go {
   position: relative;
   flex: 0 0 auto;
   min-width: 194px;
   height: 52px;
   padding: 0 30px;
-  border: none;
-  border-radius: 12px;
+  border: 1px solid var(--rl-iris);
+  border-radius: var(--rl-r2);
   background: var(--rl-iris);
-  color: #14101f;
-  font: inherit;
-  font-weight: 800;
+  color: #14101F;
+  font-family: var(--rl-mono);
+  font-weight: 700;
   font-size: 13px;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.19em;
   text-transform: uppercase;
   cursor: pointer;
   /* The sheen below is parked off the left edge, so without this it paints
      over whatever sits beside the button. */
   overflow: hidden;
-  /* transform + opacity only */
-  transition: transform 140ms var(--rl-ease), opacity 140ms ease;
+  box-shadow: 0 2px 0 rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.18);
+  transition: transform 140ms var(--rl-ease), box-shadow 140ms var(--rl-ease), opacity 140ms ease;
   will-change: transform;
 }
-.rl-go:hover { transform: translateY(-2px); }
-.rl-go:active { transform: translateY(0) scale(0.985); }
-.rl-go:focus-visible { outline: 2px solid var(--rl-sky); outline-offset: 3px; }
-/* The sheen is a pseudo-element that only ever moves. */
+.rl-go:hover { background: var(--rl-iris-hi); border-color: var(--rl-iris-hi); }
+/* the menu's press: the button drops onto its own shadow */
+.rl-go:active {
+  transform: translateY(2px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10);
+}
+#ryn-lobby .rl-go:focus-visible { outline: 2px solid var(--rl-sky); outline-offset: 3px; }
 .rl-go::after {
   content: "";
   position: absolute;
   inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(120deg, transparent 38%, rgba(255,255,255,0.34) 50%, transparent 62%);
+  background: linear-gradient(120deg, transparent 38%, rgba(255,255,255,0.30) 50%, transparent 62%);
   transform: translateX(-100%);
   transition: transform 520ms var(--rl-ease);
   pointer-events: none;
@@ -30449,45 +30494,51 @@ window.grbtp = 35;
 .rl-go[disabled]:hover { transform: none; }
 .rl-go[disabled]:hover::after { transform: translateX(-100%); }
 
-/* colours */
-.rl-swatches { display: flex; flex-wrap: wrap; gap: 9px; }
+/* ---------------- colours ----------------
+   Selected is stated once, in the accent, the way the menu states it:
+   an iris edge with an iris ring outside it. No second colour joins in —
+   a white edge next to a thin iris ring reads as neither. */
+
+.rl-swatches { display: flex; flex-wrap: wrap; gap: 10px; }
 .rl-sw {
   position: relative;
   width: 30px; height: 30px;
   flex: 0 0 auto;
-  border: 1px solid var(--rl-line-2);
-  border-radius: 9px;
+  border: 1px solid var(--rl-line-3);
+  border-radius: var(--rl-r1);
   padding: 0;
   cursor: pointer;
   transition: transform 140ms var(--rl-ease), border-color 140ms ease;
   will-change: transform;
 }
-.rl-sw:hover { transform: translateY(-3px); }
+.rl-sw:hover { transform: translateY(-3px); border-color: var(--rl-sky-45); }
 .rl-sw:active { transform: translateY(-1px) scale(0.95); }
-.rl-sw:focus-visible { outline: 1px solid var(--rl-sky); outline-offset: 2px; }
+/* Focus is the accent too, so a swatch that is both focused and chosen
+   never shows two different rings. */
+#ryn-lobby .rl-sw:focus-visible { outline: 1px solid var(--rl-iris-hi); outline-offset: 3px; }
 .rl-sw[aria-pressed="true"] {
-  border-color: var(--rl-tx-1);
+  border-color: var(--rl-iris);
   transform: translateY(-3px);
 }
-/* the selected ring, drawn outside the swatch so it costs no layout */
 .rl-sw[aria-pressed="true"]::after {
   content: "";
   position: absolute;
   inset: -4px;
-  border: 1px solid var(--rl-iris);
-  border-radius: 12px;
+  border: 1.5px solid var(--rl-iris);
+  border-radius: 9px;
 }
 
 .rl-foot {
   display: flex;
   align-items: center;
   gap: 8px;
+  font-family: var(--rl-mono);
   font-size: 10px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--rl-tx-3);
+  color: var(--rl-tx-4);
 }
-.rl-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--rl-sage); }
+.rl-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--rl-iris); }
 
 /* ---------------- right: server browser ---------------- */
 
@@ -30496,8 +30547,7 @@ window.grbtp = 35;
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background: var(--rl-ink-2);
-  /* This panel and the canvas never affect each other's layout. */
+  background: var(--rl-ink-1);
   contain: layout style;
 }
 
@@ -30511,31 +30561,30 @@ window.grbtp = 35;
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 3px;
+  margin-bottom: 4px;
 }
 .rl-rtitle h2 {
   margin: 0;
-  font-family: 'Space Grotesk', 'Manrope', sans-serif;
-  font-size: 13px;
+  font-family: var(--rl-mono);
+  font-size: 11.5px;
   font-weight: 700;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.19em;
   text-transform: uppercase;
-  color: var(--rl-tx-1);
+  color: var(--rl-iris-hi);
 }
 .rl-total {
-  font-family: 'Space Grotesk', 'Manrope', sans-serif;
+  font-family: var(--rl-mono);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
-  color: var(--rl-tx-3);
+  color: var(--rl-tx-4);
 }
-.rl-rsub { font-size: 10.5px; letter-spacing: 0.04em; color: var(--rl-tx-3); }
+.rl-rsub { font-size: 10.5px; letter-spacing: 0.04em; color: var(--rl-tx-3); margin: 0; }
 
-/* region rail */
 .rl-regions {
   display: flex;
   gap: 6px;
   overflow-x: auto;
-  padding: 12px 26px 12px;
+  padding: 12px 26px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--rl-line);
   scrollbar-width: none;
@@ -30546,30 +30595,30 @@ window.grbtp = 35;
 .rl-regions::-webkit-scrollbar { display: none; }
 .rl-reg {
   flex: 0 0 auto;
-  border: 1px solid var(--rl-line);
+  border: 1px solid rgba(255,255,255,.115);
   border-radius: 999px;
-  background: none;
+  background: linear-gradient(180deg, rgba(255,255,255,.075), rgba(255,255,255,.028));
   color: var(--rl-tx-2);
-  font: inherit;
+  font-family: var(--rl-mono);
   font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
+  font-weight: 700;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   padding: 6px 13px;
   cursor: pointer;
   white-space: nowrap;
   transition: color 130ms ease, border-color 130ms ease, background 130ms ease, transform 130ms var(--rl-ease);
 }
-.rl-reg:hover { color: var(--rl-tx-1); border-color: var(--rl-line-3); }
-.rl-reg:active { transform: scale(0.96); }
+.rl-reg:hover { color: #fff; border-color: var(--rl-sky-45); }
+.rl-reg:active { transform: translateY(2px); }
 .rl-reg[aria-pressed="true"] {
-  background: var(--rl-iris-dm);
-  border-color: rgba(142,118,206,0.5);
+  background: var(--rl-iris-18);
+  border-color: var(--rl-iris);
   color: var(--rl-iris-hi);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
 }
-.rl-reg:focus-visible { outline: 1px solid var(--rl-sky); outline-offset: 1px; }
+#ryn-lobby .rl-reg:focus-visible { outline: 1px solid var(--rl-iris-hi); outline-offset: 2px; }
 
-/* the list */
 .rl-list {
   flex: 1;
   min-height: 0;
@@ -30577,12 +30626,10 @@ window.grbtp = 35;
   overscroll-behavior: contain;
   padding: 10px 16px 18px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.16) transparent;
+  scrollbar-color: rgba(255,255,255,.07) transparent;
 }
-.rl-list::-webkit-scrollbar { width: 7px; }
-.rl-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.16); border-radius: 4px; }
-.rl-list::-webkit-scrollbar-track { background: transparent; }
 
+/* the menu's .content-option, at list density */
 .rl-srv {
   display: grid;
   grid-template-columns: minmax(0,1fr) auto;
@@ -30591,7 +30638,7 @@ window.grbtp = 35;
   width: 100%;
   text-align: start;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--rl-r2);
   background: none;
   color: inherit;
   font: inherit;
@@ -30599,16 +30646,18 @@ window.grbtp = 35;
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease, transform 120ms var(--rl-ease);
 }
-.rl-srv:hover { background: rgba(255,255,255,0.045); border-color: var(--rl-line); }
-.rl-srv:active { transform: scale(0.992); }
-.rl-srv:focus-visible { outline: 1px solid var(--rl-sky); outline-offset: 1px; }
+.rl-srv:hover { background: rgba(255,255,255,.032); border-color: var(--rl-line-2); }
+.rl-srv:active { transform: translateY(1px); }
+#ryn-lobby .rl-srv:focus-visible { outline: 1px solid var(--rl-iris-hi); outline-offset: 1px; }
 .rl-srv[aria-current="true"] {
-  background: var(--rl-iris-dm);
-  border-color: rgba(142,118,206,0.46);
+  background: var(--rl-iris-18);
+  border-color: var(--rl-iris);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
 }
 .rl-srv-name {
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: -0.008em;
   color: var(--rl-tx-1);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -30616,31 +30665,33 @@ window.grbtp = 35;
 }
 .rl-srv[aria-current="true"] .rl-srv-name { color: var(--rl-iris-hi); }
 .rl-srv-reg {
+  font-family: var(--rl-mono);
   font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--rl-tx-3);
+  color: var(--rl-tx-4);
 }
 .rl-srv-right { display: flex; align-items: center; gap: 9px; }
 .rl-srv-n {
-  font-family: 'Space Grotesk', 'Manrope', sans-serif;
+  font-family: var(--rl-mono);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   color: var(--rl-tx-2);
 }
-/* load meter — a fill, not an animation */
 .rl-srv-bar {
   width: 34px; height: 4px;
   border-radius: 2px;
-  background: rgba(255,255,255,0.1);
+  background: rgba(255,255,255,.07);
   overflow: hidden;
 }
+/* The three states the menu already uses for good / watch / bad. */
 .rl-srv-fill { height: 100%; border-radius: 2px; background: var(--rl-sage); }
 .rl-srv-fill.mid  { background: var(--rl-sky); }
 .rl-srv-fill.high { background: var(--rl-rose); }
 
 .rl-empty {
   padding: 26px 12px;
+  margin: 0;
   text-align: center;
   font-size: 11px;
   line-height: 1.6;
@@ -30659,20 +30710,19 @@ window.grbtp = 35;
   justify-content: center;
   gap: 22px;
   background:
-    radial-gradient(760px 480px at 50% 54%, rgba(142,118,206,0.14), transparent 62%),
-    #0a0a0e;
+    radial-gradient(760px 480px at 50% 54%, var(--rl-iris-12), transparent 62%),
+    var(--rl-ink-0);
   opacity: 1;
   transition: opacity 340ms ease;
 }
 #ryn-boot.rl-bye { opacity: 0; pointer-events: none; }
 
 .rl-boot-word {
-  font-family: 'Space Grotesk', 'Manrope', sans-serif;
+  font-family: var(--rl-mono);
   font-weight: 700;
   font-size: 40px;
   letter-spacing: 0.16em;
   color: var(--rl-tx-1);
-  /* one settle on entry, then nothing */
   animation: rl-rise 520ms var(--rl-ease) both;
 }
 .rl-boot-word em { font-style: normal; color: var(--rl-iris); }
@@ -30680,11 +30730,11 @@ window.grbtp = 35;
 .rl-boot-track {
   width: 208px; height: 2px;
   border-radius: 2px;
-  background: rgba(255,255,255,0.12);
+  background: rgba(255,255,255,.07);
   overflow: hidden;
 }
-/* A 2px-tall sliver sliding on the compositor. No width animation, no
-   layout, and it stops the moment the overlay is removed. */
+/* A 2px sliver sliding on the compositor. No width animation, no layout,
+   and it stops the moment the overlay is removed. */
 .rl-boot-slide {
   width: 40%;
   height: 100%;
@@ -30694,11 +30744,12 @@ window.grbtp = 35;
   animation: rl-slide 1150ms var(--rl-ease) infinite;
 }
 .rl-boot-stat {
+  font-family: var(--rl-mono);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.3em;
   text-transform: uppercase;
-  color: var(--rl-tx-3);
+  color: var(--rl-tx-4);
   min-height: 12px;
 }
 
