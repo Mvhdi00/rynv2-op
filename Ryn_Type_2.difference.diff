@@ -1,0 +1,402 @@
+--- small.js	2026-09-23 08:34:28.149682160 +0000
++++ big.js	2026-09-23 08:34:28.133682161 +0000
+@@ -24054,48 +24054,64 @@
+ @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Exo+2:wght@400;600&display=swap');
+ 
+ #setupCard {
++    --ryn-line: rgba(190,160,255,0.55);
++    --ryn-ease: cubic-bezier(.22,1,.36,1);
+     position: relative !important;
+     width: 400px !important;
+-    padding: 30px 30px 24px !important;
++    padding: 32px 30px 26px !important;
+     display: flex !important;
+     flex-direction: column !important;
+-    gap: 14px !important;
+-    background: rgba(28, 22, 46, 0.42) !important;
++    gap: 16px !important;
++    background: linear-gradient(180deg, rgba(32,25,52,0.50), rgba(22,17,38,0.46)) !important;
+     backdrop-filter: blur(46px) saturate(190%) !important;
+     -webkit-backdrop-filter: blur(46px) saturate(190%) !important;
+-    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+-    border-radius: 30px !important;
+-    box-shadow: 0 20px 60px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(0,0,0,0.18) !important;
++    border: 1px solid rgba(255,255,255,0.14) !important;
++    border-radius: 22px !important;
++    box-shadow: 0 24px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(150,96,255,0.10), inset 0 1px 0 rgba(255,255,255,0.20), inset 0 -1px 0 rgba(0,0,0,0.20) !important;
+ }
++/* Corner brackets: four short L-marks inset from the card edge, the plaque
++   framing that reads as "exclusive" rather than just another rounded panel. */
+ #setupCard::before {
+     content: '' !important;
+     position: absolute !important;
+     inset: 0 !important;
+-    border-radius: 30px !important;
+-    background: linear-gradient(160deg, rgba(150,100,255,0.16) 0%, rgba(90,60,190,0.04) 55%, rgba(255,255,255,0.05) 100%) !important;
++    border-radius: 22px !important;
+     pointer-events: none !important;
++    opacity: 0.9 !important;
++    background:
++        linear-gradient(160deg, rgba(150,100,255,0.14) 0%, rgba(90,60,190,0.03) 55%, rgba(255,255,255,0.04) 100%),
++        linear-gradient(var(--ryn-line), var(--ryn-line)) top 14px left 14px / 22px 2px no-repeat,
++        linear-gradient(var(--ryn-line), var(--ryn-line)) top 14px left 14px / 2px 22px no-repeat,
++        linear-gradient(var(--ryn-line), var(--ryn-line)) top 14px right 14px / 22px 2px no-repeat,
++        linear-gradient(var(--ryn-line), var(--ryn-line)) top 14px right 14px / 2px 22px no-repeat,
++        linear-gradient(var(--ryn-line), var(--ryn-line)) bottom 14px left 14px / 22px 2px no-repeat,
++        linear-gradient(var(--ryn-line), var(--ryn-line)) bottom 14px left 14px / 2px 22px no-repeat,
++        linear-gradient(var(--ryn-line), var(--ryn-line)) bottom 14px right 14px / 22px 2px no-repeat,
++        linear-gradient(var(--ryn-line), var(--ryn-line)) bottom 14px right 14px / 2px 22px no-repeat !important;
+ }
+ #setupCard > * { position: relative !important; z-index: 1 !important; }
+ #setupCard br { display: none !important; }
+ 
+ #nameInput, #serverSelect, #setupCard select {
+-    background: rgba(255,255,255,0.07) !important;
+-    border: 1px solid rgba(255,255,255,0.14) !important;
+-    border-radius: 14px !important;
++    background: rgba(255,255,255,0.06) !important;
++    border: 1px solid rgba(255,255,255,0.13) !important;
++    border-radius: 12px !important;
+     color: #ffffff !important;
+     font-family: 'Exo 2', sans-serif !important;
+     font-size: 1em !important;
+     font-weight: 600 !important;
+     text-align: center !important;
+-    padding: 15px 16px !important;
++    padding: 14px 16px !important;
+     width: 100% !important;
+     box-sizing: border-box !important;
+     outline: none !important;
+-    transition: border-color 160ms ease, background 160ms ease !important;
++    box-shadow: inset 0 1px 0 rgba(255,255,255,0.07) !important;
++    transition: border-color 200ms var(--ryn-ease), background 200ms var(--ryn-ease), box-shadow 200ms var(--ryn-ease) !important;
+ }
+ #nameInput:focus, #serverSelect:hover, #setupCard select:hover {
+-    border-color: rgba(170,130,255,0.72) !important;
+-    background: rgba(255,255,255,0.11) !important;
++    border-color: rgba(170,130,255,0.75) !important;
++    background: rgba(255,255,255,0.10) !important;
++    box-shadow: inset 0 1px 0 rgba(255,255,255,0.10), 0 0 0 3px rgba(150,96,255,0.14) !important;
+ }
+ #nameInput::placeholder { color: rgba(255,255,255,0.32) !important; }
+ #serverSelect, #setupCard select {
+@@ -24152,37 +24168,75 @@
+ #setupCard select[size]:not([size="1"])::-webkit-scrollbar-thumb:hover { background: rgba(170,130,255,0.7) !important; }
+ 
+ #enterGame {
+-    background: linear-gradient(135deg, rgba(150,96,255,0.92), rgba(110,64,220,0.92)) !important;
+-    border: 1px solid rgba(255,255,255,0.20) !important;
+-    border-radius: 15px !important;
++    position: relative !important;
++    overflow: hidden !important;
++    background: linear-gradient(135deg, rgba(154,100,255,0.95), rgba(106,58,218,0.95)) !important;
++    border: 1px solid rgba(255,255,255,0.22) !important;
++    border-radius: 13px !important;
+     color: #ffffff !important;
+-    font-family: 'Orbitron', monospace !important;
+-    font-size: 0.9em !important;
+-    font-weight: 700 !important;
+-    letter-spacing: 0.22em !important;
+-    padding: 17px 18px !important;
++    font-family: 'Hammersmith One', 'Orbitron', sans-serif !important;
++    font-size: 0.92em !important;
++    font-weight: 400 !important;
++    letter-spacing: 0.18em !important;
++    padding: 16px 18px !important;
+     width: 100% !important;
+     cursor: pointer !important;
+     text-transform: uppercase !important;
+-    box-shadow: 0 8px 24px rgba(122,66,244,0.34) !important;
+-    transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease !important;
++    box-shadow: 0 8px 24px rgba(122,66,244,0.36), inset 0 1px 0 rgba(255,255,255,0.30), inset 0 -2px 0 rgba(0,0,0,0.14) !important;
++    transition: transform 150ms var(--ryn-ease), box-shadow 150ms var(--ryn-ease), filter 150ms var(--ryn-ease) !important;
++}
++/* A slow, quiet sheen sweep -- the "this button matters" cue -- paused most
++   of the loop so it reads as a glint, not a marquee. */
++#enterGame::after {
++    content: '' !important;
++    position: absolute !important;
++    top: 0 !important;
++    left: -60% !important;
++    width: 40% !important;
++    height: 100% !important;
++    background: linear-gradient(100deg, transparent, rgba(255,255,255,0.30), transparent) !important;
++    transform: skewX(-18deg) !important;
++    animation: ryn-cta-sheen 4.2s ease-in-out infinite !important;
++    pointer-events: none !important;
++}
++#enterGame:hover { filter: brightness(1.12) !important; box-shadow: 0 10px 30px rgba(122,66,244,0.5), inset 0 1px 0 rgba(255,255,255,0.32) !important; }
++#enterGame:active { transform: scale(0.965) !important; filter: brightness(0.97) !important; }
++@keyframes ryn-cta-sheen {
++    0%, 20% { left: -60%; }
++    55%, 100% { left: 130%; }
++}
++/* Press ring: toggled by a click listener (JS), the same restart-the-class
++   trick the corner badge uses, so a press always answers even on a rapid
++   double-click. */
++#enterGame.is-pressed::before {
++    content: '' !important;
++    position: absolute !important;
++    inset: 0 !important;
++    border-radius: inherit !important;
++    background: radial-gradient(circle, rgba(255,255,255,0.5), transparent 60%) !important;
++    animation: ryn-cta-pulse 480ms var(--ryn-ease) !important;
++    pointer-events: none !important;
++}
++@keyframes ryn-cta-pulse {
++    0% { opacity: 0.55; transform: scale(0.4); }
++    100% { opacity: 0; transform: scale(1.4); }
+ }
+-#enterGame:hover { filter: brightness(1.12) !important; box-shadow: 0 10px 30px rgba(122,66,244,0.48) !important; }
+-#enterGame:active { transform: scale(0.985) !important; }
+ 
+ #ryn-skin-holder {
+     display: flex !important;
+     flex-wrap: wrap !important;
+     justify-content: center !important;
+-    gap: 4px !important;
+-    margin: 4px auto 2px !important;
+-    padding: 12px 8px !important;
++    gap: 6px !important;
++    margin: 2px auto 0 !important;
++    padding: 14px 10px !important;
+     max-width: 100% !important;
+     border-radius: 16px !important;
+-    background: rgba(255,255,255,0.045) !important;
+-    border: 1px solid rgba(255,255,255,0.09) !important;
++    background: rgba(255,255,255,0.04) !important;
++    border: 1px solid rgba(255,255,255,0.08) !important;
++    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05) !important;
+ }
+ #ryn-skin-holder .skinColorItem {
++    position: relative !important;
+     width: 28px !important;
+     height: 28px !important;
+     border-radius: 50% !important;
+@@ -24190,31 +24244,79 @@
+     box-shadow: 0 3px 10px rgba(0,0,0,0.34) !important;
+     cursor: pointer !important;
+     flex: 0 0 auto !important;
+-    transition: box-shadow 160ms ease, border-color 160ms ease, transform 160ms ease !important;
++    transition: box-shadow 180ms var(--ryn-ease), border-color 180ms var(--ryn-ease), transform 180ms var(--ryn-ease) !important;
+ }
+ #ryn-skin-holder .skinColorItem:hover { border-color: rgba(255,255,255,0.65) !important; transform: scale(1.10) !important; }
++#ryn-skin-holder .skinColorItem:active { transform: scale(0.90) !important; }
+ #ryn-skin-holder .skinColorItem.activeSkin {
+     border-color: #ffffff !important;
+     box-shadow: 0 0 0 3px rgba(170,130,255,0.55), 0 4px 14px rgba(0,0,0,0.4) !important;
+ }
++/* Favorite: a separate glow from "currently previewed" (.activeSkin), so
++   picking a favorite never gets overwritten by just trying other colors on. */
++#ryn-skin-holder .skinColorItem.favSkin {
++    box-shadow: 0 0 0 3px rgba(170,130,255,0.30), 0 0 14px rgba(170,130,255,0.55), 0 4px 14px rgba(0,0,0,0.4) !important;
++}
++#ryn-skin-holder .skinColorItem.favSkin.activeSkin {
++    box-shadow: 0 0 0 3px rgba(255,255,255,0.9), 0 0 16px rgba(170,130,255,0.75), 0 4px 14px rgba(0,0,0,0.4) !important;
++}
++.ryn-fav-star {
++    position: absolute !important;
++    top: -6px !important;
++    right: -6px !important;
++    width: 15px !important;
++    height: 15px !important;
++    display: flex !important;
++    align-items: center !important;
++    justify-content: center !important;
++    background: rgba(22,17,38,0.92) !important;
++    border: 1px solid rgba(255,255,255,0.30) !important;
++    border-radius: 50% !important;
++    padding: 0 !important;
++    margin: 0 !important;
++    cursor: pointer !important;
++    opacity: 0 !important;
++    transform: scale(0.7) !important;
++    transition: opacity 160ms ease, transform 160ms var(--ryn-ease), border-color 160ms ease, background 160ms ease !important;
++    pointer-events: none !important;
++}
++#ryn-skin-holder .skinColorItem:hover .ryn-fav-star { opacity: 1 !important; transform: scale(1) !important; pointer-events: auto !important; }
++.ryn-fav-star svg { width: 9px !important; height: 9px !important; fill: none !important; stroke: rgba(255,255,255,0.75) !important; stroke-width: 1.4 !important; transition: fill 160ms ease, stroke 160ms ease !important; }
++.ryn-fav-star:hover { border-color: rgba(255,255,255,0.7) !important; }
++.ryn-fav-star:active { transform: scale(0.82) !important; }
++.ryn-fav-star.is-fav {
++    opacity: 1 !important;
++    transform: scale(1) !important;
++    pointer-events: auto !important;
++    border-color: rgba(200,170,255,0.85) !important;
++    background: rgba(150,96,255,0.35) !important;
++}
++.ryn-fav-star.is-fav svg { fill: #ffffff !important; stroke: #ffffff !important; }
++.ryn-fav-star.just-set { animation: ryn-star-pop 360ms var(--ryn-ease) !important; }
++@keyframes ryn-star-pop {
++    0% { transform: scale(1); }
++    40% { transform: scale(1.45); }
++    100% { transform: scale(1); }
++}
+ 
+ #nativeCheckHolder {
+     display: flex !important;
+     align-items: center !important;
+     justify-content: center !important;
+     gap: 10px !important;
+-    background: rgba(255,255,255,0.06) !important;
+-    border: 1px solid rgba(255,255,255,0.13) !important;
+-    border-radius: 14px !important;
+-    padding: 13px 16px !important;
++    background: rgba(255,255,255,0.05) !important;
++    border: 1px solid rgba(255,255,255,0.12) !important;
++    border-radius: 12px !important;
++    padding: 12px 16px !important;
+     cursor: pointer !important;
+     color: rgba(255,255,255,0.70) !important;
+     font-family: 'Exo 2', sans-serif !important;
+     font-size: 0.84em !important;
+     font-weight: 600 !important;
+-    transition: background 160ms, border-color 160ms, color 160ms !important;
++    transition: background 180ms ease, border-color 180ms ease, color 180ms ease, transform 150ms cubic-bezier(.22,1,.36,1) !important;
+ }
+ #nativeCheckHolder:hover { border-color: rgba(170,130,255,0.55) !important; }
++#nativeCheckHolder:active { transform: scale(0.98) !important; }
+ #nativeCheckHolder:has(input:checked) {
+     background: rgba(150,96,255,0.20) !important;
+     border-color: rgba(170,130,255,0.85) !important;
+@@ -24224,20 +24326,21 @@
+ 
+ #setupCard a, #setupCard .menuText {
+     display: inline-block !important;
+-    margin: 2px auto 0 !important;
+-    padding: 10px 20px !important;
+-    background: rgba(255,255,255,0.05) !important;
+-    border: 1px solid rgba(255,255,255,0.11) !important;
+-    border-radius: 12px !important;
++    margin: 0 auto !important;
++    padding: 9px 20px !important;
++    background: rgba(255,255,255,0.04) !important;
++    border: 1px solid rgba(255,255,255,0.10) !important;
++    border-radius: 11px !important;
+     color: rgba(255,255,255,0.58) !important;
+     font-family: 'Exo 2', sans-serif !important;
+     font-size: 0.74em !important;
+     font-weight: 600 !important;
+     text-decoration: none !important;
+     text-align: center !important;
+-    transition: border-color 160ms, color 160ms !important;
++    transition: border-color 180ms ease, color 180ms ease, transform 150ms var(--ryn-ease) !important;
+ }
+ #setupCard a:hover, #setupCard .menuText:hover { border-color: rgba(170,130,255,0.75) !important; color: #ffffff !important; }
++#setupCard a:active, #setupCard .menuText:active { transform: scale(0.96) !important; }
+ 
+ /* The corner mark: the artwork and the name, and nothing around them. The card
+    they used to sit in was the size of a small window, which is a lot of screen
+@@ -24325,6 +24428,21 @@
+ @keyframes ryn-v2-ring { 0% { opacity: 0.85; transform: scale(0.96); } 100% { opacity: 0; transform: scale(1.5); } }
+ `;
+         document.head.appendChild(rynCSS);
++        // Enter submits the setup card, same as clicking Enter Game. Gated on
++        // the card actually being visible so this never fires over a chat
++        // message once you're in game, and a focused <select> is left alone
++        // since browsers use Enter there to close its own dropdown.
++        document.addEventListener("keydown", function(event) {
++          if (event.key !== "Enter") return;
++          const active = document.activeElement;
++          if (active && active.tagName === "SELECT") return;
++          const card = document.getElementById("setupCard");
++          if (!card || card.offsetParent === null) return;
++          const btn = document.getElementById("enterGame");
++          if (!btn || btn.disabled || btn.classList.contains("disabled")) return;
++          event.preventDefault();
++          btn.click();
++        });
+         function injectRynCardUI() {
+           const card = document.getElementById("setupCard");
+           if (!card || card._rynInjected) return;
+@@ -24334,6 +24452,21 @@
+             nameInput.value = "RYN";
+             nameInput.placeholder = "ENTER NAME...";
+           }
++          // Press ring on Enter Game: restart-the-class trick, same idiom the
++          // corner badge below uses for its own tap animation.
++          const enterBtn = document.getElementById("enterGame");
++          if (enterBtn) {
++            let pressTimer = 0;
++            enterBtn.addEventListener("click", function() {
++              enterBtn.classList.remove("is-pressed");
++              void enterBtn.offsetWidth;
++              enterBtn.classList.add("is-pressed");
++              clearTimeout(pressTimer);
++              pressTimer = setTimeout(function() {
++                enterBtn.classList.remove("is-pressed");
++              }, 500);
++            });
++          }
+         }
+         const cardInterval = setInterval(() => {
+           if (document.getElementById("setupCard")) {
+@@ -28053,10 +28186,25 @@
+     createSkinColors() {
+       const skin_color = CustomStorage.get("skin_color") || 0;
+       const index = typeof skin_color === "number" && skin_color >= 0 && skin_color < Config_default.skinColors.length ? skin_color : 0;
++      // Favorite is a separate, local-only pin (CustomStorage -> localStorage,
++      // never sent anywhere): which swatch stays starred no matter what you
++      // preview afterward. Distinct from `skin_color`, which is just whatever
++      // you'll spawn with right now and already persists on its own.
++      const favStored = CustomStorage.get("ryn_favorite_skin_color");
++      const favIndex = typeof favStored === "number" && favStored >= 0 && favStored < Config_default.skinColors.length ? favStored : null;
+       const {setupCard: setupCard} = this.getElements();
+       const skinHolder = document.createElement("div");
+       skinHolder.id = "ryn-skin-holder";
+       let prevIndex = index;
++      const applySkin = i => {
++        const colorButton = skinHolder.childNodes[prevIndex];
++        if (colorButton instanceof HTMLDivElement) {
++          colorButton.classList.remove("activeSkin");
++        }
++        skinHolder.childNodes[i].classList.add("activeSkin");
++        prevIndex = i;
++        this.selectSkinColor(i);
++      };
+       for (let i = 0; i < Config_default.skinColors.length; i++) {
+         const color = Config_default.skinColors[i];
+         const div = document.createElement("div");
+@@ -28064,16 +28212,34 @@
+         if (i === index) {
+           div.classList.add("activeSkin");
+         }
++        if (i === favIndex) {
++          div.classList.add("favSkin");
++        }
+         div.style.backgroundColor = color;
+-        div.onclick = () => {
+-          const colorButton = skinHolder.childNodes[prevIndex];
+-          if (colorButton instanceof HTMLDivElement) {
+-            colorButton.classList.remove("activeSkin");
+-          }
+-          div.classList.add("activeSkin");
+-          prevIndex = i;
+-          this.selectSkinColor(i);
++        div.onclick = () => applySkin(i);
++        const star = document.createElement("button");
++        star.type = "button";
++        star.className = "ryn-fav-star" + (i === favIndex ? " is-fav" : "");
++        star.title = "Save as favorite color";
++        star.setAttribute("aria-label", "Save as favorite color");
++        star.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.6 7.1.7-5.4 4.8 1.6 7-6.2-3.7-6.2 3.7 1.6-7-5.4-4.8 7.1-.7z"/></svg>';
++        star.onclick = event => {
++          // The click would otherwise also bubble to the swatch's own
++          // handler above and call applySkin(i) a second time.
++          event.stopPropagation();
++          const prevStar = skinHolder.querySelector(".ryn-fav-star.is-fav");
++          if (prevStar) prevStar.classList.remove("is-fav", "just-set");
++          const prevFav = skinHolder.querySelector(".skinColorItem.favSkin");
++          if (prevFav instanceof HTMLDivElement) prevFav.classList.remove("favSkin");
++          star.classList.add("is-fav");
++          div.classList.add("favSkin");
++          CustomStorage.set("ryn_favorite_skin_color", i);
++          applySkin(i);
++          star.classList.remove("just-set");
++          void star.offsetWidth;
++          star.classList.add("just-set");
+         };
++        div.appendChild(star);
+         skinHolder.appendChild(div);
+       }
+       setupCard.appendChild(skinHolder);
