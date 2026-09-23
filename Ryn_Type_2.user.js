@@ -24472,10 +24472,12 @@ window.grbtp = 35;
 
 /* ---------- the game's menu layer, taken over ---------------------------- */
 
-#mainMenu {
-    background: #07070A !important;
-    background-image: none !important;
-}
+/* #mainMenu keeps its own background. It used to be painted flat black here,
+   which looks right for the half-second it shows through and catastrophic the
+   moment anything keeps the lobby from drawing: a black screen with nothing on
+   it and no way to tell what went wrong. The lobby covers it completely when
+   it is up, so there is nothing to gain, and the game's own menu is a far
+   better thing to fall back to. */
 
 /* The card holder keeps its place in the page and its display keeps being the
    game's to set — the lobby reads it as a switch — but nothing is drawn in it
@@ -24487,17 +24489,25 @@ window.grbtp = 35;
     pointer-events: none !important;
 }
 
-#menuCardHolder > * { display: none !important; }
+#menuCardHolder > *:not(#loadingText) { display: none !important; }
 
-/* The default lobby's furniture. The JS sweep in buildLobby() catches
-   whatever the page ships under names not listed here; this is the part that
-   has to be right before the first paint. */
-#promoImgHolder, #guideCard, #gameName, #partyButton, #joinPartyButton,
-#linksContainer1, #linksContainer2, #bottomContainer, #altServer,
-#downloadButtonContainer, #mobileDownloadButtonContainer,
-#nativeCheckHolder, #nativeResolution, #skinColorHolder, #altcha,
-#adCard, .adMenuCard, .menuHeader, .menuText, #ot-sdk-btn-floating,
-#moomooio_728x90_home, #moomooio_970x90_home {
+/* The default lobby's furniture.
+
+   Every one of these is scoped to #mainMenu, and that is not tidiness. An id
+   is only lobby furniture if it is IN the lobby: #bottomContainer hidden by
+   name took the action bar out of the game with it, because that name belongs
+   to the strip along the bottom of the screen during a round, not to the
+   footer under the menu. Nothing outside the menu layer is touched from here,
+   and the sweep in hideDefaultLobby() holds to the same rule. */
+#mainMenu #promoImgHolder, #mainMenu #guideCard, #mainMenu #gameName,
+#mainMenu #partyButton, #mainMenu #joinPartyButton,
+#mainMenu #linksContainer1, #mainMenu #linksContainer2,
+#mainMenu #bottomContainer, #mainMenu #altServer, #mainMenu #setupCard,
+#mainMenu #downloadButtonContainer, #mainMenu #mobileDownloadButtonContainer,
+#mainMenu #nativeCheckHolder, #mainMenu #nativeResolution,
+#mainMenu #skinColorHolder, #mainMenu #altcha, #mainMenu #adCard,
+#mainMenu .adMenuCard, #mainMenu .menuHeader, #mainMenu .menuText,
+#mainMenu #moomooio_728x90_home, #mainMenu #moomooio_970x90_home {
     display: none !important;
 }
 
@@ -24586,7 +24596,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         radial-gradient(980px 560px at 6% -8%, rgba(142,118,206,0.15), transparent 62%),
         radial-gradient(700px 480px at 42% 112%, rgba(142,118,206,0.05), transparent 60%),
         var(--rl-ink-0);
-    animation: rl-shell-in 300ms var(--rl-ease) both;
+    animation: rl-shell-in 300ms var(--rl-ease) forwards;
 }
 
 /* the lobby is up when the game says it is — see the two switches it reads */
@@ -24594,6 +24604,11 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 
 #ryn-lobby *, #ryn-lobby *::before, #ryn-lobby *::after { box-sizing: border-box; }
 
+/* "forwards", never "both". Under "both" an element renders at the keyframe's
+   start — opacity 0 — for as long as the animation has not begun, so anything
+   that keeps these from running leaves the lobby drawn but empty. Under
+   "forwards" an animation that never runs costs nothing: the element is simply
+   itself. */
 @keyframes rl-shell-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes rl-rise { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
 
@@ -24632,7 +24647,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     cursor: pointer;
     user-select: none;
     -webkit-user-select: none;
-    animation: rl-rise 320ms var(--rl-ease) both;
+    animation: rl-rise 320ms var(--rl-ease) forwards;
 }
 .rl-mark-1 {
     font-family: var(--rl-mono);
@@ -24669,7 +24684,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     flex-direction: column;
     align-items: flex-start;
     justify-content: center;
-    animation: rl-rise 380ms var(--rl-ease) both;
+    animation: rl-rise 380ms var(--rl-ease) forwards;
 }
 
 .rl-title {
@@ -24872,7 +24887,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    animation: rl-rise 420ms var(--rl-ease) both;
+    animation: rl-rise 420ms var(--rl-ease) forwards;
 }
 .rl-status-dot {
     flex: 0 0 auto;
@@ -24895,7 +24910,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     min-height: 0;
     background: rgba(9,9,13,0.92);
     border-left: 1px solid var(--rl-line-2);
-    animation: rl-rise 380ms var(--rl-ease) both;
+    animation: rl-rise 380ms var(--rl-ease) forwards;
 }
 
 .rs-head {
@@ -29075,23 +29090,46 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     // whatever they happen to be called, and whatever arrives later.
     hideDefaultLobby(lobby) {
       const doc = document;
-      // Nothing that still holds the Turnstile widget gets hidden, whatever
-      // else it is. The widget has to have a rendered ancestor or the bundle
-      // will not render a challenge into it, and with no challenge there is no
-      // token and Play never comes out of its disabled state. It is inside the
-      // lobby by the time this runs; this is the belt for the day it is not.
-      const gate = doc.getElementById("turnstileWidget");
-      const spare = node => node.contains(lobby) || gate !== null && node.contains(gate);
-      const named = [ "setupCard", "guideCard", "promoImgHolder", "promoImg", "gameName", "partyButton", "joinPartyButton", "linksContainer1", "linksContainer2", "bottomContainer", "altServer", "nativeCheckHolder", "skinColorHolder", "downloadButtonContainer", "mobileDownloadButtonContainer", "adCard" ];
-      for (let i = 0; i < named.length; i++) {
-        const node = doc.getElementById(named[i]);
-        if (node !== null && !spare(node)) {
-          node.style.setProperty("display", "none", "important");
+      // Nothing that still holds one of these gets hidden, whatever else it
+      // is and wherever it turns out to sit:
+      //
+      //   #turnstileWidget  needs a rendered ancestor or the bundle will not
+      //                     render a challenge into it, and with no challenge
+      //                     there is no token and Play never comes out of its
+      //                     disabled state
+      //   #gameUI, #actionBar, #gameCanvas
+      //                     the round itself. This sweep only ever meant to
+      //                     take out lobby furniture; if any of it were nested
+      //                     where this walks, hiding it would take the game
+      //                     with it
+      //   #loadingText, #diedText
+      //                     the bundle's own two messages, which stand in for
+      //                     the lobby rather than sitting beside it
+      const sacred = [ "turnstileWidget", "gameUI", "actionBar", "gameCanvas", "loadingText", "diedText" ].map(id => doc.getElementById(id)).filter(node => node !== null);
+      const spare = node => {
+        if (node.contains(lobby)) {
+          return true;
         }
-      }
+        for (let i = 0; i < sacred.length; i++) {
+          if (node.contains(sacred[i])) {
+            return true;
+          }
+        }
+        return false;
+      };
       const mainMenu = doc.getElementById("mainMenu");
       if (mainMenu === null) {
         return;
+      }
+      // Only what is actually inside the menu layer. An id is lobby furniture
+      // because of where it sits, not because of its name: #bottomContainer
+      // hidden by name took the game's action bar with it.
+      const named = [ "setupCard", "guideCard", "promoImgHolder", "promoImg", "gameName", "partyButton", "joinPartyButton", "linksContainer1", "linksContainer2", "bottomContainer", "altServer", "nativeCheckHolder", "skinColorHolder", "downloadButtonContainer", "mobileDownloadButtonContainer", "adCard" ];
+      for (let i = 0; i < named.length; i++) {
+        const node = doc.getElementById(named[i]);
+        if (node !== null && mainMenu.contains(node) && !spare(node)) {
+          node.style.setProperty("display", "none", "important");
+        }
       }
       // #loadingText is the bundle's own status line — "Connecting...",
       // "Server is already full.", "Disconnected" — and it replaces the lobby
@@ -29673,32 +29711,36 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       /* When the lobby is up is the bundle's decision, and it says so by
        * toggling two elements it holds references to:
        *
-       *   #mainMenu        off for the whole of a round, on in the lobby and
-       *                    again after a death
-       *   #menuCardHolder  off while connecting and while a message is up
-       *                    ("Connecting...", "Server is already full."), on
-       *                    in the lobby
+       *   #mainMenu     off for the whole of a round, on in the lobby and
+       *                 again after a death
+       *   #loadingText  on in place of the lobby while connecting and while
+       *                 a message is up ("Connecting...", "Server is already
+       *                 full.", "Disconnected"), off in the lobby — _a()
+       *                 turns it off in the same breath as it fills the name
+       *                 field
        *
-       * Reading both is the same answer the old arrangement got by living
-       * inside the second one, without depending on where the page keeps it
-       * or what it stacks over it. */
+       * The test is worded so that the lobby is SHOWN unless one of those two
+       * says otherwise. A missing element, a display this cannot read, a
+       * structure that is not what was expected — all of it lands on "show".
+       * Getting that backwards is a black screen with nothing on it, which is
+       * a far worse failure than a lobby drawn a moment early. */
       const menuLayer = doc.getElementById("mainMenu");
-      const cardHolder = doc.getElementById("menuCardHolder");
-      const isShown = node => {
+      const notice = doc.getElementById("loadingText");
+      const displayOf = node => {
         if (node === null) {
-          return true;
+          return null;
         }
-        if (node.style.display === "none") {
-          return false;
+        if (node.style.display) {
+          return node.style.display;
         }
         try {
-          return getComputedStyle(node).display !== "none";
+          return getComputedStyle(node).display;
         } catch (e) {
-          return true;
+          return null;
         }
       };
       const onSwitches = () => {
-        const show = isShown(menuLayer) && isShown(cardHolder);
+        const show = displayOf(menuLayer) !== "none" && displayOf(notice) !== "block";
         if (lobby.classList.contains("rl-off") === show) {
           lobby.classList.toggle("rl-off", !show);
         }
@@ -29710,8 +29752,8 @@ html.ryn-in-lobby .ryn-v2-wrapper {
           attributeFilter: [ "style", "class" ]
         });
       }
-      if (cardHolder !== null) {
-        switches.observe(cardHolder, {
+      if (notice !== null) {
+        switches.observe(notice, {
           attributes: true,
           attributeFilter: [ "style", "class" ]
         });
