@@ -34509,6 +34509,14 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       chatBox.onblur = () => {
         chatHolder.style.display = "none";
         const value = chatBox.value;
+        // Local commands are swallowed here, before anything reaches the wire.
+        // Nothing is sent, so nothing is seen by anyone else — the chat box is
+        // just the most convenient place to type when the game has the
+        // keyboard.
+        if (_rynLocalChatCommand(value)) {
+          chatBox.value = "";
+          return;
+        }
         if (value.length > 0) {
           // Sent by whoever is being controlled, on that entity's own
           // connection, so it arrives at the server under that entity's name.
