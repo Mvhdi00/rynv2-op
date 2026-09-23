@@ -24477,31 +24477,17 @@ window.grbtp = 35;
     background-image: none !important;
 }
 
-/* #menuCardHolder is the game's own "the lobby is showing" switch: it is
-   display:none while connecting and while a round is running, and block in
-   the lobby. Hanging the new lobby off it means the show/hide logic is the
-   game's, with nothing of ours polling for it. */
+/* The card holder keeps its place in the page and its display keeps being the
+   game's to set — the lobby reads it as a switch — but nothing is drawn in it
+   any more, and it never takes a click. */
 #menuCardHolder {
-    position: fixed !important;
-    left: 0 !important;
-    top: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    width: auto !important;
-    height: auto !important;
-    max-width: none !important;
-    max-height: none !important;
-    margin: 0 !important;
-    padding: 0 !important;
     background: none !important;
     border: 0 !important;
     box-shadow: none !important;
-    overflow: hidden !important;
-    transform: none !important;
-    filter: none !important;
+    pointer-events: none !important;
 }
 
-#menuCardHolder > *:not(#ryn-lobby) { display: none !important; }
+#menuCardHolder > * { display: none !important; }
 
 /* The default lobby's furniture. The JS sweep in buildLobby() catches
    whatever the page ships under names not listed here; this is the part that
@@ -24576,9 +24562,18 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     --rl-font: 'Manrope', 'Segoe UI', system-ui, sans-serif;
     --rl-mono: 'Space Grotesk', 'Manrope', system-ui, sans-serif;
 
-    position: absolute;
-    inset: 0;
-    z-index: 1;
+    /* A top-level element of its own, above the game's menu layer and below
+       the client menu's frame (which is z-index 10). It used to live inside
+       #menuCardHolder, which meant it inherited whatever that was nested
+       under and whatever the page stacked over it — and on the real page that
+       put it behind #mainMenu's background. Nothing about where the game
+       keeps its cards can reach it here. */
+    position: fixed;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9;
     display: grid;
     grid-template-columns: minmax(0, 1fr) 384px;
     font-family: var(--rl-font);
@@ -24593,6 +24588,9 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         var(--rl-ink-0);
     animation: rl-shell-in 300ms var(--rl-ease) both;
 }
+
+/* the lobby is up when the game says it is — see the two switches it reads */
+#ryn-lobby.rl-off { display: none !important; }
 
 #ryn-lobby *, #ryn-lobby *::before, #ryn-lobby *::after { box-sizing: border-box; }
 
@@ -24672,7 +24670,6 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     align-items: flex-start;
     justify-content: center;
     animation: rl-rise 380ms var(--rl-ease) both;
-    animation-delay: 40ms;
 }
 
 .rl-title {
@@ -24876,7 +24873,6 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     overflow: hidden;
     text-overflow: ellipsis;
     animation: rl-rise 420ms var(--rl-ease) both;
-    animation-delay: 120ms;
 }
 .rl-status-dot {
     flex: 0 0 auto;
@@ -24900,7 +24896,6 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     background: rgba(9,9,13,0.92);
     border-left: 1px solid var(--rl-line-2);
     animation: rl-rise 380ms var(--rl-ease) both;
-    animation-delay: 80ms;
 }
 
 .rs-head {
@@ -26645,6 +26640,10 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       this.toggleTimeout = setTimeout(() => {
         menuWrapper.classList.remove("toopen");
       }, 150);
+      // The outline marks the section you are looking at, which it works out
+      // by measuring. Nothing in a frame that is display:none has a size, so
+      // the first honest measurement is the one taken here.
+      this.syncOutline();
     }
     toggleMenu() {
       if (!this.menuLoaded) {
@@ -26782,11 +26781,29 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       });
       this.frame.window.addEventListener("keydown", event => client.InputHandler.handleKeydown(event));
       this.frame.window.addEventListener("keyup", event => client.InputHandler.handleKeyup(event));
-      this.openMenu();
+      // The menu used to open itself here, the moment the frame finished
+      // loading — so it was up over the lobby before anything had been asked
+      // for. It opens when it is asked for now: the menu key, the mark in the
+      // lobby's top corner, or the badge in the corner during a round. The
+      // frame is created display:none and menuOpened starts false, so the
+      // first toggle opens it.
     }
     resetFrame() {
+      // Reset-to-defaults throws the frame away and builds a new one, and it
+      // is pressed from inside the menu — so the new frame comes up open if
+      // the old one was. Nothing else opens it on its own.
+      const wasOpen = this.menuOpened;
       this.frame.target.remove();
-      this.init();
+      this.menuLoaded = false;
+      this.menuOpened = false;
+      const building = this.init();
+      if (wasOpen && building && typeof building.then === "function") {
+        building.then(() => {
+          if (this.menuLoaded) {
+            this.openMenu();
+          }
+        });
+      }
     }
     async init() {
       try {
@@ -29058,10 +29075,17 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     // whatever they happen to be called, and whatever arrives later.
     hideDefaultLobby(lobby) {
       const doc = document;
+      // Nothing that still holds the Turnstile widget gets hidden, whatever
+      // else it is. The widget has to have a rendered ancestor or the bundle
+      // will not render a challenge into it, and with no challenge there is no
+      // token and Play never comes out of its disabled state. It is inside the
+      // lobby by the time this runs; this is the belt for the day it is not.
+      const gate = doc.getElementById("turnstileWidget");
+      const spare = node => node.contains(lobby) || gate !== null && node.contains(gate);
       const named = [ "setupCard", "guideCard", "promoImgHolder", "promoImg", "gameName", "partyButton", "joinPartyButton", "linksContainer1", "linksContainer2", "bottomContainer", "altServer", "nativeCheckHolder", "skinColorHolder", "downloadButtonContainer", "mobileDownloadButtonContainer", "adCard" ];
       for (let i = 0; i < named.length; i++) {
         const node = doc.getElementById(named[i]);
-        if (node !== null && !node.contains(lobby)) {
+        if (node !== null && !spare(node)) {
           node.style.setProperty("display", "none", "important");
         }
       }
@@ -29083,7 +29107,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         const kids = mainMenu.children;
         for (let i = 0; i < kids.length; i++) {
           const node = kids[i];
-          if (keep[node.id] === true || node.contains(lobby)) {
+          if (keep[node.id] === true || spare(node)) {
             continue;
           }
           if (node.style.display !== "none") {
@@ -29102,7 +29126,13 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       if (doc.getElementById("ryn-lobby") !== null) {
         return;
       }
-      const host = doc.getElementById("menuCardHolder") || doc.getElementById("mainMenu") || doc.body;
+      // A top-level element of its own. It used to be built into
+      // #menuCardHolder so the game's own show/hide came for free, but that
+      // also meant inheriting whatever the page nests and stacks that under —
+      // and on the real page it ended up behind #mainMenu's background, which
+      // is a black screen where the lobby should be. It follows the game's two
+      // switches by reading them instead; see onSwitches() below.
+      const host = doc.body || doc.documentElement;
       if (!host) {
         return;
       }
@@ -29640,6 +29670,54 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         });
       }
 
+      /* When the lobby is up is the bundle's decision, and it says so by
+       * toggling two elements it holds references to:
+       *
+       *   #mainMenu        off for the whole of a round, on in the lobby and
+       *                    again after a death
+       *   #menuCardHolder  off while connecting and while a message is up
+       *                    ("Connecting...", "Server is already full."), on
+       *                    in the lobby
+       *
+       * Reading both is the same answer the old arrangement got by living
+       * inside the second one, without depending on where the page keeps it
+       * or what it stacks over it. */
+      const menuLayer = doc.getElementById("mainMenu");
+      const cardHolder = doc.getElementById("menuCardHolder");
+      const isShown = node => {
+        if (node === null) {
+          return true;
+        }
+        if (node.style.display === "none") {
+          return false;
+        }
+        try {
+          return getComputedStyle(node).display !== "none";
+        } catch (e) {
+          return true;
+        }
+      };
+      const onSwitches = () => {
+        const show = isShown(menuLayer) && isShown(cardHolder);
+        if (lobby.classList.contains("rl-off") === show) {
+          lobby.classList.toggle("rl-off", !show);
+        }
+      };
+      const switches = new MutationObserver(onSwitches);
+      if (menuLayer !== null) {
+        switches.observe(menuLayer, {
+          attributes: true,
+          attributeFilter: [ "style", "class" ]
+        });
+      }
+      if (cardHolder !== null) {
+        switches.observe(cardHolder, {
+          attributes: true,
+          attributeFilter: [ "style", "class" ]
+        });
+      }
+      onSwitches();
+
       const onVisible = state => {
         if (state === visible) {
           return;
@@ -29657,10 +29735,9 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         }
       };
 
-      // #menuCardHolder is display:none for the whole of a round, so the lobby
-      // stops intersecting the moment one starts and starts again when it
-      // ends. That is the whole visibility story — no timer of ours outside
-      // the lobby, and no work between those two events.
+      // What is actually on screen, which the two switches above decide. No
+      // timer of ours runs outside the lobby and no work happens between those
+      // events.
       if (typeof IntersectionObserver === "function") {
         new IntersectionObserver(entries => {
           onVisible(entries[entries.length - 1].isIntersecting);
