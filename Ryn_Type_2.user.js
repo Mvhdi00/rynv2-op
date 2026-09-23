@@ -30449,38 +30449,6 @@ window.grbtp = 35;
 .rl-go[disabled]:hover { transform: none; }
 .rl-go[disabled]:hover::after { transform: translateX(-100%); }
 
-/* segmented quick-join */
-.rl-seg {
-  display: inline-flex;
-  padding: 3px;
-  gap: 3px;
-  border: 1px solid var(--rl-line);
-  border-radius: 11px;
-  background: var(--rl-ink-2);
-  margin-bottom: 22px;
-}
-.rl-seg button {
-  border: none;
-  border-radius: 8px;
-  background: none;
-  color: var(--rl-tx-2);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  padding: 8px 17px;
-  cursor: pointer;
-  transition: color 130ms ease, background 130ms ease, transform 130ms var(--rl-ease);
-}
-.rl-seg button:hover { color: var(--rl-tx-1); }
-.rl-seg button:active { transform: scale(0.97); }
-.rl-seg button[aria-pressed="true"] {
-  background: var(--rl-iris-dm);
-  color: var(--rl-iris-hi);
-}
-.rl-seg button:focus-visible { outline: 1px solid var(--rl-sky); outline-offset: 1px; }
-
 /* colours */
 .rl-swatches { display: flex; flex-wrap: wrap; gap: 9px; }
 .rl-sw {
@@ -30752,7 +30720,7 @@ window.grbtp = 35;
 @media (max-height: 620px) {
   .rl-word-1, .rl-word-2 { font-size: clamp(34px, 5vw, 56px); }
   .rl-tag { margin-bottom: 14px; }
-  .rl-rail, .rl-seg { margin-bottom: 14px; }
+  .rl-rail { margin-bottom: 14px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -30983,6 +30951,13 @@ html.ryn-lobby-open #ryn-v2-wrapper { display: none !important; }
         // before the lobby can be used.
         let boot = null;
         let bootStat = null;
+        let bootAt = 0;
+        // A floor on how long the screen is shown, not on how long anything
+        // takes. Initialisation runs underneath the whole time and the lobby is
+        // built the moment it can be; on a warm load the game is ready in a few
+        // hundred milliseconds and the screen would otherwise be a flicker.
+        // Holding it here delays only its own removal — nothing waits on this.
+        const BOOT_MIN_MS = 2600;
         const bootSay = t => { if (bootStat && bootStat.textContent !== t) bootStat.textContent = t; };
 
         function showBoot() {
@@ -30998,10 +30973,21 @@ html.ryn-lobby-open #ryn-v2-wrapper { display: none !important; }
           boot.appendChild(track);
           boot.appendChild(bootStat);
           document.body.appendChild(boot);
+          bootAt = Date.now();
         }
 
         function hideBoot() {
           if (!boot) return;
+          // Ready early: serve out the rest of the floor, then go. Re-entry is
+          // harmless because `boot` is only cleared below.
+          const left = BOOT_MIN_MS - (Date.now() - bootAt);
+          if (left > 0) {
+            if (!hideBoot._armed) {
+              hideBoot._armed = true;
+              setTimeout(() => { hideBoot._armed = false; hideBoot(); }, left);
+            }
+            return;
+          }
           const b = boot;
           boot = null;
           bootStat = null;
@@ -31018,7 +31004,6 @@ html.ryn-lobby-open #ryn-v2-wrapper { display: none !important; }
         let nameEl = null, goEl = null, swatchEl = null, footEl = null;
         let servers = [];          // flat list from the API
         let region = null;         // region currently shown
-        let quick = "selected";    // selected | best | empty
         let timer = null;
         let built = false;
 
@@ -31152,22 +31137,6 @@ html.ryn-lobby-open #ryn-v2-wrapper { display: none !important; }
           }
         }
 
-        // Quick join reads the list that is already on screen; it never invents
-        // a server. "Best" is the emptiest server that is not full, "Empty" the
-        // first with nobody on it.
-        function quickTarget() {
-          const open = servers.filter(s => (s.playerCount | 0) < (s.playerCapacity || 1));
-          if (!open.length) return null;
-          if (quick === "empty") {
-            const e = open.filter(s => (s.playerCount | 0) === 0);
-            return e.length ? e[0] : open.slice().sort((a, b) => a.playerCount - b.playerCount)[0];
-          }
-          if (quick === "best") {
-            return open.slice().sort((a, b) => a.playerCount - b.playerCount)[0];
-          }
-          return null;
-        }
-
         // ── join ───────────────────────────────────────────────────────────
         // `ev` is the real, trusted event that triggered this — see the note at
         // the top. It is forwarded untouched.
@@ -31181,14 +31150,58 @@ html.ryn-lobby-open #ryn-v2-wrapper { display: none !important; }
               try { input.dispatchEvent(new Event("change", { bubbles: true })); } catch (_) {}
             }
           }
-          const want = quickTarget();
-          const h = here();
-          if (want && !(h && h.region === String(want.region) && h.name === String(want.name))) {
-            location.href = href(want.region, want.name);
-            return;
+          // Reaching the game's handler, whichever of the two is installed.
+          //
+          // RYN wraps this button in `GameUI.load()`:
+          //
+          //     enterGameButton.onclick = function () { ...; _enterGame.call(this); ... };
+          //     Object.defineProperty(enterGameButton, "onclick", {
+          //       set(cb) { _enterGame = cb; }, configurable: true });
+          //
+          // That accessor has a setter and no getter, so once RYN has loaded,
+          // `btn.onclick` reads back as undefined however live the handler
+          // underneath is. Testing it before calling — which is what this did —
+          // therefore skipped the press and nothing happened. The wrapper it
+          // hides is driven by the DOM's own click dispatch and ignores the
+          // event object entirely, so `btn.click()` reaches it exactly as a
+          // finger on the button would; it is also the call RYN itself makes in
+          // `clientSpawn()`.
+          //
+          // The readable-handler branch is kept for the plain bundle, where
+          // `onclick` is the game's own `checkTrusted` wrapper and does need a
+          // real Event — which `ev` is, since it came from this press.
+          //
+          // The `disabled` class is deliberately not tested here. It is the
+          // bundle's "we hold a Turnstile token" flag and its own handler
+          // already refuses on it; filtering first would only make the RYN
+          // button answer a press differently from the real one.
+          let handler = btn.onclick;
+          if (typeof handler !== "function") {
+            // RYN's accessor is in the way. Press the button the way RYN does,
+            // which runs its wrapper; the wrapper's first act is
+            // `delete enterGameButton.onclick`, and its last is to assign the
+            // handler it was hiding straight back — so one press both fires it
+            // and puts the real handler back where it can be read.
+            btn.click();
+            handler = btn.onclick;
+            // Nothing underneath: RYN took the press for itself through
+            // `RYN.startGame()` and the game is already on its way.
+            if (typeof handler !== "function") return;
+            // Something underneath, and RYN called it with no arguments. That
+            // is the whole bug: the bundle's handler is `checkTrusted`-wrapped
+            // and drops anything that is not an Event, so the press RYN just
+            // made was thrown away and the player stayed in the lobby. The
+            // press is repeated below with the real event behind it.
+            //
+            // Unless it did land — on a bundle whose handler is not guarded it
+            // would have. `Si("Connecting...")` is the first thing that handler
+            // does and it shows #loadingText synchronously, so the element is a
+            // reliable read of whether the press took, and stops this from
+            // joining twice.
+            const lt = $("loadingText");
+            if (lt && lt.style.display === "block") return;
           }
-          if (btn.classList.contains("disabled")) return;
-          if (typeof btn.onclick === "function") btn.onclick(ev);
+          handler.call(btn, ev);
         }
 
         // ── colours ────────────────────────────────────────────────────────
@@ -31264,21 +31277,6 @@ html.ryn-lobby-open #ryn-v2-wrapper { display: none !important; }
           rail.appendChild(goEl);
           stack.appendChild(rail);
 
-          stack.appendChild(el("label", "rl-lab", "Quick join"));
-          const seg = el("div", "rl-seg");
-          [["selected", "Selected"], ["best", "Emptiest"], ["empty", "Fresh"]].forEach(([k, label]) => {
-            const b = el("button", null, label);
-            b.type = "button";
-            b.setAttribute("aria-pressed", String(k === quick));
-            b.addEventListener("click", () => {
-              quick = k;
-              seg.querySelectorAll("button").forEach(x =>
-                x.setAttribute("aria-pressed", String(x === b)));
-            });
-            seg.appendChild(b);
-          });
-          stack.appendChild(seg);
-
           stack.appendChild(el("label", "rl-lab", "Skin colour"));
           swatchEl = el("div", "rl-swatches");
           stack.appendChild(swatchEl);
@@ -31332,9 +31330,20 @@ html.ryn-lobby-open #ryn-v2-wrapper { display: none !important; }
           bootSay("PREPARING");
           // The lobby is only ready once the game has wired enterGame; until
           // then the button would be pressing nothing.
+          // Ready means the button does something when pressed. RYN's own
+          // wrapper hides `onclick` behind a setter-only accessor (see join),
+          // so a readable handler is sufficient but not necessary: once RYN has
+          // taken the button over, the accessor itself is the signal.
           const ready = () => {
             const b = $("enterGame");
-            if (b && typeof b.onclick === "function") { hideBoot(); return true; }
+            if (!b) return false;
+            const own = Object.getOwnPropertyDescriptor(b, "onclick");
+            const wrapped = !!(own && typeof own.set === "function");
+            if (typeof b.onclick === "function" || wrapped) {
+              bootSay("READY");
+              hideBoot();
+              return true;
+            }
             return false;
           };
           if (!ready()) {
