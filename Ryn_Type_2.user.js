@@ -30252,198 +30252,528 @@ window.grbtp = 35;
       const style = document.createElement("style");
       style.innerHTML = Game_default + Store_default;
       document.head.appendChild(style);
-      (function rynDesignInjector() {
-        const rynCSS = document.createElement("style");
-        rynCSS.id = "ryn-custom-design";
-        rynCSS.textContent = `
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Exo+2:wght@400;600&display=swap');
+      // The lobby stylesheet. Appended after the game sheet above so it
+      // wins on equal specificity without a wall of !important.
+      const rynLobbyCSS = document.createElement("style");
+      rynLobbyCSS.id = "ryn-lobby-css";
+      rynLobbyCSS.textContent = `
+/* ============================================================
+   RYN TYPE 2 — LOBBY & BOOT
+   One surface, no glass. The panels are flat fills over a fixed
+   two-stop ground, so nothing here reads the pixels behind it:
+   no backdrop-filter, no blur, no saturate. That is the whole
+   reason this repaints for free while the canvas runs.
+   Every animation below moves transform or opacity and nothing
+   else, so none of them touch layout or paint.
+   ============================================================ */
 
-#setupCard {
-    position: relative !important;
-    width: 400px !important;
-    padding: 30px 30px 24px !important;
-    display: flex !important;
-    flex-direction: column !important;
-    gap: 14px !important;
-    background: rgba(28, 22, 46, 0.42) !important;
-    backdrop-filter: blur(46px) saturate(190%) !important;
-    -webkit-backdrop-filter: blur(46px) saturate(190%) !important;
-    border: 1px solid rgba(255, 255, 255, 0.16) !important;
-    border-radius: 30px !important;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(0,0,0,0.18) !important;
+#ryn-lobby, #ryn-boot {
+  --rl-ink:   #0a0a0e;
+  --rl-ink-2: #101017;
+  --rl-ink-3: #15151f;
+  --rl-line:   rgba(255,255,255,0.075);
+  --rl-line-2: rgba(255,255,255,0.13);
+  --rl-line-3: rgba(255,255,255,0.24);
+  --rl-iris:    #8e76ce;
+  --rl-iris-hi: #a894e0;
+  --rl-iris-dm: rgba(142,118,206,0.16);
+  --rl-sky:  #9bc5e8;
+  --rl-sage: #a6d7b2;
+  --rl-rose: #d9a3ab;
+  --rl-tx-1: #f3f2f7;
+  --rl-tx-2: #aca9ba;
+  --rl-tx-3: #726f80;
+  --rl-ease: cubic-bezier(.2,.8,.3,1);
+  font-family: 'Manrope', 'Segoe UI', system-ui, sans-serif;
 }
-#setupCard::before {
-    content: '' !important;
-    position: absolute !important;
-    inset: 0 !important;
-    border-radius: 30px !important;
-    background: linear-gradient(160deg, rgba(150,100,255,0.16) 0%, rgba(90,60,190,0.04) 55%, rgba(255,255,255,0.05) 100%) !important;
-    pointer-events: none !important;
-}
-#setupCard > * { position: relative !important; z-index: 1 !important; }
-#setupCard br { display: none !important; }
+#ryn-lobby *, #ryn-boot * { box-sizing: border-box; }
 
-#nameInput, #serverSelect, #setupCard select {
-    background: rgba(255,255,255,0.07) !important;
-    border: 1px solid rgba(255,255,255,0.14) !important;
-    border-radius: 14px !important;
-    color: #ffffff !important;
-    font-family: 'Exo 2', sans-serif !important;
-    font-size: 1em !important;
-    font-weight: 600 !important;
-    text-align: center !important;
-    padding: 15px 16px !important;
-    width: 100% !important;
-    box-sizing: border-box !important;
-    outline: none !important;
-    transition: border-color 160ms ease, background 160ms ease !important;
-}
-#nameInput:focus, #serverSelect:hover, #setupCard select:hover {
-    border-color: rgba(170,130,255,0.72) !important;
-    background: rgba(255,255,255,0.11) !important;
-}
-#nameInput::placeholder { color: rgba(255,255,255,0.32) !important; }
-#serverSelect, #setupCard select {
-    cursor: pointer !important;
-    text-align-last: center !important;
-    -webkit-appearance: none !important;
-    appearance: none !important;
-    padding-right: 38px !important;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23b18cff' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") !important;
-    background-repeat: no-repeat !important;
-    background-position: right 16px center !important;
-}
-#serverSelect option, #setupCard select option { background: #1c1630 !important; color: #fff !important; }
+/* ---------------- the ground ---------------- */
 
-#serverBrowser { width: 100% !important; }
-#setupCard select[size]:not([size="1"]) {
-    height: auto !important;
-    max-height: 186px !important;
-    overflow-y: auto !important;
-    padding: 8px !important;
-    text-align: left !important;
-    text-align-last: left !important;
-    background-image: none !important;
-    cursor: default !important;
-    scrollbar-width: thin !important;
-    scrollbar-color: rgba(170,130,255,0.5) transparent !important;
+#ryn-lobby {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 384px;
+  color: var(--rl-tx-1);
+  /* Two fixed stops and a flat base. A gradient is rasterised once and
+     reused; it is not re-evaluated per frame. */
+  background:
+    radial-gradient(1100px 620px at 16% 82%, rgba(142,118,206,0.13), transparent 62%),
+    radial-gradient(760px 520px at 96% 6%, rgba(155,197,232,0.07), transparent 58%),
+    var(--rl-ink);
 }
-#setupCard select[size]:not([size="1"]) option {
-    padding: 7px 11px !important;
-    border-radius: 9px !important;
-    font-size: 0.84em !important;
-    font-weight: 600 !important;
-    background: transparent !important;
-    color: rgba(255,255,255,0.86) !important;
-}
-#setupCard select[size]:not([size="1"]) option:checked {
-    background: linear-gradient(135deg, rgba(150,96,255,0.55), rgba(110,64,220,0.55)) !important;
-    color: #ffffff !important;
-}
-#setupCard select[size]:not([size="1"]) option[disabled] {
-    color: rgba(255,255,255,0.34) !important;
-    font-size: 0.68em !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.14em !important;
-    text-transform: uppercase !important;
-    padding: 9px 11px 3px !important;
-}
-#setupCard select[size]:not([size="1"])::-webkit-scrollbar { width: 8px !important; }
-#setupCard select[size]:not([size="1"])::-webkit-scrollbar-track { background: transparent !important; }
-#setupCard select[size]:not([size="1"])::-webkit-scrollbar-thumb {
-    background: rgba(170,130,255,0.42) !important;
-    border-radius: 8px !important;
-}
-#setupCard select[size]:not([size="1"])::-webkit-scrollbar-thumb:hover { background: rgba(170,130,255,0.7) !important; }
+#ryn-lobby.rl-off { display: none; }
 
-#enterGame {
-    background: linear-gradient(135deg, rgba(150,96,255,0.92), rgba(110,64,220,0.92)) !important;
-    border: 1px solid rgba(255,255,255,0.20) !important;
-    border-radius: 15px !important;
-    color: #ffffff !important;
-    font-family: 'Orbitron', monospace !important;
-    font-size: 0.9em !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.22em !important;
-    padding: 17px 18px !important;
-    width: 100% !important;
-    cursor: pointer !important;
-    text-transform: uppercase !important;
-    box-shadow: 0 8px 24px rgba(122,66,244,0.34) !important;
-    transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease !important;
-}
-#enterGame:hover { filter: brightness(1.12) !important; box-shadow: 0 10px 30px rgba(122,66,244,0.48) !important; }
-#enterGame:active { transform: scale(0.985) !important; }
-
-#ryn-skin-holder {
-    display: flex !important;
-    flex-wrap: wrap !important;
-    justify-content: center !important;
-    gap: 4px !important;
-    margin: 4px auto 2px !important;
-    padding: 12px 8px !important;
-    max-width: 100% !important;
-    border-radius: 16px !important;
-    background: rgba(255,255,255,0.045) !important;
-    border: 1px solid rgba(255,255,255,0.09) !important;
-}
-#ryn-skin-holder .skinColorItem {
-    width: 28px !important;
-    height: 28px !important;
-    border-radius: 50% !important;
-    border: 2px solid rgba(255,255,255,0.20) !important;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.34) !important;
-    cursor: pointer !important;
-    flex: 0 0 auto !important;
-    transition: box-shadow 160ms ease, border-color 160ms ease, transform 160ms ease !important;
-}
-#ryn-skin-holder .skinColorItem:hover { border-color: rgba(255,255,255,0.65) !important; transform: scale(1.10) !important; }
-#ryn-skin-holder .skinColorItem.activeSkin {
-    border-color: #ffffff !important;
-    box-shadow: 0 0 0 3px rgba(170,130,255,0.55), 0 4px 14px rgba(0,0,0,0.4) !important;
+/* The one decorative mark: a hairline seam between the two halves. */
+#ryn-lobby::after {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0; right: 384px;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, var(--rl-line-2) 18%, var(--rl-line-2) 82%, transparent);
+  pointer-events: none;
 }
 
-#nativeCheckHolder {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    gap: 10px !important;
-    background: rgba(255,255,255,0.06) !important;
-    border: 1px solid rgba(255,255,255,0.13) !important;
-    border-radius: 14px !important;
-    padding: 13px 16px !important;
-    cursor: pointer !important;
-    color: rgba(255,255,255,0.70) !important;
-    font-family: 'Exo 2', sans-serif !important;
-    font-size: 0.84em !important;
-    font-weight: 600 !important;
-    transition: background 160ms, border-color 160ms, color 160ms !important;
-}
-#nativeCheckHolder:hover { border-color: rgba(170,130,255,0.55) !important; }
-#nativeCheckHolder:has(input:checked) {
-    background: rgba(150,96,255,0.20) !important;
-    border-color: rgba(170,130,255,0.85) !important;
-    color: #ffffff !important;
-}
-#nativeCheckHolder input[type=checkbox] { accent-color: #9660ff !important; width: 16px !important; height: 16px !important; margin: 0 !important; cursor: pointer !important; }
+/* ---------------- left: controls ---------------- */
 
-#setupCard a, #setupCard .menuText {
-    display: inline-block !important;
-    margin: 2px auto 0 !important;
-    padding: 10px 20px !important;
-    background: rgba(255,255,255,0.05) !important;
-    border: 1px solid rgba(255,255,255,0.11) !important;
-    border-radius: 12px !important;
-    color: rgba(255,255,255,0.58) !important;
-    font-family: 'Exo 2', sans-serif !important;
-    font-size: 0.74em !important;
-    font-weight: 600 !important;
-    text-decoration: none !important;
-    text-align: center !important;
-    transition: border-color 160ms, color 160ms !important;
+.rl-left {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 40px 48px 44px;
+  overflow: hidden;
 }
-#setupCard a:hover, #setupCard .menuText:hover { border-color: rgba(170,130,255,0.75) !important; color: #ffffff !important; }
 
+/* brand */
+.rl-brand { display: flex; align-items: baseline; gap: 12px; }
+.rl-brand-mark {
+  font-family: 'Space Grotesk', 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.34em;
+  color: var(--rl-iris);
+}
+.rl-brand-sub {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--rl-tx-3);
+}
+
+/* the wordmark — the lobby's one large element */
+.rl-word { margin: 0 0 4px; line-height: 0.88; }
+.rl-word-1 {
+  display: block;
+  font-family: 'Space Grotesk', 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: clamp(54px, 7.2vw, 104px);
+  letter-spacing: -0.035em;
+  color: var(--rl-tx-1);
+}
+.rl-word-2 {
+  display: block;
+  font-family: 'Space Grotesk', 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: clamp(54px, 7.2vw, 104px);
+  letter-spacing: -0.035em;
+  /* The only place the accent runs at full strength. */
+  color: var(--rl-iris);
+}
+.rl-tag {
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--rl-tx-3);
+  margin-bottom: 26px;
+}
+
+.rl-stack { max-width: 520px; width: 100%; }
+
+/* field label */
+.rl-lab {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--rl-tx-3);
+  margin-bottom: 7px;
+}
+
+/* name + enter, on one rail */
+.rl-rail { display: flex; gap: 10px; align-items: stretch; margin-bottom: 22px; }
+
+.rl-name {
+  flex: 1;
+  min-width: 0;
+  height: 52px;
+  padding: 0 16px;
+  border: 1px solid var(--rl-line-2);
+  border-radius: 12px;
+  background: var(--rl-ink-2);
+  color: var(--rl-tx-1);
+  font: inherit;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  outline: none;
+  transition: border-color 150ms var(--rl-ease);
+}
+.rl-name::placeholder { color: var(--rl-tx-3); }
+.rl-name:focus { border-color: var(--rl-iris); }
+
+/* primary action */
+.rl-go {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 194px;
+  height: 52px;
+  padding: 0 30px;
+  border: none;
+  border-radius: 12px;
+  background: var(--rl-iris);
+  color: #14101f;
+  font: inherit;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  cursor: pointer;
+  /* The sheen below is parked off the left edge, so without this it paints
+     over whatever sits beside the button. */
+  overflow: hidden;
+  /* transform + opacity only */
+  transition: transform 140ms var(--rl-ease), opacity 140ms ease;
+  will-change: transform;
+}
+.rl-go:hover { transform: translateY(-2px); }
+.rl-go:active { transform: translateY(0) scale(0.985); }
+.rl-go:focus-visible { outline: 2px solid var(--rl-sky); outline-offset: 3px; }
+/* The sheen is a pseudo-element that only ever moves. */
+.rl-go::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(120deg, transparent 38%, rgba(255,255,255,0.34) 50%, transparent 62%);
+  transform: translateX(-100%);
+  transition: transform 520ms var(--rl-ease);
+  pointer-events: none;
+}
+.rl-go:hover::after { transform: translateX(100%); }
+.rl-go[disabled] { opacity: 0.45; cursor: default; }
+.rl-go[disabled]:hover { transform: none; }
+.rl-go[disabled]:hover::after { transform: translateX(-100%); }
+
+/* segmented quick-join */
+.rl-seg {
+  display: inline-flex;
+  padding: 3px;
+  gap: 3px;
+  border: 1px solid var(--rl-line);
+  border-radius: 11px;
+  background: var(--rl-ink-2);
+  margin-bottom: 22px;
+}
+.rl-seg button {
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--rl-tx-2);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 8px 17px;
+  cursor: pointer;
+  transition: color 130ms ease, background 130ms ease, transform 130ms var(--rl-ease);
+}
+.rl-seg button:hover { color: var(--rl-tx-1); }
+.rl-seg button:active { transform: scale(0.97); }
+.rl-seg button[aria-pressed="true"] {
+  background: var(--rl-iris-dm);
+  color: var(--rl-iris-hi);
+}
+.rl-seg button:focus-visible { outline: 1px solid var(--rl-sky); outline-offset: 1px; }
+
+/* colours */
+.rl-swatches { display: flex; flex-wrap: wrap; gap: 9px; }
+.rl-sw {
+  position: relative;
+  width: 30px; height: 30px;
+  flex: 0 0 auto;
+  border: 1px solid var(--rl-line-2);
+  border-radius: 9px;
+  padding: 0;
+  cursor: pointer;
+  transition: transform 140ms var(--rl-ease), border-color 140ms ease;
+  will-change: transform;
+}
+.rl-sw:hover { transform: translateY(-3px); }
+.rl-sw:active { transform: translateY(-1px) scale(0.95); }
+.rl-sw:focus-visible { outline: 1px solid var(--rl-sky); outline-offset: 2px; }
+.rl-sw[aria-pressed="true"] {
+  border-color: var(--rl-tx-1);
+  transform: translateY(-3px);
+}
+/* the selected ring, drawn outside the swatch so it costs no layout */
+.rl-sw[aria-pressed="true"]::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 1px solid var(--rl-iris);
+  border-radius: 12px;
+}
+
+.rl-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--rl-tx-3);
+}
+.rl-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--rl-sage); }
+
+/* ---------------- right: server browser ---------------- */
+
+.rl-right {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--rl-ink-2);
+  /* This panel and the canvas never affect each other's layout. */
+  contain: layout style;
+}
+
+.rl-rhead {
+  flex-shrink: 0;
+  padding: 34px 26px 14px;
+  border-bottom: 1px solid var(--rl-line);
+}
+.rl-rtitle {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 3px;
+}
+.rl-rtitle h2 {
+  margin: 0;
+  font-family: 'Space Grotesk', 'Manrope', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--rl-tx-1);
+}
+.rl-total {
+  font-family: 'Space Grotesk', 'Manrope', sans-serif;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--rl-tx-3);
+}
+.rl-rsub { font-size: 10.5px; letter-spacing: 0.04em; color: var(--rl-tx-3); }
+
+/* region rail */
+.rl-regions {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 12px 26px 12px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--rl-line);
+  scrollbar-width: none;
+  /* A static mask, rasterised once: the rail scrolls, the fade does not. */
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 30px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 30px), transparent);
+}
+.rl-regions::-webkit-scrollbar { display: none; }
+.rl-reg {
+  flex: 0 0 auto;
+  border: 1px solid var(--rl-line);
+  border-radius: 999px;
+  background: none;
+  color: var(--rl-tx-2);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 6px 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 130ms ease, border-color 130ms ease, background 130ms ease, transform 130ms var(--rl-ease);
+}
+.rl-reg:hover { color: var(--rl-tx-1); border-color: var(--rl-line-3); }
+.rl-reg:active { transform: scale(0.96); }
+.rl-reg[aria-pressed="true"] {
+  background: var(--rl-iris-dm);
+  border-color: rgba(142,118,206,0.5);
+  color: var(--rl-iris-hi);
+}
+.rl-reg:focus-visible { outline: 1px solid var(--rl-sky); outline-offset: 1px; }
+
+/* the list */
+.rl-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 16px 18px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.16) transparent;
+}
+.rl-list::-webkit-scrollbar { width: 7px; }
+.rl-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.16); border-radius: 4px; }
+.rl-list::-webkit-scrollbar-track { background: transparent; }
+
+.rl-srv {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: start;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  padding: 9px 11px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms var(--rl-ease);
+}
+.rl-srv:hover { background: rgba(255,255,255,0.045); border-color: var(--rl-line); }
+.rl-srv:active { transform: scale(0.992); }
+.rl-srv:focus-visible { outline: 1px solid var(--rl-sky); outline-offset: 1px; }
+.rl-srv[aria-current="true"] {
+  background: var(--rl-iris-dm);
+  border-color: rgba(142,118,206,0.46);
+}
+.rl-srv-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--rl-tx-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rl-srv[aria-current="true"] .rl-srv-name { color: var(--rl-iris-hi); }
+.rl-srv-reg {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--rl-tx-3);
+}
+.rl-srv-right { display: flex; align-items: center; gap: 9px; }
+.rl-srv-n {
+  font-family: 'Space Grotesk', 'Manrope', sans-serif;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--rl-tx-2);
+}
+/* load meter — a fill, not an animation */
+.rl-srv-bar {
+  width: 34px; height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.1);
+  overflow: hidden;
+}
+.rl-srv-fill { height: 100%; border-radius: 2px; background: var(--rl-sage); }
+.rl-srv-fill.mid  { background: var(--rl-sky); }
+.rl-srv-fill.high { background: var(--rl-rose); }
+
+.rl-empty {
+  padding: 26px 12px;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--rl-tx-3);
+}
+
+/* ---------------- boot / loading ---------------- */
+
+#ryn-boot {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  background:
+    radial-gradient(760px 480px at 50% 54%, rgba(142,118,206,0.14), transparent 62%),
+    #0a0a0e;
+  opacity: 1;
+  transition: opacity 340ms ease;
+}
+#ryn-boot.rl-bye { opacity: 0; pointer-events: none; }
+
+.rl-boot-word {
+  font-family: 'Space Grotesk', 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: 40px;
+  letter-spacing: 0.16em;
+  color: var(--rl-tx-1);
+  /* one settle on entry, then nothing */
+  animation: rl-rise 520ms var(--rl-ease) both;
+}
+.rl-boot-word em { font-style: normal; color: var(--rl-iris); }
+
+.rl-boot-track {
+  width: 208px; height: 2px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.12);
+  overflow: hidden;
+}
+/* A 2px-tall sliver sliding on the compositor. No width animation, no
+   layout, and it stops the moment the overlay is removed. */
+.rl-boot-slide {
+  width: 40%;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--rl-iris);
+  transform: translateX(-100%);
+  animation: rl-slide 1150ms var(--rl-ease) infinite;
+}
+.rl-boot-stat {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--rl-tx-3);
+  min-height: 12px;
+}
+
+@keyframes rl-rise { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+@keyframes rl-slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
+
+/* ---------------- narrow / short screens ---------------- */
+
+@media (max-width: 1000px) {
+  #ryn-lobby { grid-template-columns: 1fr; grid-template-rows: minmax(0,1fr) 46%; }
+  #ryn-lobby::after { display: none; }
+  .rl-left { padding: 26px 24px 20px; }
+  .rl-right { border-top: 1px solid var(--rl-line); }
+  .rl-rhead { padding: 16px 20px 10px; }
+  .rl-regions { padding: 10px 20px; }
+  .rl-rail { flex-wrap: wrap; }
+  .rl-go { min-width: 100%; }
+}
+@media (max-height: 620px) {
+  .rl-word-1, .rl-word-2 { font-size: clamp(34px, 5vw, 56px); }
+  .rl-tag { margin-bottom: 14px; }
+  .rl-rail, .rl-seg { margin-bottom: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #ryn-lobby *, #ryn-boot * {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}
+`;
+      document.head.appendChild(rynLobbyCSS);
+      // The in-game corner mark, kept exactly as it was. It is not part of the
+      // lobby — it sits over the canvas during a round — and the chat log docks
+      // itself to it (`ChatLog._lockup` looks up #ryn-v2-wrapper), so removing
+      // it would quietly take docking with it. It is hidden while the lobby is
+      // up, through the one class the lobby already toggles.
+      (function rynCornerMark() {
+        if (document.getElementById("ryn-v2-mark-css")) return;
+        const markCSS = document.createElement("style");
+        markCSS.id = "ryn-v2-mark-css";
+        markCSS.textContent = `
 /* The corner mark: the artwork and the name, and nothing around them. The card
    they used to sit in was the size of a small window, which is a lot of screen
    to give a logo. The whole lockup is the button that opens the menu, so it
@@ -30528,30 +30858,9 @@ window.grbtp = 35;
 .ryn-v2-wrapper.is-tapped .ryn-v2-mark::after { animation: ryn-v2-ring 460ms ease-out; }
 @keyframes ryn-v2-tap { 0% { transform: scale(0.90); } 55% { transform: scale(1.07); } 100% { transform: scale(1); } }
 @keyframes ryn-v2-ring { 0% { opacity: 0.85; transform: scale(0.96); } 100% { opacity: 0; transform: scale(1.5); } }
+html.ryn-lobby-open #ryn-v2-wrapper { display: none !important; }
 `;
-        document.head.appendChild(rynCSS);
-        function injectRynCardUI() {
-          const card = document.getElementById("setupCard");
-          if (!card || card._rynInjected) return;
-          card._rynInjected = true;
-          const nameInput = document.getElementById("nameInput");
-          if (nameInput && !nameInput.value) {
-            nameInput.value = "RYN";
-            nameInput.placeholder = "ENTER NAME...";
-          }
-        }
-        const cardInterval = setInterval(() => {
-          if (document.getElementById("setupCard")) {
-            injectRynCardUI();
-            clearInterval(cardInterval);
-          }
-        }, 200);
-        const observer = new MutationObserver(() => injectRynCardUI());
-        const startObs = () => observer.observe(document.body || document.documentElement, {
-          childList: true,
-          subtree: true
-        });
-        if (document.body) startObs(); else window.addEventListener("DOMContentLoaded", startObs);
+        document.head.appendChild(markCSS);
         function injectV2Badge() {
           if (!document.body || document.getElementById("ryn-v2-wrapper")) return;
           const wrapper = document.createElement("div");
@@ -30615,36 +30924,525 @@ window.grbtp = 35;
         }
         if (document.body) injectV2Badge(); else window.addEventListener("DOMContentLoaded", injectV2Badge);
       })();
-      const logoStyle = document.createElement("style");
-      logoStyle.innerHTML = `\n                #ryn-main-logo {\n                    position: fixed;\n                    top: 14px; left: 14px;\n                    cursor: pointer;\n                    z-index: 99999;\n                    pointer-events: all;\n                    user-select: none;\n                    -webkit-user-select: none;\n                    transition: opacity 400ms ease, transform 400ms cubic-bezier(.34,1.56,.64,1);\n                    opacity: 0;\n                    display: none !important;\n                    pointer-events: none !important;\n                }\n                #ryn-main-logo.hidden { opacity:0; transform:translateY(-8px) scale(0.9); pointer-events:none; }\n                #ryn-main-logo:hover  { transform: scale(1.08); opacity: 1; }\n                #ryn-main-logo:active { transform: scale(0.95); }\n                .ryn-stroke {\n                    fill: none;\n                    stroke: #7A42F4;\n                    stroke-width: 6;\n                    stroke-linecap: round;\n                    stroke-linejoin: round;\n                }\n                .ryn-R, .ryn-Y, .ryn-N {\n                    stroke-dasharray: none;\n                    stroke-dashoffset: 0;\n                }\n            `;
-      document.head.appendChild(logoStyle);
-      const logo = document.createElement("div");
-      logo.id = "ryn-main-logo";
-      logo.innerHTML = `\n                <svg width="65" height="32" viewBox="0 0 90 44" xmlns="http://www.w3.org/2000/svg">\n                  \x3c!-- R --\x3e\n                  <path class="ryn-stroke ryn-R"\n                    d="M8,38 L8,8\n                       Q8,6 10,6 L18,6\n                       Q26,6 26,14\n                       Q26,20 20,21\n                       L26,38\n                       M8,21 L20,21" />\n                  \x3c!-- Y --\x3e\n                  <path class="ryn-stroke ryn-Y"\n                    d="M36,6 L45,20 L54,6\n                       M45,20 L45,38" />\n                  \x3c!-- N --\x3e\n                  <path class="ryn-stroke ryn-N"\n                    d="M64,38 L64,6 L82,38 L82,6" />\n                </svg>\n            `;
-      document.body.appendChild(logo);
-      logo.addEventListener("click", () => {
-        if (window._rynUI && typeof window._rynUI.toggleMenu === "function") {
-          window._rynUI.toggleMenu();
-        } else if (window.UI_default && typeof window.UI_default.toggleMenu === "function") {
-          window.UI_default.toggleMenu();
-        } else {
-          try {
-            const key = window.Settings_default && window.Settings_default._toggleMenu || "Escape";
-            document.dispatchEvent(new KeyboardEvent("keydown", {
-              code: key,
-              bubbles: true
-            }));
-            document.dispatchEvent(new KeyboardEvent("keyup", {
-              code: key,
-              bubbles: true
-            }));
-          } catch (e) {}
+      // ======================================================================
+      // RYN TYPE 2 — LOBBY & BOOT SCREEN
+      //
+      // The game's own lobby is left running underneath, untouched, and this
+      // draws over it. Nothing here reimplements joining a server: every
+      // control ends up in the element the game already wired, so whatever the
+      // game does on a real press is what happens.
+      //
+      // ── Why the real event is forwarded rather than a synthetic one ───────
+      //
+      // The bundle wraps every lobby handler in `checkTrusted`:
+      //
+      //     In = e => typeof e.isTrusted == "boolean" ? e.isTrusted : true
+      //     ie = f => t => t && t instanceof Event && In(t) && f(t)
+      //
+      // so `enterGame.click()` and `dispatchEvent(new MouseEvent(...))` are
+      // both dropped on the floor — a synthetic event carries
+      // `isTrusted === false`. The game solves this for its own Enter key by
+      // handing the handler the keypress it was given:
+      //
+      //     nameInput.onkeypress = i => { if (i.key === "Enter") we.onclick(i) }
+      //
+      // This does exactly that and nothing cleverer. The press on the RYN
+      // button and the Enter key on the RYN lobby are real user events, so
+      // they are already trusted; they are passed straight through to
+      // `enterGame.onclick`. No event is forged and no guard is defeated —
+      // the same gesture reaches the same handler it always did.
+      //
+      // ── Cost ─────────────────────────────────────────────────────────────
+      //
+      // Visibility follows `#mainMenu` through a MutationObserver rather than
+      // a poll, the whole overlay is `display:none` in game so it is out of
+      // the render tree entirely, and the one interval that exists — the
+      // server refresh, at the game's own 5s cadence — is cleared the moment
+      // the lobby is hidden. No rAF, no layout animation: every transition in
+      // the stylesheet moves transform or opacity.
+      (function rynLobby() {
+        if (window.__rynLobby) return;
+        window.__rynLobby = true;
+
+        const API = (location.hostname === "sandbox.moomoo.io"
+          ? "https://api-sandbox.moomoo.io"
+          : "https://api.moomoo.io") + "/servers?v=1.27";
+
+        const $ = id => document.getElementById(id);
+        const el = (tag, cls, txt) => {
+          const n = document.createElement(tag);
+          if (cls) n.className = cls;
+          if (txt != null) n.textContent = txt;
+          return n;
+        };
+
+        // ── boot screen ────────────────────────────────────────────────────
+        // Put up as early as there is a <body> to put it in, and taken down on
+        // a real milestone — never on a timer pretending to be progress. The
+        // three stages below are the three things that actually have to happen
+        // before the lobby can be used.
+        let boot = null;
+        let bootStat = null;
+        const bootSay = t => { if (bootStat && bootStat.textContent !== t) bootStat.textContent = t; };
+
+        function showBoot() {
+          if (boot || !document.body || $("ryn-boot")) return;
+          boot = el("div");
+          boot.id = "ryn-boot";
+          const word = el("div", "rl-boot-word");
+          word.innerHTML = "RYN <em>TYPE 2</em>";
+          const track = el("div", "rl-boot-track");
+          track.appendChild(el("div", "rl-boot-slide"));
+          bootStat = el("div", "rl-boot-stat", "INITIALIZING");
+          boot.appendChild(word);
+          boot.appendChild(track);
+          boot.appendChild(bootStat);
+          document.body.appendChild(boot);
         }
-      });
-      setInterval(() => {
-        const inGame = !!(window.RYN && window.RYN.client && window.RYN.client.myPlayer && window.RYN.client.myPlayer.inGame);
-        if (inGame) logo.classList.add("hidden"); else logo.classList.remove("hidden");
-      }, 500);
+
+        function hideBoot() {
+          if (!boot) return;
+          const b = boot;
+          boot = null;
+          bootStat = null;
+          b.classList.add("rl-bye");
+          // Removed outright once the fade is over: an element that is only
+          // transparent is still an element the compositor carries.
+          const drop = () => { if (b.parentNode) b.parentNode.removeChild(b); };
+          b.addEventListener("transitionend", drop, { once: true });
+          setTimeout(drop, 600);
+        }
+
+        // ── state ──────────────────────────────────────────────────────────
+        let lobby = null, listEl = null, regionsEl = null, totalEl = null;
+        let nameEl = null, goEl = null, swatchEl = null, footEl = null;
+        let servers = [];          // flat list from the API
+        let region = null;         // region currently shown
+        let quick = "selected";    // selected | best | empty
+        let timer = null;
+        let built = false;
+
+        // Which server this tab is on.
+        //
+        // The bundle answers this by splitting `?server=` on ":" and keeping
+        // the first two pieces, which only works while neither the region nor
+        // the name contains one. Rather than copy that assumption, the query is
+        // matched against the list itself whenever the list has arrived: the
+        // server whose own `region + ":" + name` rebuilds the query is the one
+        // we are on, whatever is inside either field. The split is kept as the
+        // fallback for the moment before the first fetch returns, where it is
+        // the only thing available and is exactly what the game would say.
+        const here = () => {
+          try {
+            const q = new URLSearchParams(location.search).get("server");
+            if (typeof q !== "string") return null;
+            for (const s of servers) {
+              if (String(s.region) + ":" + String(s.name) === q) {
+                return { region: String(s.region), name: String(s.name) };
+              }
+            }
+            const i = q.indexOf(":");
+            if (i <= 0 || i >= q.length - 1) return null;
+            return { region: q.slice(0, i), name: q.slice(i + 1) };
+          } catch (_) { return null; }
+        };
+
+        // The game strips these two prefixes off a region before showing it;
+        // same rule here so the labels match the address bar.
+        const pretty = r => String(r || "")
+          .replace(/^vultr:/, "").replace(/^do:/, "")
+          .replace(/[-_]+/g, " ")
+          .replace(/\b\w/g, c => c.toUpperCase());
+
+        const href = (r, n) =>
+          location.href.split("?")[0] + "?server=" + r + ":" + n;
+
+        // ── server list ────────────────────────────────────────────────────
+        async function pull() {
+          try {
+            const res = await fetch(API, { cache: "no-store" });
+            const list = await res.json();
+            if (!Array.isArray(list)) return;
+            servers = list.filter(s => s && !s.isPrivate);
+            if (region === null) {
+              const h = here();
+              region = (h && servers.some(s => String(s.region) === h.region))
+                ? h.region
+                : (servers[0] && String(servers[0].region)) || null;
+            }
+            paint();
+          } catch (_) { /* keep whatever is on screen */ }
+        }
+
+        function paintRegions() {
+          if (!regionsEl) return;
+          const seen = [];
+          for (const s of servers) {
+            const r = String(s.region);
+            if (seen.indexOf(r) === -1) seen.push(r);
+          }
+          regionsEl.textContent = "";
+          for (const r of seen) {
+            const b = el("button", "rl-reg", pretty(r));
+            b.type = "button";
+            b.setAttribute("aria-pressed", String(r === region));
+            b.addEventListener("click", () => { region = r; paint(); });
+            regionsEl.appendChild(b);
+          }
+        }
+
+        function paint() {
+          if (!listEl) return;
+          paintRegions();
+
+          const h = here();
+          const mine = servers.filter(s => String(s.region) === region);
+          let total = 0;
+          for (const s of servers) total += (s.playerCount | 0);
+          if (totalEl) totalEl.textContent = total + " online";
+
+          // The footer says what pressing Enter would actually join.
+          if (footEl) {
+            const on = h && servers.filter(x =>
+              String(x.region) === h.region && String(x.name) === h.name)[0];
+            footEl.textContent = on
+              ? pretty(on.region) + " · " + on.name + " · " +
+                (on.playerCount | 0) + "/" + (on.playerCapacity || 1)
+              : "No server selected";
+          }
+
+          listEl.textContent = "";
+          if (!mine.length) {
+            listEl.appendChild(el("p", "rl-empty",
+              servers.length ? "No servers in this region." : "Reaching the server list…"));
+            return;
+          }
+
+          for (const s of mine) {
+            const cap = s.playerCapacity || 1;
+            const n = s.playerCount | 0;
+            const pct = Math.max(0, Math.min(1, n / cap));
+            const cur = !!(h && h.region === String(s.region) && h.name === String(s.name));
+
+            const row = el("button", "rl-srv");
+            row.type = "button";
+            if (cur) row.setAttribute("aria-current", "true");
+
+            const left = el("div");
+            left.appendChild(el("div", "rl-srv-name", String(s.name)));
+            left.appendChild(el("div", "rl-srv-reg", pretty(s.region)));
+
+            const right = el("div", "rl-srv-right");
+            right.appendChild(el("span", "rl-srv-n", n + "/" + cap));
+            const bar = el("div", "rl-srv-bar");
+            const fill = el("div", "rl-srv-fill" + (pct >= 0.85 ? " high" : pct >= 0.5 ? " mid" : ""));
+            fill.style.width = (pct * 100).toFixed(0) + "%";
+            bar.appendChild(fill);
+            right.appendChild(bar);
+
+            row.appendChild(left);
+            row.appendChild(right);
+            // Switching server is a navigation in this game — the same one
+            // `switchServer` performs — so it is left as one.
+            row.addEventListener("click", () => {
+              if (cur) return;
+              location.href = href(s.region, s.name);
+            });
+            listEl.appendChild(row);
+          }
+        }
+
+        // Quick join reads the list that is already on screen; it never invents
+        // a server. "Best" is the emptiest server that is not full, "Empty" the
+        // first with nobody on it.
+        function quickTarget() {
+          const open = servers.filter(s => (s.playerCount | 0) < (s.playerCapacity || 1));
+          if (!open.length) return null;
+          if (quick === "empty") {
+            const e = open.filter(s => (s.playerCount | 0) === 0);
+            return e.length ? e[0] : open.slice().sort((a, b) => a.playerCount - b.playerCount)[0];
+          }
+          if (quick === "best") {
+            return open.slice().sort((a, b) => a.playerCount - b.playerCount)[0];
+          }
+          return null;
+        }
+
+        // ── join ───────────────────────────────────────────────────────────
+        // `ev` is the real, trusted event that triggered this — see the note at
+        // the top. It is forwarded untouched.
+        function join(ev) {
+          const btn = $("enterGame");
+          if (!btn) return;
+          if (nameEl) {
+            const input = $("nameInput");
+            if (input) {
+              input.value = nameEl.value.slice(0, 15);
+              try { input.dispatchEvent(new Event("change", { bubbles: true })); } catch (_) {}
+            }
+          }
+          const want = quickTarget();
+          const h = here();
+          if (want && !(h && h.region === String(want.region) && h.name === String(want.name))) {
+            location.href = href(want.region, want.name);
+            return;
+          }
+          if (btn.classList.contains("disabled")) return;
+          if (typeof btn.onclick === "function") btn.onclick(ev);
+        }
+
+        // ── colours ────────────────────────────────────────────────────────
+        // The palette is read off the holder the game already filled, and the
+        // choice goes back through the game's own global. Nothing about how a
+        // skin is stored or sent changes here.
+        function paintSwatches() {
+          if (!swatchEl) return;
+          const holder = $("skinColorHolder");
+          if (!holder) return;
+          const items = holder.querySelectorAll(".skinColorItem");
+          if (!items.length) return;
+          if (swatchEl.childElementCount === items.length) {
+            for (let i = 0; i < items.length; i++) {
+              swatchEl.children[i].setAttribute(
+                "aria-pressed", String(items[i].classList.contains("activeSkin")));
+            }
+            return;
+          }
+          swatchEl.textContent = "";
+          items.forEach((it, i) => {
+            const b = el("button", "rl-sw");
+            b.type = "button";
+            b.style.background = it.style.backgroundColor || "#fff";
+            b.setAttribute("aria-pressed", String(it.classList.contains("activeSkin")));
+            b.setAttribute("aria-label", "Colour " + (i + 1));
+            b.addEventListener("click", () => {
+              if (typeof window.selectSkinColor === "function") window.selectSkinColor(i);
+              else it.click();
+              paintSwatches();
+            });
+            swatchEl.appendChild(b);
+          });
+        }
+
+        // ── build ──────────────────────────────────────────────────────────
+        function build() {
+          if (built || !document.body) return;
+          const menu = $("mainMenu");
+          if (!menu) return;
+          built = true;
+
+          lobby = el("div");
+          lobby.id = "ryn-lobby";
+
+          // left ------------------------------------------------------------
+          const left = el("div", "rl-left");
+
+          const brand = el("div", "rl-brand");
+          brand.appendChild(el("span", "rl-brand-mark", "RYN"));
+          brand.appendChild(el("span", "rl-brand-sub", "Type 2 Client"));
+          left.appendChild(brand);
+
+          const stack = el("div", "rl-stack");
+
+          const word = el("h1", "rl-word");
+          word.appendChild(el("span", "rl-word-1", "RYN"));
+          word.appendChild(el("span", "rl-word-2", "TYPE 2"));
+          stack.appendChild(word);
+          stack.appendChild(el("p", "rl-tag", "Pick a server · press enter to drop in"));
+
+          stack.appendChild(el("label", "rl-lab", "Player name"));
+          const rail = el("div", "rl-rail");
+          nameEl = el("input", "rl-name");
+          nameEl.type = "text";
+          nameEl.maxLength = 15;
+          nameEl.placeholder = "Enter name…";
+          nameEl.spellcheck = false;
+          nameEl.autocomplete = "off";
+          goEl = el("button", "rl-go", "Enter Game");
+          goEl.type = "button";
+          rail.appendChild(nameEl);
+          rail.appendChild(goEl);
+          stack.appendChild(rail);
+
+          stack.appendChild(el("label", "rl-lab", "Quick join"));
+          const seg = el("div", "rl-seg");
+          [["selected", "Selected"], ["best", "Emptiest"], ["empty", "Fresh"]].forEach(([k, label]) => {
+            const b = el("button", null, label);
+            b.type = "button";
+            b.setAttribute("aria-pressed", String(k === quick));
+            b.addEventListener("click", () => {
+              quick = k;
+              seg.querySelectorAll("button").forEach(x =>
+                x.setAttribute("aria-pressed", String(x === b)));
+            });
+            seg.appendChild(b);
+          });
+          stack.appendChild(seg);
+
+          stack.appendChild(el("label", "rl-lab", "Skin colour"));
+          swatchEl = el("div", "rl-swatches");
+          stack.appendChild(swatchEl);
+
+          left.appendChild(stack);
+
+          const foot = el("div", "rl-foot");
+          foot.appendChild(el("span", "rl-dot"));
+          footEl = el("span", null, "Ryn Type 2 · ready");
+          foot.appendChild(footEl);
+          left.appendChild(foot);
+
+          // right -----------------------------------------------------------
+          const right = el("div", "rl-right");
+          const rhead = el("div", "rl-rhead");
+          const rtitle = el("div", "rl-rtitle");
+          const h2 = el("h2", null, "Servers");
+          totalEl = el("span", "rl-total", "—");
+          rtitle.appendChild(h2);
+          rtitle.appendChild(totalEl);
+          rhead.appendChild(rtitle);
+          rhead.appendChild(el("p", "rl-rsub", "Live player counts, refreshed every five seconds"));
+          right.appendChild(rhead);
+
+          regionsEl = el("div", "rl-regions");
+          right.appendChild(regionsEl);
+
+          listEl = el("div", "rl-list");
+          right.appendChild(listEl);
+
+          lobby.appendChild(left);
+          lobby.appendChild(right);
+          document.body.appendChild(lobby);
+
+          // wiring ------------------------------------------------------------
+          const input = $("nameInput");
+          nameEl.value = (input && input.value) || localStorage.getItem("moo_name") || "";
+          goEl.addEventListener("click", join);
+          // Enter anywhere in the lobby joins, which is what the brief asks
+          // for; the game's own Enter-on-name-field path is left alone.
+          lobby.addEventListener("keydown", e => {
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            join(e);
+          });
+
+          paintSwatches();
+          paint();
+          pull();
+          sync();
+          bootSay("PREPARING");
+          // The lobby is only ready once the game has wired enterGame; until
+          // then the button would be pressing nothing.
+          const ready = () => {
+            const b = $("enterGame");
+            if (b && typeof b.onclick === "function") { hideBoot(); return true; }
+            return false;
+          };
+          if (!ready()) {
+            let n = 0;
+            const t = setInterval(() => {
+              if (ready() || ++n > 80) { clearInterval(t); hideBoot(); }
+            }, 100);
+          }
+        }
+
+        // ── visibility ─────────────────────────────────────────────────────
+        // `#mainMenu` is display:none exactly while a round is running, so it
+        // is the one flag worth following — and it is followed by observing it,
+        // not by asking every tick.
+        function sync() {
+          if (!lobby) return;
+          const menu = $("mainMenu");
+          const open = !!menu && menu.style.display !== "none";
+          lobby.classList.toggle("rl-off", !open);
+          // The in-game corner mark hides behind this one class rather than
+          // being queried and restyled here.
+          document.documentElement.classList.toggle("ryn-lobby-open", open);
+          if (open) {
+            paintSwatches();
+            if (!timer) timer = setInterval(pull, 5000);
+          } else if (timer) {
+            clearInterval(timer);
+            timer = null;
+          }
+        }
+
+        // ── the game's own lobby chrome ────────────────────────────────────
+        // Hidden rather than removed: the bundle holds references to these and
+        // reads their state. One pass, at build time.
+        function stripChrome() {
+          const ids = ["nativeResolution", "promoImg", "promoImgHolder", "guideCard",
+                       "partyButton", "joinPartyButton", "serverBrowser", "linksContainer2",
+                       "bottomContainer", "gameName", "mobileDownloadButtonContainer",
+                       "pre-content-container", "ot-sdk-btn-floating"];
+          for (const id of ids) {
+            const n = $(id);
+            if (n) n.style.display = "none";
+          }
+          // The footer links and the version stamp have no ids of their own, so
+          // they are matched on what they say. Runs once.
+          const menu = $("mainMenu");
+          if (!menu) return;
+          const kill = /^(discord|terms|privacy|youtube|about|contact)$/i;
+          menu.querySelectorAll("a").forEach(a => {
+            const t = (a.textContent || "").trim();
+            if (kill.test(t) || /^v?\d+\.\d+\.\d+$/.test(t)) {
+              const row = a.closest("div");
+              (row && row !== menu ? row : a).style.display = "none";
+            }
+          });
+          menu.querySelectorAll("div,span,p").forEach(n => {
+            if (n.children.length) return;
+            const t = (n.textContent || "").trim();
+            if (/^v?\d+\.\d+\.\d+$/.test(t) || /use native resolution/i.test(t)) {
+              n.style.display = "none";
+            }
+          });
+        }
+
+        // ── start ──────────────────────────────────────────────────────────
+        showBoot();
+
+        const start = () => {
+          showBoot();
+          bootSay("LOADING");
+          stripChrome();
+          build();
+          const menu = $("mainMenu");
+          if (menu) {
+            // style is the only attribute the bundle changes on it
+            new MutationObserver(sync).observe(menu, {
+              attributes: true, attributeFilter: ["style"]
+            });
+          }
+          const holder = $("skinColorHolder");
+          if (holder) {
+            new MutationObserver(paintSwatches).observe(holder, {
+              childList: true, subtree: true, attributes: true, attributeFilter: ["class"]
+            });
+          }
+        };
+
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", start, { once: true });
+        } else {
+          start();
+        }
+
+        // If the menu arrives after DOMContentLoaded — the bundle builds it
+        // itself — pick it up then and stop watching.
+        if (!built) {
+          const mo = new MutationObserver(() => {
+            if (built) { mo.disconnect(); return; }
+            if ($("mainMenu")) { start(); if (built) mo.disconnect(); }
+          });
+          const go = () => mo.observe(document.body || document.documentElement,
+                                      { childList: true, subtree: true });
+          if (document.body) go();
+          else document.addEventListener("DOMContentLoaded", go, { once: true });
+          // Never let the boot screen outlive initialisation, whatever happens.
+          setTimeout(() => { mo.disconnect(); hideBoot(); }, 20000);
+        }
+      })();
     }
     createFrame() {
       this.injectStyles();
