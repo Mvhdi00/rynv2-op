@@ -24600,14 +24600,20 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 @keyframes rl-rise { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
 @keyframes rl-live { 0%, 100% { opacity: 1; } 50% { opacity: 0.32; } }
 
-/* ---------- left column ------------------------------------------------- */
+/* ---------- left column -------------------------------------------------
+
+   No card. The controls are separate things sitting on the background, kept
+   in line by one column and told apart by a hairline and a marker each,
+   rather than by being fenced into a panel together. The launch control and
+   the footer stand clear of that column entirely, so what you press is never
+   inside the same frame as what you set.
+   ------------------------------------------------------------------------ */
 
 .rl-left {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 26px;
     min-width: 0;
     min-height: 0;
     padding: 40px clamp(30px, 5vw, 76px);
@@ -24619,9 +24625,15 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 .rl-left::-webkit-scrollbar-track { background: transparent; }
 .rl-left::-webkit-scrollbar-thumb { background: rgba(255,255,255,.07); border-radius: 8px; }
 
-.rl-brand {
+.rl-col {
     width: 100%;
-    max-width: 470px;
+    max-width: 452px;
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+}
+
+.rl-brand {
     display: flex;
     flex-direction: column;
     gap: 11px;
@@ -24664,67 +24676,91 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     background: linear-gradient(90deg, var(--rl-line-2), transparent);
 }
 
-/* the panel the controls sit in */
-.rl-panel {
-    width: 100%;
-    max-width: 470px;
+/* the settings, one under the other, divided rather than boxed */
+.rl-stack {
     display: flex;
     flex-direction: column;
-    gap: 22px;
-    padding: 24px;
-    border: 1px solid var(--rl-line-2);
-    border-radius: 18px;
-    background: rgba(16,16,22,0.72);
-    box-shadow: 0 30px 70px -38px rgba(0,0,0,0.95);
     animation: rl-rise 380ms var(--rl-ease) both;
     animation-delay: 40ms;
 }
 
-.rl-field { display: flex; flex-direction: column; gap: 10px; }
+.rl-block { padding: 17px 0; }
+.rl-block:first-child { padding-top: 0; }
+.rl-block:last-child { padding-bottom: 0; }
+.rl-block + .rl-block { border-top: 1px solid var(--rl-line); }
 
 .rl-label {
+    position: relative;
     display: flex;
     align-items: baseline;
     justify-content: space-between;
     gap: 10px;
+    margin-bottom: 11px;
+    padding-left: 13px;
     font-family: var(--rl-mono);
     font-size: 9.5px;
     font-weight: 600;
     letter-spacing: 0.22em;
     text-transform: uppercase;
-    color: var(--rl-tx-4);
+    color: var(--rl-tx-3);
 }
-.rl-label .rl-label-note { color: var(--rl-tx-3); letter-spacing: 0.12em; }
+/* the same marker the menu's open category carries, so a section here reads
+   as the same kind of thing a page there does */
+.rl-label::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 1px;
+    width: 2px;
+    height: 10px;
+    border-radius: 2px;
+    background: var(--rl-iris);
+}
+.rl-label .rl-label-note { color: var(--rl-tx-4); letter-spacing: 0.14em; }
 
-/* name -------------------------------------------------------------------- */
+/* name ------------------------------------------------------------------- */
+
+/* A line to write on rather than a field to fill in: no plate, no outline,
+   one rule underneath, and a second rule that draws itself in from the left
+   when the caret lands. The draw is a transform on one element. */
+.rl-line { position: relative; padding-left: 13px; }
+.rl-line::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 1px;
+    background: var(--rl-sky);
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 240ms var(--rl-ease);
+}
+.rl-line:focus-within::after { transform: scaleX(1); }
 
 #ryn-lobby #nameInput {
     display: block !important;
     width: 100% !important;
-    height: 48px !important;
+    height: 44px !important;
     margin: 0 !important;
-    padding: 0 15px !important;
-    border: 1px solid var(--rl-line-2) !important;
-    border-radius: var(--rl-r2) !important;
-    background: rgba(255,255,255,0.04) !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: 0 !important;
+    border-bottom: 1px solid var(--rl-line-2) !important;
+    border-radius: 0 !important;
     color: var(--rl-tx-1) !important;
+    caret-color: var(--rl-sky) !important;
     font-family: var(--rl-font) !important;
-    font-size: 15px !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.005em !important;
+    font-size: 21px !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.012em !important;
     text-align: left !important;
     outline: none !important;
     box-shadow: none !important;
-    transition: border-color 150ms var(--rl-ease), background-color 150ms var(--rl-ease),
-                box-shadow 150ms var(--rl-ease) !important;
+    transition: border-color 200ms var(--rl-ease), color 200ms var(--rl-ease) !important;
 }
-#ryn-lobby #nameInput::placeholder { color: var(--rl-tx-4) !important; font-weight: 500 !important; }
-#ryn-lobby #nameInput:hover { border-color: var(--rl-line-3) !important; }
-#ryn-lobby #nameInput:focus {
-    border-color: var(--rl-sky-45) !important;
-    background: rgba(155,197,232,0.10) !important;
-    box-shadow: 0 0 0 3px rgba(155,197,232,0.11) !important;
-}
+#ryn-lobby #nameInput::placeholder { color: var(--rl-tx-4) !important; font-weight: 600 !important; }
+#ryn-lobby #nameInput:hover { border-bottom-color: var(--rl-line-3) !important; }
 
 /* colours ----------------------------------------------------------------- */
 
@@ -24732,7 +24768,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     display: flex !important;
     flex-wrap: wrap !important;
     gap: 8px !important;
-    margin: 0 !important;
+    margin: 0 0 0 13px !important;
     padding: 0 !important;
     background: none !important;
     border: 0 !important;
@@ -24756,36 +24792,45 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 #ryn-skin-holder .skinColorItem:active { transform: translateY(0) scale(0.94) !important; }
 #ryn-skin-holder .skinColorItem.activeSkin { outline-color: var(--rl-iris-hi) !important; }
 
-/* segmented controls ------------------------------------------------------ */
+/* mode -------------------------------------------------------------------- */
 
-.rl-seg { display: flex; gap: 6px; }
+.rl-seg { display: flex; gap: 8px; margin-left: 13px; }
 
 .rl-seg-btn {
     flex: 1;
     min-width: 0;
-    height: 44px;
-    padding: 0 12px;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 3px;
+    gap: 10px;
+    height: 50px;
+    padding: 0 13px;
     border: 1px solid var(--rl-line);
     border-radius: var(--rl-r2);
-    background: rgba(255,255,255,0.035);
-    color: var(--rl-tx-3);
+    background: rgba(255,255,255,0.025);
     cursor: pointer;
     user-select: none;
     -webkit-user-select: none;
     transition: background-color 150ms var(--rl-ease), border-color 150ms var(--rl-ease),
-                color 150ms var(--rl-ease), transform 110ms var(--rl-ease);
+                transform 110ms var(--rl-ease);
 }
+.rl-seg-dot {
+    flex: 0 0 auto;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--rl-tx-4);
+    transition: background-color 150ms var(--rl-ease), box-shadow 150ms var(--rl-ease);
+}
+.rl-seg-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .rl-seg-btn .rl-seg-name {
     font-family: var(--rl-font);
     font-size: 13px;
     font-weight: 700;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.01em;
     line-height: 1;
+    color: var(--rl-tx-3);
+    transition: color 150ms var(--rl-ease);
 }
 .rl-seg-btn .rl-seg-note {
     font-family: var(--rl-mono);
@@ -24797,18 +24842,30 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     color: var(--rl-tx-4);
     transition: color 150ms var(--rl-ease);
 }
-.rl-seg-btn:hover { background: rgba(255,255,255,0.065); color: var(--rl-tx-1); }
+.rl-seg-btn:hover { background: rgba(255,255,255,0.055); border-color: var(--rl-line-2); }
+.rl-seg-btn:hover .rl-seg-name { color: var(--rl-tx-1); }
+.rl-seg-btn:hover .rl-seg-dot { box-shadow: inset 0 0 0 1px var(--rl-tx-2); }
 .rl-seg-btn:active { transform: translateY(1px); }
 .rl-seg-btn.rl-on {
-    background: var(--rl-iris-18);
+    background: var(--rl-iris-12);
     border-color: var(--rl-iris-45);
-    color: #FFFFFF;
+    cursor: default;
 }
+.rl-seg-btn.rl-on .rl-seg-name { color: #FFFFFF; }
 .rl-seg-btn.rl-on .rl-seg-note { color: var(--rl-iris-hi); }
+.rl-seg-btn.rl-on .rl-seg-dot { background: var(--rl-iris-hi); box-shadow: inset 0 0 0 1px var(--rl-iris-hi); }
 
-/* play -------------------------------------------------------------------- */
+/* launch ------------------------------------------------------------------ */
 
-.rl-play { display: flex; flex-direction: column; gap: 10px; }
+/* Clear of the column above it: the one control that starts a round is not
+   sitting in the same frame as the ones that only set something. */
+.rl-launch {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    animation: rl-rise 400ms var(--rl-ease) both;
+    animation-delay: 80ms;
+}
 
 #ryn-lobby #enterGame {
     position: relative !important;
@@ -24816,11 +24873,11 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     align-items: center !important;
     justify-content: center !important;
     width: 100% !important;
-    height: 58px !important;
+    height: 62px !important;
     margin: 0 !important;
     padding: 0 !important;
     border: 1px solid var(--rl-iris-45) !important;
-    border-radius: 12px !important;
+    border-radius: 13px !important;
     background: var(--rl-iris-18) !important;
     color: #F4F0FF !important;
     font-family: var(--rl-mono) !important;
@@ -24833,32 +24890,48 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     text-decoration: none !important;
     cursor: pointer !important;
     overflow: hidden !important;
-    box-shadow: 0 14px 34px -18px rgba(142,118,206,0.85) !important;
+    box-shadow: 0 16px 38px -20px rgba(142,118,206,0.9) !important;
     transition: background-color 160ms var(--rl-ease), border-color 160ms var(--rl-ease),
                 transform 120ms var(--rl-ease), box-shadow 160ms var(--rl-ease),
                 color 160ms var(--rl-ease) !important;
+}
+/* a mark that leans out on hover; one pseudo-element, moved on transform */
+#ryn-lobby #enterGame::after {
+    content: '→';
+    position: absolute;
+    right: 22px;
+    top: 50%;
+    font-size: 17px;
+    letter-spacing: 0;
+    text-indent: 0;
+    color: rgba(255,255,255,0.42);
+    transform: translate(-6px, -50%);
+    opacity: 0;
+    transition: transform 200ms var(--rl-ease), opacity 200ms var(--rl-ease);
 }
 #ryn-lobby #enterGame:hover {
     background: rgba(142,118,206,0.28) !important;
     border-color: rgba(142,118,206,0.72) !important;
     color: #FFFFFF !important;
-    box-shadow: 0 18px 40px -18px rgba(142,118,206,0.95) !important;
+    box-shadow: 0 20px 44px -20px rgba(142,118,206,1) !important;
 }
+#ryn-lobby #enterGame:hover::after { transform: translate(0, -50%); opacity: 1; }
 #ryn-lobby #enterGame:active {
     transform: translateY(2px) !important;
     background: rgba(142,118,206,0.34) !important;
-    box-shadow: 0 8px 20px -14px rgba(142,118,206,0.9) !important;
+    box-shadow: 0 9px 22px -16px rgba(142,118,206,0.95) !important;
 }
 /* the bundle's own gate: the "disabled" class is on the button until
    Turnstile hands over a token, and nothing here decides when that is */
 #ryn-lobby #enterGame.disabled {
-    background: rgba(255,255,255,0.035) !important;
+    background: rgba(255,255,255,0.03) !important;
     border-color: var(--rl-line) !important;
     color: var(--rl-tx-4) !important;
     box-shadow: none !important;
     cursor: default !important;
     pointer-events: none !important;
 }
+#ryn-lobby #enterGame.disabled::after { display: none; }
 
 .rl-gate {
     display: flex;
@@ -24869,25 +24942,25 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 .rl-gate:empty { display: none; }
 .rl-gate > * { margin: 0 auto !important; }
 
-/* footer of the panel ----------------------------------------------------- */
+/* foot -------------------------------------------------------------------- */
 
 .rl-foot {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding-top: 18px;
-    border-top: 1px solid var(--rl-line);
+    animation: rl-rise 420ms var(--rl-ease) both;
+    animation-delay: 120ms;
 }
 
 .rl-ghost {
     display: inline-flex;
     align-items: center;
     gap: 9px;
-    height: 40px;
-    padding: 0 16px;
+    height: 38px;
+    padding: 0 15px;
     border: 1px solid var(--rl-line-2);
     border-radius: var(--rl-r2);
-    background: rgba(255,255,255,0.045);
+    background: transparent;
     color: var(--rl-tx-2);
     font-family: var(--rl-font);
     font-size: 12.5px;
@@ -24899,8 +24972,8 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     transition: background-color 150ms var(--rl-ease), border-color 150ms var(--rl-ease),
                 color 150ms var(--rl-ease), transform 110ms var(--rl-ease);
 }
-.rl-ghost:hover { background: rgba(255,255,255,0.085); border-color: var(--rl-line-3); color: var(--rl-tx-1); }
-.rl-ghost:active { transform: translateY(1px); background: rgba(255,255,255,0.11); }
+.rl-ghost:hover { background: rgba(255,255,255,0.06); border-color: var(--rl-line-3); color: var(--rl-tx-1); }
+.rl-ghost:active { transform: translateY(1px); background: rgba(255,255,255,0.09); }
 
 .rl-hint {
     margin-left: auto;
@@ -25223,8 +25296,8 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 
 @media (max-width: 980px) {
     #ryn-lobby { grid-template-columns: minmax(0, 1fr) 302px; }
-    .rl-left { padding: 26px 20px; gap: 20px; }
-    .rl-panel { gap: 18px; padding: 20px; }
+    .rl-left { padding: 26px 20px; }
+    .rl-col { gap: 24px; }
     .rs-head { padding: 20px 16px 13px; }
     .rs-list { padding: 8px 9px 10px; }
     .rs-foot { padding: 12px 16px 14px; }
@@ -25238,26 +25311,27 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         grid-template-rows: minmax(0, 1fr) minmax(168px, 40%);
         overflow: hidden;
     }
-    .rl-left { padding: 20px 18px 16px; gap: 16px; justify-content: flex-start; }
-    .rl-brand, .rl-panel { max-width: none; }
+    .rl-left { padding: 20px 18px 16px; justify-content: flex-start; }
+    .rl-col { max-width: none; gap: 20px; }
     .rl-right { border-left: 0; border-top: 1px solid var(--rl-line-2); }
 }
 
 @media (max-height: 720px) {
-    .rl-left { gap: 18px; }
+    .rl-col { gap: 22px; }
     .rl-brand { gap: 7px; }
     .rl-wordmark .rl-w1 { font-size: 36px; }
-    .rl-panel { gap: 16px; padding: 18px; }
-    .rl-foot { padding-top: 14px; }
-    #ryn-lobby #enterGame { height: 52px !important; }
+    .rl-block { padding: 14px 0; }
+    #ryn-lobby #enterGame { height: 54px !important; }
 }
 
 @media (max-height: 580px) {
+    .rl-col { gap: 16px; }
     .rl-wordmark .rl-w1 { font-size: 30px; }
-    .rl-panel { gap: 13px; padding: 15px; }
-    #ryn-lobby #nameInput { height: 42px !important; }
+    .rl-block { padding: 11px 0; }
+    .rl-label { margin-bottom: 8px; }
+    #ryn-lobby #nameInput { height: 38px !important; font-size: 18px !important; }
     #ryn-lobby #enterGame { height: 46px !important; }
-    .rl-seg-btn { height: 40px; }
+    .rl-seg-btn { height: 44px; }
     #ryn-skin-holder .skinColorItem { width: 26px !important; height: 26px !important; }
 }
 
@@ -29232,57 +29306,69 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       lobby.id = "ryn-lobby";
       const isSandbox = location.hostname === "sandbox.moomoo.io";
 
-      /* ---------------- left: the controls ---------------- */
+      /* ---------------- left: the controls ----------------
+
+         Four things standing on the background rather than one card holding
+         everything: the mark, the settings (divided by a hairline and marked
+         one by one, not fenced in together), the launch control on its own,
+         and the footer. What starts a round is never inside the same frame as
+         what merely sets something. */
 
       const left = el("div", "rl-left");
+      const column = el("div", "rl-col");
+      left.appendChild(column);
+
       const brand = el("div", "rl-brand");
       const wordmark = el("div", "rl-wordmark");
       wordmark.appendChild(el("span", "rl-w1", "RYN"));
       wordmark.appendChild(el("span", "rl-w2", "Type 2"));
       brand.appendChild(wordmark);
       brand.appendChild(el("div", "rl-rule", isSandbox ? "Sandbox client" : "Client"));
-      left.appendChild(brand);
+      column.appendChild(brand);
 
-      const panel = el("div", "rl-panel");
-      left.appendChild(panel);
+      const stack = el("div", "rl-stack");
+      column.appendChild(stack);
+
+      const block = (title, note) => {
+        const wrap = el("div", "rl-block");
+        const label = el("div", "rl-label");
+        label.appendChild(el("span", null, title));
+        if (note) {
+          label.appendChild(el("span", "rl-label-note", note));
+        }
+        wrap.appendChild(label);
+        stack.appendChild(wrap);
+        return wrap;
+      };
 
       // identity
-      const nameField = el("div", "rl-field");
-      const nameLabel = el("div", "rl-label");
-      nameLabel.appendChild(el("span", null, "Identity"));
-      nameLabel.appendChild(el("span", "rl-label-note", "shown in game"));
-      nameField.appendChild(nameLabel);
+      const nameBlock = block("Identity", "shown in game");
+      const nameLine = el("div", "rl-line");
       const nameInput = doc.getElementById("nameInput");
       if (nameInput !== null) {
         nameInput.placeholder = "Enter a name";
-        nameField.appendChild(nameInput);
+        nameLine.appendChild(nameInput);
       }
-      panel.appendChild(nameField);
+      nameBlock.appendChild(nameLine);
 
       // colour
-      const skinField = el("div", "rl-field");
-      const skinLabel = el("div", "rl-label");
-      skinLabel.appendChild(el("span", null, "Colour"));
-      skinField.appendChild(skinLabel);
-      panel.appendChild(skinField);
-      this.createSkinColors(skinField);
+      this.createSkinColors(block("Colour", null));
 
       // mode: the two hosts the game runs on. The bundle writes the other
       // one's address into #altServer, so the link followed here is the
       // bundle's own, with the plain hosts as the fallback.
       const altLink = doc.querySelector("#altServer a");
       const altHref = altLink !== null ? altLink.getAttribute("href") : null;
-      const modeField = el("div", "rl-field");
-      const modeLabel = el("div", "rl-label");
-      modeLabel.appendChild(el("span", null, "Mode"));
-      modeLabel.appendChild(el("span", "rl-label-note", isSandbox ? "sandbox" : "normal"));
-      modeField.appendChild(modeLabel);
+      const modeBlock = block("Mode", isSandbox ? "sandbox" : "normal");
       const seg = el("div", "rl-seg");
       let leaving = false;
       const addMode = (name, note, active, href) => {
         const button = el("div", "rl-seg-btn" + (active ? " rl-on" : ""));
-        button.appendChild(el("span", "rl-seg-name", name));
-        button.appendChild(el("span", "rl-seg-note", note));
+        button.appendChild(el("span", "rl-seg-dot"));
+        const text = el("span", "rl-seg-text");
+        text.appendChild(el("span", "rl-seg-name", name));
+        text.appendChild(el("span", "rl-seg-note", note));
+        button.appendChild(text);
         if (!active && href) {
           button.addEventListener("click", () => {
             if (leaving) {
@@ -29296,15 +29382,14 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       };
       addMode("Normal", "Standard", !isSandbox, isSandbox ? altHref || "//moomoo.io/" : null);
       addMode("Sandbox", "Free build", isSandbox, isSandbox ? null : altHref || "//sandbox.moomoo.io/");
-      modeField.appendChild(seg);
-      panel.appendChild(modeField);
+      modeBlock.appendChild(seg);
 
-      // play
-      const play = el("div", "rl-play");
+      // launch, clear of the column above it
+      const launch = el("div", "rl-launch");
       const enterGame = doc.getElementById("enterGame");
       if (enterGame !== null) {
         enterGame.textContent = "Enter Game";
-        play.appendChild(enterGame);
+        launch.appendChild(enterGame);
       }
       // The challenge the bundle needs a token from. It has to have a rendered
       // ancestor or turnstile.render() refuses, so it gets a slot of its own
@@ -29315,8 +29400,8 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       if (turnstile !== null) {
         gate.appendChild(turnstile);
       }
-      play.appendChild(gate);
-      panel.appendChild(play);
+      launch.appendChild(gate);
+      column.appendChild(launch);
 
       // foot
       const foot = el("div", "rl-foot");
@@ -29329,7 +29414,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       hint.appendChild(el("span", "rl-key", this.keyLabel(Settings_default._toggleMenu)));
       hint.appendChild(el("span", null, "menu"));
       foot.appendChild(hint);
-      panel.appendChild(foot);
+      column.appendChild(foot);
 
       /* ---------------- right: the server browser ---------------- */
 
