@@ -25017,8 +25017,29 @@ html.ryn-in-lobby .ryn-v2-wrapper {
    ancestor or turnstile.render() refuses, so it gets a slot of its own rather
    than a display:none corner; the slot collapses when the widget draws
    nothing. */
-.rl-gate { margin-top: 22px; display: flex; align-items: center; }
-.rl-gate:empty { display: none; }
+/* The challenge takes up room only when there is a challenge to answer. The
+   "disabled" class on #enterGame is the bundle's own "we hold a token" flag —
+   on until Turnstile hands one over, back on the moment one expires — so the
+   slot follows it exactly. Nothing to verify, nothing on screen; a token lost
+   after a death or a disconnect, and it is here again, in this same place.
+   :not(:empty) covers the stretch while the boot screen has the widget. */
+.rl-gate { display: none; }
+.rl-gate.rl-need:not(:empty) {
+    margin-top: 22px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+}
+.rl-gate.rl-need:not(:empty)::before {
+    content: 'Verification';
+    font-family: var(--rl-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--rl-iris-hi);
+}
 
 /* the selected server, in the bottom corner ------------------------------- */
 
@@ -29415,10 +29436,10 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       addMode("Sandbox", isSandbox, isSandbox ? null : altHref || "//sandbox.moomoo.io/");
       modeGroup.appendChild(seg);
 
-      // The challenge the bundle needs a token from. It has to have a rendered
-      // ancestor or turnstile.render() refuses, so it gets a slot of its own
-      // rather than a display:none corner; the slot collapses when the widget
-      // draws nothing.
+      // The challenge the bundle needs a token from. The slot is here rather
+      // than in a display:none corner because turnstile.render() refuses a
+      // container with no rendered ancestor — see gateNeeded() below, which is
+      // what decides when the slot is on screen.
       const gate = el("div", "rl-gate");
       const turnstile = doc.getElementById("turnstileWidget");
       if (turnstile !== null) {
@@ -29894,6 +29915,42 @@ html.ryn-in-lobby .ryn-v2-wrapper {
           lobby.classList.toggle("rl-off", !show);
         }
       };
+
+      /* The challenge slot is on screen only while there is a challenge.
+       *
+       * "disabled" on #enterGame is the bundle's own "we hold a token" flag:
+       * on until Turnstile hands one over, back the moment one expires. Once
+       * the token is in — which, on a fresh load, happens behind the boot
+       * screen — there is nothing to verify and nothing to show, and that is
+       * the empty plate this gets rid of. Die, get disconnected, or sit long
+       * enough for the token to expire and the slot is back, here, where the
+       * client already is.
+       *
+       * The supervisor is armed alongside it because the bundle renders its
+       * widget exactly once — nn() returns early for the rest of the page's
+       * life — so an expiry after that first render leaves a container nothing
+       * will ever draw into again. _arm() waits out its own grace period
+       * before touching anything and stands down by itself the moment a token
+       * arrives, so calling it when it is not needed costs one timer tick.
+       */
+      const gateNeeded = () => {
+        const need = enterGame !== null && enterGame.classList.contains("disabled");
+        if (gate.classList.contains("rl-need") !== need) {
+          gate.classList.toggle("rl-need", need);
+        }
+        if (need) {
+          try {
+            Login_default._arm("challenge needed in the lobby");
+          } catch (e) {}
+        }
+      };
+      if (enterGame !== null) {
+        new MutationObserver(gateNeeded).observe(enterGame, {
+          attributes: true,
+          attributeFilter: [ "class" ]
+        });
+      }
+      gateNeeded();
       const switches = new MutationObserver(onSwitches);
       if (menuLayer !== null) {
         switches.observe(menuLayer, {
