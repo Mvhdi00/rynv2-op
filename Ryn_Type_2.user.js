@@ -7477,6 +7477,21 @@ window.grbtp = 35;
       this.client = client2;
     }
     insertObject(object) {
+      // The server recycles a destroyed building's sid for the next building
+      // anyone places: `add(objects.length, …, setSID = false)` takes the
+      // first inactive slot and keeps that slot's old sid. A connection that
+      // was dead when the old building fell is never told (Q only goes to
+      // active players), so it can still be holding the old one when the new
+      // one arrives under the same sid. The game's own client re-uses its
+      // entry in that case; this model has to drop the old object properly
+      // first — otherwise it stays in its owner's list and on the grid, and
+      // the owner leaving later ("R") deletes the live building that now
+      // carries its sid: a structure the server still has, and the bots can
+      // no longer see.
+      const previous = this.objects.get(object.id);
+      if (previous !== void 0 && previous !== object) {
+        this._retire(previous);
+      }
       this.revision++;
       this.grid2D.insert(object.pos.current.x, object.pos.current.y, Math.max(object.collisionScale, object.placementScale), object.id);
       this.objects.set(object.id, object);
@@ -7523,7 +7538,36 @@ window.grbtp = 35;
     isDestroyedObject() {
       return this.deletedObjects.size !== 0;
     }
+    // Drops an object the server has already replaced under the same sid. Quiet
+    // on purpose: it is not a building breaking now, it is one that broke a
+    // while ago without this connection being told, so nothing that reacts to
+    // a fresh break (the placer's replace, the break animation, the "just
+    // destroyed next to me" set) is fired for it.
+    _retire(object) {
+      const id = object.id;
+      this.revision++;
+      this.grid2D.remove(object.pos.current.x, object.pos.current.y, Math.max(object.collisionScale, object.placementScale), id);
+      const live = this.objects.get(id);
+      if (live === object) {
+        this.objects.delete(id);
+      } else if (live !== void 0) {
+        // The live building under this sid may share grid cells with the old
+        // footprint just cleared.
+        this.grid2D.insert(live.pos.current.x, live.pos.current.y, Math.max(live.collisionScale, live.placementScale), id);
+      }
+      if (object instanceof PlayerObject) {
+        const player = this.client.PlayerManager.playerData.get(object.ownerID);
+        if (player !== void 0) {
+          player.handleObjectDeletion(object);
+        }
+      }
+    }
     removeObject(object) {
+      // Never let a stale object take a live one with it.
+      if (this.objects.get(object.id) !== object) {
+        this._retire(object);
+        return;
+      }
       const engine = this.client._ModuleHandler && this.client._ModuleHandler.staticModules && this.client._ModuleHandler.staticModules.placementEngine;
       if (engine) {
         try {
@@ -41101,6 +41145,9 @@ html.ryn-in-lobby .ryn-v2-wrapper {
   // Objects go in as one H frame, in batches, so a full view is a couple of
   // calls rather than one per structure.
   const POSSESS_OBJECT_BATCH = 512;
+  // How often the screen is topped up with the structures around whoever you
+  // are controlling that it is not showing yet.
+  const POSSESS_STREAM_MS = 250;
 
   let _gameHandler = null;
   let _gameSocket = null;
@@ -41125,6 +41172,11 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       try {
         if (Possess !== null && Possess.holdMain(event)) {
           return;
+        }
+      } catch (_) {}
+      try {
+        if (Possess !== null) {
+          Possess.notePassed(event);
         }
       } catch (_) {}
       return handler.call(socket, event);
@@ -41244,7 +41296,19 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     projectionBlind=false;
     _noteEvent=null;
     _noteType=null;
+    _noteArgs=null;
     _lostSince=0;
+    // What the game bundle is drawing right now: sid → [x, y, owner sid], plus
+    // a fourth `true` for one another connection saw break there, kept
+    // from every H, Q and R that actually reaches it (the main socket's own
+    // frames through the gate, and everything handed over by _emit). The
+    // server gives a destroyed building's sid to the next building placed, so
+    // "remove sid 812" from a connection that saw the old 812 is a different
+    // building from the 812 the screen may be showing by then. This is what
+    // every removal from another connection is checked against, and what the
+    // top-up pass fills the screen from.
+    _held=new Map;
+    _streamAt=0;
 
     init(owner) {
       this.owner = owner;
@@ -41432,6 +41496,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       if (c === this.owner) {
         this._noteEvent = event;
         this._noteType = type;
+        this._noteArgs = args;
       }
       this._mirror(c, type, args);
       if (c === this.active && c !== this.owner && !POSSESS_NEVER_FORWARD.has(type)) {
@@ -41451,37 +41516,128 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       // that ground, so a structure dying there would never reach the bundle and
       // would sit on the map as a drawing of something that is not here.
       //
-      // Every connection that sees a destruction reports it, and the report is
-      // deduplicated for the tick: twenty bots watching the same spike fall cost
-      // the bundle one lookup, not twenty. The connection the bundle is already
-      // reading in full is skipped — it has been told by the line above, or by
-      // the socket itself.
+      // Every connection that sees a destruction reports it, but only for the
+      // building the screen is actually holding under that sid. That check is
+      // the whole difference between clearing a leftover and erasing a live
+      // structure: the server re-uses a fallen building's sid for the next
+      // building placed anywhere, and a bot's "Q 812" handled after the main
+      // socket has already drawn the new 812 used to wipe that new building off
+      // the screen — solid on the server, invisible on yours. The first report
+      // removes the record, so twenty bots watching the same spike fall still
+      // cost the bundle one removal. The connection the bundle is reading in
+      // full is skipped — it has been told by the line above, or by the socket
+      // itself.
+      //
+      // The main connection's own removals, while a bot owns the screen, are
+      // held back by holdMain and checked here instead. It has to be here: this
+      // runs before the connection's own handler removes the building from its
+      // model, and the check needs to see it.
       if (type === "Q" || type === "R") {
-        this._forwardRemoval(c, type, args);
+        if (c !== this.owner) {
+          this._forwardRemoval(c, type, args);
+        } else if (this.possessing) {
+          this._removeFrom(c, type, args);
+        }
       }
     }
-    _removalTick=-1;
-    _removalsSeen=new Set;
     _forwardRemoval(c, type, args) {
       if (c === this.owner || c === this.active) {
         return;
       }
-      const sid = args[0];
+      this._removeFrom(c, type, args);
+    }
+    // Hand the bundle the removals connection `c` reports, limited to the
+    // buildings it is holding under exactly those sids. An R (a player's whole
+    // base) goes over as one Q per building, because the bundle's R removes by
+    // owner sid and player sids are re-used too.
+    _removeFrom(c, type, args) {
+      const sid = args && args[0];
       if (sid === void 0 || sid === null) {
         return;
       }
-      const mh = this.owner._ModuleHandler;
-      const tick = mh ? mh.tickCount : 0;
-      if (this._removalTick !== tick) {
-        this._removalTick = tick;
-        this._removalsSeen.clear();
-      }
-      const key = type + ":" + sid;
-      if (this._removalsSeen.has(key)) {
+      if (type === "Q") {
+        this._removeHeld(c.ObjectManager.objects.get(sid));
         return;
       }
-      this._removalsSeen.add(key);
-      this._emit(type, args);
+      const player = c.PlayerManager.playerData.get(sid);
+      if (player === void 0) {
+        return;
+      }
+      for (const object of player.objects) {
+        this._removeHeld(object);
+      }
+    }
+    // Take `object` off the screen if the screen is drawing it, and remember it
+    // is gone. The entity on screen may still hold it — a connection that was
+    // dead when it broke is never told — and the top-up must not put it back.
+    _removeHeld(object) {
+      if (!this._isHeld(object)) {
+        return;
+      }
+      const held = this._held.get(object.id);
+      if (this._emit("Q", [ object.id ])) {
+        this._held.set(object.id, [ held[0], held[1], held[2], true ]);
+      }
+    }
+    // The record for this very object — same sid, same place — or undefined.
+    _heldAs(object) {
+      if (object === void 0 || object === null) {
+        return void 0;
+      }
+      const held = this._held.get(object.id);
+      if (held === void 0) {
+        return void 0;
+      }
+      const p = object.pos.current;
+      return Math.abs(p.x - held[0]) < 1 && Math.abs(p.y - held[1]) < 1 ? held : void 0;
+    }
+    // Is the bundle drawing this very object.
+    _isHeld(object) {
+      const held = this._heldAs(object);
+      return held !== void 0 && held[3] !== true;
+    }
+    // Keeps _held in step with a frame that has reached the bundle.
+    _record(type, args) {
+      switch (type) {
+       case "H":
+        {
+          const buf = args && args[0];
+          if (!buf || typeof buf.length !== "number") {
+            return;
+          }
+          for (let i = 0; i + 7 < buf.length; i += 8) {
+            this._held.set(buf[i], [ buf[i + 1], buf[i + 2], buf[i + 6] === null ? -1 : buf[i + 7] ]);
+          }
+          return;
+        }
+
+       case "Q":
+        this._held.delete(args[0]);
+        return;
+
+       case "R":
+        {
+          const sid = args[0];
+          for (const [id, held] of this._held) {
+            if (held[2] === sid) {
+              this._held.delete(id);
+            }
+          }
+          return;
+        }
+
+       case "io-init":
+        // A new main connection: the bundle empties its object list on the
+        // first setup that follows, so nothing recorded before it is on screen.
+        this._held.clear();
+        return;
+      }
+    }
+    // Called by the socket gate for every main-socket frame it lets through.
+    notePassed(event) {
+      if (event === this._noteEvent) {
+        this._record(this._noteType, this._noteArgs);
+      }
     }
     // True when the bundle must not see this frame from the main connection.
     holdMain(event) {
@@ -41491,7 +41647,17 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       const type = this._typeOf(event);
       // An undecodable frame is held: letting an unknown one through while a bot
       // owns the screen is the one case that could mix two worlds.
-      return type === null ? true : !POSSESS_MAIN_ALWAYS.has(type);
+      if (type === null) {
+        return true;
+      }
+      // Removals from the main connection while a bot owns the screen follow
+      // the same rule as removals from any other connection: only the
+      // building the screen is holding under that sid. observe() has already
+      // handed the checked part over, so the frame itself is held.
+      if ((type === "Q" || type === "R") && event === this._noteEvent) {
+        return true;
+      }
+      return !POSSESS_MAIN_ALWAYS.has(type);
     }
     // What kind of frame this is. Normally free: observe() ran for this very
     // event a moment ago, because this client's listener is registered before
@@ -41640,7 +41806,57 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       } catch (_) {
         return false;
       }
+      this._record(type, args);
       return true;
+    }
+    // Half the visible area's diagonal plus a margin, at the current zoom.
+    _viewRadius() {
+      const view = ZoomHandler_default._scale && ZoomHandler_default._scale.current;
+      const span = view ? hyp(view._w || 1920, view._h || 1080) / 2 : 1200;
+      return Math.max(1600, span + 700);
+    }
+    // H frames for `ids` out of `objects`, batched. Never one another
+    // connection has already seen break in that exact place. With
+    // `missingOnly`, only the ones the bundle is not already drawing there.
+    _sendObjects(objects, ids, missingOnly) {
+      let batch = null;
+      for (let i = 0; i < ids.length; i++) {
+        const object = objects.get(ids[i]);
+        if (object === void 0) {
+          continue;
+        }
+        const held = this._heldAs(object);
+        if (held !== void 0 && (held[3] === true || missingOnly)) {
+          continue;
+        }
+        const pos = object.pos.current;
+        const isPlayerObject = object._rynType5 !== void 0;
+        if (batch === null) {
+          batch = [];
+        }
+        batch.push(object.id, pos.x, pos.y, object.angle, object.scale, isPlayerObject ? object._rynType5 : object.type, isPlayerObject ? object.type : null, isPlayerObject ? object.ownerID : -1);
+        if (batch.length >= POSSESS_OBJECT_BATCH * 8) {
+          this._emit("H", [ batch ]);
+          batch = null;
+        }
+      }
+      if (batch !== null) {
+        this._emit("H", [ batch ]);
+      }
+    }
+    // Put on screen whatever the entity you are controlling knows is around it
+    // and the screen is not showing. The server will not send those again, so
+    // this is the only way they get there: structures a bot passed before you
+    // took it over, and anything the main connection was sent while a bot had
+    // the screen. Normally there is nothing missing and this sends nothing.
+    _topUp(c) {
+      if (_gameHandler === null || !c || !c.myPlayer || !c.myPlayer.inGame) {
+        return;
+      }
+      const om = c.ObjectManager;
+      const at = c.myPlayer.pos.current;
+      const ids = om.grid2D.queryFull(at.x, at.y, Math.ceil(this._viewRadius() / om.grid2D.cellSize));
+      this._sendObjects(om.objects, ids, true);
     }
     // Replay `next`'s world into the bundle. Returns false when the bundle's
     // handler was never captured, which is the one case possession degrades to
@@ -41682,36 +41898,21 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       // 3. The world, as H frames in the server's own eight-field layout.
       //
       //    Only what can be on screen plus a margin, not the whole of what this
-      //    entity has ever seen. Two reasons, and they agree: the server streams
-      //    objects to a connection as it approaches them — those arrive here as
-      //    ordinary forwarded frames, so the rest of the world fills itself in
-      //    as the entity walks, exactly as it does for the main player — and the
-      //    bundle's insert is a linear scan over everything it holds, so handing
-      //    it thousands of structures at once would turn a keypress into a
-      //    visible stall. A small model is sent whole; a large one is windowed.
-      const view = ZoomHandler_default._scale && ZoomHandler_default._scale.current;
-      const span = view ? hyp(view._w || 1920, view._h || 1080) / 2 : 1200;
-      const radius = Math.max(1600, span + 700);
+      //    entity has ever seen: the bundle's insert is a linear scan over
+      //    everything it holds, so handing it thousands of structures at once
+      //    would turn a keypress into a visible stall. A small model is sent
+      //    whole; a large one is windowed.
+      //
+      //    The rest is NOT sent again by the server as the entity walks toward
+      //    it — the server sends each structure to a connection once
+      //    (GameObject.sentTo) and never repeats it. What this entity already
+      //    knows about beyond the window is handed over by _topUp as it comes
+      //    into range; without that it stayed off the screen for good, while
+      //    the entity itself kept bumping into it.
       const at = next.myPlayer.pos.current;
       const grid = next.ObjectManager.grid2D;
-      const near = objects.size <= POSSESS_OBJECT_BATCH ? [ ...objects.keys() ] : grid.queryFull(at.x, at.y, Math.ceil(radius / grid.cellSize));
-      let batch = [];
-      for (let i = 0; i < near.length; i++) {
-        const object = objects.get(near[i]);
-        if (object === undefined) {
-          continue;
-        }
-        const pos = object.pos.current;
-        const isPlayerObject = object._rynType5 !== undefined;
-        batch.push(object.id, pos.x, pos.y, object.angle, object.scale, isPlayerObject ? object._rynType5 : object.type, isPlayerObject ? object.type : null, isPlayerObject ? object.ownerID : -1);
-        if (batch.length >= POSSESS_OBJECT_BATCH * 8) {
-          this._emit("H", [ batch ]);
-          batch = [];
-        }
-      }
-      if (batch.length !== 0) {
-        this._emit("H", [ batch ]);
-      }
+      const near = objects.size <= POSSESS_OBJECT_BATCH ? [ ...objects.keys() ] : grid.queryFull(at.x, at.y, Math.ceil(this._viewRadius() / grid.cellSize));
+      this._sendObjects(objects, near, false);
       // 4. Positions and animals, from the last tick this entity received. One
       //    tick of staleness at most — the entity's own next tick corrects it.
       const m = next._rynMirror;
@@ -41859,6 +42060,13 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         return;
       }
       this.hookNet();
+      const now = Date.now();
+      if (now - this._streamAt >= POSSESS_STREAM_MS) {
+        this._streamAt = now;
+        try {
+          this._topUp(this.possessing ? this.active : this.owner);
+        } catch (_) {}
+      }
       if (!this.possessing) {
         return;
       }
@@ -41869,7 +42077,6 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         return;
       }
       const alive = !!(bot.myPlayer && bot.myPlayer.inGame);
-      const now = Date.now();
       if (alive) {
         // Came back from a death you watched: the bot respawned somewhere else
         // and the server started a fresh view for it, so the bundle is given
