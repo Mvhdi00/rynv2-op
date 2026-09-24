@@ -9130,7 +9130,8 @@ window.grbtp = 35;
         this.revision++;
         try {
           if (window._rynBotToast) {
-            window._rynBotToast("SCAN: found " + (t.name || t.id) + " — " + dexLabel(client) + " has them" + (this.mode === "track" ? ", tracking" : ", attacking"));
+            const who = dexLabel(client);
+            window._rynBotToast("SCAN: found " + (t.name || t.id) + " — " + who + (who === "you" ? " have" : " has") + " them" + (this.mode === "track" ? ", tracking" : ", attacking"));
           }
         } catch (_) {}
       } else if (t.finder === null || !t.finder.myPlayer || !t.finder.myPlayer.inGame) {
@@ -12195,11 +12196,25 @@ window.grbtp = 35;
     getActualPosition() {
       const pos = this.getMovePosition();
       const ownerClient = this.client.ownerClient;
-      const botIndex = ownerClient.getClientIndex(this.client);
+      let botIndex = ownerClient.getClientIndex(this.client);
       const f = Settings_default._formation || "none";
       if (f === "none") return pos;
-      const totalBots = ownerClient.clients.size;
+      let totalBots = ownerClient.clients.size;
       if (totalBots === 0) return pos;
+      // Bots given to a clan mate are not in your formation. Counting them
+      // would leave a hole in the shape for every one of them.
+      if (RynEscort.bots.size !== 0) {
+        const list = ownerClient.clientList();
+        let idx = 0;
+        let total = 0;
+        for (let i = 0; i < list.length; i++) {
+          if (RynEscort.bots.has(list[i])) continue;
+          if (list[i] === this.client) idx = total;
+          total++;
+        }
+        botIndex = idx;
+        totalBots = Math.max(1, total);
+      }
       const {circleOffset: circleOffset} = ownerClient._ModuleHandler;
       const radius = Settings_default._circleRadius;
       // A train trails behind where you are going, not where you are aiming, so
@@ -26384,8 +26399,22 @@ window.grbtp = 35;
         goalY = py + Math.sin(a) * ESCORT_INTERPOSE + Math.cos(a) * side;
         chase = false;
       } else if (lost || toPlayer > ESCORT_LEASH) {
-        // 2. Rejoin. Only what is already in reach is hit on the way.
+        // 2. Rejoin. Only what is already in reach is hit on the way: the
+        // enemy nearest this bot, if it is close enough to swing at without a
+        // step off the way back.
         chase = false;
+        let near = null;
+        let nd = ESCORT_INTERPOSE * 2.4;
+        for (let i = 0; i < enemies.length; i++) {
+          const e = enemies[i];
+          if (!e || !e.pos || e.id === r.sid) continue;
+          const d = hyp(e.pos.current.x - pos.x, e.pos.current.y - pos.y);
+          if (d < nd) {
+            nd = d;
+            near = e;
+          }
+        }
+        engage = near;
       } else if (nearest !== null && hyp(nearest.pos.current.x - pos.x, nearest.pos.current.y - pos.y) <= ESCORT_ENGAGE_BOT) {
         // 3. Immediate threat.
         engage = nearest;
@@ -26958,8 +26987,26 @@ window.grbtp = 35;
       const held = typeof RYN !== "undefined" && RYN._heldBots ? RYN._heldBots : null;
       for (const bot of owner.clients) {
         const e = bot._rynEntry;
-        if (!e || e.phase !== "spawning") continue;
+        if (!e) continue;
         const p = bot.myPlayer;
+        if (e.phase === "ready") {
+          // Dead, and nothing has asked for a respawn lately. The respawn is
+          // normally sent from the bot's own tick (PlayerManager.postTick), and
+          // a connection the server has stopped sending ticks to while it is
+          // dead never gets that tick — this is the backstop for it.
+          if (p && !p.inGame && p.diedOnce) {
+            const asked = bot.PlayerManager._spawnAskedAt || 0;
+            const sock = bot.SocketManager.socket;
+            if (now - asked >= RYN_ENTRY_SPAWN_WAIT_MS && sock && sock.readyState === 1) {
+              bot.PlayerManager._spawnAskedAt = now;
+              try {
+                p.spawn();
+              } catch (_) {}
+            }
+          }
+          continue;
+        }
+        if (e.phase !== "spawning") continue;
         if (p && p.inGame) {
           e.phase = "ready";
           continue;
@@ -34084,7 +34131,6 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     _botFarmMode: "single",
     _botFarmType: 0,
     _botFarmLimit: 0,
-    _botFarmMode: "single",
     _farmGoalWood: 0,
     _farmGoalStone: 0,
     _farmGoalFood: 0,
@@ -44667,6 +44713,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         const autoSync = q("#song-autosync");
         if (autoSync && autoSync.checked) {
           this._chatSync = true;
+          const chatSyncToggle = q("#music-chat-sync");
           if (chatSyncToggle) chatSyncToggle.checked = true;
           this.play(this._songs.length - 1);
         }
