@@ -14348,6 +14348,61 @@ window.grbtp = 35;
   const LUNA_MAX_SCANNERS = 6;
   const LUNA_SECTOR_MAX_BUILDS = 1;
 
+  // ── Escape containment ────────────────────────────────────────────────────
+  // What auto place does in the ticks before a trap holding the enemy breaks.
+  //
+  // The model is four ways out — straight away from us, either side, and back
+  // towards us — and one trap standing across each of them, so that whichever
+  // way they walk when the trap goes, the first thing they touch is another.
+  // The four are where the reasoning starts, not what gets built. Each one is
+  // solved against the game's own rules:
+  //
+  //   catches    the game locks a player whose centre comes within
+  //              playerScale + trap.scale * colDiv of a trap (35 + 50 * 0.2 =
+  //              45; EnemyManager.checkCollision uses the same radius), so a
+  //              trap covers a way out when the line out passes inside that
+  //              radius of it, within a few ticks' walk
+  //   legal      the trap has to land on our own ring and clear every object
+  //              standing — the trap still holding them included — by the
+  //              server's checkItemLocation rule, which is exactly what
+  //              `placeable` in the scan table already answers
+  //   useful     a way out already closed — by one of our traps, or by any
+  //              solid build the player would walk into — needs nothing
+  //
+  // and then the smallest set of legal, non-overlapping candidates that
+  // closes the most of what is left, weighted towards the likely way out, is
+  // what gets queued. From one position the ring reaches only so much of the
+  // ground around a trapped player — a trap has to sit 100 units clear of the
+  // one they are in, and ours land 80 units from us — so the answer is four
+  // when the board allows four and three, two, one or none when it does not.
+  // Nothing is built for a way out nothing legal can cover.
+  //
+  // When is the other half. RetrapForecast lays the swings breaking the trap
+  // out on the tick line, and the formation is sent once the break is inside
+  // the round trip plus one tick — early enough to be standing on the server
+  // before the first tick they can move, late enough that a trap nobody is
+  // breaking costs nothing. The trap slot itself, which only becomes legal
+  // when the old trap goes, is Spam Preplace's; this is everything around it.
+  //
+  // Preparing for it starts the tick they are caught. The extra scanners fill
+  // the ring on their first tick, and with traps first, so left alone they
+  // spend the six-trap cap and the ground beside the enemy on builds facing
+  // nobody before any break is in sight. While an enemy is held by our trap
+  // they fill open ground with spikes only. The ladder is untouched: its
+  // spikes land around the enemy, and a way out a spike already blocks is a
+  // way out the formation does not need to cover.
+  const LUNA_CONTAIN_DIRS = 4;
+  // How far along a way out a trap still counts as catching them: a few ticks
+  // of walking, the same order as the engine's RPE_ESCAPE_MAX_RUN.
+  const LUNA_CONTAIN_RUN = 120;
+  // Candidates kept per way out before the set is chosen.
+  const LUNA_CONTAIN_POOL = 3;
+  // Units a line has to clear an edge by to count as covered, rather than
+  // grazing it.
+  const LUNA_CONTAIN_MARGIN = 4;
+  // Away from us, left, towards us, right — how likely each way out is.
+  const LUNA_CONTAIN_WEIGHTS = [ 1, .85, .6, .85 ];
+
   // Modules that own a sync or a trap tick. They all run before the placer,
   // and whichever claims the tick puts its name in ModuleHandler.activeModule.
   // If one of them owns the tick the placer stays out of its way rather than
@@ -14388,6 +14443,13 @@ window.grbtp = 35;
     // found anything. See _boardSignature.
     _lastSignature=null;
     _lastProduced=true;
+    // The four ways out, as unit vectors, reused every tick the containment
+    // runs.
+    _contUx=new Float64Array(LUNA_CONTAIN_DIRS);
+    _contUy=new Float64Array(LUNA_CONTAIN_DIRS);
+    // Ground a Spam Preplace replacement already on the wire will take, read
+    // once per tick from the engine. See _addPredictObject.
+    _retrapCover=null;
     constructor(client2) {
       this.client = client2;
     }
@@ -14403,6 +14465,7 @@ window.grbtp = 35;
       this._lastPrePlaceObj = null;
       this._spamPrePlacer = false;
       this._steps = LUNA_ANGLE_STEPS_DEFAULT;
+      this._retrapCover = null;
       SpikeOpportunity.reset();
     }
 
@@ -14663,6 +14726,11 @@ window.grbtp = 35;
       for (const obj of this._predictObjects) {
         if (obj.id !== 17 && hyp(x - obj.x, y - obj.y) < item.scale + obj.scale) return;
       }
+      // Ground a Spam Preplace replacement is already on its way to. The server
+      // will have it before anything sent now arrives, so a build here is five
+      // packets to be refused.
+      const cover = this._retrapCover;
+      if (cover !== null && hyp(x - cover.x, y - cover.y) < item.scale + cover.r) return;
       this._predictObjects.push({
         id: id,
         angle: angle,
@@ -14944,6 +15012,234 @@ window.grbtp = 35;
       return bestScore > 0 ? best : null;
     }
 
+    // ── Escape containment ──────────────────────────────────────────────────
+    // See the LUNA_CONTAIN_* block above for the model.
+
+    // The trap the enemy is standing in, if it is ours or a teammate's.
+    // EnemyManager.checkCollision already solved that against the game's own
+    // contact radius before any module ran, so it is read rather than derived
+    // again.
+    _heldBy(enemy, myPlayer, PlayerManager2) {
+      const trap = enemy ? enemy.trappedIn : null;
+      if (!(trap instanceof PlayerObject)) return null;
+      const item = Items[trap.type];
+      if (!item || !item.trap) return null;
+      if (PlayerManager2.isEnemyByID(trap.ownerID, myPlayer)) return null;
+      return trap;
+    }
+
+    // Whether the break is close enough to build the formation for. Null when
+    // there is no trap item to build with. `armed` is every tick the enemy is
+    // held — the scanners leave the trap cap and the ground around the enemy
+    // alone for that whole stretch — and `active` is the ticks the formation
+    // is actually sent in.
+    //
+    // `lead` is the round trip in whole ticks plus one: a send made now is
+    // standing on the server a round trip from now, and the held player cannot
+    // walk until the tick after the one the trap falls on. `soon` takes the
+    // tank-hat break a tick early, since they can swap on the swing.
+    _containWindow(enemy, held, trapId) {
+      if (!held || trapId === null || trapId === undefined) return null;
+      const item = Items[trapId];
+      if (!item || !item.trap) return null;
+      const fc = RetrapForecast.predict(this.client, held, enemy);
+      if (!fc) return null;
+      const lead = Math.ceil(rpePingMs(this.client) / RPE_TICK_MS) + 1;
+      const soon = Math.min(fc.ticks, fc.earliest + 1);
+      return {
+        fc: fc,
+        lead: lead,
+        armed: true,
+        active: soon <= lead && fc.confidence >= RPE_RETRAP_MIN_CONFIDENCE
+      };
+    }
+
+    // How many of this item the resources on hand pay for.
+    _affordable(id, myPlayer) {
+      if (myPlayer.isSandbox) return Infinity;
+      const cost = Items[id] && Items[id].cost;
+      const res = myPlayer.resources;
+      if (!cost || !res) return 0;
+      let n = Infinity;
+      if (cost.food > 0) n = Math.min(n, Math.floor((res.food || 0) / cost.food));
+      if (cost.wood > 0) n = Math.min(n, Math.floor((res.wood || 0) / cost.wood));
+      if (cost.stone > 0) n = Math.min(n, Math.floor((res.stone || 0) / cost.stone));
+      if (cost.gold > 0) n = Math.min(n, Math.floor((res.gold || 0) / cost.gold));
+      return n;
+    }
+
+    // The ways out that are already closed, as a bitmask. A way out is closed
+    // by one of our (or a teammate's) traps whose catch radius it passes
+    // through, or by any solid build — anyone's, and resources too — whose
+    // body it runs into, within the run. Builds queued this tick and builds
+    // still in flight from the last two count as standing: the first is ground
+    // this tick has already spoken for, and the second would otherwise be
+    // re-sent every tick until its add packet arrived.
+    _sealedWays(held, enemy, ex, ey, catchR, ObjectManager2, PlayerManager2, myPlayer) {
+      const ux = this._contUx, uy = this._contUy;
+      const enemyR = enemy.collisionScale;
+      let sealed = 0;
+      const close = (x, y, r) => {
+        const dx = x - ex, dy = y - ey;
+        for (let i = 0; i < LUNA_CONTAIN_DIRS; i++) {
+          if (sealed & 1 << i) continue;
+          const along = dx * ux[i] + dy * uy[i];
+          if (along <= 0 || along > LUNA_CONTAIN_RUN + r) continue;
+          if (Math.abs(dx * uy[i] - dy * ux[i]) <= r - LUNA_CONTAIN_MARGIN) sealed |= 1 << i;
+        }
+      };
+      const bodyR = it => enemyR + (it ? it.scale * ("colDiv" in it ? it.colDiv : 1) : 0);
+      ObjectManager2.grid2D.query(ex, ey, 3, id => {
+        const obj = ObjectManager2.objects.get(id);
+        if (!obj || obj === held) return false;
+        if (obj instanceof PlayerObject) {
+          const it = Items[obj.type];
+          if (it && it.trap) {
+            // Their own side's traps do not hold them.
+            if (!PlayerManager2.isEnemyByID(obj.ownerID, myPlayer)) close(obj.pos.current.x, obj.pos.current.y, catchR);
+            return false;
+          }
+          if (obj.canMoveOnTop()) return false;
+        }
+        close(obj.pos.current.x, obj.pos.current.y, enemyR + obj.collisionScale);
+        return false;
+      });
+      for (const list of [ this._predictObjects, this._placedSlots ]) {
+        for (const q of list) {
+          const it = Items[q.id];
+          if (!it) continue;
+          if (it.trap) close(q.x, q.y, catchR);
+          else if (!it.ignoreCollision) close(q.x, q.y, bodyR(it));
+        }
+      }
+      return sealed;
+    }
+
+    // The containment formation for this tick. Queues up to four traps and
+    // returns how many.
+    _containEscape(held, trapAngles, enemy, enemyPos, myPos, myPlayer, trapId, ObjectManager2, PlayerManager2) {
+      const item = Items[trapId];
+      const {count: count, limit: limit} = myPlayer.getItemCount(item.itemGroup);
+      const room = Math.min(LUNA_CONTAIN_DIRS, limit ? limit - count : LUNA_CONTAIN_DIRS, this._affordable(trapId, myPlayer));
+      if (room <= 0) return 0;
+      const catchR = enemy.collisionScale + item.scale * ("colDiv" in item ? item.colDiv : 1);
+      const reachR = catchR - LUNA_CONTAIN_MARGIN;
+      const ex = enemyPos.x, ey = enemyPos.y;
+      // Straight away from us first; the others follow round.
+      const base = Math.atan2(ey - myPos.y, ex - myPos.x);
+      const ux = this._contUx, uy = this._contUy;
+      for (let i = 0; i < LUNA_CONTAIN_DIRS; i++) {
+        ux[i] = Math.cos(base + i * Math.PI / 2);
+        uy[i] = Math.sin(base + i * Math.PI / 2);
+      }
+      const sealed = this._sealedWays(held, enemy, ex, ey, catchR, ObjectManager2, PlayerManager2, myPlayer);
+      const open = ~sealed & (1 << LUNA_CONTAIN_DIRS) - 1;
+      if (open === 0) return 0;
+      // Every legal sample on the ring that closes at least one open way out,
+      // with the distance along it at which they would be caught.
+      const reach = LUNA_CONTAIN_RUN + catchR;
+      const found = [];
+      for (const a of trapAngles) {
+        if (!a.placeable) continue;
+        const dx = a.x - ex, dy = a.y - ey;
+        if (dx * dx + dy * dy > reach * reach) continue;
+        if (this._isBanned(a)) continue;
+        let clash = false;
+        for (const q of this._predictObjects) {
+          if (q.id !== 17 && hyp(a.x - q.x, a.y - q.y) < a.scale + q.scale) {
+            clash = true;
+            break;
+          }
+        }
+        if (clash) continue;
+        let mask = 0, t = null;
+        for (let i = 0; i < LUNA_CONTAIN_DIRS; i++) {
+          if (!(open & 1 << i)) continue;
+          const along = dx * ux[i] + dy * uy[i];
+          if (along <= 0) continue;
+          const perp = Math.abs(dx * uy[i] - dy * ux[i]);
+          if (perp > reachR) continue;
+          const caughtAt = along - Math.sqrt(catchR * catchR - perp * perp);
+          if (caughtAt > LUNA_CONTAIN_RUN) continue;
+          if (t === null) t = [ Infinity, Infinity, Infinity, Infinity ];
+          t[i] = Math.max(0, caughtAt);
+          mask |= 1 << i;
+        }
+        if (mask) found.push({
+          angle: a.angle,
+          x: a.x,
+          y: a.y,
+          mask: mask,
+          t: t
+        });
+      }
+      if (found.length === 0) return 0;
+      // The few best per way out: earliest catch, then nearest the enemy.
+      const pool = [];
+      for (let i = 0; i < LUNA_CONTAIN_DIRS; i++) {
+        if (!(open & 1 << i)) continue;
+        const ranked = found.filter(c => c.mask & 1 << i).sort((p, q) => p.t[i] - q.t[i]);
+        for (let k = 0; k < ranked.length && k < LUNA_CONTAIN_POOL; k++) {
+          if (pool.indexOf(ranked[k]) === -1) pool.push(ranked[k]);
+        }
+      }
+      // The set. Exhaustive over a pool of at most twelve and sets of at most
+      // four, so it cannot miss the combination geometry allows: pairwise the
+      // builds must clear each other by the server's own rule, and a build
+      // that closes nothing the set has not already closed costs more than it
+      // adds, so it is never in the answer.
+      const gap = item.scale * 2;
+      const chosen = [];
+      let best = null, bestScore = 0;
+      const score = () => {
+        let s = -.05 * chosen.length;
+        for (let i = 0; i < LUNA_CONTAIN_DIRS; i++) {
+          if (!(open & 1 << i)) continue;
+          let caught = Infinity;
+          for (const c of chosen) if (c.t[i] < caught) caught = c.t[i];
+          if (caught !== Infinity) s += LUNA_CONTAIN_WEIGHTS[i] * (1 + .25 * (1 - caught / LUNA_CONTAIN_RUN));
+        }
+        return s;
+      };
+      const search = start => {
+        if (chosen.length) {
+          const s = score();
+          if (s > bestScore + 1e-9) {
+            bestScore = s;
+            best = chosen.slice();
+          }
+        }
+        if (chosen.length >= room) return;
+        for (let k = start; k < pool.length; k++) {
+          const c = pool[k];
+          let clash = false;
+          for (const o of chosen) {
+            if (hyp(c.x - o.x, c.y - o.y) < gap) {
+              clash = true;
+              break;
+            }
+          }
+          if (clash) continue;
+          chosen.push(c);
+          search(k + 1);
+          chosen.pop();
+        }
+      };
+      search(0);
+      if (best === null) return 0;
+      // Queued most likely way out first, so a short packet budget spends
+      // itself on the build that matters most.
+      const lead = c => {
+        let w = 0;
+        for (let i = 0; i < LUNA_CONTAIN_DIRS; i++) if (c.mask & 1 << i && LUNA_CONTAIN_WEIGHTS[i] > w) w = LUNA_CONTAIN_WEIGHTS[i];
+        return w;
+      };
+      best.sort((p, q) => lead(q) - lead(p));
+      const before = this._predictObjects.length;
+      for (const c of best) this._addPredictObject(trapId, c.angle, false, myPos);
+      return this._predictObjects.length - before;
+    }
+
     postTick() {
       const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2, PacketManager: PacketManager2} = this.client;
       if (!Settings_default._autoplacer) return;
@@ -14971,6 +15267,15 @@ window.grbtp = 35;
       const enemyFut = enemy.pos.future ?? enemyPos;
       const enemyScale = enemy.collisionScale;
 
+      // A replacement Spam Preplace already has on the wire, and the trap
+      // holding the enemy with when it falls. Both are read before the
+      // early-out, because both change while the board does not: the send
+      // lands, and the reloads breaking the trap tick on.
+      const engine = ModuleHandler.staticModules ? ModuleHandler.staticModules.placementEngine : null;
+      this._retrapCover = engine && engine.retrapCover ? engine.retrapCover() : null;
+      const held = this._heldBy(enemy, myPlayer, PlayerManager2);
+      const contain = held ? this._containWindow(enemy, held, trapId) : null;
+
       // ── State-change early-out ──────────────────────────────────────────
       // Everything below this line is the scan: two grid queries around the
       // enemy, an aperture solve and a ring of samples per item, a ladder over
@@ -14989,7 +15294,7 @@ window.grbtp = 35;
       // is "no build" — and it is not a tick budget or a rate limit. In a
       // fight it is inert, because the enemy moves more than the 3-unit
       // quantum every tick.
-      const signature = this._boardSignature(myPos, enemy, enemyPos, myPlayer, spikeId, trapId, ObjectManager2);
+      const signature = this._boardSignature(myPos, enemy, enemyPos, myPlayer, spikeId, trapId, ObjectManager2) + "|" + (contain ? held.id + ":" + contain.fc.ticks + ":" + contain.fc.earliest + ":" + (contain.active ? 1 : 0) : "n") + "|" + (this._retrapCover ? 1 : 0);
       if (!this._lastProduced && this._placedSlots.length === 0 && this._lastSignature === signature) {
         this._predictObjects = [];
         this._lastPrePlaceObj = null;
@@ -15104,6 +15409,17 @@ window.grbtp = 35;
       {
         const spikeAngles = this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null, LUNA_SPIKE_TYPE);
         const trapAngles = this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null, LUNA_TRAP_TYPE);
+
+        // ── Escape containment ────────────────────────────────────────────
+        // The enemy is held by one of our traps and it is about to break.
+        // Queued ahead of the ladder so the ground around the way out is not
+        // handed to whatever the ladder would have offered first; the ladder
+        // then builds around it as it always has. On every other tick this is
+        // skipped and nothing below changes.
+        if (contain !== null && contain.active && myPos.distance(enemyPos) <= (Settings_default._autoplacerRadius ?? 350) && myPlayer.canPlace(LUNA_TRAP_TYPE)) {
+          this._containEscape(held, trapAngles, enemy, enemyPos, myPos, myPlayer, trapId, ObjectManager2, PlayerManager2);
+        }
+
         const notBanned = a => !this._isBanned(a);
         const validSpike = spikeAngles.filter(a => notBanned(a) && (a.placeable || a.perfect));
         const validTrap = trapAngles.filter(a => notBanned(a) && (a.placeable || a.perfect));
@@ -15284,7 +15600,11 @@ window.grbtp = 35;
       // myself in, and out here there is no target to be near.
       const scanners = Math.max(1, Math.min(LUNA_MAX_SCANNERS, Math.round(Settings_default._autoplacerScanners ?? 1)));
       if (scanners > 1 && myPos.distance(enemyPos) <= (Settings_default._autoplacerRadius ?? 350)) {
-        this._scanSectors(scanners, [ [ trapId, LUNA_TRAP_TYPE, this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null, LUNA_TRAP_TYPE) ], [ spikeId, LUNA_SPIKE_TYPE, this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null, LUNA_SPIKE_TYPE) ] ], Math.atan2(enemyPos.y - myPos.y, enemyPos.x - myPos.x), myPos, myPlayer, _los);
+        // While the enemy is held by our trap, traps are what the containment
+        // and the replacement will need and the cap is six, so the scanners
+        // fill open ground with spikes only.
+        const sectorItems = contain !== null && contain.armed ? [ [ spikeId, LUNA_SPIKE_TYPE, this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null, LUNA_SPIKE_TYPE) ] ] : [ [ trapId, LUNA_TRAP_TYPE, this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null, LUNA_TRAP_TYPE) ], [ spikeId, LUNA_SPIKE_TYPE, this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null, LUNA_SPIKE_TYPE) ] ];
+        this._scanSectors(scanners, sectorItems, Math.atan2(enemyPos.y - myPos.y, enemyPos.x - myPos.x), myPos, myPlayer, _los);
       }
 
       // ────────────────────────────────────────────────────────────────────
@@ -15498,6 +15818,75 @@ window.grbtp = 35;
   // quantity by it.
   function rpePingLead(client) {
     return Math.max(0, Math.min(RPE_PING_MAX_TICKS, rpePingMs(client) / RPE_TICK_MS));
+  }
+
+  // ── Break window ──────────────────────────────────────────────────────────
+  // The one placement whose value is decided by *when* it lands rather than
+  // where: the replacement for the trap the target is standing in. The game
+  // resolves a build on the packet that asks for it (Player.buildItem runs
+  // checkItemLocation against the objects standing at that instant), while a
+  // trap only falls on a server tick, when the swing that kills it resolves.
+  // So a replacement that reaches the server
+  //
+  //     before the break          is refused: the trap is still there
+  //     in [S(b), S(b+1))         lands on open ground, and the held player
+  //                               has not had a tick to move yet
+  //     after S(b+1)              lands behind someone already walking
+  //
+  // and the whole job is to land in the middle band.
+  //
+  // Jitter is how far a packet's arrival wanders from where the round trip
+  // says it lands. Two readings, the larger wins: the spread of tick arrivals
+  // around 1000/9, which the engine samples every tick
+  // (RynPlacementEngine._sampleTick), and half the gap between the current
+  // round trip and the best this connection has had (SocketManager
+  // minPingTime), which is queueing on the path. Floored so a quiet line
+  // still keeps a margin, and capped at a quarter tick so one stall cannot
+  // push every send out of the window it was aimed at.
+  const RPE_JITTER_MIN = 6;
+  // Two sends closer together than this reach the same server state, so
+  // spacing them tighter buys duplicates rather than coverage.
+  const RPE_RETRAP_GAP_MIN = 8;
+  // Below this a break forecast is a guess about someone who is not
+  // swinging, and nothing is sent on it.
+  const RPE_RETRAP_MIN_CONFIDENCE = .3;
+  function rpeJitterMs(client) {
+    const SM = client && client.SocketManager;
+    const MH = client && client._ModuleHandler;
+    const engine = MH && MH.staticModules ? MH.staticModules.placementEngine : null;
+    const tickJitter = engine && isFinite(engine._tickJitter) ? engine._tickJitter : 0;
+    let pathJitter = 0;
+    if (SM && typeof SM.pong === "number" && SM.pong > 0 && isFinite(SM.minPingTime)) {
+      pathJitter = Math.max(0, SM.pong - SM.minPingTime) / 2;
+    }
+    return Math.max(RPE_JITTER_MIN, Math.min(RPE_TICK_MS / 4, Math.max(tickJitter, pathJitter)));
+  }
+  // The window, as delays from the moment this tick's update was read. The
+  // update for tick k left the server half a round trip ago, and a packet
+  // sent `d` ms from now arrives half a round trip later, so it reaches the
+  // server at S(k) + RTT + d. A break on tick k+n is therefore met by
+  //
+  //     d in [ n*T - RTT , (n+1)*T - RTT )
+  //
+  // shrunk by the jitter at both ends. `from`/`to` is the part of that inside
+  // this tick — the rest belongs to the next tick, which schedules it from a
+  // fresher forecast.
+  function rpeBreakWindow(n, rtt, jitter) {
+    const lo = n * RPE_TICK_MS - rtt + jitter;
+    const hi = (n + 1) * RPE_TICK_MS - rtt - jitter;
+    return {
+      lo: lo,
+      hi: hi,
+      from: Math.max(0, lo),
+      to: Math.min(RPE_TICK_MS, hi)
+    };
+  }
+  // Ticks from now until the first tick whose update, answered at once,
+  // reaches the server at or after the break: the smallest j >= 0 with
+  // j*T >= n*T - RTT + jitter. Tick-level, so it lands the pipeline's own send
+  // inside the window at any ping; the timed sends fill in around it.
+  function rpeBreakSendTick(n, rtt, jitter) {
+    return Math.max(0, Math.ceil((n * RPE_TICK_MS - rtt + jitter) / RPE_TICK_MS - 1e-9));
   }
 
   // Priority classes for the reservation ledger. A higher class wins the
@@ -16458,6 +16847,303 @@ window.grbtp = 35;
     }
   }
 
+  // ── Break clock ───────────────────────────────────────────────────────────
+  // When the trap holding the target falls, in server ticks.
+  //
+  // `attrition` below answers "how many swings", and a swing is not a tick. A
+  // great hammer swings every four ticks or so (400ms over 111.11ms), so "two
+  // swings" is anything from one tick to five depending on where the reload
+  // is — and a replacement timed on the swing count reaches a trap that is
+  // still standing. The client already tracks every player's reload per tick
+  // (Player.updateReloads advances the weapon in hand by one,
+  // PlayerManager.attackPlayer resets it on the swing and stamps
+  // `lastAttacked` / `lastAttackWeapon`), so the swings are laid out on the
+  // tick line instead of counted:
+  //
+  //   cadence   how many ticks apart this actor's swings with this weapon
+  //             actually land, measured from consecutive attack animations and
+  //             kept as the shortest gap seen. The game's player update only
+  //             lets a swing out on the tick after the reload has run down
+  //             (`reloads > 0 ? reloads -= dt : gather()`), so the real cadence
+  //             can sit a tick past the reload counter's own maximum. Until two
+  //             swings have been seen, the counter's maximum stands in for it,
+  //             which errs early: an early send is refused and re-timed next
+  //             tick, a late one lets them walk.
+  //   wait      ticks until the weapon can next swing — cadence less the ticks
+  //             it has reloaded in hand
+  //   walk      the actor keeps swinging the weapon in their hand (Player
+  //             weapon.current), or, if that one cannot reach the trap, the
+  //             hardest-hitting one that can. Breaking out is holding one
+  //             weapon on one target; a model that swaps to a weaker weapon
+  //             whenever it is readier costs the heavy one its reload and puts
+  //             the break late
+  //   damage    Player.getBuildingDamage, with the tank multiplier for an actor
+  //             wearing it or seen breaking traps in it (`usesTank`, which
+  //             EnemyManager.checkCollision sets)
+  //   actors    the holder and the two nearest other enemies in reach, their
+  //             swings merged, so a teammate hitting the trap from outside
+  //             brings the break forward exactly as it does on the server
+  //
+  // `ticks` is that answer. `earliest` is the same walk with the tank
+  // multiplier on everyone — the soonest it can fall if they swap hats on the
+  // swing. `confidence` is the evidence that the swings are actually coming:
+  // health the trap has visibly lost (StealForecast's history), the holder's
+  // own recent attack animations, or a trap already inside one swing. A
+  // pinned player standing still is not breaking anything, whatever their
+  // reload says, and a forecast built on them is not acted on.
+  //
+  // Memoised per tick on the engine, so Auto Place and the engine read one
+  // answer and the walk runs once per trap per tick. It is a few dozen
+  // additions: two weapons, three actors at most, eighteen ticks.
+  const RPE_BREAK_HORIZON = 18;
+  const RPE_BREAK_ACTORS = 3;
+  // Further than this from the trap no melee weapon in the game reaches it.
+  const RPE_BREAK_REACH = 260;
+  // Swing history per actor: kept while the actor is being watched, dropped a
+  // few seconds after.
+  const RPE_SWING_FORGET = 60;
+  const RetrapForecast = {
+    _exp: new Float64Array(RPE_BREAK_HORIZON + 1),
+    _early: new Float64Array(RPE_BREAK_HORIZON + 1),
+    _late: new Float64Array(RPE_BREAK_HORIZON + 1),
+    _dExp: [ 0, 0 ],
+    _dEarly: [ 0, 0 ],
+    _used: [],
+    predict(client, trap, holder) {
+      const MH = client && client._ModuleHandler;
+      if (!MH || !trap) return null;
+      const engine = MH.staticModules ? MH.staticModules.placementEngine : null;
+      const tick = MH.tickCount;
+      if (!engine) return this._safeSolve(client, trap, holder, tick, null);
+      if (engine._breakMemoTick !== tick) {
+        engine._breakMemoTick = tick;
+        engine._breakMemo.clear();
+      }
+      let out = engine._breakMemo.get(trap.id);
+      if (out === undefined) {
+        out = this._safeSolve(client, trap, holder, tick, engine);
+        engine._breakMemo.set(trap.id, out);
+      }
+      return out;
+    },
+    _safeSolve(client, trap, holder, tick, engine) {
+      try {
+        return this._solve(client, trap, holder, tick, engine);
+      } catch (_) {
+        return null;
+      }
+    },
+    _damage(actor, id, tank) {
+      try {
+        const d = actor.getBuildingDamage(id, tank);
+        return isFinite(d) && d > 0 ? d : 0;
+      } catch (_) {
+        return 0;
+      }
+    },
+    // Records a swing the client has just seen, and the gap since this
+    // actor's last swing with the same weapon. `lastAttacked` is stamped in
+    // myPlayer's own tick count, so gaps are in ticks.
+    _observe(engine, actor, myTick) {
+      const log = engine._swingLog;
+      let s = log.get(actor.id);
+      if (s === undefined) {
+        if (log.size >= 16) {
+          for (const [id, old] of log) {
+            if (myTick - old.touched > RPE_SWING_FORGET) log.delete(id);
+          }
+        }
+        s = {
+          seen: actor.lastAttacked,
+          last: new Map,
+          cadence: new Map,
+          touched: myTick
+        };
+        // The swing already on record is a real one, so the next one seen
+        // yields a gap instead of only a start.
+        if (actor.lastAttacked > 0) s.last.set(actor.lastAttackWeapon, actor.lastAttacked);
+        log.set(actor.id, s);
+      }
+      s.touched = myTick;
+      const at = actor.lastAttacked;
+      if (at > 0 && at !== s.seen) {
+        s.seen = at;
+        const w = actor.lastAttackWeapon;
+        const prev = s.last.get(w);
+        if (prev !== undefined) {
+          const gap = at - prev;
+          if (gap >= 1 && gap <= RPE_BREAK_HORIZON) {
+            const known = s.cadence.get(w);
+            s.cadence.set(w, known === undefined ? gap : Math.min(known, gap));
+          }
+        }
+        s.last.set(w, at);
+      }
+      return s;
+    },
+    // The melee weapons this actor can land on the trap, with how many ticks
+    // each is from swinging if held.
+    //
+    // Ticks reloaded come from the swing log when the weapon has swung within
+    // reach of it and is still the one in hand: the reload counter stops at
+    // its maximum, so two ticks in a row can read full and say nothing about
+    // which of them the swing lands on, while the stamp of the last swing is
+    // exact. `lastAttacked` is stamped before that tick's own update advances
+    // the tick count, hence the one taken off.
+    _weapons(actor, trap, swings, myTick) {
+      const rows = [];
+      const w = actor.weapon;
+      if (!w || !actor.pos) return rows;
+      const tp = trap.pos.current, ap = actor.pos.current;
+      const gap = hyp(ap.x - tp.x, ap.y - tp.y) - trap.scale;
+      for (let slot = 0; slot < 2; slot++) {
+        const id = slot === 0 ? w.primary : w.secondary;
+        if (id === null || id === undefined || id < 0) continue;
+        if (!DataHandler_default.isMelee(id)) continue;
+        const wd = DataHandler_default.getWeapon(id);
+        if (!wd || gap > (wd.range ?? 0)) continue;
+        const r = actor.reload && actor.reload[slot];
+        const max = r && isFinite(r.max) && r.max > 0 ? r.max : Math.max(1, Math.ceil((wd.speed ?? 300) / RPE_TICK_MS));
+        const current = r && isFinite(r.current) ? Math.max(0, Math.min(max, r.current)) : max;
+        const measured = swings ? swings.cadence.get(id) : undefined;
+        // Unmeasured, the cadence is bracketed: the counter's maximum (the
+        // swing on the tick it fills) and one past it (the swing on the tick
+        // after), which is where the game's update puts it.
+        const cadence = measured !== undefined ? measured : max;
+        const cadenceLate = measured !== undefined ? measured : max + 1;
+        // The swing tick itself already reads 1 on the counter
+        // (attackPlayer resets it, the same tick's update advances it), so
+        // `current - 1` is the ticks reloaded in hand since.
+        let held = Math.max(0, current - 1);
+        const lastSwing = swings && w.current === id ? swings.last.get(id) : undefined;
+        if (lastSwing !== undefined) {
+          const since = myTick - lastSwing - 1;
+          if (since >= held && since <= cadenceLate + RPE_BREAK_HORIZON) held = since;
+        }
+        rows.push({
+          id: id,
+          cadence: cadence,
+          wait: Math.max(1, cadence - held),
+          cadenceLate: cadenceLate,
+          waitLate: Math.max(1, cadenceLate - held)
+        });
+      }
+      return rows;
+    },
+    // One weapon's swings, added into `into[t]` for t = 1..horizon.
+    _walk(row, dmg, into, late) {
+      if (!(dmg > 0)) return;
+      let wait = late ? row.waitLate : row.wait;
+      const cadence = late ? row.cadenceLate : row.cadence;
+      for (let t = 1; t <= RPE_BREAK_HORIZON; t++) {
+        if (--wait > 0) continue;
+        into[t] += dmg;
+        wait = cadence;
+      }
+    },
+    _first(into, health) {
+      let sum = 0;
+      for (let t = 1; t <= RPE_BREAK_HORIZON; t++) {
+        sum += into[t];
+        if (sum >= health - 1e-6) return t;
+      }
+      return Infinity;
+    },
+    _solve(client, trap, holder, tick, engine) {
+      // The client's health is an estimate (PlayerManager.attackPlayer takes
+      // each swing's damage off it). A trap still in the world that the
+      // estimate has at zero is one the estimate over-counted, and the honest
+      // reading is "one more hit", not "now" — which would otherwise be
+      // re-asserted every tick until the next swing.
+      const health = trap.health > 0 ? trap.health : 1;
+      const out = {
+        trapId: trap.id,
+        ticks: Infinity,
+        earliest: Infinity,
+        latest: Infinity,
+        confidence: 0,
+        health: health,
+        swing: 0,
+        reload: 1
+      };
+      const exp = this._exp, early = this._early, late = this._late;
+      exp.fill(0);
+      early.fill(0);
+      late.fill(0);
+      const {PlayerManager: PlayerManager2, myPlayer: myPlayer} = client;
+      const myTick = myPlayer ? myPlayer.tickCount : 0;
+      const step = actor => {
+        const swings = engine ? this._observe(engine, actor, myTick) : null;
+        const rows = this._weapons(actor, trap, swings, myTick);
+        if (rows.length === 0) return;
+        const tank = actor.hatID === 40 || !!actor.usesTank;
+        const dExp = this._dExp, dEarly = this._dEarly;
+        let pick = -1;
+        for (let i = 0; i < rows.length; i++) {
+          dExp[i] = this._damage(actor, rows[i].id, tank);
+          dEarly[i] = this._damage(actor, rows[i].id, true);
+          if (dEarly[i] > out.swing) out.swing = dEarly[i];
+          if (rows[i].id === actor.weapon.current) pick = i;
+        }
+        if (pick < 0) {
+          pick = 0;
+          if (rows.length > 1 && dExp[1] > dExp[0]) pick = 1;
+        }
+        const row = rows[pick];
+        if (row.cadenceLate > out.reload) out.reload = row.cadenceLate;
+        // Only someone actually swinging — an attack animation inside their
+        // own cadence — is breaking it. Anyone else in reach could, which is
+        // what `earliest` is for, but a player standing in the trap with a
+        // full reload and no swing is not a break one tick away.
+        const swinging = actor.lastAttacked > 0 && myTick - actor.lastAttacked <= row.cadenceLate + 2;
+        if (swinging) {
+          this._walk(row, dExp[pick], exp, false);
+          this._walk(row, dExp[pick], late, true);
+        }
+        this._walk(row, dEarly[pick], early, false);
+      };
+      if (holder) step(holder);
+      const enemies = PlayerManager2 && PlayerManager2.enemies;
+      if (enemies && enemies.length) {
+        const used = this._used;
+        used.length = 0;
+        const tp = trap.pos.current;
+        while (used.length < RPE_BREAK_ACTORS - 1) {
+          let pick = null, pickD = RPE_BREAK_REACH;
+          for (const e of enemies) {
+            if (!e || e === holder || !e.pos || used.indexOf(e) !== -1) continue;
+            if (myPlayer && e.id === myPlayer.id) continue;
+            const d = hyp(e.pos.current.x - tp.x, e.pos.current.y - tp.y);
+            if (d < pickD) {
+              pickD = d;
+              pick = e;
+            }
+          }
+          if (pick === null) break;
+          used.push(pick);
+          step(pick);
+        }
+        used.length = 0;
+      }
+      out.ticks = this._first(exp, health);
+      out.earliest = Math.min(out.ticks, this._first(early, health));
+      out.latest = Math.max(out.ticks, this._first(late, health));
+      if (!isFinite(out.ticks) && !isFinite(out.earliest)) return out;
+      // Evidence that the swings are actually being thrown.
+      let evidence = 0;
+      const rec = engine && engine.forecast ? engine.forecast._observe(trap, tick) : null;
+      if (rec && rec.lastHitTick >= 0) {
+        evidence = Math.max(0, 1 - (tick - rec.lastHitTick) / (out.reload + 3));
+      }
+      if (holder && myPlayer && holder.lastAttacked > 0 && myPlayer.tickCount - holder.lastAttacked <= out.reload + 2) {
+        evidence = Math.max(evidence, .7);
+      }
+      if (out.swing >= health) evidence = Math.max(evidence, .8);
+      out.confidence = Math.max(holder ? .25 : 0, Math.min(1, evidence));
+      return out;
+    }
+  };
+
   // ── World model ───────────────────────────────────────────────────────────
   // One sweep per tick, read by everything downstream. Replaces the several
   // separate scans the old placer ran.
@@ -17246,6 +17932,9 @@ window.grbtp = 35;
       // Scheduled from here, not from the planner: a retransmission only
       // makes sense for a send that actually went out.
       engine._scheduleRetrap(cand, frame);
+      // And the replacement cycle is told, so its timed sends leave room for
+      // this one and a break that lands on it is known to be covered.
+      engine._retrapNoteSend(cand, frame.tick);
       engine.memory.note(cand.profile, cand.angle, frame.tick);
       ModuleHandler.placeAngles[0] = type;
       ModuleHandler.placeAngles[1].push(cand.angle);
@@ -17871,6 +18560,11 @@ window.grbtp = 35;
       // decision to make.
       if (cand.kind === "vacating") {
         if (cand.vacated) return true;
+        // The trap the target is standing in, on the break clock. Its deadline
+        // is already the tick whose send lands inside the break window — net
+        // of the round trip and the jitter — so it is due on that tick and not
+        // a round trip before it.
+        if (cand.clocked && Settings_default._spamPrePlace) return tick >= cand.dueTick;
         return tick >= cand.dueTick - (Settings_default._spamPrePlace ? ping : 0);
       }
       // An interception. The build has to be standing there when they arrive,
@@ -17930,6 +18624,10 @@ window.grbtp = 35;
       replaced: 0,
       stolen: 0,
       retrapped: 0,
+      // Spam Preplace's replacement cycle: breaks the replacement re-held the
+      // target through, and breaks it sent into and still lost them.
+      retrapHeld: 0,
+      retrapMissed: 0,
       dropped: 0,
       directed: 0
     };
@@ -17956,6 +18654,27 @@ window.grbtp = 35;
     // Speculative preplace sends, holding the hard claim each one filed so the
     // next tick's candidate for the same ground can ignore it exactly once.
     _retries=[];
+    // Spam Preplace's replacement cycle for the trap holding the target: the
+    // break it is timed on, the ground it sends to, the timers it has armed
+    // and what it has sent. One at a time, keyed by trap, and torn down the
+    // moment that trap or that target stops being the one in front of us. See
+    // _retrapTrack.
+    _retrap=null;
+    _retrapSeq=0;
+    _retrapOffsets=[];
+    // A broken trap's replacement, waiting to be seen holding the target.
+    _retrapAwait=null;
+    // Ground a replacement already on the wire will occupy once it lands, so
+    // nothing else pays five packets to be refused on it.
+    _retrapCover=null;
+    // RetrapForecast's per-tick memo, and the swing cadence it measures per
+    // actor and weapon.
+    _breakMemo=new Map;
+    _breakMemoTick=-1;
+    _swingLog=new Map;
+    // Spread of tick arrivals around 1000/9 (ms), for rpeJitterMs.
+    _tickJitter=0;
+    _lastTickAt=0;
     constructor(client2) {
       this.client = client2;
       this._threat = new ThreatAnalyzer(client2);
@@ -17984,6 +18703,14 @@ window.grbtp = 35;
       this._sweep = null;
       this._sweepTick = -1;
       this._retries = [];
+      this._retrapEnd();
+      this._retrapCover = null;
+      this._retrapAwait = null;
+      this._breakMemo.clear();
+      this._breakMemoTick = -1;
+      this._swingLog.clear();
+      this._tickJitter = 0;
+      this._lastTickAt = 0;
       SpikeOpportunity.reset();
     }
 
@@ -18293,8 +19020,13 @@ window.grbtp = 35;
           const obj = ObjectManager2.objects.get(id);
           if (!obj || !(obj instanceof PlayerObject) || !obj.isDestroyable) return false;
           // A trap they have not walked into is hidden from them, so it is not
-          // a slot they are about to open.
-          if (Items[obj.type] && Items[obj.type].hideFromEnemy) return false;
+          // a slot they are about to open. The one they are standing in is not
+          // hidden — the game reveals a trap to whoever it catches — and it is
+          // the slot Spam Preplace exists for, so with Spam Preplace on it is
+          // counted. Without that exception every pit trap was skipped here,
+          // the one holding the target included, and nothing downstream could
+          // ever see it breaking.
+          if (Items[obj.type] && Items[obj.type].hideFromEnemy && !(obj === frame.targetTrapped && Settings_default._spamPrePlace)) return false;
           const pos = obj.pos.current;
           if (hyp(actor.x - pos.x, actor.y - pos.y) - obj.scale > actor.range) return false;
           if (actor.legacy) {
@@ -18466,6 +19198,8 @@ window.grbtp = 35;
         // object rather than however many the geometry happens to offer.
         role: extra.role || "primary",
         holdsTrap: !!extra.holdsTrap,
+        // Timed on the break clock (Spam Preplace) rather than the swing count.
+        clocked: !!extra.clocked,
         pressure: extra.pressure === undefined ? 0 : extra.pressure,
         x: myPos.x + profile.ringR * Math.cos(angle),
         y: myPos.y + profile.ringR * Math.sin(angle)
@@ -18548,7 +19282,7 @@ window.grbtp = 35;
     // Two directions, never more. The book holds a primary and a fallback for
     // one object (see RPE_PREPLACE_PER_OBJECT) and a third proposal could only
     // ever be a third thing to reject.
-    _retrapAims(entry, frame, leadTicks) {
+    _retrapAims(entry, frame, leadTicks, profile, freed, clock) {
       const objPos = entry.object.pos.current;
       const aims = [ {
         x: objPos.x,
@@ -18556,6 +19290,18 @@ window.grbtp = 35;
         role: "primary"
       } ];
       if (!entry.retrap) return aims;
+      // With the break on the clock (Spam Preplace), the primary is steered at
+      // where the target will be standing when the replacement lands rather
+      // than at the middle of the trap they are standing in. The two differ by
+      // up to the trap's own contact radius, and only one of them is the
+      // player. See _retrapLanding.
+      if (clock && profile && freed) {
+        const land = this._retrapLanding(entry.object, frame, profile, freed, clock);
+        if (land) {
+          aims[0].x = land.x;
+          aims[0].y = land.y;
+        }
+      }
       // A pinned player has no velocity of their own — the game zeroes it on
       // contact — so asking the motion estimator where they are going answers
       // "here", with falling confidence, and a fallback built on that would be
@@ -18586,6 +19332,82 @@ window.grbtp = 35;
         });
       }
       return aims;
+    }
+
+    // Enemy_position(T_break), and the ring point that holds it.
+    //
+    // A trapped player's velocity is zeroed every tick they touch the trap, so
+    // until it breaks they are exactly where the frame says. A replacement
+    // that lands inside the break window finds them there. One that cannot —
+    // the break is nearer than the round trip lets anything arrive — finds
+    // them `late` ticks along the way out, at the speed their own track says
+    // they move, down the line _escapeContext solved (widest exit, their old
+    // course, or straight away from us).
+    //
+    // Two ways to reach that point from our ring: steer at it, or steer at the
+    // slot the trap is leaving. They land in different places whenever we are
+    // not standing exactly in line, and legality can move either one — so both
+    // are solved against the ground as it will be once the trap is gone, and
+    // whichever lands nearer the player wins, if it lands near enough to hold
+    // them at all. Null means neither does, and the caller keeps the slot.
+    _retrapLanding(trap, frame, profile, freed, clock) {
+      const rtt = rpePingMs(this.client), jitter = rpeJitterMs(this.client);
+      const late = Math.max(0, Math.ceil((rtt + jitter - (clock.ticks + 1) * RPE_TICK_MS) / RPE_TICK_MS));
+      let ax = frame.targetPos.x, ay = frame.targetPos.y;
+      if (late > 0) {
+        const dir = frame.escape ? frame.escape.angle : Math.atan2(frame.targetPos.y - frame.myPos.y, frame.targetPos.x - frame.myPos.x);
+        const track = frame.motion;
+        const speed = Math.max(8, Math.min(30, track && isFinite(track.peakSpeed) ? track.peakSpeed : 20));
+        const run = Math.min(RPE_ESCAPE_MAX_RUN, speed * late);
+        ax += Math.cos(dir) * run;
+        ay += Math.sin(dir) * run;
+      }
+      const item = profile.item;
+      const holdR = frame.targetScale + profile.footR * (profile.isTrap && "colDiv" in item ? item.colDiv : 1);
+      const my = frame.myPos, tp = trap.pos.current;
+      let bestX = 0, bestY = 0, bestD = Infinity;
+      for (let k = 0; k < 2; k++) {
+        const wx = k === 0 ? ax : tp.x, wy = k === 0 ? ay : tp.y;
+        const angle = GeometrySolver.nearestFree(freed, Math.atan2(wy - my.y, wx - my.x));
+        if (angle === null) continue;
+        const d = hyp(my.x + profile.ringR * Math.cos(angle) - ax, my.y + profile.ringR * Math.sin(angle) - ay);
+        if (d < bestD) {
+          bestD = d;
+          bestX = wx;
+          bestY = wy;
+        }
+      }
+      return bestD <= holdR ? {
+        x: bestX,
+        y: bestY
+      } : null;
+    }
+
+    // The trap the target is standing in, on the break clock.
+    //
+    // `_retrapForecast` is the forecast whatever it says; `_retrapClock` is
+    // the forecast only when it is worth acting on — a break inside the
+    // horizon, with evidence the swings are coming. A replacement whose
+    // forecast is not yet worth acting on is booked (the ground is prepared
+    // and held) but not due: it waits for the forecast to firm up, or for the
+    // deletion packet, rather than being sent into a trap that is standing.
+    _retrapForecast(trap, frame) {
+      if (!trap || !frame || !frame.target) return null;
+      return RetrapForecast.predict(this.client, trap, frame.target);
+    }
+    _retrapClock(trap, frame) {
+      const fc = this._retrapForecast(trap, frame);
+      if (!fc || !isFinite(fc.ticks) || fc.confidence < RPE_RETRAP_MIN_CONFIDENCE) return null;
+      return fc;
+    }
+    // Absolute tick on which the replacement's own send is due: the send tick
+    // for a forecast worth acting on (see rpeBreakSendTick), never for one
+    // that is not.
+    _retrapDue(forecast, tick) {
+      if (!forecast || !isFinite(forecast.ticks) || forecast.confidence < RPE_RETRAP_MIN_CONFIDENCE) return Infinity;
+      const c = this._retrap;
+      if (c !== null && c.trapId === forecast.trapId && c.missed >= 2) return Infinity;
+      return tick + rpeBreakSendTick(forecast.ticks, rpePingMs(this.client), rpeJitterMs(this.client));
     }
 
     // The third reservation: a slot beside the opening that neither of the
@@ -18678,12 +19500,18 @@ window.grbtp = 35;
         const obj = entry.object;
         const freed = this._generator.apertures(profile, frame.myPos.x, frame.myPos.y, this._blockers, obj);
         if (!freed.length) continue;
+        // The trap the target is standing in, timed on the break clock when
+        // Spam Preplace is on: its break in ticks rather than in swings, and a
+        // send tick that lands the replacement inside the break window rather
+        // than a round trip early. Null leaves this entry exactly as before.
+        const forecast = entry.retrap && Settings_default._spamPrePlace ? this._retrapForecast(obj, frame) : null;
+        const clock = forecast && isFinite(forecast.ticks) && forecast.confidence >= RPE_RETRAP_MIN_CONFIDENCE ? forecast : null;
         // The break, in ticks, with the round trip added: this is when the
         // replacement has to be standing there, not when the local view will
         // say it broke.
-        const leadTicks = Math.max(1, entry.hits) + ping;
+        const leadTicks = (clock ? clock.ticks : Math.max(1, entry.hits)) + ping;
         const pressure = this._breakPressure(obj, frame);
-        const aims = this._retrapAims(entry, frame, leadTicks);
+        const aims = this._retrapAims(entry, frame, leadTicks, profile, freed, clock);
         // The third slot, and only once the break is actually pressing. A
         // fallback booked against a wall someone has hit once is a reservation
         // held through a break that is not coming; booked against one that is
@@ -18718,14 +19546,19 @@ window.grbtp = 35;
             // trap under two loaded weapons books at a confidence the same
             // trap being chipped at by one does not reach.
             confidence: Math.max(.3, Math.max(1 - (entry.hits - 1) * .35, pressure)),
-            interceptTick: entry.hits,
+            interceptTick: clock ? clock.ticks : entry.hits,
             // Brought forward by the round trip, so the preparation is
             // finished before the break rather than starting at it. The send
             // itself is still held back by PlacementScheduler.due unless spam
             // pre-placement is on; what this buys unconditionally is that the
             // record is booked, the ground reserved and the angle validated
             // with a tick in hand.
-            dueTick: frame.tick + Math.max(1, entry.hits) - (Settings_default._spamPrePlace ? ping : 0),
+            //
+            // On the clock the deadline is the send tick itself, already net
+            // of the round trip and the jitter (rpeBreakSendTick), and `due`
+            // does not take the ping off it a second time.
+            dueTick: forecast ? this._retrapDue(forecast, frame.tick) : frame.tick + Math.max(1, entry.hits) - (Settings_default._spamPrePlace ? ping : 0),
+            clocked: !!forecast,
             vacates: obj.id,
             excludes: obj,
             role: aim.role,
@@ -18903,6 +19736,17 @@ window.grbtp = 35;
         const profile = this.profileFor(rec.type);
         if (!profile) continue;
         const excludes = rec.vacates !== null ? this.client.ObjectManager.objects.get(rec.vacates) || null : null;
+        // A record on the break clock is re-timed every tick from the reloads
+        // as they are now, not replayed from when it was booked: a swing that
+        // did not come, a hat swapped to tank or a teammate joining in moves
+        // the break, and the send has to move with it.
+        if (rec.clocked && excludes !== null && Settings_default._spamPrePlace) {
+          const forecast = this._retrapForecast(excludes, frame);
+          if (forecast) {
+            if (isFinite(forecast.ticks)) rec.interceptTick = forecast.ticks;
+            rec.deadlineTick = this._retrapDue(forecast, frame.tick);
+          }
+        }
         const cand = {
           profile: profile,
           angle: Math.atan2(rec.y - frame.myPos.y, rec.x - frame.myPos.x),
@@ -18924,6 +19768,7 @@ window.grbtp = 35;
           steal: rec.steal || null,
           role: rec.role || "primary",
           holdsTrap: !!rec.holdsTrap,
+          clocked: !!rec.clocked,
           // Re-measured rather than replayed. The record was written down when
           // the break was further off; what decides how hard to prepare now is
           // where the break is now.
@@ -19004,6 +19849,10 @@ window.grbtp = 35;
       if (max === 0) return 0;
       if (!Settings_default._spamPrePlace) return 0;
       if (cand.mode !== RPE_MODE.PREPLACE || cand.kind !== "vacating") return 0;
+      // On the break clock the repeats are the replacement cycle's, placed
+      // inside the predicted window (_retrapArm) instead of at a fixed offset
+      // into this tick.
+      if (cand.clocked) return 0;
       // Ground already open needs no help finding the moment it opens.
       if (cand.vacated) return 0;
       const trap = frame.targetTrapped;
@@ -19084,6 +19933,325 @@ window.grbtp = 35;
       }
       this.stats.retrapped += armed;
       return armed;
+    }
+
+    // ── Replacement cycle (Spam Preplace) ───────────────────────────────────
+    // Continuous containment of a trapped target, one break at a time:
+    //
+    //   predict   RetrapForecast gives the break in server ticks, re-solved
+    //             every tick from the reloads and the trap's health as they
+    //             stand, so the cycle is never working from a stale guess
+    //   aim       _retrapLanding puts the replacement where the target will be
+    //             standing when it lands, and the pipeline books that ground
+    //             (the `vacating` record) and holds it
+    //   send      the pipeline's own send goes out on the tick whose update,
+    //             answered at once, reaches the server inside the break window
+    //             (rpeBreakSendTick); the timers here fill the rest of that
+    //             window from its earliest legal instant, spaced by the
+    //             measured jitter, up to the Retrap Resend count
+    //   confirm   the deletion packet cancels whatever has not fired and, when
+    //             a send is already in flight behind the break, stands the
+    //             reactive duplicate down; the next tick checks whether the
+    //             target is held again and, if a new trap is holding them,
+    //             opens the next cycle on it in the same pass
+    //
+    // Nothing here chooses ground or spends packets on its own account: the
+    // ground is the booked record's, legality is re-asked of the live world at
+    // the instant each timer fires, and every send is ModuleHandler.resendPlace
+    // under the same packet budget as everything else. What this adds is only
+    // *when*.
+
+    // Tick arrival spread, for rpeJitterMs. One subtraction and one multiply a
+    // tick; a gap longer than a stall is a pause, not jitter, and is skipped.
+    _sampleTick() {
+      const now = performance.now();
+      if (this._lastTickAt > 0) {
+        const dt = now - this._lastTickAt;
+        if (dt > 0 && dt < 600) this._tickJitter += (Math.abs(dt - RPE_TICK_MS) - this._tickJitter) * .1;
+      }
+      this._lastTickAt = now;
+    }
+    _retrapCancel(c) {
+      if (!c) return;
+      for (const handle of c.timers) clearTimeout(handle);
+      c.timers.length = 0;
+    }
+    _retrapEnd() {
+      if (!this._retrap) return;
+      this._retrapCancel(this._retrap);
+      this._retrap = null;
+    }
+    // Opens, keeps or closes the cycle for this tick. Runs before the plan so
+    // a send the plan makes is counted against the cycle it belongs to.
+    _retrapTrack(frame) {
+      const held = frame && frame.range <= (Settings_default._autoplacerRadius ?? 350) ? frame.targetTrapped : null;
+      // Confirmation of the last break's replacement: the target held by a
+      // trap that is not the one that broke, inside the time its add packet
+      // needed to come back. Past that, the break was lost.
+      const wait = this._retrapAwait;
+      if (wait !== null) {
+        if (held && held.id !== wait.trapId && frame.targetId === wait.targetId) {
+          this.stats.retrapHeld += 1;
+          this._retrapAwait = null;
+        } else if (!frame || frame.tick > wait.until) {
+          this.stats.retrapMissed += 1;
+          this._retrapAwait = null;
+        }
+      }
+      let c = this._retrap;
+      if (c && (!held || held.id !== c.trapId || frame.targetId !== c.targetId)) {
+        this._retrapSettle(c, frame);
+        c = null;
+      }
+      if (!held) return null;
+      if (!c) {
+        c = this._retrap = {
+          id: ++this._retrapSeq,
+          trapId: held.id,
+          targetId: frame.targetId,
+          fc: null,
+          timers: [],
+          sends: 0,
+          sentTick: -1,
+          lastSendAt: -Infinity,
+          armedTick: -1,
+          windowKey: -1,
+          windowSends: 0,
+          missed: 0,
+          aimX: NaN,
+          aimY: NaN,
+          type: null
+        };
+      }
+      c.fc = this._retrapClock(held, frame);
+      // No forecast worth acting on: whatever was armed was armed for a break
+      // that is no longer coming when it said it would.
+      if (!c.fc) {
+        this._retrapCancel(c);
+        return c;
+      }
+      // One window per predicted break, however many ticks it spans. A
+      // forecast that moves the break has made a new window — and one that
+      // moves it because the predicted tick came and went with the trap still
+      // standing has missed. Each miss halves what the timers may spend on the
+      // next window (_retrapArm), and two stand the plan's own speculative send
+      // down until the deletion packet (_retrapDue): a player who stops
+      // swinging with the trap one hit from breaking would otherwise be
+      // answered with a burst every tick until the evidence that they were
+      // swinging ran out.
+      const breakTick = frame.tick + c.fc.ticks;
+      if (c.windowKey !== breakTick) {
+        if (c.windowKey !== -1 && frame.tick >= c.windowKey) c.missed += 1;
+        c.windowKey = breakTick;
+        c.windowSends = 0;
+      }
+      return c;
+    }
+    // The cycle's trap is no longer the one holding the target. Releases its
+    // timers and, if the trap broke with a replacement sent for it, waits for
+    // that replacement to be confirmed. The next cycle, if a new trap is
+    // already holding them, is opened by the caller in the same pass — which
+    // is also the confirmation.
+    _retrapSettle(c, frame) {
+      this._retrapCancel(c);
+      if (this._retrap === c) this._retrap = null;
+      if (c.sends === 0) return;
+      // Still standing: they left it some other way, or the target changed.
+      if (this.client.ObjectManager.objects.has(c.trapId)) return;
+      const tick = frame ? frame.tick : this.client._ModuleHandler.tickCount;
+      this._retrapAwait = {
+        trapId: c.trapId,
+        targetId: c.targetId,
+        until: tick + Math.ceil((rpePingMs(this.client) + rpeJitterMs(this.client)) / RPE_TICK_MS) + 2
+      };
+      const now = frame ? frame.targetTrapped : null;
+      if (now && now.id !== c.trapId) {
+        this.stats.retrapHeld += 1;
+        this._retrapAwait = null;
+      }
+    }
+    // The booked ground for this break: the primary if there is one, else any
+    // record holding this trap.
+    _retrapRecord(c) {
+      let any = null;
+      for (const rec of this.book.records) {
+        if (rec.state !== "pending" || rec.vacates !== c.trapId || !rec.holdsTrap) continue;
+        if (rec.role === "primary") return rec;
+        if (any === null) any = rec;
+      }
+      return any;
+    }
+    _retrapNoteSend(cand, tick) {
+      const c = this._retrap;
+      if (!c || !cand || cand.vacates !== c.trapId) return;
+      if (cand.mode !== RPE_MODE.PREPLACE && cand.mode !== RPE_MODE.REPLACE) return;
+      c.sentTick = tick;
+      c.lastSendAt = performance.now();
+      c.sends += 1;
+      c.aimX = cand.x;
+      c.aimY = cand.y;
+      c.type = cand.profile.type;
+    }
+    // Arms this tick's slice of the break window. Runs after the plan, so it
+    // knows whether the plan already sent into the front of it.
+    _retrapArm() {
+      const c = this._retrap;
+      if (!c || !c.fc) return;
+      const tick = this.client._ModuleHandler.tickCount;
+      if (c.armedTick === tick) return;
+      c.armedTick = tick;
+      const rec = this._retrapRecord(c);
+      if (rec) {
+        c.aimX = rec.x;
+        c.aimY = rec.y;
+        c.type = rec.type;
+      } else if (c.sentTick !== tick) {
+        // Nothing booked and nothing sent: no ground has been chosen for this
+        // break, and a timer has nothing to repeat.
+        return;
+      }
+      if (!isFinite(c.aimX) || c.type === null) return;
+      const max = Math.max(0, Math.min(RPE_RETRAP_RESEND_MAX, Settings_default._retrapResend | 0));
+      if (max === 0) return;
+      const fc = c.fc;
+      const rtt = rpePingMs(this.client), jitter = rpeJitterMs(this.client);
+      const win = rpeBreakWindow(fc.ticks, rtt, jitter);
+      // While the swing cadence is still unmeasured the break is bracketed
+      // (see RetrapForecast), and the later end of the bracket gets one send
+      // of its own at the front of its window.
+      const late = isFinite(fc.latest) && fc.latest > fc.ticks ? rpeBreakWindow(fc.latest, rtt, jitter) : null;
+      const lateHere = late !== null && late.to > late.from;
+      if (win.to <= win.from && !lateHere) return;
+      // The ceiling is the user's Retrap Resend; how much of it a window gets
+      // is how sure the forecast is that the break is coming, halved for every
+      // window that has already come and gone (see _retrapTrack).
+      let left = (Math.max(1, Math.round(max * fc.confidence)) >> Math.min(c.missed, 4)) - c.windowSends;
+      if (left <= 0) return;
+      const gap = Math.max(RPE_RETRAP_GAP_MIN, 2 * jitter);
+      // The window is measured from when this tick's update was read
+      // (ModuleHandler.moduleStart); the modules ahead of this one have used a
+      // few milliseconds of it.
+      const MH = this.client._ModuleHandler;
+      const spent = MH.moduleStart > 0 ? Math.min(RPE_TICK_MS, Math.max(0, performance.now() - MH.moduleStart)) : 0;
+      // Nothing earlier than now, and nothing on top of the plan's own send if
+      // it made one this tick — that went out a moment ago and already holds
+      // the front of the slice.
+      const floor = c.sentTick === tick ? spent + gap : spent;
+      const armed = this._retrapOffsets;
+      armed.length = 0;
+      const fill = (from, to, n) => {
+        let at = Math.max(from, floor);
+        while (n > 0 && left > 0 && at < to) {
+          let clear = true;
+          for (const o of armed) {
+            if (Math.abs(o - at) < gap) {
+              clear = false;
+              break;
+            }
+          }
+          if (clear) {
+            armed.push(at);
+            this._retrapTimer(c, at - spent);
+            c.windowSends += 1;
+            left--;
+            n--;
+          }
+          at += gap;
+        }
+      };
+      // Earliest legal instant first, then spaced by the jitter through the
+      // window; one held back for the later end of the bracket when there is
+      // one and there is budget for it.
+      const keep = lateHere && left >= 2 ? 1 : 0;
+      if (win.to > win.from) fill(win.from, win.to, left - keep);
+      if (lateHere) fill(late.from, late.to, 1);
+    }
+    _retrapTimer(c, ms) {
+      const id = c.id;
+      const handle = setTimeout(() => {
+        const i = c.timers.indexOf(handle);
+        if (i !== -1) c.timers.splice(i, 1);
+        if (this._retrap !== c || c.id !== id) return;
+        try {
+          this._retrapFire(c);
+        } catch (_) {}
+      }, Math.max(0, Math.round(ms)));
+      c.timers.push(handle);
+    }
+    // One timed send. Everything that decides whether it may go out is asked
+    // again here, at the instant it fires, because up to a tick has passed
+    // since it was armed.
+    _retrapFire(c) {
+      const {myPlayer: myPlayer, ObjectManager: ObjectManager2, _ModuleHandler: ModuleHandler} = this.client;
+      if (!myPlayer || !myPlayer.inGame || !Settings_default._spamPrePlace) return;
+      const trap = ObjectManager2.objects.get(c.trapId);
+      // The deletion has been read, so the ground is open and the reactive
+      // path is already answering it. onVacated cancels these; this is the
+      // guard for a timer already running when it did.
+      if (!trap) return;
+      const type = c.type;
+      if (!myPlayer.canPlace(type)) return;
+      const profile = this.profileFor(type);
+      if (!profile) return;
+      const pos = myPlayer.pos.current;
+      const angle = Math.atan2(c.aimY - pos.y, c.aimX - pos.x);
+      // We move; the ring may have left the ground this was booked on.
+      if (hyp(pos.x + profile.ringR * Math.cos(angle) - c.aimX, pos.y + profile.ringR * Math.sin(angle) - c.aimY) > profile.footR * .8) return;
+      // Legal the instant the trap is gone — everything else still has to be
+      // clear of it.
+      this._ensureBlockers(pos, ModuleHandler.tickCount);
+      const apertures = this._generator.apertures(profile, pos.x, pos.y, this._blockers, trap);
+      if (!GeometrySolver.inAperture(apertures, angle)) return;
+      if (ModuleHandler._placementHitsProtected(type, angle)) return;
+      if (!ModuleHandler.resendPlace(type, angle)) return;
+      c.sends += 1;
+      c.lastSendAt = performance.now();
+      this.stats.retrapped += 1;
+    }
+    // Ground a replacement already in flight will take. Read by Auto Place so
+    // it does not spend five packets to be refused on it; expires on its own
+    // once the add packet is due.
+    retrapCover() {
+      const cv = this._retrapCover;
+      if (!cv) return null;
+      if (performance.now() > cv.until) {
+        this._retrapCover = null;
+        return null;
+      }
+      return cv;
+    }
+    // The deletion of the cycle's trap. The timers were aimed at a moment that
+    // has now happened, and anything sent from here lands sooner than any of
+    // them would, so they are dropped. If one of the sends already went out
+    // late enough to reach the server after the break — within one round trip
+    // of now, less the jitter twice over — it is the replacement, and the
+    // booked record for the same ground stands down instead of paying to be
+    // refused behind it. Its ground is held with a hard claim until the add
+    // packet is due.
+    _retrapOnBreak(object) {
+      const c = this._retrap;
+      if (!c || c.trapId !== object.id) return;
+      this._retrapCancel(c);
+      if (c.sends === 0 || !isFinite(c.aimX)) return;
+      const rtt = rpePingMs(this.client), jitter = rpeJitterMs(this.client);
+      const age = performance.now() - c.lastSendAt;
+      if (age >= rtt - 2 * jitter) return;
+      const profile = this.profileFor(c.type);
+      const r = profile ? profile.footR : object.scale;
+      this._retrapCover = {
+        x: c.aimX,
+        y: c.aimY,
+        r: r,
+        until: performance.now() + (rtt - age) + jitter
+      };
+      const tick = this.client._ModuleHandler.tickCount;
+      for (const rec of this.book.records) {
+        if (rec.state !== "pending" || rec.vacates !== object.id || !rec.holdsTrap) continue;
+        if (hyp(rec.x - c.aimX, rec.y - c.aimY) >= rec.footR + r) continue;
+        this.book.drop(rec, "inFlight");
+        this.ledger.releaseToken(rec.token);
+      }
+      this.ledger.reserve(c.aimX, c.aimY, r, RPE_PRIORITY.RECOVERY, "retrap", tick, 2);
     }
     _noteSpeculative(cand, token, tick) {
       if (!token) return;
@@ -19247,6 +20415,7 @@ window.grbtp = 35;
           // hard the break was pressing when it was written down.
           role: cand.role || "primary",
           holdsTrap: !!cand.holdsTrap,
+          clocked: !!cand.clocked,
           pressure: cand.pressure || 0,
           // The whole reservation, and deliberately small: an id, a position, a
           // radius, a confidence and a count. The object handle is not kept —
@@ -19583,8 +20752,10 @@ window.grbtp = 35;
       const {myPlayer: myPlayer} = this.client;
       if (!myPlayer || !myPlayer.inGame) {
         this._vacatedQueue.length = 0;
+        this._retrapEnd();
         return;
       }
+      this._sampleTick();
       // Whatever was deleted this tick is planned here, once, before the
       // engine's own opportunistic pass. Marking the tick as passed is what
       // lets a deletion arriving after this point take an immediate pass of its
@@ -19600,15 +20771,24 @@ window.grbtp = 35;
       if (Settings_default._prePlace) modes.push(RPE_MODE.PREPLACE);
       if (modes.length === 0) {
         if (this.book.records.length) this.book.invalidateAll("disabled", this);
+        this._retrapEnd();
         return;
       }
       this.ledger.expire(this.client._ModuleHandler.tickCount);
       this.stats.substituted = 0;
+      // Spam Preplace's replacement cycle brackets the plan: opened (or
+      // settled) from this tick's frame before it, so a send the plan makes
+      // is counted, and armed after it, so the timers know that send is there.
+      // The frame is the one cycle() reads — ThreatAnalyzer.build is per tick.
+      const spam = !!Settings_default._spamPrePlace;
+      if (spam) this._retrapTrack(this._threat.build());
+      else this._retrapEnd();
       this.cycle({
         modes: modes,
         vacated: null,
         replace: null
       });
+      if (spam) this._retrapArm();
     }
 
     // The deletion packet is the game telling us ground just opened. Acting on
@@ -19661,6 +20841,9 @@ window.grbtp = 35;
     _vacatedTick=-1;
     onVacated(object) {
       if (!object) return;
+      // First, and whatever the gates below decide: timers aimed at a break
+      // must not outlive it.
+      if (this._retrap !== null) this._retrapOnBreak(object);
       const {myPlayer: myPlayer} = this.client;
       if (!Settings_default._prePlace && !Settings_default._replace) return;
       if (!myPlayer || !myPlayer.inGame) return;
