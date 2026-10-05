@@ -275,6 +275,75 @@ The real lyrics and translation services were not reachable from the
 environment this was built in, so they are mocked in both tests. That code is
 Ryn's, unchanged.
 
+## Luna Client: FPS / Ping counter
+
+A small counter at the top centre of the screen, with two numbers, both
+measured:
+
+- **FPS** — frames Luna's own render loop actually ran in the last half
+  second (the build counts every pass of the game's `doUpdate`).
+- **Ping** — the round trip of Luna's ping packet to the game server, shown
+  only while the socket is open.
+
+It can be switched off under **visuals → HUD**.
+
+## Luna Client: Auto grind
+
+Luna's "dynamic farm" is replaced by Ryn Type 2's AutoGrind
+(`src/luna-grind/auto-grind.js`, placed inside Luna's game code next to the
+hat logic it feeds). Turn it on under **utilities → Auto Grind** or with the
+auto grind key (G by default); both flip the same setting.
+
+As in Ryn:
+
+- it grinds weapon variants on your own turrets: the weapon that lands the
+  killing blow gets the turret's cost as weapon XP (350), and a weapon turns
+  gold at 3000, diamond at 7000, ruby at 12000;
+- **grind until** gold / diamond / ruby, separately for the primary and the
+  secondary; it idles once both are there;
+- only while standing still, with no enemy within 400, auto mills off, and a
+  turret (or teleporter) in the item bar;
+- with none of your turrets within 300, it places them **toward the mouse**,
+  any direction: 3 (centre and ±75°) in sandbox, 2 (±40°) on a normal server,
+  where the turret limit is 2;
+- then it breaks them — the great hammer with the tank hat to grind the
+  hammer; to grind the primary, the hammer chips (with tank while the turret
+  is far above the primary's damage, without it once close) and the primary
+  takes the kill — and places a fresh set as soon as they are gone.
+
+**What changed: the aim.** Turrets placed from one spot have to be at least
+72.2° apart (73 units out, 86 apart), and a swing only reaches 69.2° either
+side. Ryn aims at the centre of the turrets: with three at −75°/0°/+75° that
+swing hits only the middle one, and once it breaks, the centre of the two left
+is still 0° — 75° from both — so every swing after that hits nothing. That is
+the "gets lost and misses". Here each swing goes to the angle that reaches the
+most turrets: two at a time, then the last one, then a fresh set. Two smaller
+Luna bugs went with it: a grind angle of exactly 0 was treated as "no angle"
+and fell back to the mouse, and the facing was only re-sent when it was more
+than 17° off; while grinding it now follows to 1°.
+
+Measured against the game's own rules (`tools/test-luna-grind.js`), taking the
+great hammer from nothing to ruby from 40 random mouse directions:
+
+| | sandbox (3 turrets) | normal server (2) |
+|---|---|---|
+| Luna | ruby 40/40 · 1.52 turrets a swing · 0% empty swings | ruby 40/40 · 2.00 · 0% |
+| Ryn's aim | ruby 36/40, the rest stuck · 0.66 · 34.6% empty | ruby 40/40 · 2.00 · 0% |
+
+1.5 a swing is the most three turrets allow; with two, both every swing.
+
+`tools/test-luna-grind-e2e.js` runs the whole build against the local game
+server on moomoo.io and on sandbox.moomoo.io and checks what goes out on the
+wire: the turrets land toward the mouse, the hammer, tank hat and auto-gather
+come on, the facing reaches two at a time and then the last, a fresh set goes
+toward wherever the mouse is next, the key and the menu switch agree, and the
+counter shows a measured FPS and the server round trip.
+
+```sh
+node tools/test-luna-grind.js       # the grind against the game's rules
+node tools/test-luna-grind-e2e.js   # whole build + local game server
+```
+
 ---
 
 ## Layout
@@ -287,6 +356,8 @@ src/RYN_Client_v4.js         base client (input)
 src/Luna_Client_1.1.js       Luna client, kept for reference (input)
 src/Luna_Client_1.1_fixed.js Luna 1.1 on the current protocol (input to build-luna)
 src/luna-music/              the Music page: music.html, music.css, music-player.js, lrc-ai.js (Ryn's)
+src/luna-grind/auto-grind.js Ryn's auto grind, ported into Luna's game code
+src/luna-hud/counter.js      the FPS / Ping counter
 src/game_index.js            game bundle: protocol, data tables, engine
 src/game_vendor.js           game bundle: msgpack codec, polyfills
 tools/extract-drivers.js     game bundle  -> drivers/game-drivers.json
@@ -296,6 +367,9 @@ tools/build-reup.js          src/RYN_Client_v4.js -> ReUp_Mix.user.js
 tools/build-luna.js          src/Luna_Client_1.1_fixed.js + src/luna-music -> Luna_Client.user.js
 tools/test-luna-music.js     headless test of the Music page in the Luna build
 tools/test-luna-chat-e2e.js  whole Luna build against a local game server: chat on the wire
+tools/test-luna-grind.js     auto grind against the game's placement / hit / XP rules, vs Ryn's aim
+tools/test-luna-grind-e2e.js whole Luna build + local game server: auto grind and the counter
+tools/lib/fake-moomoo.js     the local game server and stand-in page both e2e tests use
 ```
 
 ## Build

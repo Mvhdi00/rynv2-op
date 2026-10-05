@@ -44,7 +44,7 @@ edit(
   "// @description     Luna 1.1 fixed by raptor",
   "// @description     Luna 1.1 fixed by raptor, with Ryn Type 2's Music page and LRC AI"
 );
-edit("header: version", "// @version         1.1", "// @version         1.4");
+edit("header: version", "// @version         1.1", "// @version         1.5");
 
 /* ------------------------------------------------------------------ *
  * 2. Chat bridge, exported from app.js
@@ -185,6 +185,232 @@ edit(
         LunaMusic.hide();
         content.style.display = '';
         content.innerHTML = '';
+`
+);
+
+/* ------------------------------------------------------------------ *
+ * 5. Auto grind (Ryn Type 2's AutoGrind, ported)
+ *
+ * Replaces Luna's "dynamic farm". The logic lives in
+ * src/luna-grind/auto-grind.js and is placed inside app.js, next to the hat
+ * logic it feeds, because it works on app.js's own state (myPlayer,
+ * visibleObjects, the reload arrays, the auto placer).
+ * ------------------------------------------------------------------ */
+
+/* Replace the text between two markers that each occur exactly once. */
+function replaceBetween(label, startMarker, endMarker, replacement) {
+  const a = code.split(startMarker).length - 1;
+  const b = code.split(endMarker).length - 1;
+  if (a !== 1 || b !== 1) throw new Error(`markers not unique (${a}, ${b}): ${label}`);
+  const start = code.indexOf(startMarker);
+  const end = code.indexOf(endMarker);
+  if (end < start) throw new Error(`markers out of order: ${label}`);
+  code = code.slice(0, start) + replacement + code.slice(end);
+  applied.push(label);
+}
+
+const grind = fs.readFileSync(path.join(ROOT, "src/luna-grind/auto-grind.js"), "utf8");
+
+edit(
+  "grind: hat state",
+  "let grindAngle = null;\n",
+  "let grindAngle = null;\nlet grindHat = null;\n"
+);
+
+/* Luna skipped a grind angle of exactly 0 (aiming straight right) and fell
+ * back to the mouse — one of the ways its grind swung at nothing. */
+edit(
+  "grind: angle 0 is an angle",
+  "                    if (gatherGrind && grindAngle) {\n",
+  "                    if (gatherGrind && grindAngle !== null) {\n"
+);
+
+/* The key now flips the same setting as the menu switch, as in Ryn. */
+edit(
+  "grind: key toggles the setting",
+  "                            gPressed = !gPressed;\n",
+  `                            window.vars.autoGrind = !window.vars.autoGrind;
+                            window.dispatchEvent(new CustomEvent("luna-vars-changed", { detail: "autoGrind" }));
+`
+);
+
+replaceBetween(
+  "grind: tick runs Ryn's auto grind",
+  "                        // AUTOGRIND\n",
+  "\n\n\n\n// --- KILL DETECTION & AUTO STOP ---",
+  `                        // AUTOGRIND (Ryn Type 2's AutoGrind — see lunaAutoGrind)
+                        grindAngle = null;
+                        gatherGrind = false;
+                        grindHat = null;
+                        grindObjects = [];
+                        lunaAutoGrind();
+`
+);
+
+edit(
+  "grind: module",
+  "            function hatFc() {\n",
+  grind + "\n            function hatFc() {\n"
+);
+
+/* Ryn forces the grind hat: tank, or none while the primary is being set up
+ * for the kill. A real threat (soldier) still wins, as before. */
+edit(
+  "grind: hat",
+  "                if (isBoughtHat(6, 0)) {\n                    if (soldierAnti) {\n",
+  `                // AUTO GRIND
+                if (gatherGrind && grindHat !== null) {
+                    currentHat = grindHat;
+                }
+
+                if (isBoughtHat(6, 0)) {
+                    if (soldierAnti) {
+`
+);
+
+/* Luna only re-sends its facing when it is off by more than 0.3 rad (17°).
+ * While grinding the swing has to land where it was aimed, so it follows
+ * closely. */
+edit(
+  "grind: precise facing",
+  "                            if (Math.abs(myPlayer.d2 - angle) > 0.3) {\n",
+  "                            if (Math.abs(myPlayer.d2 - angle) > (gatherGrind ? 0.02 : 0.3)) {\n"
+);
+
+edit(
+  "grind: settings",
+  "        // Utilities\n        autoBuy: true,\n",
+  `        // Utilities
+        autoBuy: true,
+        autoGrind: false,
+        autoGrindTargetPrimary: "ruby",
+        autoGrindTargetSecondary: "ruby",
+`
+);
+
+edit(
+  "grind: keybind label",
+  `{ type: 'keybind', name: "dynamic farm", id: "keyAutoGrind" }`,
+  `{ type: 'keybind', name: "auto grind", id: "keyAutoGrind" }`
+);
+
+edit(
+  "grind: menu section",
+  `                title: "ACTIONS",
+                items: [
+                    { type: 'toggle', name: "autobuy", id: "autoBuy" },
+                ]
+            }
+`,
+  `                title: "ACTIONS",
+                items: [
+                    { type: 'toggle', name: "autobuy", id: "autoBuy" },
+                ]
+            },
+            {
+                title: "Auto Grind",
+                items: [
+                    { type: 'toggle', name: "auto grind", id: "autoGrind" },
+                    { type: 'select', name: "grind until (primary)", id: "autoGrindTargetPrimary", options: [["gold", "Gold"], ["diamond", "Diamond"], ["ruby", "Ruby"]] },
+                    { type: 'select', name: "grind until (secondary)", id: "autoGrindTargetSecondary", options: [["gold", "Gold"], ["diamond", "Diamond"], ["ruby", "Ruby"]] }
+                ]
+            }
+`
+);
+
+/* Luna's menu had no dropdown; the grind targets need one. */
+edit(
+  "menu: select control",
+  "                // KEYBIND (NEW)\n",
+  `                // SELECT
+                else if (item.type === 'select') {
+                    const row = document.createElement('div');
+                    row.className = 'feature-row';
+                    row.innerHTML = \`<span class="feat-label">\${item.name}</span>\`;
+
+                    const select = document.createElement('select');
+                    select.className = 'select-styled';
+                    item.options.forEach(([value, label]) => {
+                        const option = document.createElement('option');
+                        option.value = value;
+                        option.textContent = label;
+                        select.appendChild(option);
+                    });
+                    select.value = window.vars[item.id];
+
+                    select.onchange = () => {
+                        window.vars[item.id] = select.value;
+                        saveConfig(); // SAVE
+                        select.blur();
+                    };
+
+                    row.appendChild(select);
+                    itemsContainer.appendChild(row);
+                }
+                // KEYBIND (NEW)
+`
+);
+
+edit(
+  "menu: select style",
+  "    .text-input-styled:focus {",
+  `    .select-styled {
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        color: #fff; padding: 6px 10px;
+        font-size: 12px; border-radius: 6px;
+        font-family: 'JetBrains Mono', monospace;
+        cursor: pointer; transition: 0.2s;
+    }
+    .select-styled:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
+    .select-styled option { background: #14141c; color: #fff; }
+
+    .text-input-styled:focus {`
+);
+
+/* ------------------------------------------------------------------ *
+ * 6. FPS / Ping counter (top centre)
+ * ------------------------------------------------------------------ */
+
+edit(
+  "counter: count rendered frames",
+  "                updateGame();\n",
+  "                updateGame();\n                window.__lunaFrames = (window.__lunaFrames || 0) + 1;\n"
+);
+
+edit(
+  "counter: setting",
+  "        // Visuals\n",
+  "        // Visuals\n        hudCounter: true,\n"
+);
+
+edit(
+  "counter: menu toggle",
+  `                    { type: 'toggle', name: "mill rotation", id: "millRotation" }
+`,
+  `                    { type: 'toggle', name: "mill rotation", id: "millRotation" }
+                ]
+            },
+            {
+                title: "HUD",
+                items: [
+                    { type: 'toggle', name: "fps & ping counter", id: "hudCounter" }
+`
+);
+
+const counter = fs.readFileSync(path.join(ROOT, "src/luna-hud/counter.js"), "utf8");
+edit(
+  "counter: module + grind key sync",
+  "    render('keybinds');\n",
+  counter + `
+    // A setting flipped from outside the menu (the auto grind key): save it,
+    // and redraw the tab if it is the one showing that setting.
+    window.addEventListener('luna-vars-changed', () => {
+        saveConfig();
+        if (currentTab === 'utilities' && !searchInput.value) render('utilities');
+    });
+
+    render('keybinds');
 `
 );
 
