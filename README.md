@@ -242,10 +242,38 @@ only by the button; pasted Spanish lyrics translated without a search;
 "Translation unavailable" when no translation service answers; Clear cache;
 and Ryn's own cache left untouched.
 
-The game cannot load in the test, so the chat bridge in `app.js` is not
-exercised. Neither are the real lyrics and translation services: they were
-not reachable from the environment this was built in. That code is Ryn's,
-unchanged.
+`test-luna-chat-e2e.js` covers what that one cannot: whether chat sync
+actually reaches the game. It loads the **whole** `Luna_Client.user.js` into a
+stand-in moomoo page and connects it to a local WebSocket server that speaks
+the game's protocol (io-init handshake, spawn). The server checks every frame
+the way the game server must: the 6-byte HMAC-SHA256 signature with Node's own
+crypto, the sequence number, and the opcode through tables built by the game's
+own functions taken from `src/game_index.js`. Checked: each lyric line arrives
+as the game's chat packet, at most 30 characters, within ±0.25 s of its
+timestamp (±0.1 s in practice); Test chat and Send All Lyrics arrive; nothing
+is sent while dead; and an LRC AI timeline arrives in English.
+
+```sh
+node tools/test-luna-chat-e2e.js   # headless Chromium + local game server
+```
+
+### Chat limits compared with Ryn
+
+The chat path uses Ryn's numbers: 30 characters a message (the game's own
+client cuts chat at 30 too), long lines split by Ryn's `_wrapText` and spread
+across the gap to the next line (1.6–2.6 s apart), never two lines within
+1.5 s, 2.2 s between the parts of one line, 2.3 s for Send All Lyrics. Run
+side by side on 2,010 lyric files (10 written by hand, 2,000 random), Ryn's
+player and Luna's sent the same messages at the same moments in every case.
+
+Two differences remain, both outside the limits. Auto delay sends each line
+early by the measured ping (Ryn's switch did nothing). And a line carrying two
+timestamps (`[00:12.00][01:40.00]chorus`) goes out cleanly at both times;
+Ryn sends it once, with the second timestamp in the text.
+
+The real lyrics and translation services were not reachable from the
+environment this was built in, so they are mocked in both tests. That code is
+Ryn's, unchanged.
 
 ---
 
@@ -267,6 +295,7 @@ tools/check-hooks.js         client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js          src/RYN_Client_v4.js -> ReUp_Mix.user.js
 tools/build-luna.js          src/Luna_Client_1.1_fixed.js + src/luna-music -> Luna_Client.user.js
 tools/test-luna-music.js     headless test of the Music page in the Luna build
+tools/test-luna-chat-e2e.js  whole Luna build against a local game server: chat on the wire
 ```
 
 ## Build
