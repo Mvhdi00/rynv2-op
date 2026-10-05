@@ -14,7 +14,6 @@
   --line:rgba(255,255,255,0.055);
   --line-2:rgba(255,255,255,0.10);
   --line-3:rgba(255,255,255,0.16);
-  --ink-2:#101016;
 
   --iris:var(--accent);
   --iris-hi:var(--accent-bright);
@@ -344,7 +343,6 @@
 .lm-page .rm-sync-row:hover{background:rgba(255,255,255,.028);}
 .lm-page .rm-sync-label{flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);}
 .lm-page .rm-sync-note{padding:0 14px 8px;font-size:12.5px;font-weight:500;line-height:1.5;color:var(--tx-4);}
-.lm-page .rm-sync-note b{color:var(--tx-2);font-weight:700;}
 .lm-page .rm-badge{
   display:inline-block;margin-left:9px;padding:2px 8px;border-radius:999px;
   background:var(--iris-12);color:var(--iris-hi);

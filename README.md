@@ -7,7 +7,7 @@ against them.
 Build output: **`ReUp_Mix.user.js`**
 
 This repo also builds **`Luna_Client.user.js`** — Luna 1.1 with Ryn Type 2's
-Music page and its LRC AI lyrics. See [Luna Client: Music page](#luna-client-music-page).
+Music page. See [Luna Client: Music page](#luna-client-music-page).
 
 ---
 
@@ -119,8 +119,8 @@ but nothing in the client needs it. It is stripped from the build.
 ## Luna Client: Music page
 
 `Luna_Client.user.js` is the Luna 1.1 build that runs on the current protocol
-(`src/Luna_Client_1.1_fixed.js`) with Ryn Type 2's **Music** page, including
-its **LRC AI** lyrics module, added to its menu as a new **music** tab.
+(`src/Luna_Client_1.1_fixed.js`) with Ryn Type 2's **Music** page added to its
+menu as a new **music** tab.
 
 ### What came over from Ryn
 
@@ -138,46 +138,6 @@ its **LRC AI** lyrics module, added to its menu as a new **music** tab.
   debug log.
 - **Backup & restore** — export to JSON and import back. A backup exported from
   Ryn imports too.
-- **LRC AI** — see below.
-
-### LRC AI
-
-Finds a song's synced lyrics online, translates them to English when they are
-not already, checks they belong to this song, caches them, and hands them to
-chat sync when the song plays. It is Ryn's module, carried over whole: the
-same lyric sources (LRCLIB, then NetEase, then Textyl), the same translation
-chain (Google, Lingva, MyMemory), language detection, the ID3-tag reader, the
-validator, the per-song cache and offset, and the details panel.
-
-**What changed: it runs by itself.** In Ryn nothing happened until the
-`LRC AI` button on a song was pressed. In Luna:
-
-- a song is looked up **the moment it is added** — usually ready before it is
-  first played;
-- a song that has never been looked up (imported, or added with the switch
-  off) is looked up **the first time it plays**, and its lines go to chat as
-  soon as they are ready;
-- **Find lyrics for the whole library** does every song that has never been
-  looked up, one at a time.
-
-Each song is looked up once. The result — found, or nothing found — is cached,
-so nothing is asked twice by itself and a replay or a reload makes no request.
-**Retry LRC** and **Re-fetch** ask again. The switch is under the page's
-**LRC AI** section and is saved with Luna's settings.
-
-Lyrics pasted into a song come first: they are used as they are, and
-translated if they are in another language — never searched for. Saving new
-lyrics on a song looks it up again from them.
-
-Other differences from Ryn's module:
-
-- If lyrics are found but no translation service answers, Ryn threw them away.
-  Luna keeps them in their own words and says so in the details panel;
-  Re-fetch tries the translation again.
-- Ryn's global offset had no control. Here the Chat sync **Delay** slider is
-  the global offset, and the panel's offset is per song.
-- **Send All Lyrics** sends what LRC AI found, not only lyrics pasted by hand.
-- The cache is its own database (`LunaLRCDB`), separate from Ryn's.
 
 ### Left out, as asked
 
@@ -185,6 +145,7 @@ Other differences from Ryn's module:
   is one chat sync, and it sends from you.
 - **Albums** — the album grid, album picker and album filters. Album tags on
   imported Ryn songs are dropped.
+- **LRC AI** — the automatic lyrics fetch / translate module.
 
 ### Where it differs from Ryn, and why
 
@@ -224,10 +185,8 @@ And a few adaptations to Luna:
 
 ### How it is wired
 
-The page lives in `src/luna-music/` as plain files: markup, stylesheet,
-player, and `lrc-ai.js`, which attaches to the player the same way it does in
-Ryn — by wrapping a few of its methods — so the player runs fine without it.
-`tools/build-luna.js` splices them into the Luna base. As with the ReUp build,
+The page lives in `src/luna-music/` as plain markup, stylesheet and player.
+`tools/build-luna.js` splices it into the Luna base. As with the ReUp build,
 every edit is anchored to an exact string, and a missing or ambiguous anchor
 fails the build. The menu is built outside `app.js`, so `app.js` exports a small
 `window.__lunaMusicChat` bridge next to Luna's other `window.*` exports. Chat
@@ -242,20 +201,8 @@ node tools/test-luna-music.js      # headless Chromium; needs playwright
 blank page, with a recorder standing in for the chat bridge. It covers playback,
 sync timing and line splitting, nothing sent out of game, library actions,
 filters, Save lyrics, Send All Lyrics, export / import, persistence across a
-reload, and the key and wheel guards.
-
-For LRC AI it answers LRCLIB and Google Translate itself, in the shapes those
-services return. It covers: a song added with only "Artist - Title" and a file
-found, translated from Japanese and typed into chat in English on time; the
-details panel and a live offset; replays and reloads served from the cache with
-no request; a miss remembered, and retried only by the button; pasted Spanish
-lyrics translated without a search; the automatic switch; the whole-library
-lookup; and Clear cache.
-
-The game cannot load in the test, so the chat bridge in `app.js` is not
-exercised. The real lyrics and translation services are not either: they were
-not reachable from the environment this was built in. The provider code is
-Ryn's, unchanged.
+reload, and the key and wheel guards. The game itself cannot load in the test,
+so the bridge in `app.js` is the one part it does not exercise.
 
 ---
 
@@ -263,12 +210,12 @@ Ryn's, unchanged.
 
 ```
 ReUp_Mix.user.js             the build output — this is the script to install
-Luna_Client.user.js          Luna 1.1 + Music page + LRC AI build output
+Luna_Client.user.js          Luna 1.1 + Music page build output
 drivers/game-drivers.json    protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js         base client (input)
 src/Luna_Client_1.1.js       Luna client, kept for reference (input)
 src/Luna_Client_1.1_fixed.js Luna 1.1 on the current protocol (input to build-luna)
-src/luna-music/              the Music page: music.html, music.css, music-player.js, lrc-ai.js
+src/luna-music/              the Music page: music.html, music.css, music-player.js
 src/game_index.js            game bundle: protocol, data tables, engine
 src/game_vendor.js           game bundle: msgpack codec, polyfills
 tools/extract-drivers.js     game bundle  -> drivers/game-drivers.json
