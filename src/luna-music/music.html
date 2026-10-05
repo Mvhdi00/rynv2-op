@@ -1,0 +1,124 @@
+<div id="rm-toast" class="rm-toast"></div>
+
+<div class="page-head">
+    <h1 class="page-title">Music</h1>
+    <p class="page-description">A local library that plays inside the client and can type synced lyrics into chat for you.</p>
+</div>
+
+<div class="rm-root">
+
+  <div class="rm-player">
+    <div class="rm-art" id="rm-art">
+      <div class="rm-eq"><div class="rm-eq-bar"></div><div class="rm-eq-bar"></div><div class="rm-eq-bar"></div></div>
+    </div>
+    <div class="rm-meta">
+      <div class="rm-kicker">Now playing</div>
+      <div id="music-title" class="rm-title">No song selected</div>
+      <div id="music-artist" class="rm-artist">--</div>
+    </div>
+    <div class="rm-actions">
+      <button id="rm-like-now" class="rm-like-btn" title="Like">&#9825;</button>
+      <button id="rm-save-now" class="rm-save-now-btn" title="Save">&#9733;</button>
+    </div>
+    <div class="rm-transport">
+      <div class="rm-ctrl">
+        <button id="music-prev" class="rm-btn" title="Previous">&#9664;&#9664;</button>
+        <button id="music-play" class="rm-btn rm-play-btn" title="Play / pause">&#9654;</button>
+        <button id="music-next" class="rm-btn" title="Next">&#9654;&#9654;</button>
+        <button id="music-loop" class="rm-btn" title="Loop">&#8635;</button>
+        <button id="music-shuffle" class="rm-btn rm-shf" title="Shuffle">SHF</button>
+      </div>
+      <div class="rm-prog-wrap">
+        <span id="music-time-current" class="rm-time">0:00</span>
+        <div id="music-progress-bar" class="rm-prog-rail"><div id="music-progress-fill" class="rm-prog-fill"></div></div>
+        <span id="music-time-total" class="rm-time">0:00</span>
+      </div>
+      <div class="rm-vol">
+        <span class="rm-vol-icon">&#9834;</span>
+        <input id="music-volume" type="range" min="0" max="100" value="70">
+        <span id="music-volume-label" class="rm-vol-val">70%</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="rm-sec open">
+    <div class="rm-sec-head"><div class="rm-sec-dot"></div><span class="rm-sec-title">Library</span><span class="rm-sec-arrow">&#9660;</span></div>
+    <div class="rm-sec-body">
+      <div id="rm-filter-bar" class="rm-filter-bar">
+        <button class="rm-filter-btn active" data-filter="">All songs</button>
+        <button class="rm-filter-btn" data-filter="__liked">&#9829; Liked</button>
+        <button class="rm-filter-btn" data-filter="__saved">&#9733; Saved</button>
+      </div>
+      <div id="song-list"></div>
+    </div>
+  </div>
+
+  <div class="rm-sec">
+    <div class="rm-sec-head"><div class="rm-sec-dot"></div><span class="rm-sec-title">Add song</span><span class="rm-sec-arrow">&#9660;</span></div>
+    <div class="rm-sec-body">
+      <details class="rm-guide">
+        <summary>How to add a song with its lyrics</summary>
+        <ol>
+          <li>Find the song on <a href="https://www.youtube.com/" target="_blank" rel="noreferrer">youtube.com</a> and copy its link.</li>
+          <li>Turn the link into a file on <a href="https://ytmp3.gl/" target="_blank" rel="noreferrer">ytmp3.gl</a> and download the <code>.mp3</code>.</li>
+          <li>Search the same song on <a href="https://lrclib.net/" target="_blank" rel="noreferrer">lrclib.net</a> and download the <b>synced</b> lyrics as <code>.lrc</code>.</li>
+          <li>Fill in the <b>Title</b> below and pick the <code>.mp3</code> in the file box, or paste a direct link in <b>URL</b>.</li>
+          <li>In the <b>LRC sync</b> box, pick the <code>.lrc</code> file &mdash; or paste its lines into the text area.</li>
+          <li>Press <b>Add song</b>. It shows up in the library with its lyrics attached.</li>
+        </ol>
+        <div class="rm-guide-note">The <code>.lrc</code> has to be the synced kind &mdash; the one whose lines start with a timestamp like <code>[01:23.45]</code>. Plain lyrics still show up, but they will not follow the song. If the words drift, an <code>.lrc</code> from a different release of the track is usually the reason.</div>
+      </details>
+      <div class="rm-form">
+        <input id="song-title-input" class="rm-inp" type="text" placeholder="Title *" maxlength="50">
+        <input id="song-artist-input" class="rm-inp" type="text" placeholder="Artist" maxlength="30">
+        <input id="song-url-input" class="rm-inp" type="text" placeholder="URL (.mp3  .ogg  .wav)">
+        <input id="song-file-input" class="rm-inp" type="file" accept=".mp3,.ogg,.wav,.flac,.aac,.m4a">
+        <div class="rm-lrc">
+          <div class="rm-lrc-head"><span>LRC sync</span><span id="lrc-status"></span></div>
+          <input id="lrc-file-input" class="rm-inp" type="file" accept=".lrc,.txt" style="margin-bottom:9px;">
+          <textarea id="song-lyrics-input" class="rm-inp" placeholder="[0:15] Line 1&#10;[0:30] Line 2"></textarea>
+          <label class="rm-check"><input id="song-autosync" type="checkbox"> Auto-play and sync when added</label>
+        </div>
+        <div class="rm-row">
+          <button id="add-song" class="option-button primary wide">Add song</button>
+          <button id="save-song-btn" class="option-button">Save lyrics</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rm-sec">
+    <div class="rm-sec-head"><div class="rm-sec-dot"></div><span class="rm-sec-title">Chat sync</span><span class="rm-sec-arrow">&#9660;</span></div>
+    <div class="rm-sec-body">
+      <div class="rm-sync-row"><span class="rm-sync-label">Enable chat sync</span><label class="switch-checkbox"><input id="music-chat-sync" type="checkbox"><span></span></label></div>
+      <div class="rm-sync-note">Each lyric line goes to chat as the song reaches it.</div>
+      <div class="rm-divider"></div>
+      <div class="rm-sync-row"><span class="rm-sync-label">Auto delay<span id="bm-auto-delay-badge" class="rm-badge">off</span></span><label class="switch-checkbox"><input id="music-auto-delay" type="checkbox" checked><span></span></label></div>
+      <div class="rm-sync-note">Sends each line early by your ping, so it lands in chat on the beat.</div>
+      <div id="bm-manual-delay-row" class="rm-sync-row"><span class="rm-sync-label">Delay</span><label class="slider"><span class="slider-value">0ms</span><input id="music-sync-delay" type="range" min="-3000" max="3000" step="50" value="0"></label></div>
+      <div class="rm-divider"></div>
+      <div class="rm-row" style="align-items:center;">
+        <button id="bm-test-chat" class="option-button">Test chat</button>
+        <span id="bm-test-chat-status" class="rm-status" style="align-self:center;"></span>
+      </div>
+      <button id="bm-send-all-lyrics" class="option-button wide">&#9836; Send All Lyrics: OFF</button>
+      <div id="bm-send-lyrics-status" class="rm-status" style="text-align:center;"></div>
+      <div id="bm-dbg-wrap" style="display:none;"><pre id="bm-dbg-box"></pre></div>
+      <button id="bm-dbg-toggle" class="option-button wide">Show Debug Log</button>
+    </div>
+  </div>
+
+  <div class="rm-sec">
+    <div class="rm-sec-head"><div class="rm-sec-dot"></div><span class="rm-sec-title">Backup &amp; restore</span><span class="rm-sec-arrow">&#9660;</span></div>
+    <div class="rm-sec-body">
+      <p class="rm-sync-note" style="padding-left:0;">Export the whole library to a JSON file and bring it back on another machine. Backups exported from Ryn import here too.</p>
+      <div class="rm-row" style="max-width:420px;">
+        <button id="music-export-btn" class="option-button wide">Export</button>
+        <button id="music-import-btn" class="option-button wide">Import</button>
+        <input id="music-import-file" type="file" accept=".json" style="display:none;">
+      </div>
+      <div id="music-backup-status" class="rm-status"></div>
+    </div>
+  </div>
+
+</div>

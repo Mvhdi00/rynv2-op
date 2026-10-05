@@ -6,6 +6,9 @@ against them.
 
 Build output: **`ReUp_Mix.user.js`**
 
+This repo also builds **`Luna_Client.user.js`** — Luna 1.1 with Ryn Type 2's
+Music page. See [Luna Client: Music page](#luna-client-music-page).
+
 ---
 
 ## Why RYN is the base
@@ -113,19 +116,114 @@ but nothing in the client needs it. It is stripped from the build.
 
 ---
 
+## Luna Client: Music page
+
+`Luna_Client.user.js` is the Luna 1.1 build that runs on the current protocol
+(`src/Luna_Client_1.1_fixed.js`) with Ryn Type 2's **Music** page added to its
+menu as a new **music** tab.
+
+### What came over from Ryn
+
+- **Now playing** — equalizer art, title / artist, like and save, previous /
+  play-pause / next, loop, shuffle, seek bar, volume.
+- **Library** — every song with like / save / delete, and filter chips
+  (All songs, ♥ Liked, ★ Saved).
+- **Add song** — title, artist, a URL or a local file (up to 20 MB), an `.lrc`
+  file or pasted lyrics, "auto-play and sync when added", Save lyrics, and
+  Ryn's step-by-step guide.
+- **Chat sync** — one switch that types each lyric line into chat as the song
+  reaches it. Lines longer than chat's 30 characters are split and spread
+  across the gap to the next line; no two lines go out closer than 1.5 s.
+  Plus Auto delay, a manual delay slider, Test chat, Send All Lyrics and a
+  debug log.
+- **Backup & restore** — export to JSON and import back. A backup exported from
+  Ryn imports too.
+
+### Left out, as asked
+
+- **Bot sync modes** — mixed, bots only, unified and the sync-bot switch. There
+  is one chat sync, and it sends from you.
+- **Albums** — the album grid, album picker and album filters. Album tags on
+  imported Ryn songs are dropped.
+- **LRC AI** — the automatic lyrics fetch / translate module.
+
+### Where it differs from Ryn, and why
+
+A few things in Ryn's page were present but did nothing, or broke; they work
+here:
+
+- **Auto delay** had a switch and no code behind it. Here it sends each line
+  early by your measured ping, so it lands in chat on the beat.
+- **Status messages** ("Title required", "Could not load this song", …) went to
+  an element that did not exist. They now show as a toast.
+- **Artist** was asked for in the form but never saved.
+- **★ Save** set a flag nothing used. It now has its own filter.
+- **Debug log** was an empty box. It now logs each line and whether it was sent
+  or dropped.
+- **Save lyrics** with an empty box wiped the song's lyrics. It now refuses.
+- **Deleting the playing song** left it resumable. It now stops.
+- **Song titles and artists** were written in as HTML, so an imported backup
+  could inject markup. They are written as text.
+- The Web Audio graph is gone. It only ever connected the first song, and that
+  song went silent after a seek. Volume works the same way without it.
+
+And a few adaptations to Luna:
+
+- Luna's menu is in the game page, not an iframe like Ryn's. Typing in the
+  page's text boxes no longer reaches the game's keys (so "v" does not place a
+  spike and Enter does not open chat), and the mouse wheel scrolls the page
+  instead of zooming the game.
+- Luna's menu grid had no row size, so a tab taller than the menu was clipped
+  instead of scrolling. The row is now pinned to the menu's height.
+- The seek bar sits on its own line, because Luna's fixed 900 px menu left it
+  about 100 px wide inline.
+- The page's accent follows Luna's theme. Volume, loop, shuffle, delay and auto
+  delay are saved with Luna's settings. Chat sync always starts off, so a
+  reload never starts typing into chat by itself.
+- The library is stored in its own IndexedDB database (`LunaMusicDB`), separate
+  from Ryn's.
+
+### How it is wired
+
+The page lives in `src/luna-music/` as plain markup, stylesheet and player.
+`tools/build-luna.js` splices it into the Luna base. As with the ReUp build,
+every edit is anchored to an exact string, and a missing or ambiguous anchor
+fails the build. The menu is built outside `app.js`, so `app.js` exports a small
+`window.__lunaMusicChat` bridge next to Luna's other `window.*` exports. Chat
+goes out through Luna's own `sendChat()`, the same packet the chat box sends.
+
+```sh
+node tools/build-luna.js           # produce Luna_Client.user.js
+node tools/test-luna-music.js      # headless Chromium; needs playwright
+```
+
+`test-luna-music.js` mounts the Music module and Luna's menu from the build on a
+blank page, with a recorder standing in for the chat bridge. It covers playback,
+sync timing and line splitting, nothing sent out of game, library actions,
+filters, Save lyrics, Send All Lyrics, export / import, persistence across a
+reload, and the key and wheel guards. The game itself cannot load in the test,
+so the bridge in `app.js` is the one part it does not exercise.
+
+---
+
 ## Layout
 
 ```
-ReUp_Mix.user.js          the build output — this is the script to install
-drivers/game-drivers.json protocol + data tables extracted from the game bundle
-src/RYN_Client_v4.js      base client (input)
-src/Luna_Client_1.1.js    Luna client, kept for reference (input)
-src/game_index.js         game bundle: protocol, data tables, engine
-src/game_vendor.js        game bundle: msgpack codec, polyfills
-tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
-tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
-tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
-tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+ReUp_Mix.user.js             the build output — this is the script to install
+Luna_Client.user.js          Luna 1.1 + Music page build output
+drivers/game-drivers.json    protocol + data tables extracted from the game bundle
+src/RYN_Client_v4.js         base client (input)
+src/Luna_Client_1.1.js       Luna client, kept for reference (input)
+src/Luna_Client_1.1_fixed.js Luna 1.1 on the current protocol (input to build-luna)
+src/luna-music/              the Music page: music.html, music.css, music-player.js
+src/game_index.js            game bundle: protocol, data tables, engine
+src/game_vendor.js           game bundle: msgpack codec, polyfills
+tools/extract-drivers.js     game bundle  -> drivers/game-drivers.json
+tools/verify-drivers.js      client tables vs. drivers/game-drivers.json
+tools/check-hooks.js         client's bundle-rewrite hooks vs. the game bundle
+tools/build-reup.js          src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/build-luna.js          src/Luna_Client_1.1_fixed.js + src/luna-music -> Luna_Client.user.js
+tools/test-luna-music.js     headless test of the Music page in the Luna build
 ```
 
 ## Build
@@ -133,6 +231,7 @@ tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 ```sh
 node tools/extract-drivers.js    # refresh drivers from src/game_*.js
 node tools/build-reup.js         # produce ReUp_Mix.user.js
+node tools/build-luna.js         # produce Luna_Client.user.js
 ```
 
 Every edit in `build-reup.js` is anchored to an exact string in the base
