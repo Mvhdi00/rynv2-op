@@ -3,12 +3,13 @@
  * build-luna.js
  *
  * Builds Luna_Client.user.js: the Luna 1.1 client (src/Luna_Client_1.1_fixed.js,
- * the build that speaks the current protocol) with Ryn Type 2's Music page
- * ported into its menu.
+ * the build that speaks the current protocol) with Ryn Type 2's Music page and
+ * Ryn's LRC AI module ported into its menu.
  *
- * The page itself lives in src/luna-music/ as three plain files — markup,
- * stylesheet and the player — and is spliced in here, so it can be read and
- * edited on its own instead of as a string buried in a 20k-line bundle.
+ * The page itself lives in src/luna-music/ as plain files — markup,
+ * stylesheet, the player and LRC AI — and is spliced in here, so it can be
+ * read and edited on its own instead of as a string buried in a 20k-line
+ * bundle.
  *
  *   node tools/build-luna.js
  */
@@ -41,9 +42,9 @@ function edit(label, find, replace) {
 edit(
   "header: description",
   "// @description     Luna 1.1 fixed by raptor",
-  "// @description     Luna 1.1 fixed by raptor, with Ryn Type 2's Music page"
+  "// @description     Luna 1.1 fixed by raptor, with Ryn Type 2's Music page and LRC AI"
 );
-edit("header: version", "// @version         1.1", "// @version         1.2");
+edit("header: version", "// @version         1.1", "// @version         1.4");
 
 /* ------------------------------------------------------------------ *
  * 2. Chat bridge, exported from app.js
@@ -98,10 +99,23 @@ for (const [token, value] of [["__LUNA_MUSIC_CSS__", css], ["__LUNA_MUSIC_HTML__
   player = player.replace(token, () => JSON.stringify(value));
 }
 
+/* Ryn's LRC AI module, attached to the player the way Ryn attaches it: right
+ * after the player is defined, so its wrappers are in place before the page's
+ * first render and first play. A failure to attach leaves the player working
+ * without it. */
+const lrcAi = fs.readFileSync(path.join(MUSIC, "lrc-ai.js"), "utf8");
+const attachLrc = `
+try {
+  RynLRC.attach(LunaMusic.player);
+} catch (e) {
+  try { console.warn("[RynLRC] attach failed:", e); } catch (_) {}
+}
+`;
+
 edit(
-  "menu: music module",
+  "menu: music module + LRC AI",
   "(function () {\n    'use strict';\n\n    const STORAGE_KEY = \"DELTEK_V4_CONFIG\";",
-  player + "\n(function () {\n    'use strict';\n\n    const STORAGE_KEY = \"DELTEK_V4_CONFIG\";"
+  player + "\n" + lrcAi + attachLrc + "\n(function () {\n    'use strict';\n\n    const STORAGE_KEY = \"DELTEK_V4_CONFIG\";"
 );
 
 /* ------------------------------------------------------------------ *

@@ -12,9 +12,12 @@
  * the 30-character chat cap and the 1500 ms / 2200 ms send spacing are Ryn's
  * own numbers.
  *
+ * Ryn's LRC AI module (lrc-ai.js) attaches to this player exactly as it does
+ * in Ryn, by wrapping play / seekTo / _renderSongList / _save.
+ *
  * Left out on purpose: the bot sync modes (mixed / bots only / unified / sync
- * bot) — there is one chat sync and it is yours; albums; and the LRC AI
- * module. A Ryn backup still imports; album tags on its songs are dropped.
+ * bot) — there is one chat sync and it is yours — and albums. A Ryn backup
+ * still imports; album tags on its songs are dropped.
  *
  * The page talks to the game only through window.__lunaMusicChat, which the
  * build exports from inside app.js next to Luna's other window exports.
@@ -150,7 +153,7 @@ const LunaMusic = (function () {
       if (!s || typeof s !== "object") return null;
       if (typeof s.title !== "string" || !s.title.trim()) return null;
       if (typeof s.url !== "string" || !s.url) return null;
-      return {
+      const out = {
         title: s.title.trim().slice(0, 50),
         artist: typeof s.artist === "string" ? s.artist.trim().slice(0, 30) : "",
         url: s.url,
@@ -158,6 +161,19 @@ const LunaMusic = (function () {
         liked: !!s.liked,
         saved: !!s.saved
       };
+      /* LRC AI keeps its id for the song (and the file's tags) on the song
+       * itself, as in Ryn, so cached lyrics are found again after a reload. */
+      if (typeof s.lrcId === "string" && /^[0-9a-f]{32}$/.test(s.lrcId)) out.lrcId = s.lrcId;
+      if (typeof s.lrcHash === "string" && /^[0-9a-f]{32}$/.test(s.lrcHash)) out.lrcHash = s.lrcHash;
+      if (s.lrcTags && typeof s.lrcTags === "object") {
+        const t = s.lrcTags;
+        out.lrcTags = {
+          title: typeof t.title === "string" ? t.title.slice(0, 120) : "",
+          artist: typeof t.artist === "string" ? t.artist.slice(0, 120) : "",
+          album: typeof t.album === "string" ? t.album.slice(0, 120) : ""
+        };
+      }
+      return out;
     }
     _applyData(data) {
       const songs = data && Array.isArray(data.songs) ? data.songs : [];
