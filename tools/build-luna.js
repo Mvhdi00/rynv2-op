@@ -120,6 +120,55 @@ edit(
             }`
 );
 
+/* With `pre` resolved, the bar matches the game's own exactly. Every other
+ * client in the set shows MORE than that: Misery, ai slop, novastorm and Luna
+ * 1.1 have no `pre` on items at all, and Ryn Type 2 / RYN v4 strip the check
+ * with a `true||` hook - all of them offer every item of the age. Whether the
+ * server accepts an item without its prerequisite cannot be settled from the
+ * files (none of them confirms an upgrade landed). So both are offered here:
+ * "show all upgrades" (default on, like the others) keeps the extra choices,
+ * dimmed with a note, and off is the game's bar exactly. A refused pick costs
+ * nothing - the point is not spent and the bar comes back. */
+edit(
+  "updateUpgrades: real prerequisites, locked items dimmed when shown",
+  `                    for (var i = 0; i < items.list.length; ++i) {
+                        if (items.list[i].age == age && (items.list[i].pre == undefined || myPlayer.items.indexOf(items.list[i].pre) >= 0)) {
+                            var tmpI = (items.weapons.length + i);
+                            var e = UTILS.generateElement({
+                                id: "upgradeItem" + tmpI,
+                                class: "actionBarItem",
+                                onmouseout: function () { showItemInfo(); },
+                                parent: upgradeHolder
+                            });
+                            e.style.backgroundImage = document.getElementById("actionBarItem" + tmpI).style.backgroundImage;
+                            tmpList.push(tmpI);`,
+  `                    for (var i = 0; i < items.list.length; ++i) {
+                        var lpLocked = items.list[i].pre != undefined && myPlayer.items.indexOf(items.list[i].pre) < 0;
+                        if (items.list[i].age == age && (!lpLocked || !(window.vars && window.vars.showAllUpgrades === false))) {
+                            var tmpI = (items.weapons.length + i);
+                            var e = UTILS.generateElement({
+                                id: "upgradeItem" + tmpI,
+                                class: "actionBarItem",
+                                onmouseout: function () { showItemInfo(); },
+                                parent: upgradeHolder
+                            });
+                            e.style.backgroundImage = document.getElementById("actionBarItem" + tmpI).style.backgroundImage;
+                            if (lpLocked) {
+                                e.style.opacity = "0.45";
+                                e.title = "needs " + items.list[items.list[i].pre].name + " - the server may refuse it";
+                            }
+                            tmpList.push(tmpI);`
+);
+
+edit(
+  "menu: show all upgrades toggle",
+  `                    { type: 'toggle', name: "autobuy", id: "autoBuy" },
+`,
+  `                    { type: 'toggle', name: "autobuy", id: "autoBuy" },
+                    { type: 'toggle', name: "show all upgrades", id: "showAllUpgrades" },
+`
+);
+
 /* ------------------------------------------------------------------ *
  * 3. The survival helpers
  *
@@ -807,6 +856,7 @@ edit(
         smartHeal: true,        // ping-aware shame-safe heal timing
         healThroughShame: true, // heal at 7 shame when an insta has already opened
         healMargin: 20,         // ms of safety on top of the 120 ms shame window
+        showAllUpgrades: true,  // offer every item of the age; locked ones dimmed
 `
 );
 

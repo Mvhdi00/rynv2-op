@@ -9157,7 +9157,8 @@ function sendLockDir() {
                         }
                     }
                     for (var i = 0; i < items.list.length; ++i) {
-                        if (items.list[i].age == age && (items.list[i].pre == undefined || myPlayer.items.indexOf(items.list[i].pre) >= 0)) {
+                        var lpLocked = items.list[i].pre != undefined && myPlayer.items.indexOf(items.list[i].pre) < 0;
+                        if (items.list[i].age == age && (!lpLocked || !(window.vars && window.vars.showAllUpgrades === false))) {
                             var tmpI = (items.weapons.length + i);
                             var e = UTILS.generateElement({
                                 id: "upgradeItem" + tmpI,
@@ -9166,6 +9167,10 @@ function sendLockDir() {
                                 parent: upgradeHolder
                             });
                             e.style.backgroundImage = document.getElementById("actionBarItem" + tmpI).style.backgroundImage;
+                            if (lpLocked) {
+                                e.style.opacity = "0.45";
+                                e.title = "needs " + items.list[items.list[i].pre].name + " - the server may refuse it";
+                            }
                             tmpList.push(tmpI);
                         }
                     }
@@ -23334,6 +23339,7 @@ try {
         smartHeal: true,        // ping-aware shame-safe heal timing
         healThroughShame: true, // heal at 7 shame when an insta has already opened
         healMargin: 20,         // ms of safety on top of the 120 ms shame window
+        showAllUpgrades: true,  // offer every item of the age; locked ones dimmed
 
         // Placers
         autoPlace: false,
@@ -23498,6 +23504,7 @@ defense: [
                 title: "ACTIONS",
                 items: [
                     { type: 'toggle', name: "autobuy", id: "autoBuy" },
+                    { type: 'toggle', name: "show all upgrades", id: "showAllUpgrades" },
                 ]
             }
         ],

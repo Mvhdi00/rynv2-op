@@ -517,14 +517,70 @@ test("item prerequisites resolve to real ids, as in the game bundle", () => {
   eq(pre("power mill"), 11, "power mill needs faster windmill");
 });
 
-test("age 9 upgrade bar offers both poison and spinning spikes, whatever the food", () => {
-  for (const food of [0, 1, 2]) {
-    const owned = [food, 4, 7, 11, 15];
-    const offered = items.list
-      .filter(i => i.age == 9 && (i.pre == undefined || owned.indexOf(i.pre) >= 0))
-      .map(i => i.name);
-    ok(offered.includes("poison spikes") && offered.includes("spinning spikes"), `food ${food}: ${offered}`);
+/* Luna's real updateUpgrades, run against a stub DOM: what the bar offers,
+ * what is dimmed, and which "H" index each button sends. */
+const updateUpgradesSrc = between("            function updateUpgrades(points, age) {", "            function sendUpgrade(index) {");
+function upgradeBar(ownedItems, age, vars = {}) {
+  const els = {}, sent = [];
+  const el = (id) => els[id] || (els[id] = { id, style: { backgroundImage: "url(" + id + ")" } });
+  const ctx = {
+    items, window: { vars },
+    myPlayer: { weapons: [5, 9], items: ownedItems },
+    io: { send: (...a) => sent.push(a) },
+    UTILS: {
+      removeAllChildren() { },
+      generateElement(cfg) { const e = el(cfg.id); e.created = true; return e; },
+      checkTrusted: (f) => f,
+      hookTouchEvents() { },
+    },
+    document: { getElementById: el },
+    upgradeHolder: { style: {} }, upgradeCounter: { style: {} },
+    showItemInfo() { },
+  };
+  vm.createContext(ctx);
+  vm.runInContext("var tmpList = [];\n" + updateUpgradesSrc + "\nupdateUpgrades(1, " + age + ");", ctx);
+  const offered = {};
+  for (const id of Object.keys(els)) {
+    const e = els[id];
+    if (!e.created) continue;
+    const idx = Number(id.slice("upgradeItem".length));
+    const name = idx < items.weapons.length ? items.weapons[idx].name : items.list[idx - items.weapons.length].name;
+    sent.length = 0;
+    e.onclick();
+    offered[name] = { dimmed: e.style.opacity === "0.45", sends: sent[0] };
   }
+  return offered;
+}
+
+test("real upgrade bar, game rules: both age-9 spikes for every food when greater spikes is owned", () => {
+  for (const food of [0, 1, 2]) {
+    const bar = upgradeBar([food, 4, 7, 11, 15], 9, { showAllUpgrades: false });
+    ok(bar["poison spikes"] && bar["spinning spikes"], `food ${food}: ${Object.keys(bar)}`);
+    eq(bar["poison spikes"].sends[1], 24, "poison spikes H index");
+    eq(bar["spinning spikes"].sends[1], 25, "spinning spikes H index");
+    ok(!bar["poison spikes"].dimmed && !bar["spinning spikes"].dimmed, "dimmed although unlocked");
+  }
+});
+
+test("real upgrade bar, game rules: no spikes at 9 without greater spikes", () => {
+  const bar = upgradeBar([1, 4, 6, 11], 9, { showAllUpgrades: false });
+  ok(!bar["poison spikes"] && !bar["spinning spikes"], Object.keys(bar).join(", "));
+  ok(bar["spawn pad"], "spawn pad missing");
+});
+
+test("real upgrade bar, show all (default): locked spikes offered dimmed, unlocked ones normal", () => {
+  const locked = upgradeBar([1, 4, 6, 11], 9, {});
+  ok(locked["poison spikes"] && locked["spinning spikes"], Object.keys(locked).join(", "));
+  ok(locked["poison spikes"].dimmed && locked["spinning spikes"].dimmed, "locked spikes not dimmed");
+  eq(locked["spinning spikes"].sends[1], 25, "spinning spikes H index");
+  ok(!locked["spawn pad"].dimmed, "spawn pad has no prerequisite");
+  const open = upgradeBar([2, 4, 7, 11], 9, {});
+  ok(!open["poison spikes"].dimmed && !open["spinning spikes"].dimmed, "unlocked spikes dimmed");
+});
+
+test("real upgrade bar: weapons keep their prerequisite (musket needs crossbow)", () => {
+  const bar = upgradeBar([1, 4, 7, 11], 9, {});
+  ok(!bar["musket"] && !bar["repeater crossbow"], "musket offered without crossbow: " + Object.keys(bar).join(", "));
 });
 
 /* ---------------- faster heal key ---------------- */
