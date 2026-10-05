@@ -49,16 +49,22 @@ const dist = (x1, y1, x2, y2) => Math.hypot(x1 - x2, y1 - y2);
 function makeWorld(opts) {
   const w = {
     sandbox: opts.sandbox,
-    player: { sid: 1, x: 0, y: 0, weapons: [ opts.primary, 10 ], items: [ 0, 3, 6, 10, 15, 17 ], weaponVariants: {}, wood: 1e6, stone: 1e6, food: 1e6, points: 1e6 },
+    player: { sid: 1, alive: true, x: 0, y: 0, weapons: [ opts.primary, 10 ], items: [ 0, 3, 6, 10, 15, 17 ], weaponVariants: {}, wood: 1e6, stone: 1e6, food: 1e6, points: 1e6 },
     xp: { [opts.primary]: 0, 10: 0 },
     objects: [],
     nextSid: 100,
     reload: { 0: 0, 1: 0 },
-    hat: 40,
+    hat: 0,
+    held: 10,
+    vx: 0, vy: 0,
+    moveDir: null,
     swings: 0,
     hits: 0,
     emptySwings: 0,
-    turretsPlaced: 0
+    turretsPlaced: 0,
+    kills: [],          /* turrets destroyed by each swing that destroyed any */
+    swingSpots: [],     /* where the player stood for each swing, vs the set's anchor */
+    anchors: []         /* where each set was placed from */
   };
   w.limit = w.sandbox ? 99 : TURRET.group.limit;
   w.variantOf = id => { let v = 0; VARIANTS.forEach((t, i) => { if ((w.xp[id] || 0) >= t.xp) v = i; }); return v; };
@@ -72,12 +78,25 @@ function makeWorld(opts) {
     w.turretsPlaced++;
     return true;
   };
+  /* One server tick of the player's movement, as the game's update():
+   * speed 0.0016 x weapon x hat, then 0.993^ms of it kept. */
+  w.physics = () => {
+    const C = (weaponsById[w.held].spdMult || 1) * (w.hat === 40 ? 0.3 : 1);
+    if (w.moveDir !== null && w.moveDir !== undefined) {
+      w.vx += Math.cos(w.moveDir) * 0.0016 * C * TICK;
+      w.vy += Math.sin(w.moveDir) * 0.0016 * C * TICK;
+    }
+    w.player.x += w.vx * TICK;
+    w.player.y += w.vy * TICK;
+    w.vx *= Math.pow(0.993, TICK);
+    w.vy *= Math.pow(0.993, TICK);
+  };
   /* One swing of `slot` toward `dir`, scored exactly as the game's gather(). */
   w.swing = (slot, dir) => {
     const weaponId = w.player.weapons[slot];
     const weapon = weaponsById[weaponId];
     const dmg = weapon.dmg * (weapon.sDmg || 1) * VARIANTS[w.variantOf(weaponId)].val * (w.hat === 40 ? 3.3 : 1);
-    let hit = 0;
+    let hit = 0, killed = 0;
     for (const o of w.objects.slice()) {
       if (dist(w.player.x, w.player.y, o.x, o.y) - o.scale > weapon.range) continue;
       if (angleDist(Math.atan2(o.y - w.player.y, o.x - w.player.x), dir) > GATHER_ANGLE) continue;
@@ -86,8 +105,12 @@ function makeWorld(opts) {
       if (o.health <= 0) {
         w.objects.splice(w.objects.indexOf(o), 1);
         w.xp[weaponId] = (w.xp[weaponId] || 0) + TURRET_XP;
+        killed++;
       }
     }
+    if (killed) w.kills.push(killed);
+    const a = w.anchors[w.anchors.length - 1];
+    if (a) w.swingSpots.push((a.x - w.player.x) * Math.cos(a.axis) + (a.y - w.player.y) * Math.sin(a.axis));
     w.swings++;
     w.hits += hit;
     if (!hit) w.emptySwings++;
@@ -113,10 +136,15 @@ function lunaGrind(world) {
     let isBoughtHat = () => true, canPlace = () => false, isItemLimit = () => false;
     ${GRIND_SRC}
     return {
-      tick(state) {
+      set(state) {
         myPlayer = state.myPlayer; visibleObjects = state.visibleObjects;
         mouseX = state.mouseX; mouseY = state.mouseY;
         canPlace = state.canPlace; isItemLimit = state.isItemLimit;
+      },
+      move: keyMove => lunaGrindMove(keyMove),
+      anchor: () => lunaGrindAnchor,
+      tick(state) {
+        if (state) this.set(state);
         gatherGrind = false; grindAngle = null; grindHat = null; grindObjects = [];
         lunaAutoGrind();
         return { gatherGrind, grindAngle, grindHat, predictWeapon, grindObjects };
@@ -153,18 +181,24 @@ function run(kind, opts, seed) {
   const mouseAngle = rnd() * 2 * Math.PI - Math.PI;
   let facing = 0, idle = 0;
   const target = 3;
+  let prevX = world.player.x, prevY = world.player.y;
   for (let t = 0; t < 60000; t++) {
-    /* standing still: a unit or two of drift */
-    world.player.x += (rnd() - 0.5) * 2;
-    world.player.y += (rnd() - 0.5) * 2;
+    /* the server's update, with the move the client sent last tick */
+    world.physics();
+    world.player.x += (rnd() - 0.5) * 0.4;                /* rounding on the wire */
+    world.player.y += (rnd() - 0.5) * 0.4;
     world.syncVariants();
     if (world.variantOf(until) >= target) return { done: true, world, ticks: t };
     for (const k of [ 0, 1 ]) world.reload[k] = Math.max(0, world.reload[k] - TICK);
 
     let decision;
     if (kind === "luna") {
-      const r = grind.tick({
-        myPlayer: Object.assign(world.player, { x2: world.player.x, y2: world.player.y }),
+      /* what Luna knows: the position, and xVel = its next-position estimate */
+      Object.assign(world.player, { x2: world.player.x, y2: world.player.y,
+        xVel: world.player.x * 2 - prevX, yVel: world.player.y * 2 - prevY });
+      prevX = world.player.x; prevY = world.player.y;
+      grind.set({
+        myPlayer: world.player,
         visibleObjects: world.objects,
         mouseX: 640 + Math.cos(mouseAngle) * 200, mouseY: 400 + Math.sin(mouseAngle) * 200,
         canPlace: (id, angle) => {
@@ -173,7 +207,15 @@ function run(kind, opts, seed) {
         },
         isItemLimit: () => world.objects.length >= world.limit
       });
-      if (r.grindObjects.length) decision = { place: r.grindObjects.map(o => o.angle) };
+      /* no movement key held: the grind's step, or stand still */
+      const mv = grind.move(null);
+      world.moveDir = mv === undefined ? null : mv;
+      const r = grind.tick();
+      if (r.grindObjects.length) {
+        const a = grind.anchor();
+        world.anchors.push({ x: a.x, y: a.y, axis: a.axis });
+        decision = { place: r.grindObjects.map(o => o.angle) };
+      }
       else if (r.gatherGrind) decision = { slot: r.predictWeapon === 10 ? 1 : 0, angle: r.grindAngle, hat: r.grindHat };
     } else {
       decision = rynTick(world, mouseAngle);
@@ -182,6 +224,7 @@ function run(kind, opts, seed) {
     idle = 0;
     if (decision.place) { decision.place.forEach(a => world.place(a)); continue; }
     world.hat = decision.hat;
+    world.held = world.player.weapons[decision.slot];
     /* the server turns to the last facing it was sent (within 0.02 rad) */
     facing = decision.angle + (rnd() - 0.5) * 0.04;
     if (world.reload[decision.slot] === 0) world.swing(decision.slot, facing);
@@ -262,9 +305,21 @@ for (const sandbox of [ true, false ]) {
   check("Luna always reaches ruby", stuck(luna) === 0, luna.filter(r => !r.done).map(r => r.why));
   check("no swing at empty air", luna.every(r => r.world.emptySwings === 0), luna.map(r => r.world.emptySwings));
   const perSwing = list => list.reduce((s, r) => s + r.world.hits, 0) / list.reduce((s, r) => s + r.world.swings, 0);
+  const together = list => { const k = [].concat(...list.map(r => r.world.kills)); return k.filter(n => n === (sandbox ? 3 : 2)).length / k.length; };
+  const spots = [].concat(...luna.map(r => r.world.swingSpots));
+  const anchorsDrift = Math.max(...luna.map(r => Math.max(...r.world.anchors.map(a => dist(a.x, a.y, r.world.anchors[0].x, r.world.anchors[0].y)))));
   console.log(`    turrets hit per swing: Luna ${perSwing(luna).toFixed(2)}, Ryn ${perSwing(ryn).toFixed(2)}`);
-  if (sandbox) check("about 1.5 turrets a swing with three (the most the geometry allows)", perSwing(luna) >= 1.4, perSwing(luna));
-  else check("both turrets every swing with two", perSwing(luna) >= 1.9, perSwing(luna));
+  console.log(`    sets broken by one swing: Luna ${(together(luna) * 100).toFixed(0)}%, Ryn ${(together(ryn) * 100).toFixed(0)}%`);
+  console.log(`    standing ${Math.min(...spots).toFixed(1)}-${Math.max(...spots).toFixed(1)} units behind the placing spot when swinging; placing spot drifts at most ${anchorsDrift.toFixed(1)}`);
+  if (sandbox) {
+    check("every swing hits all three", perSwing(luna) >= 2.95, perSwing(luna));
+    check("every set of three breaks on one swing", together(luna) === 1, together(luna));
+    check("swings from 15-45 units back (inside the window where three fit)", spots.every(b => b >= 15 && b <= 45), [ Math.min(...spots), Math.max(...spots) ]);
+  } else {
+    check("both turrets every swing with two", perSwing(luna) >= 1.95, perSwing(luna));
+    check("no step needed with two: swings from the placing spot (within the 8-unit walk-back tolerance)", spots.every(b => Math.abs(b) < 8), [ Math.min(...spots), Math.max(...spots) ]);
+  }
+  check("walks back after each set: the placing spot stays put", anchorsDrift < 12, anchorsDrift);
 }
 
 console.log("primary (polearm) from nothing to ruby, hammer already ruby — hammer chips, polearm kills");

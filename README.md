@@ -311,37 +311,74 @@ As in Ryn:
   is far above the primary's damage, without it once close) and the primary
   takes the kill — and places a fresh set as soon as they are gone.
 
-**What changed: the aim.** Turrets placed from one spot have to be at least
-72.2° apart (73 units out, 86 apart), and a swing only reaches 69.2° either
-side. Ryn aims at the centre of the turrets: with three at −75°/0°/+75° that
-swing hits only the middle one, and once it breaks, the centre of the two left
-is still 0° — 75° from both — so every swing after that hits nothing. That is
-the "gets lost and misses". Here each swing goes to the angle that reaches the
-most turrets: two at a time, then the last one, then a fresh set. Two smaller
-Luna bugs went with it: a grind angle of exactly 0 was treated as "no angle"
-and fell back to the mouse, and the facing was only re-sent when it was more
-than 17° off; while grinding it now follows to 1°.
+**What changed: the aim, and a short step back.** Turrets placed from one
+spot have to be at least 72.2° apart (73 units out, 86 apart), and a swing
+only reaches 69.2° either side. Ryn aims at the centre of the turrets: with
+three at −75°/0°/+75° that swing hits only the middle one, and once it breaks,
+the centre of the two left is still 0° — 75° from both — so every swing after
+that hits nothing. That is the "gets lost and misses". Here each swing goes to
+the angle that reaches the most turrets.
 
-Measured against the game's own rules (`tools/test-luna-grind.js`), taking the
-great hammer from nothing to ruby from 40 random mouse directions:
+From the spot they were placed from, three turrets never fit in one swing —
+but a little further back they do, since from further away the same three
+take up a narrower angle. So with three (sandbox), once the set is down the
+player takes a short step straight back from the middle turret, swings from
+there and breaks **all three at once**, then walks back onto the same spot and
+places the next set toward the mouse. The step is planned against the game's
+movement physics (the player keeps sliding after it stops), so the swing is
+taken 20–35 units behind the placing spot, and the spot itself doesn't drift
+from set to set. With two (normal server) both already fit from the placing
+spot, so there is no step. A movement key always wins: it drops the step and
+the walk back, and grinding resumes from wherever you stop.
+
+Two smaller Luna bugs went with it: a grind angle of exactly 0 was treated as
+"no angle" and fell back to the mouse, and the facing was only re-sent when it
+was more than 17° off; while grinding it now follows to 1°.
+
+Measured against the game's own rules and movement (`tools/test-luna-grind.js`),
+taking the great hammer from nothing to ruby from 40 random mouse directions:
 
 | | sandbox (3 turrets) | normal server (2) |
 |---|---|---|
-| Luna | ruby 40/40 · 1.52 turrets a swing · 0% empty swings | ruby 40/40 · 2.00 · 0% |
-| Ryn's aim | ruby 36/40, the rest stuck · 0.66 · 34.6% empty | ruby 40/40 · 2.00 · 0% |
-
-1.5 a swing is the most three turrets allow; with two, both every swing.
+| Luna | ruby 40/40 · 39 swings · 3.00 turrets a swing · every set broken by one swing | ruby 40/40 · 59 swings · 2.00 · every set by one swing |
+| Ryn's aim | ruby 0/40, stuck swinging at nothing · 0.20 a swing · 80% empty | ruby 40/40 · 59 swings · 2.00 · every set by one swing |
 
 `tools/test-luna-grind-e2e.js` runs the whole build against the local game
-server on moomoo.io and on sandbox.moomoo.io and checks what goes out on the
-wire: the turrets land toward the mouse, the hammer, tank hat and auto-gather
-come on, the facing reaches two at a time and then the last, a fresh set goes
-toward wherever the mouse is next, the key and the menu switch agree, and the
-counter shows a measured FPS and the server round trip.
+server on moomoo.io and on sandbox.moomoo.io, with the game's movement on the
+server side, and checks what goes out on the wire: the turrets land toward the
+mouse, the hammer, tank hat and auto-gather come on, every swing hits every
+turret standing (three in sandbox, from 18–32 units back; two on a normal
+server, from the placing spot), every set breaks on one swing, the player walks
+back so the placing spot stays put, a fresh set goes toward wherever the mouse
+is next, turning it off stops placing and stepping, the key and the menu
+switch agree, and the counter shows a measured FPS and the server round trip.
 
 ```sh
 node tools/test-luna-grind.js       # the grind against the game's rules
 node tools/test-luna-grind-e2e.js   # whole build + local game server
+```
+
+## Luna Client: biome colours
+
+Luna repainted the map: white grass, a lavender desert (#A9B8EC), a river in
+two dark reds, and a black 15% gradient laid over the screen four times
+(about half the light gone). All of it is back to the game's own, branch for
+branch from its background pass in `src/game_index.js`:
+
+| | colour | on screen (under the overlay) |
+|---|---|---|
+| grass | #b6db66 | #768e5b |
+| snow | #fff | #a6a6be |
+| desert | #dbc666 | #8e815b |
+| river bank / water | #dbc666 / #91b2db | — / #5e74a7 |
+| overlay | one `rgba(0, 0, 70, 0.35)` over the whole screen | |
+
+`tools/test-luna-biomes.js` spawns the player in each biome against the local
+game server and reads the pixel the whole build actually painted; each must be
+the game's colour under the game's overlay.
+
+```sh
+node tools/test-luna-biomes.js      # whole build + local game server
 ```
 
 ---
@@ -350,7 +387,7 @@ node tools/test-luna-grind-e2e.js   # whole build + local game server
 
 ```
 ReUp_Mix.user.js             the build output — this is the script to install
-Luna_Client.user.js          Luna 1.1 + Music page + LRC AI build output
+Luna_Client.user.js          Luna 1.1 + Music page, LRC AI, counter, auto grind, game biomes (build output)
 drivers/game-drivers.json    protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js         base client (input)
 src/Luna_Client_1.1.js       Luna client, kept for reference (input)
@@ -369,6 +406,7 @@ tools/test-luna-music.js     headless test of the Music page in the Luna build
 tools/test-luna-chat-e2e.js  whole Luna build against a local game server: chat on the wire
 tools/test-luna-grind.js     auto grind against the game's placement / hit / XP rules, vs Ryn's aim
 tools/test-luna-grind-e2e.js whole Luna build + local game server: auto grind and the counter
+tools/test-luna-biomes.js    whole Luna build + local game server: the ground is the game's colours
 tools/lib/fake-moomoo.js     the local game server and stand-in page both e2e tests use
 ```
 

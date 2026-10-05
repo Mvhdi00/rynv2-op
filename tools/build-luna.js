@@ -44,7 +44,7 @@ edit(
   "// @description     Luna 1.1 fixed by raptor",
   "// @description     Luna 1.1 fixed by raptor, with Ryn Type 2's Music page and LRC AI"
 );
-edit("header: version", "// @version         1.1", "// @version         1.5");
+edit("header: version", "// @version         1.1", "// @version         1.6");
 
 /* ------------------------------------------------------------------ *
  * 2. Chat bridge, exported from app.js
@@ -253,6 +253,25 @@ edit(
   grind + "\n            function hatFc() {\n"
 );
 
+/* The short step back that brings three turrets inside one swing is decided
+ * where Luna picks the tick's movement: after the keys and auto push, before
+ * the path finder and safe walk (which still guard it), so it goes out with
+ * the tick's own move packet instead of fighting it. */
+edit(
+  "grind: step back",
+  "                    if (autoPush) {\n                        predictMoveAngle = autoPushAngle;\n                    }\n",
+  `                    if (autoPush) {
+                        predictMoveAngle = autoPushAngle;
+                    }
+
+                    // AUTO GRIND: the short step that brings all three turrets inside one swing
+                    if (myPlayer && myPlayer.alive) {
+                        const grindMove = lunaGrindMove(predictMoveAngle);
+                        if (grindMove !== undefined) predictMoveAngle = grindMove;
+                    }
+`
+);
+
 /* Ryn forces the grind hat: tank, or none while the primary is being set up
  * for the kill. A real threat (soldier) still wins, as before. */
 edit(
@@ -369,7 +388,81 @@ edit(
 );
 
 /* ------------------------------------------------------------------ *
- * 6. FPS / Ping counter (top centre)
+ * 6. Biome colours back to the game's own
+ *
+ * Luna repainted the ground: grass white, desert #A9B8EC, and the river in
+ * two reds. These are the game's values, branch for branch, from its
+ * background pass in src/game_index.js: grass #b6db66, desert #dbc666,
+ * snow #fff, river bank #dbc666 and water #91b2db — and the game's own
+ * blue-tinted overlay on top of them.
+ * ------------------------------------------------------------------ */
+
+replaceBetween(
+  "biomes: game colours",
+  "                    // RENDER BACKGROUND:\n",
+  "                    // RENDER GRID:\n",
+  `                    // RENDER BACKGROUND (the game's own colours):
+                    if (config.snowBiomeTop - yOffset <= 0 && config.mapScale - config.snowBiomeTop - yOffset >= maxScreenHeight) {
+                        mainContext.fillStyle = "#b6db66";
+                        mainContext.fillRect(0, 0, maxScreenWidth, maxScreenHeight);
+                    } else if (config.mapScale - config.snowBiomeTop - yOffset <= 0) {
+                        mainContext.fillStyle = "#dbc666";
+                        mainContext.fillRect(0, 0, maxScreenWidth, maxScreenHeight);
+                    } else if (config.snowBiomeTop - yOffset >= maxScreenHeight) {
+                        mainContext.fillStyle = "#fff";
+                        mainContext.fillRect(0, 0, maxScreenWidth, maxScreenHeight);
+                    } else if (config.snowBiomeTop - yOffset >= 0) {
+                        mainContext.fillStyle = "#fff";
+                        mainContext.fillRect(0, 0, maxScreenWidth, config.snowBiomeTop - yOffset);
+                        mainContext.fillStyle = "#b6db66";
+                        mainContext.fillRect(0, config.snowBiomeTop - yOffset, maxScreenWidth,
+                            maxScreenHeight - (config.snowBiomeTop - yOffset));
+                    } else {
+                        mainContext.fillStyle = "#b6db66";
+                        mainContext.fillRect(0, 0, maxScreenWidth,
+                            (config.mapScale - config.snowBiomeTop - yOffset));
+                        mainContext.fillStyle = "#dbc666";
+                        mainContext.fillRect(0, (config.mapScale - config.snowBiomeTop - yOffset), maxScreenWidth,
+                            maxScreenHeight - (config.mapScale - config.snowBiomeTop - yOffset));
+                    }
+
+                    // RENDER WATER AREAS:
+                    if (!firstSetup) {
+                        waterMult += waterPlus * config.waveSpeed * delta;
+                        if (waterMult >= config.waveMax) {
+                            waterMult = config.waveMax;
+                            waterPlus = -1;
+                        } else if (waterMult <= 1) {
+                            waterMult = waterPlus = 1;
+                        }
+                        mainContext.globalAlpha = 1;
+                        mainContext.fillStyle = "#dbc666";
+                        renderWaterBodies(xOffset, yOffset, mainContext, config.riverPadding);
+                        mainContext.fillStyle = "#91b2db";
+                        renderWaterBodies(xOffset, yOffset, mainContext, (waterMult - 1) * 250);
+                    }
+
+`
+);
+
+/* Over the ground Luna laid a black 15% gradient four times (about half the
+ * light gone), which turned every colour above muddy. The game lays one
+ * rgba(0, 0, 70, 0.35) over the whole screen, at this same point — after the
+ * map edges, before names and health bars. */
+replaceBetween(
+  "biomes: game overlay",
+  "// RENDER DAY/NIGHT TIME (Fixed - No more darkness)\n",
+  "                    // FROM HERE",
+  `                    // RENDER DAY/NIGHT TIME (the game's own overlay):
+                    mainContext.globalAlpha = 1;
+                    mainContext.fillStyle = "rgba(0, 0, 70, 0.35)";
+                    mainContext.fillRect(0, 0, maxScreenWidth, maxScreenHeight);
+
+`
+);
+
+/* ------------------------------------------------------------------ *
+ * 7. FPS / Ping counter (top centre)
  * ------------------------------------------------------------------ */
 
 edit(

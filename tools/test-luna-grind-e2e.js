@@ -26,7 +26,8 @@ const LUNA = fs.readFileSync(path.join(ROOT, "Luna_Client.user.js"), "utf8");
 const PAGE = standInPage(LUNA);
 const DRIVERS = JSON.parse(fs.readFileSync(path.join(ROOT, "drivers/game-drivers.json"), "utf8"));
 const GATHER = DRIVERS.config.gatherAngle;
-const HAMMER_RANGE = DRIVERS.weapons.find(w => w.id === 10).range;
+const WEAPONS = {};
+DRIVERS.weapons.forEach(w => { WEAPONS[w.id] = w; });
 const R = 35 + 43 - 5;                       /* where a turret lands from the player */
 const deg = r => +(r * 180 / Math.PI).toFixed(1);
 const angleDist = (a, b) => { let d = Math.abs(a - b) % (2 * Math.PI); return d > Math.PI ? 2 * Math.PI - d : d; };
@@ -42,7 +43,32 @@ async function scenario(browser, port, host, sandbox) {
   console.log((sandbox ? "sandbox" : "normal server") + " (" + host + ")");
   /* On land: the middle of the map (y 7200) is the river, where the game
    * refuses turrets. */
-  const st = { x: 3000, y: 3000, dir: 0, weapon: 5, skin: 0, building: null, gather: false, placed: [], turrets: new Map(), nextSid: 500, ticking: null };
+  const st = { x: 3000, y: 3000, vx: 0, vy: 0, moveDir: null, dir: 0, weapon: 5, skin: 0, building: null, gather: false,
+    reload: {}, placed: [], turrets: new Map(), nextSid: 500, ticking: null, aim: 0, sets: [], swings: [] };
+  /* One swing of the held weapon toward the server's facing, scored the way
+   * the game's gather() does; a destroyed turret is removed for the client. */
+  const swing = srv => {
+    const weapon = WEAPONS[st.weapon];
+    const dmg = weapon.dmg * (weapon.sDmg || 1) * (st.skin === 40 ? 3.3 : 1);
+    let hits = 0, kills = 0;
+    const present = st.turrets.size;
+    for (const [ sid, t ] of [ ...st.turrets ]) {
+      if (Math.hypot(t.x - st.x, t.y - st.y) - 43 > weapon.range) continue;
+      if (angleDist(Math.atan2(t.y - st.y, t.x - st.x), st.dir) > GATHER) continue;
+      hits++;
+      t.health -= dmg;
+      if (t.health <= 0) {
+        kills++;
+        st.turrets.delete(sid);
+        srv.sendTo("Q", [ sid ]);
+        srv.sendTo("S", [ 7, st.turrets.size ]);
+      }
+    }
+    const set = st.sets[st.sets.length - 1];
+    st.swings.push({ hits, kills, present,
+      behind: set ? (set.x - st.x) * Math.cos(set.axis) + (set.y - st.y) * Math.sin(set.axis) : 0, set: st.sets.length });
+    st.reload[st.weapon] = weapon.speed;
+  };
   const server = createGameServer((f, srv) => {
     if (f.name === "M") {
       srv.sendTo("V", [ [ 0, 3, 6, 10, 15, 17 ] ]);         /* items: ..., turret */
@@ -52,13 +78,30 @@ async function scenario(browser, port, host, sandbox) {
       srv.sendTo("N", [ "stone", 5000, 1 ]);                 /* and 150 stone */
       clearInterval(st.ticking);
       st.ticking = setInterval(() => {
+        /* the game's update(): movement, then the held weapon swings
+         * whenever auto gather is on and it has reloaded */
+        const C = (WEAPONS[st.weapon].spdMult || 1) * (st.skin === 40 ? 0.3 : 1);
+        if (st.moveDir !== null && st.moveDir !== undefined) {
+          st.vx += Math.cos(st.moveDir) * 0.0016 * C * 111;
+          st.vy += Math.sin(st.moveDir) * 0.0016 * C * 111;
+        }
+        st.x += st.vx * 111;
+        st.y += st.vy * 111;
+        st.vx *= Math.pow(0.993, 111);
+        st.vy *= Math.pow(0.993, 111);
+        for (const k of Object.keys(st.reload)) st.reload[k] = Math.max(0, st.reload[k] - 111);
+        if (st.gather && !(st.reload[st.weapon] > 0)) swing(srv);
         srv.sendTo("a", [ [ 5, st.x, st.y, st.dir, -1, st.weapon, 0, null, 0, st.skin, 0, 0, 0 ] ]);
       }, 111);
+    } else if (f.name === "9") {
+      st.moveDir = f.args[0];
     } else if (f.name === "z") {
       if (f.args[1]) st.weapon = f.args[0]; else st.building = f.args[0];
     } else if (f.name === "F") {
       if (f.args[0] === 1 && st.building === 17) {
         const angle = f.args[1];
+        if (st.turrets.size === 0) st.sets.push({ x: st.x, y: st.y, axis: st.aim, angles: [] });
+        st.sets[st.sets.length - 1].angles.push(angle);
         st.placed.push(angle);
         /* the game's buildItem(): 73 out, refused within 86 of another, limit */
         const x = st.x + R * Math.cos(angle), y = st.y + R * Math.sin(angle);
@@ -66,7 +109,7 @@ async function scenario(browser, port, host, sandbox) {
         const free = [ ...st.turrets.values() ].every(t => Math.hypot(t.x - x, t.y - y) >= 86);
         if (free && st.turrets.size < limit) {
           const sid = st.nextSid++;
-          st.turrets.set(sid, { x, y, angle });
+          st.turrets.set(sid, { x, y, angle, health: 800 });
           srv.sendTo("H", [ [ sid, x, y, angle, 43, null, 17, 5 ] ]);
           srv.sendTo("S", [ 7, st.turrets.size ]);
         }
@@ -85,10 +128,6 @@ async function scenario(browser, port, host, sandbox) {
     server.sendTo("Q", [ sid ]);
     server.sendTo("S", [ 7, st.turrets.size ]);
   };
-  /* What one swing in the current facing would reach, by the game's rule. */
-  const reach = () => [ ...st.turrets.values() ].filter(t =>
-    Math.hypot(t.x - st.x, t.y - st.y) - 43 <= HAMMER_RANGE &&
-    angleDist(Math.atan2(t.y - st.y, t.x - st.x), st.dir) <= GATHER).length;
 
   const httpServer = http.createServer((req, res) => {
     if (req.url === "/luna.js") { res.writeHead(200, { "content-type": "text/javascript; charset=utf-8" }); return res.end(LUNA); }
@@ -108,10 +147,18 @@ async function scenario(browser, port, host, sandbox) {
   check("in game", await page.evaluate(() => window.__lunaMusicChat.status().inGame));
   await page.keyboard.press("Escape");                      /* close Luna's menu */
 
-  const mouse = async angle => page.dispatchEvent("#touch-controls-fullscreen", "mousemove",
-    { clientX: 640 + Math.cos(angle) * 220, clientY: 400 + Math.sin(angle) * 220 });
+  const mouse = async angle => {
+    st.aim = angle;
+    await page.dispatchEvent("#touch-controls-fullscreen", "mousemove",
+      { clientX: 640 + Math.cos(angle) * 220, clientY: 400 + Math.sin(angle) * 220 });
+  };
+  const size = sandbox ? 3 : 2;
+  const want = sandbox ? [ 0, -75, 75 ] : [ -40, 40 ];
+  const setAngles = (set, aim) => set.angles.map(a => deg(a - aim));
+  const setMatches = (set, aim) => set && set.angles.length === want.length && want.every(w => setAngles(set, aim).some(a => Math.abs(a - w) < 0.6));
+  const brokenSets = () => st.swings.filter(sw => sw.kills > 0).length;
 
-  /* 1. Turn it on with the key; turrets go toward the mouse. */
+  /* 1. Turn it on with the key; the first set goes toward the mouse. */
   const aim1 = 0.6;
   await mouse(aim1);
   await sleep(300);
@@ -121,42 +168,35 @@ async function scenario(browser, port, host, sandbox) {
   check("G turns it on (and it is saved)", await page.evaluate(() => window.vars.autoGrind === true &&
     JSON.parse(localStorage.getItem("DELTEK_V4_CONFIG")).autoGrind === true));
   await sleep(700);
-  const want1 = sandbox ? [ 0, -75, 75 ] : [ -40, 40 ];
-  const got1 = st.placed.slice(0, want1.length).map(a => deg(a - aim1));
-  console.log("    placed at (relative to the mouse):", JSON.stringify(got1));
-  check("places " + want1.length + " turrets toward the mouse", st.turrets.size === want1.length &&
-    want1.every(w => st.placed.some(a => Math.abs(deg(a - aim1) - w) < 0.6)), got1);
+  console.log("    first set placed at (relative to the mouse):", JSON.stringify(st.sets[0] ? setAngles(st.sets[0], aim1) : []));
+  check("places " + size + " turrets toward the mouse", setMatches(st.sets[0], aim1), st.sets[0] && setAngles(st.sets[0], aim1));
 
-  /* 2. Then breaks them: hammer, tank, auto gather, facing that reaches the most. */
-  await sleep(900);
-  console.log(`    holding ${st.weapon}, hat ${st.skin}, gather ${st.gather}, facing ${deg(st.dir - aim1)} deg from the mouse, reaches ${reach()}`);
-  check("hammer out", st.weapon === 10, st.weapon);
-  check("tank hat on", st.skin === 40, st.skin);
-  check("auto gather on", st.gather === true);
-  check(sandbox ? "facing reaches two of the three (the most one swing can)" : "facing reaches both", reach() === 2, reach());
+  /* 2. Let it grind: the server swings for real, from wherever the player is. */
+  for (let i = 0; i < 160 && brokenSets() < 2; i++) await sleep(100);
+  check("hammer out, tank hat on, auto gather on", st.weapon === 10 && st.skin === 40, { weapon: st.weapon, hat: st.skin });
 
-  /* 3. One gone: it turns to what is left, never to empty air. */
-  const sids = [ ...st.turrets.keys() ];
-  const middle = sandbox ? sids.find(s => Math.abs(deg(st.turrets.get(s).angle - aim1)) < 1) : sids[0];
-  killTurret(middle);
-  await sleep(600);
-  check("after one breaks, the swing still reaches a turret", reach() >= 1, { dir: deg(st.dir - aim1), left: st.turrets.size });
-  if (sandbox) {
-    killTurret([ ...st.turrets.keys() ][0]);
-    await sleep(600);
-    check("and the last one too", reach() === 1, deg(st.dir - aim1));
-  }
-
-  /* 4. All gone: a fresh set, toward wherever the mouse is now. */
+  /* 3. Turn the mouse; the next sets follow it. */
   const aim2 = -2.4;
   await mouse(aim2);
-  const before = st.placed.length;
-  [ ...st.turrets.keys() ].forEach(killTurret);
-  await sleep(900);
-  const got2 = st.placed.slice(before, before + want1.length).map(a => deg(a - aim2));
-  console.log("    placed again at (relative to the new mouse direction):", JSON.stringify(got2));
-  check("places a fresh set toward the new mouse direction", st.turrets.size === want1.length &&
-    want1.every(w => got2.some(a => Math.abs(a - w) < 0.6)), got2);
+  const setsBefore = st.sets.length;
+  for (let i = 0; i < 200 && (st.sets.length < setsBefore + 2 || brokenSets() < setsBefore + 1); i++) await sleep(100);
+
+  const swings = st.swings.filter(sw => sw.present > 0);
+  const kills = st.swings.filter(sw => sw.kills > 0).map(sw => sw.kills);
+  const behind = swings.map(sw => +sw.behind.toFixed(1));
+  const spotDrift = Math.max(...st.sets.map(s => Math.hypot(s.x - st.sets[0].x, s.y - st.sets[0].y)));
+  console.log(`    ${st.sets.length} sets, ${swings.length} swings; turrets hit per swing: ${JSON.stringify([ ...new Set(swings.map(sw => sw.hits)) ])}; broken per swing: ${JSON.stringify(kills)}`);
+  console.log(`    standing ${Math.min(...behind)}-${Math.max(...behind)} units behind the placing spot when swinging; placing spot drift ${spotDrift.toFixed(1)}`);
+  check("at least four sets ground", st.sets.length >= 4 && kills.length >= 3, { sets: st.sets.length, kills });
+  check(`every swing hits all ${size}`, swings.every(sw => sw.hits === size), swings.map(sw => sw.hits));
+  check(`every set of ${size} breaks on one swing`, kills.every(k => k === size), kills);
+  check("no swing misses a standing turret", swings.every(sw => sw.hits === sw.present), swings.filter(sw => sw.hits < sw.present));
+  if (sandbox) check("swings from 15-45 units back, where all three fit", behind.every(b => b >= 15 && b <= 45), behind);
+  else check("no step with two: swings from the placing spot", behind.every(b => Math.abs(b) < 8), behind);
+  check("walks back each time: the placing spot stays put", spotDrift < 9, spotDrift);
+  const after = st.sets.slice(setsBefore);
+  console.log("    after turning the mouse, placed at:", JSON.stringify(after.map(s => setAngles(s, aim2))));
+  check("sets after turning the mouse go toward the new direction", after.length >= 1 && after.every(s => setMatches(s, aim2)), after.map(s => setAngles(s, aim2)));
 
   /* 5. The menu shows it, and G turns it off. */
   await page.keyboard.press("Escape");                      /* open Luna's menu */
@@ -169,10 +209,14 @@ async function scenario(browser, port, host, sandbox) {
   await sleep(400);
   check("G turns it off", await page.evaluate(() => window.vars.autoGrind === false));
   const afterOff = st.placed.length;
+  const framesOff = server.frames.length;
   [ ...st.turrets.keys() ].forEach(killTurret);
-  await sleep(700);
+  await sleep(900);
+  const sinceOff = server.frames.slice(framesOff);
   check("off: nothing placed", st.placed.length === afterOff);
-  check("off: auto gather released", st.gather === false);
+  check("off: no stepping", !sinceOff.some(f => f.name === "9" && f.args[0] !== null));
+  check("off: auto gather is not asked for again", sinceOff.filter(f => f.name === "K" && f.args[0] === 1).length <= 1,
+    sinceOff.filter(f => f.name === "K").length);
 
   /* 6. The counter. */
   const fps = await page.evaluate(() => Number(document.querySelector("#lfp-fps").textContent));
