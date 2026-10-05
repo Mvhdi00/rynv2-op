@@ -44,7 +44,7 @@ edit(
   "// @description     Luna 1.1 fixed by raptor",
   "// @description     Luna 1.1 fixed by raptor, with Ryn Type 2's Music page and LRC AI"
 );
-edit("header: version", "// @version         1.1", "// @version         1.6");
+edit("header: version", "// @version         1.1", "// @version         1.7");
 
 /* ------------------------------------------------------------------ *
  * 2. Chat bridge, exported from app.js
@@ -189,12 +189,17 @@ edit(
 );
 
 /* ------------------------------------------------------------------ *
- * 5. Auto grind (Ryn Type 2's AutoGrind, ported)
+ * 5. Auto grind: Luna's own, with two changes
  *
- * Replaces Luna's "dynamic farm". The logic lives in
- * src/luna-grind/auto-grind.js and is placed inside app.js, next to the hat
- * logic it feeds, because it works on app.js's own state (myPlayer,
- * visibleObjects, the reload arrays, the auto placer).
+ * Luna's AUTOGRIND block (the "dynamic farm" key, G) stays as it is: three
+ * turrets 73° apart, the same aim, the same targets (secondary to gold,
+ * primary to diamond), the same stop. Only two things change:
+ *
+ *   - the secondary (great hammer) is ground first, then the primary.
+ *     Luna did the primary first — the hammer chipped and the primary took
+ *     the kills until it was diamond — and only then gave the hammer kills;
+ *   - the turrets go toward the mouse. Luna tried angles from 0° (straight
+ *     right) in 10° steps and used the first where all three fit.
  * ------------------------------------------------------------------ */
 
 /* Replace the text between two markers that each occur exactly once. */
@@ -209,182 +214,94 @@ function replaceBetween(label, startMarker, endMarker, replacement) {
   applied.push(label);
 }
 
-const grind = fs.readFileSync(path.join(ROOT, "src/luna-grind/auto-grind.js"), "utf8");
-
 edit(
-  "grind: hat state",
-  "let grindAngle = null;\n",
-  "let grindAngle = null;\nlet grindHat = null;\n"
-);
+  "grind: secondary first, then primary",
+  `                                    if (allOneshotByHammer && getPlayerInfo(myPlayer, "primaryVariant") < 2) {
+                                        predictWeapon = myPlayer.weapons[0];
+                                        grindAngle = findOptimalAngle(candidateTurrets);
+                                    }
+                                    else if (getPlayerInfo(myPlayer, "primaryVariant") < 2) {
+                                        predictWeapon = myPlayer.weapons[1];
+                                        let validTurrets = candidateTurrets.filter(turret => turret.health > hammerDmg);
 
-/* Luna skipped a grind angle of exactly 0 (aiming straight right) and fell
- * back to the mouse — one of the ways its grind swung at nothing. */
-edit(
-  "grind: angle 0 is an angle",
-  "                    if (gatherGrind && grindAngle) {\n",
-  "                    if (gatherGrind && grindAngle !== null) {\n"
-);
-
-/* The key now flips the same setting as the menu switch, as in Ryn. */
-edit(
-  "grind: key toggles the setting",
-  "                            gPressed = !gPressed;\n",
-  `                            window.vars.autoGrind = !window.vars.autoGrind;
-                            window.dispatchEvent(new CustomEvent("luna-vars-changed", { detail: "autoGrind" }));
-`
-);
-
-replaceBetween(
-  "grind: tick runs Ryn's auto grind",
-  "                        // AUTOGRIND\n",
-  "\n\n\n\n// --- KILL DETECTION & AUTO STOP ---",
-  `                        // AUTOGRIND (Ryn Type 2's AutoGrind — see lunaAutoGrind)
-                        grindAngle = null;
-                        gatherGrind = false;
-                        grindHat = null;
-                        grindObjects = [];
-                        lunaAutoGrind();
-`
-);
-
-edit(
-  "grind: module",
-  "            function hatFc() {\n",
-  grind + "\n            function hatFc() {\n"
-);
-
-/* The short step back that brings three turrets inside one swing is decided
- * where Luna picks the tick's movement: after the keys and auto push, before
- * the path finder and safe walk (which still guard it), so it goes out with
- * the tick's own move packet instead of fighting it. */
-edit(
-  "grind: step back",
-  "                    if (autoPush) {\n                        predictMoveAngle = autoPushAngle;\n                    }\n",
-  `                    if (autoPush) {
-                        predictMoveAngle = autoPushAngle;
-                    }
-
-                    // AUTO GRIND: the short step that brings all three turrets inside one swing
-                    if (myPlayer && myPlayer.alive) {
-                        const grindMove = lunaGrindMove(predictMoveAngle);
-                        if (grindMove !== undefined) predictMoveAngle = grindMove;
-                    }
-`
-);
-
-/* Ryn forces the grind hat: tank, or none while the primary is being set up
- * for the kill. A real threat (soldier) still wins, as before. */
-edit(
-  "grind: hat",
-  "                if (isBoughtHat(6, 0)) {\n                    if (soldierAnti) {\n",
-  `                // AUTO GRIND
-                if (gatherGrind && grindHat !== null) {
-                    currentHat = grindHat;
-                }
-
-                if (isBoughtHat(6, 0)) {
-                    if (soldierAnti) {
-`
-);
-
-/* Luna only re-sends its facing when it is off by more than 0.3 rad (17°).
- * While grinding the swing has to land where it was aimed, so it follows
- * closely. */
-edit(
-  "grind: precise facing",
-  "                            if (Math.abs(myPlayer.d2 - angle) > 0.3) {\n",
-  "                            if (Math.abs(myPlayer.d2 - angle) > (gatherGrind ? 0.02 : 0.3)) {\n"
-);
-
-edit(
-  "grind: settings",
-  "        // Utilities\n        autoBuy: true,\n",
-  `        // Utilities
-        autoBuy: true,
-        autoGrind: false,
-        autoGrindTargetPrimary: "ruby",
-        autoGrindTargetSecondary: "ruby",
-`
-);
-
-edit(
-  "grind: keybind label",
-  `{ type: 'keybind', name: "dynamic farm", id: "keyAutoGrind" }`,
-  `{ type: 'keybind', name: "auto grind", id: "keyAutoGrind" }`
-);
-
-edit(
-  "grind: menu section",
-  `                title: "ACTIONS",
-                items: [
-                    { type: 'toggle', name: "autobuy", id: "autoBuy" },
-                ]
-            }
+                                        if (validTurrets.length > 0) {
+                                            grindAngle = findOptimalAngle(validTurrets);
+                                        }
+                                    }
+                                    else {
+                                        predictWeapon = myPlayer.weapons[1];
+                                        grindAngle = findOptimalAngle(candidateTurrets);
+                                    }
 `,
-  `                title: "ACTIONS",
-                items: [
-                    { type: 'toggle', name: "autobuy", id: "autoBuy" },
-                ]
-            },
-            {
-                title: "Auto Grind",
-                items: [
-                    { type: 'toggle', name: "auto grind", id: "autoGrind" },
-                    { type: 'select', name: "grind until (primary)", id: "autoGrindTargetPrimary", options: [["gold", "Gold"], ["diamond", "Diamond"], ["ruby", "Ruby"]] },
-                    { type: 'select', name: "grind until (secondary)", id: "autoGrindTargetSecondary", options: [["gold", "Gold"], ["diamond", "Diamond"], ["ruby", "Ruby"]] }
-                ]
-            }
-`
-);
+  `                                    // secondary first: the hammer takes the kills until it is gold
+                                    if (getPlayerInfo(myPlayer, "secondaryVariant") < 1) {
+                                        predictWeapon = myPlayer.weapons[1];
+                                        grindAngle = findOptimalAngle(candidateTurrets);
+                                    }
+                                    // then the primary: the hammer chips, the primary takes the kills until it is diamond
+                                    else if (allOneshotByHammer && getPlayerInfo(myPlayer, "primaryVariant") < 2) {
+                                        predictWeapon = myPlayer.weapons[0];
+                                        grindAngle = findOptimalAngle(candidateTurrets);
+                                    }
+                                    else if (getPlayerInfo(myPlayer, "primaryVariant") < 2) {
+                                        predictWeapon = myPlayer.weapons[1];
+                                        let validTurrets = candidateTurrets.filter(turret => turret.health > hammerDmg);
 
-/* Luna's menu had no dropdown; the grind targets need one. */
-edit(
-  "menu: select control",
-  "                // KEYBIND (NEW)\n",
-  `                // SELECT
-                else if (item.type === 'select') {
-                    const row = document.createElement('div');
-                    row.className = 'feature-row';
-                    row.innerHTML = \`<span class="feat-label">\${item.name}</span>\`;
-
-                    const select = document.createElement('select');
-                    select.className = 'select-styled';
-                    item.options.forEach(([value, label]) => {
-                        const option = document.createElement('option');
-                        option.value = value;
-                        option.textContent = label;
-                        select.appendChild(option);
-                    });
-                    select.value = window.vars[item.id];
-
-                    select.onchange = () => {
-                        window.vars[item.id] = select.value;
-                        saveConfig(); // SAVE
-                        select.blur();
-                    };
-
-                    row.appendChild(select);
-                    itemsContainer.appendChild(row);
-                }
-                // KEYBIND (NEW)
+                                        if (validTurrets.length > 0) {
+                                            grindAngle = findOptimalAngle(validTurrets);
+                                        }
+                                    }
 `
 );
 
 edit(
-  "menu: select style",
-  "    .text-input-styled:focus {",
-  `    .select-styled {
-        background: var(--bg-input);
-        border: 1px solid var(--border);
-        color: #fff; padding: 6px 10px;
-        font-size: 12px; border-radius: 6px;
-        font-family: 'JetBrains Mono', monospace;
-        cursor: pointer; transition: 0.2s;
-    }
-    .select-styled:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
-    .select-styled option { background: #14141c; color: #fff; }
-
-    .text-input-styled:focus {`
+  "grind: turrets toward the mouse",
+  `                                    for (let i = 0; i < 36; i++) {
+                                        const angle = UTILS.toRad(i * (360 / 36));
+                                        if (canPlace(myPlayer.items[5], angle) &&
+                                            canPlace(myPlayer.items[5], angle - UTILS.toRad(73)) &&
+                                            canPlace(myPlayer.items[5], angle + UTILS.toRad(73))) {
+                                                grindObjects.push({
+                                                    id: myPlayer.items[5],
+                                                    angle: angle,
+                                                    preplace: false
+                                                });
+                                                grindObjects.push({
+                                                    id: myPlayer.items[5],
+                                                    angle: angle - UTILS.toRad(73),
+                                                    preplace: false
+                                                });
+                                                grindObjects.push({
+                                                    id: myPlayer.items[5],
+                                                    angle: angle + UTILS.toRad(73),
+                                                    preplace: false
+                                                });
+                                                break;
+                                        }
+                                    }
+`,
+  `                                    // toward the mouse
+                                    const angle = Math.atan2(mouseY - (screenHeight / 2), mouseX - (screenWidth / 2));
+                                    if (canPlace(myPlayer.items[5], angle) &&
+                                        canPlace(myPlayer.items[5], angle - UTILS.toRad(73)) &&
+                                        canPlace(myPlayer.items[5], angle + UTILS.toRad(73))) {
+                                            grindObjects.push({
+                                                id: myPlayer.items[5],
+                                                angle: angle,
+                                                preplace: false
+                                            });
+                                            grindObjects.push({
+                                                id: myPlayer.items[5],
+                                                angle: angle - UTILS.toRad(73),
+                                                preplace: false
+                                            });
+                                            grindObjects.push({
+                                                id: myPlayer.items[5],
+                                                angle: angle + UTILS.toRad(73),
+                                                preplace: false
+                                            });
+                                    }
+`
 );
 
 /* ------------------------------------------------------------------ *
@@ -493,16 +410,9 @@ edit(
 
 const counter = fs.readFileSync(path.join(ROOT, "src/luna-hud/counter.js"), "utf8");
 edit(
-  "counter: module + grind key sync",
+  "counter: module",
   "    render('keybinds');\n",
   counter + `
-    // A setting flipped from outside the menu (the auto grind key): save it,
-    // and redraw the tab if it is the one showing that setting.
-    window.addEventListener('luna-vars-changed', () => {
-        saveConfig();
-        if (currentTab === 'utilities' && !searchInput.value) render('utilities');
-    });
-
     render('keybinds');
 `
 );

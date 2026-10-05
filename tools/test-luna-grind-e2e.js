@@ -2,12 +2,25 @@
 /*
  * test-luna-grind-e2e.js
  *
- * Auto grind and the FPS / Ping counter inside the whole Luna_Client.user.js,
- * booted in a stand-in moomoo page and connected to a local game server
- * (tools/lib/fake-moomoo.js) that plays the game's side: it sends the player's
- * position every tick, the item bar, the tank hat, and the turrets the client
- * places — at the spot the game would put them — and it reads back every
- * packet the client sends.
+ * Luna's own auto grind (the "dynamic farm" key, G) and the FPS / Ping
+ * counter, inside the whole Luna_Client.user.js, booted in a stand-in moomoo
+ * page and connected to a local game server (tools/lib/fake-moomoo.js).
+ *
+ * The server plays the game's side the way src/game_index.js does: it moves
+ * the player, swings the held weapon whenever auto gather is on and it has
+ * reloaded (damage = dmg * variant * sDmg * tank, hits within reach and
+ * 69.2 deg of the facing), sends "L" for every building hit and "Q" for one
+ * that breaks, then "K" for the swing — which is how Luna keeps its own count
+ * of each turret's health — and gives the weapon that breaks a turret its cost
+ * as XP (350), reporting the held weapon's variant every tick.
+ *
+ * What is checked is what the build changes in Luna's grind, and nothing more:
+ *   - the turrets go toward the mouse: three, at the mouse and 73 deg either
+ *     side (Luna tried angles from 0 deg and used the first that fit);
+ *   - the secondary (great hammer) is ground first, to gold, and only then
+ *     the primary, to diamond (Luna did the primary first);
+ * and that the rest is still Luna's: it stops once both are there, and the
+ * key turns it off.
  *
  * Run on a normal server (moomoo.io, turret limit 2) and on sandbox
  * (sandbox.moomoo.io — Luna decides from the hostname, so the browser is told
@@ -29,6 +42,9 @@ const GATHER = DRIVERS.config.gatherAngle;
 const WEAPONS = {};
 DRIVERS.weapons.forEach(w => { WEAPONS[w.id] = w; });
 const R = 35 + 43 - 5;                       /* where a turret lands from the player */
+const VARIANTS = [ { xp: 0, val: 1 }, { xp: 3000, val: 1.1 }, { xp: 7000, val: 1.18 }, { xp: 12000, val: 1.18 } ];
+const variantOf = xp => { for (let i = VARIANTS.length - 1; i >= 0; i--) if (xp >= VARIANTS[i].xp) return i; return 0; };
+const PRIMARY = 5, HAMMER = 10;             /* polearm, great hammer */
 const deg = r => +(r * 180 / Math.PI).toFixed(1);
 const angleDist = (a, b) => { let d = Math.abs(a - b) % (2 * Math.PI); return d > Math.PI ? 2 * Math.PI - d : d; };
 
@@ -42,44 +58,44 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function scenario(browser, port, host, sandbox) {
   console.log((sandbox ? "sandbox" : "normal server") + " (" + host + ")");
   /* On land: the middle of the map (y 7200) is the river, where the game
-   * refuses turrets. */
-  const st = { x: 3000, y: 3000, vx: 0, vy: 0, moveDir: null, dir: 0, weapon: 5, skin: 0, building: null, gather: false,
-    reload: {}, placed: [], turrets: new Map(), nextSid: 500, ticking: null, aim: 0, sets: [], swings: [] };
-  /* One swing of the held weapon toward the server's facing, scored the way
-   * the game's gather() does; a destroyed turret is removed for the client. */
+   * refuses turrets. Each weapon starts two kills short of its next variant:
+   * the hammer of gold, the polearm of diamond — Luna's targets. */
+  const st = { x: 3000, y: 3000, vx: 0, vy: 0, moveDir: null, dir: 0, weapon: PRIMARY, skin: 0, building: null, gather: false,
+    reload: {}, placed: [], turrets: new Map(), nextSid: 500, ticking: null, aim: 0, sets: [], kills: [],
+    xp: { [PRIMARY]: 7000 - 700, [HAMMER]: 3000 - 700 } };
   const swing = srv => {
     const weapon = WEAPONS[st.weapon];
-    const dmg = weapon.dmg * (weapon.sDmg || 1) * (st.skin === 40 ? 3.3 : 1);
-    let hits = 0, kills = 0;
-    const present = st.turrets.size;
+    const variant = VARIANTS[variantOf(st.xp[st.weapon] || 0)];
+    const dmg = weapon.dmg * variant.val * (weapon.sDmg || 1) * (st.skin === 40 ? 3.3 : 1);
+    let hit = false;
     for (const [ sid, t ] of [ ...st.turrets ]) {
+      const toward = Math.atan2(t.y - st.y, t.x - st.x);
       if (Math.hypot(t.x - st.x, t.y - st.y) - 43 > weapon.range) continue;
-      if (angleDist(Math.atan2(t.y - st.y, t.x - st.x), st.dir) > GATHER) continue;
-      hits++;
+      if (angleDist(toward, st.dir) > GATHER) continue;
+      hit = true;
       t.health -= dmg;
       if (t.health <= 0) {
-        kills++;
+        st.kills.push({ weapon: st.weapon, hammer: variantOf(st.xp[HAMMER]), primary: variantOf(st.xp[PRIMARY]), at: Date.now() });
+        st.xp[st.weapon] = (st.xp[st.weapon] || 0) + 350;
         st.turrets.delete(sid);
         srv.sendTo("Q", [ sid ]);
         srv.sendTo("S", [ 7, st.turrets.size ]);
+      } else {
+        srv.sendTo("L", [ +toward.toFixed(1), sid ]);
       }
     }
-    const set = st.sets[st.sets.length - 1];
-    st.swings.push({ hits, kills, present,
-      behind: set ? (set.x - st.x) * Math.cos(set.axis) + (set.y - st.y) * Math.sin(set.axis) : 0, set: st.sets.length });
+    srv.sendTo("K", [ 5, hit ? 1 : 0, st.weapon ]);
     st.reload[st.weapon] = weapon.speed;
   };
   const server = createGameServer((f, srv) => {
     if (f.name === "M") {
       srv.sendTo("V", [ [ 0, 3, 6, 10, 15, 17 ] ]);         /* items: ..., turret */
-      srv.sendTo("V", [ [ 5, 10 ], true ]);                  /* polearm + great hammer */
+      srv.sendTo("V", [ [ PRIMARY, HAMMER ], true ]);        /* polearm + great hammer */
       srv.sendTo("5", [ 0, 40, 0 ]);                         /* tank hat owned */
-      srv.sendTo("N", [ "wood", 5000, 1 ]);                  /* a turret costs 200 wood */
-      srv.sendTo("N", [ "stone", 5000, 1 ]);                 /* and 150 stone */
+      srv.sendTo("N", [ "wood", 50000, 1 ]);                 /* a turret costs 200 wood */
+      srv.sendTo("N", [ "stone", 50000, 1 ]);                /* and 150 stone */
       clearInterval(st.ticking);
       st.ticking = setInterval(() => {
-        /* the game's update(): movement, then the held weapon swings
-         * whenever auto gather is on and it has reloaded */
         const C = (WEAPONS[st.weapon].spdMult || 1) * (st.skin === 40 ? 0.3 : 1);
         if (st.moveDir !== null && st.moveDir !== undefined) {
           st.vx += Math.cos(st.moveDir) * 0.0016 * C * 111;
@@ -91,7 +107,7 @@ async function scenario(browser, port, host, sandbox) {
         st.vy *= Math.pow(0.993, 111);
         for (const k of Object.keys(st.reload)) st.reload[k] = Math.max(0, st.reload[k] - 111);
         if (st.gather && !(st.reload[st.weapon] > 0)) swing(srv);
-        srv.sendTo("a", [ [ 5, st.x, st.y, st.dir, -1, st.weapon, 0, null, 0, st.skin, 0, 0, 0 ] ]);
+        srv.sendTo("a", [ [ 5, st.x, st.y, st.dir, -1, st.weapon, variantOf(st.xp[st.weapon] || 0), null, 0, st.skin, 0, 0, 0 ] ]);
       }, 111);
     } else if (f.name === "9") {
       st.moveDir = f.args[0];
@@ -100,7 +116,9 @@ async function scenario(browser, port, host, sandbox) {
     } else if (f.name === "F") {
       if (f.args[0] === 1 && st.building === 17) {
         const angle = f.args[1];
-        if (st.turrets.size === 0) st.sets.push({ x: st.x, y: st.y, axis: st.aim, angles: [] });
+        if (st.turrets.size === 0 && !(st.sets.length && Date.now() - st.sets[st.sets.length - 1].at < 300)) {
+          st.sets.push({ aim: st.aim, angles: [], at: Date.now() });
+        }
         st.sets[st.sets.length - 1].angles.push(angle);
         st.placed.push(angle);
         /* the game's buildItem(): 73 out, refused within 86 of another, limit */
@@ -123,10 +141,12 @@ async function scenario(browser, port, host, sandbox) {
       st.dir = f.args[0];
     }
   }, { spawn: [ 3000, 3000 ] });
-  const killTurret = sid => {
-    st.turrets.delete(sid);
-    server.sendTo("Q", [ sid ]);
-    server.sendTo("S", [ 7, st.turrets.size ]);
+  const clearTurrets = () => {
+    for (const sid of [ ...st.turrets.keys() ]) {
+      st.turrets.delete(sid);
+      server.sendTo("Q", [ sid ]);
+    }
+    server.sendTo("S", [ 7, 0 ]);
   };
 
   const httpServer = http.createServer((req, res) => {
@@ -152,73 +172,66 @@ async function scenario(browser, port, host, sandbox) {
     await page.dispatchEvent("#touch-controls-fullscreen", "mousemove",
       { clientX: 640 + Math.cos(angle) * 220, clientY: 400 + Math.sin(angle) * 220 });
   };
-  const size = sandbox ? 3 : 2;
-  const want = sandbox ? [ 0, -75, 75 ] : [ -40, 40 ];
-  const setAngles = (set, aim) => set.angles.map(a => deg(a - aim));
-  const setMatches = (set, aim) => set && set.angles.length === want.length && want.every(w => setAngles(set, aim).some(a => Math.abs(a - w) < 0.6));
-  const brokenSets = () => st.swings.filter(sw => sw.kills > 0).length;
+  const want = [ 0, -73, 73 ];
+  const setAngles = set => set.angles.map(a => deg(Math.atan2(Math.sin(a - set.aim), Math.cos(a - set.aim))));
+  const towardMouse = set => set && set.angles.length === 3 && want.every((w, i) => Math.abs(setAngles(set)[i] - w) < 0.6);
 
-  /* 1. Turn it on with the key; the first set goes toward the mouse. */
-  const aim1 = 0.6;
-  await mouse(aim1);
+  /* 1. Nothing until the key; then three turrets toward the mouse. */
+  await mouse(0.6);
+  await sleep(500);
+  check("nothing placed before the key", st.placed.length === 0, st.placed.length);
+  await page.keyboard.press("KeyG");
+  for (let i = 0; i < 20 && !st.sets.length; i++) await sleep(100);
+  await sleep(200);
+  console.log("    first set (relative to the mouse):", JSON.stringify(st.sets[0] ? setAngles(st.sets[0]) : []),
+    "— the server kept", st.turrets.size);
+  check("G: three turrets toward the mouse (at it and 73 deg either side)", towardMouse(st.sets[0]), st.sets[0] && setAngles(st.sets[0]));
+  check(sandbox ? "sandbox: all three stand" : "normal server: the limit keeps two", st.turrets.size === (sandbox ? 3 : 2), st.turrets.size);
+
+  /* 2. The key turns it off: the turrets go, and no new ones come. */
+  await page.keyboard.press("KeyG");
   await sleep(300);
-  check("auto grind starts off", !(await page.evaluate(() => window.vars.autoGrind)));
-  await page.keyboard.press("KeyG");
+  const placedOff = st.placed.length;
+  clearTurrets();
+  await sleep(1200);
+  check("G again: off, nothing placed", st.placed.length === placedOff, st.placed.length - placedOff);
+
+  /* 3. On again, toward a new direction; turn the mouse once more as each
+   * new set goes down, and let it grind to the end. */
+  await mouse(-2.4);
   await sleep(150);
-  check("G turns it on (and it is saved)", await page.evaluate(() => window.vars.autoGrind === true &&
-    JSON.parse(localStorage.getItem("DELTEK_V4_CONFIG")).autoGrind === true));
-  await sleep(700);
-  console.log("    first set placed at (relative to the mouse):", JSON.stringify(st.sets[0] ? setAngles(st.sets[0], aim1) : []));
-  check("places " + size + " turrets toward the mouse", setMatches(st.sets[0], aim1), st.sets[0] && setAngles(st.sets[0], aim1));
-
-  /* 2. Let it grind: the server swings for real, from wherever the player is. */
-  for (let i = 0; i < 160 && brokenSets() < 2; i++) await sleep(100);
-  check("hammer out, tank hat on, auto gather on", st.weapon === 10 && st.skin === 40, { weapon: st.weapon, hat: st.skin });
-
-  /* 3. Turn the mouse; the next sets follow it. */
-  const aim2 = -2.4;
-  await mouse(aim2);
-  const setsBefore = st.sets.length;
-  for (let i = 0; i < 200 && (st.sets.length < setsBefore + 2 || brokenSets() < setsBefore + 1); i++) await sleep(100);
-
-  const swings = st.swings.filter(sw => sw.present > 0);
-  const kills = st.swings.filter(sw => sw.kills > 0).map(sw => sw.kills);
-  const behind = swings.map(sw => +sw.behind.toFixed(1));
-  const spotDrift = Math.max(...st.sets.map(s => Math.hypot(s.x - st.sets[0].x, s.y - st.sets[0].y)));
-  console.log(`    ${st.sets.length} sets, ${swings.length} swings; turrets hit per swing: ${JSON.stringify([ ...new Set(swings.map(sw => sw.hits)) ])}; broken per swing: ${JSON.stringify(kills)}`);
-  console.log(`    standing ${Math.min(...behind)}-${Math.max(...behind)} units behind the placing spot when swinging; placing spot drift ${spotDrift.toFixed(1)}`);
-  check("at least four sets ground", st.sets.length >= 4 && kills.length >= 3, { sets: st.sets.length, kills });
-  check(`every swing hits all ${size}`, swings.every(sw => sw.hits === size), swings.map(sw => sw.hits));
-  check(`every set of ${size} breaks on one swing`, kills.every(k => k === size), kills);
-  check("no swing misses a standing turret", swings.every(sw => sw.hits === sw.present), swings.filter(sw => sw.hits < sw.present));
-  if (sandbox) check("swings from 15-45 units back, where all three fit", behind.every(b => b >= 15 && b <= 45), behind);
-  else check("no step with two: swings from the placing spot", behind.every(b => Math.abs(b) < 8), behind);
-  check("walks back each time: the placing spot stays put", spotDrift < 9, spotDrift);
-  const after = st.sets.slice(setsBefore);
-  console.log("    after turning the mouse, placed at:", JSON.stringify(after.map(s => setAngles(s, aim2))));
-  check("sets after turning the mouse go toward the new direction", after.length >= 1 && after.every(s => setMatches(s, aim2)), after.map(s => setAngles(s, aim2)));
-
-  /* 5. The menu shows it, and G turns it off. */
-  await page.keyboard.press("Escape");                      /* open Luna's menu */
-  await page.click('.nav-item[data-tab="utilities"]');
-  const sw = page.locator(".deltek-card", { hasText: "Auto Grind" }).locator(".switch").first();
-  check("menu: Auto Grind section, switch on", await sw.evaluate(e => e.classList.contains("active")));
-  check("menu: grind-until choices", (await page.locator(".deltek-card", { hasText: "Auto Grind" }).locator("select").count()) === 2);
-  await page.keyboard.press("Escape");
   await page.keyboard.press("KeyG");
-  await sleep(400);
-  check("G turns it off", await page.evaluate(() => window.vars.autoGrind === false));
-  const afterOff = st.placed.length;
-  const framesOff = server.frames.length;
-  [ ...st.turrets.keys() ].forEach(killTurret);
-  await sleep(900);
-  const sinceOff = server.frames.slice(framesOff);
-  check("off: nothing placed", st.placed.length === afterOff);
-  check("off: no stepping", !sinceOff.some(f => f.name === "9" && f.args[0] !== null));
-  check("off: auto gather is not asked for again", sinceOff.filter(f => f.name === "K" && f.args[0] === 1).length <= 1,
-    sinceOff.filter(f => f.name === "K").length);
+  const aims = [ -2.4, 1.9, -0.9, 2.8 ];
+  let lastSets = st.sets.length;
+  for (let i = 0; i < 900; i++) {
+    await sleep(100);
+    if (st.sets.length > lastSets) {
+      lastSets = st.sets.length;
+      await sleep(150);
+      await mouse(aims[(lastSets - 1) % aims.length]);
+    }
+    if (variantOf(st.xp[PRIMARY]) >= 2) break;
+  }
+  await sleep(2000);                                         /* would it go on? */
 
-  /* 6. The counter. */
+  const killers = st.kills.map(k => (k.weapon === HAMMER ? "hammer" : "polearm"));
+  const firstPolearm = st.kills.findIndex(k => k.weapon === PRIMARY);
+  const sets = st.sets.slice(1);
+  console.log("    sets after turning it back on (relative to the mouse):", JSON.stringify(sets.map(setAngles)));
+  console.log("    kills in order:", killers.join(", "));
+  console.log("    end: hammer", [ "plain", "gold", "diamond", "ruby" ][variantOf(st.xp[HAMMER])] + ", polearm",
+    [ "plain", "gold", "diamond", "ruby" ][variantOf(st.xp[PRIMARY])]);
+  check("every set goes toward the mouse as it was when placed", sets.length >= 2 && sets.every(towardMouse), sets.map(setAngles));
+  check("secondary first: the hammer takes the first kills", st.kills.length > 0 && st.kills[0].weapon === HAMMER, killers);
+  check("no polearm kill until the hammer is gold", firstPolearm > 0 && st.kills.slice(0, firstPolearm).every(k => k.weapon === HAMMER) &&
+    st.kills[firstPolearm].hammer >= 1, st.kills);
+  check("then the primary: the polearm takes the kills", firstPolearm >= 0 && st.kills.slice(firstPolearm).filter(k => k.weapon === PRIMARY).length >= 2, killers);
+  check("hammer gold, polearm diamond", variantOf(st.xp[HAMMER]) >= 1 && variantOf(st.xp[PRIMARY]) >= 2, st.xp);
+  const lastKill = st.kills.length ? st.kills[st.kills.length - 1].at : 0;
+  const placedAfter = st.sets.filter(s => s.at > lastKill).length;
+  check("stops once both are there (Luna's own targets)", placedAfter === 0 && !st.kills.some(k => k.primary >= 2), { placedAfter });
+
+  /* 4. The counter. */
   const fps = await page.evaluate(() => Number(document.querySelector("#lfp-fps").textContent));
   const ping = await page.textContent("#lfp-ping");
   console.log(`    counter: FPS ${fps}, PING ${ping}`);
@@ -233,7 +246,6 @@ async function scenario(browser, port, host, sandbox) {
   await ctx.close();
   wss.close();
   await new Promise(r => httpServer.close(r));
-  return page;
 }
 
 (async () => {
