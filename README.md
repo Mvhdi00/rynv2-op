@@ -126,6 +126,8 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+luna/                     Luna Client 1.8 with Replace (see luna/README.md)
+tools/luna-harness/       drives the Luna client against a fake server
 ```
 
 ## Build

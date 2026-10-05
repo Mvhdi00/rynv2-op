@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Luna harness</title>
+</head>
+<body>
+<div id="mainMenu"><div id="menuCardHolder"><input id="nameInput"><div id="enterGame"></div><select id="serverBrowser"></select></div></div>
+<div id="loadingText"></div>
+<div id="gameUI"><div id="actionBar"></div><canvas id="mapDisplay"></canvas></div>
+<canvas id="gameCanvas" width="1920" height="1080"></canvas>
+<input id="chatBox"><input id="allianceInput">
+<div id="harness-ids"></div>
+<script>
+    // Every other element the client looks up by id. The game's own page has
+    // them; here they only need to exist.
+    (function () {
+        var ids = ["ad-container", "ageBarBody", "ageText", "allianceButton", "allianceHolder", "allianceManager",
+            "allianceMenu", "altServer", "altcha", "chatButton", "chatHolder", "diedText", "downloadButtonContainer",
+            "foodDisplay", "guideCard", "itemInfoHolder", "joinPartyButton", "killCounter", "leaderboardData",
+            "linksContainer2", "mobileDownloadButtonContainer", "nativeResolution", "noticationDisplay",
+            "ot-sdk-btn-floating", "partyButton", "pingDisplay", "playMusic", "promoImg", "promoImgHolder",
+            "rm-lrc-panel", "scoreDisplay", "settingsButton", "showPing", "shutdownDisplay", "skinColorHolder",
+            "stoneDisplay", "storeButton", "storeHolder", "storeMenu", "upgradeCounter", "upgradeHolder",
+            "woodDisplay", "desktopInstructions", "mobileInstructions", "touch-controls-fullscreen"];
+        var holder = document.getElementById("harness-ids");
+        for (var i = 0; i < ids.length; i++) {
+            var el = document.createElement("div");
+            el.id = ids[i];
+            holder.appendChild(el);
+        }
+        // Children the client removes or reads at boot.
+        var menuText = document.createElement("div");
+        menuText.className = "menuText";
+        document.getElementById("guideCard").appendChild(menuText);
+    })();
+</script>
+<script src="msgpack.min.js"></script>
+<script>
+    // The server, as far as the client can tell. Luna keeps the page's
+    // WebSocket as OriginalWebSocket before it installs its own, so the fake
+    // has to be in place first.
+    window.__sent = [];
+    function FakeSocket(url) {
+        var self = this;
+        this.url = url;
+        this.readyState = 0;
+        window.__socket = this;
+        setTimeout(function () {
+            self.readyState = 1;
+            if (self.onopen) self.onopen();
+        }, 0);
+    }
+    FakeSocket.CONNECTING = 0;
+    FakeSocket.OPEN = 1;
+    FakeSocket.CLOSING = 2;
+    FakeSocket.CLOSED = 3;
+    FakeSocket.prototype.send = function (frame) {
+        var msg = msgpack.decode(new Uint8Array(frame));
+        window.__sent.push({ at: performance.now(), type: msg[0], data: msg[1] });
+        if (msg[0] === "0" && window.__pingDelay != null) {
+            var self = this;
+            setTimeout(function () { window.__recv("0", []); }, window.__pingDelay);
+        }
+    };
+    FakeSocket.prototype.close = function () {};
+    window.WebSocket = FakeSocket;
+
+    window.__recv = function (type, data) {
+        window.__socket.onmessage({ data: msgpack.encode([type, data]) });
+    };
+</script>
+<script src="luna.user.js"></script>
+</body>
+</html>

@@ -3,7 +3,7 @@
 // @namespace       luna-fixed
 // @author          Luna and Skye, with help from Zenith and XTRFY
 // @description     Luna 1.1 fixed by raptor, with Ryn Type 2's Music page and LRC AI
-// @version         1.7
+// @version         1.8
 // @match           *://moomoo.io/*
 // @match           *://*.moomoo.io/*
 // @run-at          document-start
@@ -9081,6 +9081,7 @@ function sendLockDir() {
                 myPlayer.alive = false;
                 cancelPlacementRestore();
                 cancelDelayedPlacers();
+                resetPlaceSync();
 
                 try {
                     factorem.refreshAds([2], true);
@@ -9105,13 +9106,20 @@ function sendLockDir() {
 
             // KILL ALL OBJECTS BY A PLAYER:
             function killObjects(sid) {
-                if (myPlayer) objectManager.removeAllItems(sid);
+                if (myPlayer) {
+                    for (const object of gameObjects) {
+                        if (object.owner && object.owner.sid == sid) removedSinceRebuild.add(object);
+                    }
+                    objectManager.removeAllItems(sid);
+                }
             }
 
             // KILL OBJECT:
             function killObject(sid) {
                 removedObjects.push(sid);
+                const object = findObjectBySid(sid);
                 objectManager.disableBySid(sid);
+                if (object) onObjectRemoved(object);
             }
 
             // UPDATE SCORE DISPLAY:
@@ -9466,6 +9474,21 @@ function sendLockDir() {
                         mainContext.drawImage(image, -(image.width / 2), -(image.height / 2));
 
                         mainContext.rotate(object.angle);
+                        mainContext.restore();
+                    }
+
+                    // REPLACE BUILDS (green), shown briefly after they are sent
+                    const replaceNow = Date.now();
+                    replaceMarks = replaceMarks.filter(mark => mark.until > replaceNow);
+                    for (let mark of replaceMarks) {
+                        mainContext.globalAlpha = .6;
+
+                        mainContext.save();
+                        mainContext.translate(mark.x - xOffset, mark.y - yOffset);
+
+                        let image = getItemSprite({ id: mark.id, name: mark.name, scale: mark.scale, prediction: true, replace: true });
+                        mainContext.drawImage(image, -(image.width / 2), -(image.height / 2));
+
                         mainContext.restore();
                     }
 
@@ -10029,8 +10052,15 @@ if (tmpObj.isPlayer && tmpObj.alive) {
 
             // GET ITEM SPRITE:
             var itemSprites = [];
+            // Prediction tints: red autoplace, blue preplace, green replace.
+            function predictionTint(obj) {
+                return obj.replace ? "#00ff66" : (obj.preplace ? "#0000ff" : "#ff0000");
+            }
+            function itemSpriteKey(obj) {
+                return obj.id + (obj.predictEnemyTrap ? 100 : (obj.prediction ? (obj.replace ? 400 : (obj.preplace ? 200 : 300)) : 0));
+            }
             function getItemSprite(obj, asIcon) {
-                var tmpSprite = itemSprites[obj.id + (obj.predictEnemyTrap ? 100 : (obj.prediction ? (obj.preplace ? 200 : 300) : 0))];
+                var tmpSprite = itemSprites[itemSpriteKey(obj)];
                 if (!tmpSprite || asIcon) {
                     var tmpCanvas = document.createElement('canvas');
                     tmpCanvas.width = tmpCanvas.height = (obj.scale * 2.5) + outlineWidth +
@@ -10093,7 +10123,7 @@ if (tmpObj.isPlayer && tmpObj.alive) {
 
                         obj.prediction && (
                             tmpContext.globalAlpha = 0.6,
-                            tmpContext.fillStyle = obj.preplace ? "#0000ff" : "#ff0000",
+                            tmpContext.fillStyle = predictionTint(obj),
                             renderStar(tmpContext, obj.name == "spikes" ? 5 : 6, obj.scale, tmpScale),
                             tmpContext.fill(),
                             tmpContext.globalAlpha = 1);
@@ -10103,7 +10133,7 @@ if (tmpObj.isPlayer && tmpObj.alive) {
 
                         obj.prediction && (
                             tmpContext.globalAlpha = 0.6,
-                            tmpContext.fillStyle = obj.preplace ? "#0000ff" : "#ff0000",
+                            tmpContext.fillStyle = predictionTint(obj),
                             renderCircle(0, 0, tmpScale, tmpContext),
                             tmpContext.globalAlpha = 1);
 
@@ -10112,7 +10142,7 @@ if (tmpObj.isPlayer && tmpObj.alive) {
 
                         obj.prediction && (
                             tmpContext.globalAlpha = 0.6,
-                            tmpContext.fillStyle = obj.preplace ? "#0000ff" : "#ff0000",
+                            tmpContext.fillStyle = predictionTint(obj),
                             renderCircle(0, 0, tmpScale / 2, tmpContext, !0),
                             tmpContext.globalAlpha = 1);
                     } else if (obj.name == "windmill" || obj.name == "faster windmill" || obj.name == "power mill") {
@@ -10121,7 +10151,7 @@ if (tmpObj.isPlayer && tmpObj.alive) {
 
                         obj.prediction && (
                             tmpContext.globalAlpha = 0.6,
-                            tmpContext.fillStyle = obj.preplace ? "#0000ff" : "#ff0000",
+                            tmpContext.fillStyle = predictionTint(obj),
                             renderCircle(0, 0, obj.scale, tmpContext),
                             tmpContext.globalAlpha = 1);
 
@@ -10130,7 +10160,7 @@ if (tmpObj.isPlayer && tmpObj.alive) {
 
                         obj.prediction && (
                             tmpContext.globalAlpha = 0.6,
-                            tmpContext.fillStyle = obj.preplace ? "#0000ff" : "#ff0000",
+                            tmpContext.fillStyle = predictionTint(obj),
                             renderRectCircle(0, 0, obj.scale * 1.5, 29, 4, tmpContext),
                             tmpContext.globalAlpha = 1);
 
@@ -10139,7 +10169,7 @@ if (tmpObj.isPlayer && tmpObj.alive) {
 
                         obj.prediction && (
                             tmpContext.globalAlpha = 0.6,
-                            tmpContext.fillStyle = obj.preplace ? "#0000ff" : "#ff0000",
+                            tmpContext.fillStyle = predictionTint(obj),
                             renderCircle(0, 0, obj.scale * .5, tmpContext),
                             tmpContext.globalAlpha = 1);
                     } else if (obj.name == "mine") {
@@ -10166,7 +10196,7 @@ if (tmpObj.isPlayer && tmpObj.alive) {
 
                         obj.prediction && (
                             tmpContext.globalAlpha = 0.6,
-                            tmpContext.fillStyle = obj.preplace ? "#0000ff" : "#ff0000",
+                            tmpContext.fillStyle = predictionTint(obj),
                             renderStar(tmpContext, 3, obj.scale * 1.1, obj.scale * 1.1),
                             tmpContext.fill(),
                             tmpContext.globalAlpha = 1);
@@ -10179,7 +10209,7 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                         obj.prediction && (
                             tmpContext.globalAlpha = 0.6,
 
-                            tmpContext.fillStyle = obj.preplace ? "#0000ff" : "#ff0000",
+                            tmpContext.fillStyle = predictionTint(obj),
                             renderStar(tmpContext, 3, obj.scale * .65, obj.scale * .65),
 
                             tmpContext.fill());
@@ -10246,7 +10276,7 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                     }
                     tmpSprite = tmpCanvas;
                     if (!asIcon)
-                        itemSprites[obj.id + (obj.predictEnemyTrap ? 100 : (obj.prediction ? (obj.preplace ? 200 : 300) : 0))] = tmpSprite;
+                        itemSprites[itemSpriteKey(obj)] = tmpSprite;
                 }
                 return tmpSprite;
             }
@@ -10373,6 +10403,7 @@ if (tmpObj.isPlayer && tmpObj.alive) {
 
                     if (data[i + 7] >= 0) {
                         spawnedObjectSids.push(data[i + 7]);
+                        if (myPlayer && data[i + 7] == myPlayer.sid) markClaimsLanded(data[i + 1], data[i + 2], data[i + 6]);
                     }
 
                     i += 8;
@@ -10535,6 +10566,7 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                     keyCodeWeapon = 0;
                     cancelPlacementRestore();
                     cancelDelayedPlacers();
+                    resetPlaceSync();
 
                     myPlayer = tmpPlayer;
                     camX = myPlayer.x;
@@ -11217,7 +11249,7 @@ if (tmpObj.isPlayer && tmpObj.alive) {
 
                 const placements = objects
                     .filter(object => object.preplace)
-                    .map(object => ({ id: object.id, angle: object.angle, preplace: true }));
+                    .map(object => ({ id: object.id, angle: object.angle, x: object.x, y: object.y, scale: object.scale, targetSid: object.targetSid, preplace: true }));
 
                 if (placements.length === 0) return;
 
@@ -11248,26 +11280,428 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                     }
                 }, 1);
 
-                schedule(function () {
+                // The one send path for preplace. It fires at the moments the two
+                // old paths used between them (live ping, lowest ping, and 10ms
+                // after that), every shot on this tick's angles, and it skips any
+                // ground autoplace or replace already has a build on the way to.
+                const fireShot = function () {
+                    let placedCount = 0;
                     for (const object of placements) {
+                        if (placedCount >= 4) break;
                         if (!hasPlacementPacketBudget(true)) break;
+                        if (isGroundClaimed(object.x, object.y, object.scale, "pre")) {
+                            placeSyncStats.preSkipped++;
+                            continue;
+                        }
 
                         place(object.id, object.angle);
                         placedAngles.push(object.angle);
                         io.send("D", getAttackDir());
+                        claimPlace(object.id, object.x, object.y, "pre", object.targetSid);
+                        if (object.targetSid != null) preplaceCover.set(object.targetSid, tick);
+                        placedCount++;
                     }
-                }, 111 - livePing);
+                };
 
-                if (shouldSpam) {
-                    schedule(function () {
-                        for (const object of placements) {
-                            if (!hasPlacementPacketBudget(true)) break;
+                const shotDelays = [111 - livePing];
+                if (shouldSpam) shotDelays.push(111 - lowestPing, 111 - lowestPing + 10);
 
-                            place(object.id, object.angle);
-                            placedAngles.push(object.angle);
-                            io.send("D", getAttackDir());
+                const scheduled = [];
+                for (let delay of shotDelays) {
+                    delay = Math.max(1, delay);
+                    if (scheduled.some(other => Math.abs(other - delay) < 3)) continue;
+                    scheduled.push(delay);
+                    schedule(fireShot, delay);
+                }
+            }
+
+            // ================================================================
+            // PLACEMENT SYNC: autoplace, preplace and replace
+            //
+            // Each placer owns one moment:
+            //   AUTOPLACE  the board as it is this tick
+            //   PREPLACE   an object predicted to break, builds timed to land
+            //              on the server right after the break
+            //   REPLACE    an object that actually broke ("Q") which preplace
+            //              was not already covering
+            //
+            // Every build any of them sends is written to one ledger by world
+            // position, and each placer skips ground another one already holds.
+            //
+            // Hand-off: a break that preplace already sent builds for is left
+            // to preplace. Replace waits for that tick's update and fires only
+            // if none of preplace's builds showed up, i.e. preplace missed.
+            // ================================================================
+            const PLACE_CLAIM_TTL = { auto: 1, pre: 2, replace: 2 };
+            const REPLACE_PER_BREAK = 2;
+            const REPLACE_PER_TICK = 4;
+            // Same ceiling the laffer preplace path used: stop short of the
+            // 119 cap so a heal later in the same second still fits.
+            const REPLACE_PACKET_CEILING = 100;
+            const REPLACE_MARK_MS = 450;
+
+            let placeClaims = [];
+            let preplaceCover = new Map();
+            let replaceQueue = [];
+            let removedSinceRebuild = new Set();
+            let replaceMarks = [];
+            let replaceTick = -1;
+            let replaceTickCount = 0;
+
+            const placeSyncStats = {
+                autoSkipped: 0,
+                preSkipped: 0,
+                breaks: 0,
+                replaced: 0,
+                replaceBuilds: 0,
+                leftToPreplace: 0,
+                preplaceLanded: 0,
+                preplaceMissed: 0,
+                deferred: 0,
+            };
+            window.lunaPlaceSync = {
+                stats: placeSyncStats,
+                claims: () => placeClaims.slice(),
+            };
+
+            function resetPlaceSync() {
+                placeClaims = [];
+                preplaceCover.clear();
+                replaceQueue = [];
+                removedSinceRebuild.clear();
+                replaceMarks = [];
+            }
+
+            function claimLive(claim) {
+                return !claim.landed && (tick - claim.tick) < PLACE_CLAIM_TTL[claim.source];
+            }
+
+            function claimPlace(id, x, y, source, sid) {
+                const item = items.list[id];
+                if (!item) return;
+
+                // A resend of the same build refreshes its claim instead of adding one.
+                for (const claim of placeClaims) {
+                    if (claim.source === source && claim.id === id && !claim.landed && UTILS.getDistance(x, y, claim.x, claim.y) < 1) {
+                        claim.tick = tick;
+                        return;
+                    }
+                }
+
+                placeClaims.push({ id: id, group: item.group.id, x: x, y: y, scale: item.scale, source: source, sid: sid == null ? null : sid, tick: tick, landed: false });
+            }
+
+            function pruneClaims() {
+                placeClaims = placeClaims.filter(claim => (tick - claim.tick) <= PLACE_CLAIM_TTL[claim.source]);
+                for (const [sid, coveredTick] of preplaceCover) {
+                    if (tick - coveredTick > 2) preplaceCover.delete(sid);
+                }
+            }
+
+            // Ground another placer has a build on the way to. A placer is not
+            // blocked by its own claims (preplace resends, autoplace retries),
+            // except replace, so two breaks in one tick do not stack builds.
+            function isGroundClaimed(x, y, scale, source) {
+                for (const claim of placeClaims) {
+                    if (!claimLive(claim)) continue;
+                    if (claim.source === source && source !== "replace") continue;
+                    if (UTILS.getDistance(x, y, claim.x, claim.y) < scale + claim.scale) return true;
+                }
+                return false;
+            }
+
+            // One of our builds arrived ("H"): whatever claim it answers is done.
+            function markClaimsLanded(x, y, id) {
+                const item = items.list[id];
+                if (!item) return;
+
+                for (const claim of placeClaims) {
+                    if (claim.landed || claim.group !== item.group.id) continue;
+                    if (UTILS.getDistance(x, y, claim.x, claim.y) < claim.scale) claim.landed = true;
+                }
+            }
+
+            // How many more of this item can go down, counting builds still in flight.
+            function itemRoom(id) {
+                const group = items.list[id].group;
+                const limit = config.inSandbox ? group.sandboxLimit || Math.max(group.limit * 3, 99) : group.limit;
+                if (!limit) return Infinity;
+
+                let pending = 0;
+                for (const claim of placeClaims) {
+                    if (claim.group === group.id && claimLive(claim)) pending++;
+                }
+
+                return limit - (myPlayer.itemCounts[group.id] || 0) - pending;
+            }
+
+            function pointSegmentDistance(px, py, x1, y1, x2, y2) {
+                const dx = x2 - x1;
+                const dy = y2 - y1;
+                const lengthSq = dx * dx + dy * dy;
+                let t = lengthSq > 0 ? ((px - x1) * dx + (py - y1) * dy) / lengthSq : 0;
+                t = Math.max(0, Math.min(1, t));
+                return UTILS.getDistance(px, py, x1 + t * dx, y1 + t * dy);
+            }
+
+            // Same test as closestSpikeToKb: does a spike at `slot` knock `target`
+            // onto one of our spikes, and how straight. Infinity when it does not.
+            function replaceKbAlignment(slot, target, ourSpikes) {
+                const kbAngle = Math.atan2(target.yVel - slot.y, target.xVel - slot.x);
+                const endX = target.xVel + 200 * Math.cos(kbAngle);
+                const endY = target.yVel + 200 * Math.sin(kbAngle);
+
+                let best = Infinity;
+                for (const spike of ourSpikes) {
+                    if (!UTILS.lineInRect(
+                        spike.x - spike.scale, spike.y - spike.scale,
+                        spike.x + spike.scale, spike.y + spike.scale,
+                        target.xVel, target.yVel, endX, endY
+                    )) continue;
+
+                    let angleDiff = Math.abs(kbAngle - Math.atan2(spike.y - target.yVel, spike.x - target.xVel));
+                    if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+                    best = Math.min(best, angleDiff);
+                }
+
+                return best;
+            }
+
+            // What a break means, read the moment it arrives, before anyone moves:
+            //   retrap  our trap broke with the enemy inside it        (A)
+            //   spike   our spike broke while touching the enemy       (B)
+            //   steal   an enemy build broke within our reach          (C)
+            function classifyBreak(object) {
+                if (!object.owner || !object.group) return null;
+
+                // From `players` rather than enemiesNear: that list is emptied when a
+                // tick's update starts and only refilled once its objects are in.
+                const target = players
+                    .filter(enemy => enemy.visible && enemy != myPlayer && (enemy.team == null || enemy.team != myPlayer.team) &&
+                        UTILS.getDistance(myPlayer.x2, myPlayer.y2, enemy.x2, enemy.y2) <= window.vars.replaceRange)
+                    .sort((a, b) => UTILS.getDistance(object.x, object.y, a.x2, a.y2) - UTILS.getDistance(object.x, object.y, b.x2, b.y2))[0];
+                if (!target) return null;
+
+                const targetScale = target.scale || 35;
+                const toTarget = UTILS.getDistance(object.x, object.y, target.x2, target.y2);
+
+                if (isObjectOur(object)) {
+                    // Path breaking our own builds: one of ours that breaks inside our
+                    // swing broke to our own hit, and putting it back would loop.
+                    if (isObjectMine(object) && breakObject && isObjectMine(breakObject) && items.weapons[autoBreakWeapon] &&
+                        UTILS.getDistance(myPlayer.x2, myPlayer.y2, object.x, object.y) <= items.weapons[autoBreakWeapon].range + object.scale) return null;
+
+                    if (object.id == 15 && toTarget < object.scale) {
+                        return { kind: "retrap", target: target };
+                    }
+
+                    if (object.id > 5 && object.id < 10 && toTarget <= object.scale + targetScale + 15) {
+                        return { kind: "spike", target: target };
+                    }
+
+                    return null;
+                }
+
+                // The enemy trap we were standing in is not ground to steal.
+                if (object.id == 15 && UTILS.getDistance(object.x, object.y, myPlayer.x2, myPlayer.y2) < object.scale) return null;
+
+                const toMe = UTILS.getDistance(object.x, object.y, myPlayer.x2, myPlayer.y2);
+                for (const id of [myPlayer.items[2], myPlayer.items[4]]) {
+                    if (id == null || !items.list[id]) continue;
+                    const ring = 35 + items.list[id].scale + (items.list[id].placeOffset || 0);
+                    if (Math.abs(toMe - ring) < object.scale) {
+                        return { kind: "steal", target: target };
+                    }
+                }
+
+                return null;
+            }
+
+            function pickReplaceBuilds(object, info) {
+                const target = info.target;
+                const targetScale = target.scale || 35;
+                const spikeId = myPlayer.items[2];
+                const trapId = myPlayer.items[4] === 15 ? 15 : null;
+
+                const objects = visibleObjects.filter(o => o !== object && !removedSinceRebuild.has(o));
+                const ourSpikes = spikes_our.filter(o => o !== object && !removedSinceRebuild.has(o));
+                const open = id => (id == null || !items.list[id]) ? [] : getPrePlaceAngles(id, objects)
+                    .filter(slot => slot.placeable && !isGroundClaimed(slot.x, slot.y, slot.scale, "replace"));
+
+                const spikeSlots = open(spikeId);
+                const trapSlots = open(trapId);
+
+                const gap = slot => pointSegmentDistance(slot.x, slot.y, target.x2, target.y2, target.xVel, target.yVel);
+                const touches = slot => gap(slot) < slot.scale + targetScale - 1;
+                const catches = slot => gap(slot) < slot.scale;
+                const onFreed = slot => UTILS.getDistance(slot.x, slot.y, object.x, object.y) < object.scale;
+                const byGap = (a, b) => gap(a) - gap(b);
+
+                const heldByOtherTrap = traps_our.some(trap =>
+                    trap !== object && !removedSinceRebuild.has(trap) &&
+                    UTILS.getDistance(trap.x, trap.y, target.x2, target.y2) < trap.scale
+                );
+
+                const builds = [];
+                const take = slot => {
+                    if (!slot || builds.length >= REPLACE_PER_BREAK) return false;
+                    if (builds.some(build => UTILS.getDistance(build.x, build.y, slot.x, slot.y) < build.scale + slot.scale)) return false;
+
+                    const group = items.list[slot.id].group.id;
+                    const sameGroup = builds.filter(build => items.list[build.id].group.id === group).length;
+                    if (itemRoom(slot.id) - sameGroup <= 0) return false;
+
+                    builds.push(slot);
+                    return true;
+                };
+                const clear = slots => slots.filter(slot =>
+                    !builds.some(build => UTILS.getDistance(build.x, build.y, slot.x, slot.y) < build.scale + slot.scale)
+                );
+
+                // A spike in contact with the target. While they are free, the one
+                // that knocks them onto our spikes wins; while held, the closest.
+                const bestSpike = (slots, held) => {
+                    const touching = slots.filter(touches);
+                    if (touching.length === 0) return null;
+
+                    if (!held) {
+                        let kbSlot = null;
+                        let kbAlignment = Infinity;
+                        for (const slot of touching) {
+                            const alignment = replaceKbAlignment(slot, target, ourSpikes);
+                            if (alignment < kbAlignment || (alignment === kbAlignment && kbSlot && gap(slot) < gap(kbSlot))) {
+                                kbAlignment = alignment;
+                                kbSlot = slot;
+                            }
                         }
-                    }, 111 - lowestPing);
+                        if (kbSlot && kbAlignment < Infinity) return kbSlot;
+                    }
+
+                    return touching.sort((a, b) => (onFreed(b) - onFreed(a)) || byGap(a, b))[0];
+                };
+
+                const bestTrap = slots => slots.filter(catches).sort(byGap)[0];
+
+                if (info.kind === "retrap") {
+                    // A: catch them again before they step out, then pin them.
+                    const retrapped = take(bestTrap(trapSlots));
+                    take(bestSpike(clear(spikeSlots), retrapped));
+                } else if (info.kind === "spike") {
+                    // B: put the pressure back, and trap them if nothing holds them.
+                    take(bestSpike(spikeSlots, heldByOtherTrap));
+                    if (!heldByOtherTrap) take(bestTrap(clear(trapSlots)));
+                } else if (info.kind === "steal") {
+                    // C: one build on the freed ground, most useful first. With
+                    // nothing to hit or catch, a trap holds the ground without
+                    // walling us in; a spike only where it stays out of our way.
+                    const freedSpikes = spikeSlots.filter(onFreed);
+                    const freedTraps = trapSlots.filter(onFreed);
+                    const byFreed = (a, b) => UTILS.getDistance(a.x, a.y, object.x, object.y) - UTILS.getDistance(b.x, b.y, object.x, object.y);
+
+                    const blocksMyWay = slot => {
+                        const pad = slot.scale + 5;
+                        const crosses = (x1, y1, x2, y2) => UTILS.lineInRect(slot.x - pad, slot.y - pad, slot.x + pad, slot.y + pad, x1, y1, x2, y2);
+
+                        if (predictMoveAngle != null && crosses(
+                            myPlayer.x2 + Math.cos(predictMoveAngle) * 35, myPlayer.y2 + Math.sin(predictMoveAngle) * 35,
+                            myPlayer.x2 + Math.cos(predictMoveAngle) * 222, myPlayer.y2 + Math.sin(predictMoveAngle) * 222
+                        )) return true;
+
+                        return crosses(myPlayer.xVel, myPlayer.yVel, target.xVel, target.yVel);
+                    };
+
+                    take(bestSpike(freedSpikes, heldByOtherTrap)) ||
+                        take(bestTrap(freedTraps)) ||
+                        take(freedTraps.sort(byFreed)[0]) ||
+                        take(freedSpikes.filter(slot => !blocksMyWay(slot)).sort(byFreed)[0]);
+                }
+
+                return builds;
+            }
+
+            function runReplace(object, info) {
+                if (!myPlayer || !myPlayer.alive || !info.target || !info.target.visible) return 0;
+
+                if (replaceTick !== tick) {
+                    replaceTick = tick;
+                    replaceTickCount = 0;
+                }
+
+                const left = REPLACE_PER_TICK - replaceTickCount;
+                if (left <= 0) return 0;
+
+                const builds = pickReplaceBuilds(object, info).slice(0, left);
+
+                let sent = 0;
+                for (const build of builds) {
+                    if (packets + getPlacementPacketCost(true) > REPLACE_PACKET_CEILING) break;
+
+                    place(build.id, build.angle);
+                    claimPlace(build.id, build.x, build.y, "replace", object.sid);
+                    replaceMarks.push({ id: build.id, name: items.list[build.id].name, x: build.x, y: build.y, scale: build.scale, until: Date.now() + REPLACE_MARK_MS });
+                    sent++;
+                }
+
+                if (sent > 0) {
+                    io.send("D", getAttackDir());
+                    replaceTickCount += sent;
+                    placeSyncStats.replaced++;
+                    placeSyncStats.replaceBuilds += sent;
+                }
+
+                return sent;
+            }
+
+            // "Q": an object is gone. Runs before the tick's player update arrives.
+            function onObjectRemoved(object) {
+                removedSinceRebuild.add(object);
+
+                if (!window.vars.prePlace2 || !myPlayer || !myPlayer.alive || !inGame) return;
+
+                const info = classifyBreak(object);
+                if (!info) return;
+                placeSyncStats.breaks++;
+
+                const coveredTick = preplaceCover.get(object.sid);
+                if (coveredTick !== undefined && (tick - coveredTick) <= 1) {
+                    // Preplace already sent builds for this break. Its moment, not ours.
+                    replaceQueue.push({ object: object, info: info, waitingOn: "preplace" });
+                    placeSyncStats.leftToPreplace++;
+                    return;
+                }
+
+                if (autoaim) {
+                    // An insta is mid-sequence; place with the tick, like autoplace does.
+                    replaceQueue.push({ object: object, info: info, waitingOn: "tick" });
+                    placeSyncStats.deferred++;
+                    return;
+                }
+
+                runReplace(object, info);
+            }
+
+            // Runs at the start of the tick's placing, after this tick's new
+            // objects ("H") are in, so we know whether preplace's builds landed.
+            function settleReplaceQueue() {
+                if (replaceQueue.length === 0) return;
+
+                const queue = replaceQueue;
+                replaceQueue = [];
+
+                for (const entry of queue) {
+                    if (entry.waitingOn === "preplace") {
+                        const claims = placeClaims.filter(claim => claim.source === "pre" && claim.sid === entry.object.sid);
+                        if (claims.some(claim => claim.landed)) {
+                            placeSyncStats.preplaceLanded++;
+                            continue;
+                        }
+
+                        // Preplace missed: release its ground so replace can take it.
+                        placeClaims = placeClaims.filter(claim => claims.indexOf(claim) === -1);
+                        placeSyncStats.preplaceMissed++;
+                    }
+
+                    if (window.vars.prePlace2) runReplace(entry.object, entry.info);
                 }
             }
 
@@ -11374,13 +11808,13 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                 return myPlayer.weapons[0];
             }
 
-            function addPredictObject(id, angle, preplace) {
+            function addPredictObject(id, angle, preplace, targetSid) {
                 let config = getConfig(id, angle);
                 for (let object of predictObjects) {
                     if (object.id != 17 && UTILS.getDistance(config.x, config.y, object.x, object.y) < (config.scale + object.scale)) return;
                 }
 
-                predictObjects.push({ id: id, angle: angle, name: items.list[id].name, x: config.x, y: config.y, scale: config.scale, preplace: preplace });
+                predictObjects.push({ id: id, angle: angle, name: items.list[id].name, x: config.x, y: config.y, scale: config.scale, preplace: preplace, targetSid: targetSid == null ? null : targetSid });
             }
 
             function isItemLimit(id) {
@@ -12032,7 +12466,7 @@ if (isSpike && canSpikeTick && canTrapTick()) {
 
                             findAngleFunc();
                             if (findAngle) {
-                                addPredictObject(findAngle.id, findAngle.angle, true);
+                                addPredictObject(findAngle.id, findAngle.angle, true, findObject.sid);
                             }
                         }
 
@@ -12536,6 +12970,7 @@ if (isSpike && canSpikeTick && canTrapTick()) {
             function updatePlayers(data) {
                 cancelDelayedPlacers();
                 tick++;
+                pruneClaims();
 
 
 
@@ -12680,6 +13115,7 @@ if (isSpike && canSpikeTick && canTrapTick()) {
                     // OBJECTS FILTERING
                     if (myPlayer) {
                         visibleObjects = gameObjects.filter(object => UTILS.getDistance(object.x, object.y, myPlayer.x2, myPlayer.y2) < 1000);
+                        removedSinceRebuild.clear();
                         spikes_enemy = visibleObjects.filter(object => object.id > 5 && object.id < 10 && !isObjectOur(object));
                         trap_where_im_in = visibleObjects.filter(object => object.id == 15 && UTILS.getDistance(object.x, object.y, myPlayer.x2, myPlayer.y2) < object.scale && !isObjectOur(object))[0];
                         cactuses = visibleObjects.filter(object => object.type == 1 && object.y >= config.mapScale - config.snowBiomeTop);
@@ -14100,15 +14536,23 @@ function triggerKillChat() {
                             damageHealed = true;
                         }
 
+                        // REPLACE: breaks preplace was covering, or that waited for the tick
+                        settleReplaceQueue();
+
                         // AUTO PLACER
                         getPredictObjects();
                         placedAngles = [];
                         for (let object of predictObjects) {
                             if (object.preplace) continue;
                             if (!hasPlacementPacketBudget(true)) break;
+                            if (isGroundClaimed(object.x, object.y, object.scale, "auto")) {
+                                placeSyncStats.autoSkipped++;
+                                continue;
+                            }
 
                             place(object.id, object.angle);
                             placedAngles.push(object.angle);
+                            claimPlace(object.id, object.x, object.y, "auto", null);
 
                         }
 
@@ -14141,56 +14585,7 @@ function triggerKillChat() {
                     }
                 });
 
-                 // PRE PLACER — timing ported from laffer: snapshot dir early, guarded ping math
-            const _ping = window.pingTime || 50;
-const _minPing = minPingTime < Infinity ? minPingTime : _ping;
-const _prePlaceDir = getAttackDir();
-const _fastPing = Math.min(_ping, _minPing);
-
-// Don't fire preplace if near packet limit
-if (packets <= 100) {
-    // Pre-filter for speed
-    const preplaceObjects = predictObjects.filter(o => o.preplace);
-
-    // Shot 1: aggressive timing with min ping
-    setTimeout(function () {
-        if (!window.vars.prePlace) return;
-        let placedCount = 0;
-        for (let object of preplaceObjects) {
-            if (placedCount >= 4) break;
-            if (packets + 1 > 119) break;
-
-            place(object.id, object.angle);
-            placedAngles.push(object.angle);
-            io.send("D", _prePlaceDir);
-            placedCount++;
-        }
-        const delayedCombatWeapon = getPriorityWeaponLock();
-        if (delayedCombatWeapon != null && myPlayer.weaponIndex != delayedCombatWeapon) {
-            selectWeapon(delayedCombatWeapon);
-        }
-    }, Math.max(1, 111 - _fastPing));
-
-    // Shot 2: staggered by 10ms to avoid simultaneous firing
-    setTimeout(function () {
-        if (!window.vars.prePlace) return;
-        let placedCount = 0;
-        for (let object of preplaceObjects) {
-            if (placedCount >= 4) break;
-            if (packets + 1 > 119) break;
-
-            place(object.id, object.angle);
-            placedAngles.push(object.angle);
-            io.send("D", _prePlaceDir);
-            placedCount++;
-        }
-        const delayedCombatWeapon = getPriorityWeaponLock();
-        if (delayedCombatWeapon != null && myPlayer.weaponIndex != delayedCombatWeapon) {
-            selectWeapon(delayedCombatWeapon);
-        }
-    }, Math.max(1, 111 - _fastPing) + 10);
-}
-
+                // PRE PLACER: sent from scheduleDelayedPlacers, on this tick's angles.
 
                 damagesByHits = [];
                 spikeDamages = [];
@@ -23186,6 +23581,8 @@ try {
         autoPlace: false,
         placeRange: 300,
         prePlace: true,
+        prePlace2: true,
+        replaceRange: 300,
 
         // Utilities
         autoBuy: true,
@@ -23344,7 +23741,8 @@ items: [
                 title: "Special",
                 items: [
                     { type: 'toggle', name: "preplace", id: "prePlace" },
-                    { type: 'toggle', name: "replace", id: "prePlace2" }
+                    { type: 'toggle', name: "replace", id: "prePlace2" },
+                    { type: 'slider', name: "replace range", id: "replaceRange", min: 100, max: 500 }
                 ]
             }
         ],
