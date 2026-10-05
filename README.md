@@ -136,6 +136,45 @@ One consequence: the bar now offers an item whose prerequisite you do not own
 (castle wall without a stone wall). Whether the server accepts that pick is the
 server's call; the client no longer hides it.
 
+### Sync spike 2 and Spike Kb
+
+Two combat toggles, both off by default, built on Misery's velocity tick. That
+tick is two steps on consecutive ticks: turret gear first, then bull helmet and
+the primary. Luna runs it as `instaKill` steps (`"turret"`, then `"primary"`),
+like its other combos, so it needs no timers.
+
+**sync spike 2** (Combat → Ticks). Fires when the enemy touches one of our
+spikes — took spike damage this tick, or reaches the spike on the next one —
+and sits inside Misery's ring, 221–261 from us: just beyond normal melee reach.
+Needs the primary and the turret ready and the turret gear owned. Fires `turret, primary`; waits 9 ticks before the next one.
+It sits beside the existing velocity spike tick (primary only, enemy already in
+reach), which is unchanged.
+
+**Spike Kb** (Combat → Knockback). This entry was a menu label with no code
+behind it; it now drives the combo. It fires when one of our spikes lies on the
+line from us through the enemy within the reach of both knockbacks, the hammer
+and the primary are ready, and the enemy is within range of both. It runs
+`secondary, turret, primary`: the hammer pushes the enemy into the spike, then
+the velocity tick follows. Without a ready turret the turret step is skipped.
+An enemy held in our trap is skipped (a push does not move them). When it
+applies it takes over from the plain velocity spike tick.
+
+The menu id changed from `he21llo` to `spikeKb`, so a saved "on" has to be set
+again. Auto sync, hit on spike, trap tick, Tick Kb and AutoHit Kb are still
+menu labels with no code behind them.
+
+The ring (`VELOCITY_TICK_MIN` / `VELOCITY_TICK_MAX`) and the cooldown
+(`SYNC_SPIKE2_COOLDOWN`) are constants next to `instaKill`.
+
+```sh
+node tools/check-luna-combos.js
+```
+
+runs the real predicates, step engine and `hatFc` cut out of the script against
+synthetic states. It shows when each feature may fire and what weapon, hat and
+auto-attack the engine produces tick by tick. It says nothing about how the
+combos land on a live server.
+
 ---
 
 ## Layout
@@ -151,6 +190,7 @@ src/game_vendor.js        game bundle: msgpack codec, polyfills
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
+tools/check-luna-combos.js Luna's sync spike 2 / Spike Kb vs. the script's own code
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 ```
 

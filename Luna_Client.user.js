@@ -10693,6 +10693,13 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                 secondary: false
             }
 
+            // VELOCITY TICK (from Misery): turret gear one tick before the bull primary. The ring is Misery's,
+            // just beyond normal melee reach.
+            const VELOCITY_TICK_MIN = 221;
+            const VELOCITY_TICK_MAX = 261;
+            const SYNC_SPIKE2_COOLDOWN = 9;
+            let syncSpike2Tick = -SYNC_SPIKE2_COOLDOWN;
+
             let spamPrePlacer = false;
             let prePlaceInterval;
 
@@ -10763,6 +10770,93 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                     return (myPlayer.weapons[0] == 4 || myPlayer.weapons[0] == 5) && UTILS.getDistance(nearestEnemy.xVel, nearestEnemy.yVel, myPlayer.xVel, myPlayer.yVel) <= (35 * 1.8 + items.weapons[myPlayer.weapons[0]].range)
                         && primaryReload[myPlayer.sid] == 1 && !autoaim;
                 }
+            }
+
+            // SYNC SPIKE 2 / SPIKE KB
+            // a combo is already underway: instaKill steps set these flags and the "stop" step clears them
+            function isInstaRunning() {
+                return autoaim || insta.primary || insta.secondary || insta.turret || insta.primaryturret;
+            }
+
+            // the enemy took spike damage this tick, or reaches one of our spikes on the next one
+            function isEnemyTouchingOurSpike() {
+                if (!nearestEnemy) return false;
+                // xVel/yVel are NaN on the first tick an enemy is seen, and lineInRect answers true for NaN
+                if (!Number.isFinite(nearestEnemy.xVel) || !Number.isFinite(nearestEnemy.yVel)) return false;
+
+                for (let spike of spikes_our) {
+                    const reach = nearestEnemy.scale + spike.scale;
+
+                    if (nearestEnemy.spikeDamage > 0 && UTILS.getDistance(nearestEnemy.x2, nearestEnemy.y2, spike.x, spike.y) <= reach + 10) {
+                        return true;
+                    }
+
+                    if (UTILS.lineInRect(
+                        spike.x - reach, spike.y - reach,
+                        spike.x + reach, spike.y + reach,
+                        nearestEnemy.x2, nearestEnemy.y2,
+                        nearestEnemy.xVel, nearestEnemy.yVel)) {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+
+            // Velocity tick the moment the enemy touches our spike, so the turret shot and the primary hit
+            // land with the spike damage. Needs the primary and the turret ready and the enemy inside the ring.
+            function canSyncSpike2() {
+                if (!window.vars.syncSpike2) return false;
+                if (!nearestEnemy) return false;
+                if (isInstaRunning()) return false;
+                if (tick - syncSpike2Tick < SYNC_SPIKE2_COOLDOWN) return false;
+                if (primaryReload[myPlayer.sid] != 1 || turretReload[myPlayer.sid] != 1) return false;
+                if (!isBoughtHat(53, 0)) return false;
+
+                const distance = UTILS.getDistance(myPlayer.x2, myPlayer.y2, nearestEnemy.x2, nearestEnemy.y2);
+                if (!(distance > VELOCITY_TICK_MIN && distance < VELOCITY_TICK_MAX)) return false;
+
+                return isEnemyTouchingOurSpike();
+            }
+
+            // Enemy in front of one of our spikes and us behind them, both weapons ready and in range of both:
+            // the hammer pushes them into the spike, then the velocity tick follows.
+            function canSpikeKb() {
+                if (!window.vars.spikeKb) return false;
+                if (!nearestEnemy) return false;
+                if (isInstaRunning()) return false;
+                if (getPlayerInfo(myPlayer, "secondaryWeapon") != "hammer") return false;
+                if (primaryReload[myPlayer.sid] != 1 || secondaryReload[myPlayer.sid] != 1) return false;
+
+                // a trapped enemy is held in place, a push does not move them
+                const enemyTrapped = traps_our.find(trap =>
+                    UTILS.getDistance(trap.x, trap.y, nearestEnemy.x2, nearestEnemy.y2) < trap.scale
+                );
+                if (enemyTrapped) return false;
+
+                const distance = UTILS.getDistance(myPlayer.xVel, myPlayer.yVel, nearestEnemy.xVel, nearestEnemy.yVel);
+                if (!(distance <= 35 * 1.8 + getPlayerInfo(myPlayer, "primaryRange"))) return false;
+                if (!(distance <= 35 * 1.8 + getPlayerInfo(myPlayer, "secondaryRange"))) return false;
+
+                // both hits knock the enemy straight away from us
+                const knockback = 111 * (.3 + getPlayerInfo(myPlayer, "primaryKnockback")) + 111 * (.3 + (items.weapons[myPlayer.weapons[1]].knock || 0));
+                const angle = Math.atan2(nearestEnemy.y2 - myPlayer.y2, nearestEnemy.x2 - myPlayer.x2);
+                const endX = nearestEnemy.x2 + knockback * Math.cos(angle);
+                const endY = nearestEnemy.y2 + knockback * Math.sin(angle);
+
+                for (let spike of spikes_our) {
+                    const reach = nearestEnemy.scale + spike.scale;
+
+                    if (UTILS.lineInRect(
+                        spike.x - reach, spike.y - reach,
+                        spike.x + reach, spike.y + reach,
+                        nearestEnemy.x2, nearestEnemy.y2,
+                        endX, endY)) {
+                        return true;
+                    }
+                }
+
+                return false;
             }
 
             function doSmartTickAnti() {
@@ -13282,6 +13376,20 @@ if (player.sid == myPlayer.sid) {
 
                         if (canVelocitySpikeTick()) {
                             instaKill = ["primary", "stop"];
+                        }
+
+                        // hammer pushes the enemy into our spike, then turret gear and the primary one tick apart
+                        if (canSpikeKb()) {
+                            const turretReady = turretReload[myPlayer.sid] == 1 && isBoughtHat(53, 0);
+
+                            smartTickObject = null;
+                            instaKill = turretReady ? ["secondary", "turret", "primary", "stop"] : ["secondary", "primary", "stop"];
+                        }
+
+                        // velocity tick: turret gear now, bull + primary on the next tick
+                        if (canSyncSpike2()) {
+                            syncSpike2Tick = tick;
+                            instaKill = ["turret", "primary", "stop"];
                         }
 
 
@@ -22968,6 +23076,8 @@ try {
         autoShameLimit: 4,
         autoPlay: false,
         autoPush: true,
+        syncSpike2: false,
+        spikeKb: false,
 
         // Defense
         safeSoldier: true,
@@ -23071,14 +23181,15 @@ try {
                 items: [
                     { type: 'toggle', name: "auto sync", id: "hello" },
                     { type: 'toggle', name: "hit on spike", id: "wsp" },
-                    { type: 'toggle', name: "trap tick", id: "ws2p" }
+                    { type: 'toggle', name: "trap tick", id: "ws2p" },
+                    { type: 'toggle', name: "sync spike 2", id: "syncSpike2" }
                 ]
             },
 
             {
                 title: "Knockback",
                 items: [
-                    { type: 'toggle', name: "Spike Kb", id: "he21llo" },
+                    { type: 'toggle', name: "Spike Kb", id: "spikeKb" },
                     { type: 'toggle', name: "Tick Kb", id: "w21sp" },
                     { type: 'toggle', name: "AutoHit Kb", id: "autoattack" }
                 ]
