@@ -6,6 +6,96 @@ against them.
 
 Build output: **`ReUp_Mix.user.js`**
 
+This repo also builds **`Luna_Client.user.js`**: Luna Client 1.7 with its
+auto-heal rebuilt and its anti toggles actually wired up. See
+[Luna+](#luna-luna-client-18).
+
+---
+
+## Luna+ (Luna Client 1.8)
+
+`src/Luna_Client_1.7.js` → `tools/build-luna.js` → `Luna_Client.user.js`.
+It keeps 1.7's `@name` and `@namespace`, so Tampermonkey installs it as an
+update instead of a second copy.
+
+Compared against the auto-heal and antis of ai slop skidd v1, Misery V3,
+novastorm 1.4 and Ryn Type 2. Misery, ai slop and novastorm are all forks of
+Luna's survival block (novastorm's is line-for-line the same). Ryn Type 2 ports
+it again on its own engine.
+
+### What was broken in 1.7
+
+| | |
+|---|---|
+| **Dead anti toggles** | `anti default insta`, `anti reverse insta`, `anti sync`, `anti onetick`, `anti Kb Sync/Hammer/Dagger/Placement`: menu rows with no code behind them and no default. |
+| **Dead "faster heal" key** | Q set a `qPress` flag that nothing read and nothing cleared. |
+| **`antiTick` never read** | `projectileHandle` spotted the turret shot from 200–300 out that opens a velocity one-tick, set `antiTick`… and nothing used it. |
+| **Wrong projectile damage** | `getPlayerInfo("secondaryDmg")` had bow 15 (really 25), crossbow 30 (35), repeater 35 (30), so bow and crossbow instas were read too low. |
+| **`damages` never cleared** | It grew all session. After the first poison chunk, poison prediction stopped for good. Before any poison it predicted a fake 5 dmg every 9 ticks. `% 9 == 9` can never be true. |
+| **`damagesByShoots` never cleared** | It stayed non-empty forever after the first projectile hit. |
+| **`canStillGather` reset per enemy** | A second enemy cleared the spike-push read found for the first (Misery fixed this, Luna never did). |
+| **Slow heal** | A free heal waited 1–2 full server ticks (111–222 ms) after a hit, whatever the ping. |
+| **Heal packets** | 4 packets per food, no packet budget, no food-count check. |
+
+### What Luna+ does
+
+**Auto heal**
+- **Ping-aware shame-safe timing.** The server counts shame when food lands
+  within 120 ms of the last hit, measured server-side. That gap is our wait
+  plus one full round trip, so the heal waits `max(0, 120 + margin − minRTT)`.
+  At 60 ms ping that is 80 ms instead of up to 222. From about 140 ms ping it
+  heals straight away. A timer fires the heal at that moment instead of
+  waiting for the next tick to notice.
+- **Emergency heal** when the damage read says the next tick kills: right
+  away, under 7 shame. It also goes through 7 shame when the first half of an
+  insta has *already landed* (ai slop's foe-burst rule), because being clowned
+  is better than dying.
+- **Packets:** 3 per food plus 1 weapon restore, trimmed to the 119 budget
+  before anything is sent (from ai slop). Only food you can afford is sent
+  (from Ryn Type 2). A batch already on its way is not sent again unless a new
+  hit lands.
+- The **faster heal** key (default Q) heals on press and tops you up while held.
+
+**Antis** (all on by default; a value you already saved still wins)
+
+| Toggle | What it reads |
+|---|---|
+| anti default insta | Luna's primary-opener follow-up, now behind its toggle. It also marks the burst as confirmed when the opener came from that enemy. |
+| anti reverse insta | **New.** Secondary, turret or projectile lands first, then the bull primary, which is ready and in reach. A musket or bolt still in the air at you also counts. |
+| anti sync | **New.** Two or more enemies who can all swing this tick, summed. Luna's per-enemy reads only ever counted one. |
+| anti onetick | Luna's velocity-tick read, plus the long-dead `antiTick`, plus Ryn Type 2's forward sim (diamond/ruby polearm in bull or turret gear, loaded within 3 ticks, closing and facing you). |
+| pre-emptive soldier | **New.** One enemy has everything for an insta loaded and in reach, and the combo kills at your HP: the helmet goes on *before* the opener. A turret only counts for someone seen wearing or firing one. This costs bull on your own swings, so it has its own switch. |
+| anti Kb Sync | **New.** Two enemies' knockbacks added together, onto a spike. |
+| anti Kb Hammer | **New.** Hammer knockback onto a spike. Luna only swept primaries. |
+| anti Kb Dagger | **New.** Daggers reload every tick: a double push onto a spike. |
+| anti Kb Placement | Luna's 36-angle "enemy places a spike and hits", plus ai slop's and Misery's soldier for 4 ticks after your trap breaks, and while a spike is biting. |
+
+**Soldier.** Any read that is lethal at your current HP puts on the helmet.
+Often the helmet alone makes the hit survivable, so no shame-costing heal is
+needed. This changes the hat only, so you keep swinging. It is skipped while
+your own insta is mid-sequence, and Luna's `soldierAnti` still has the last
+word.
+
+**Auto Heal** menu: `smart heal (ping aware)`, `heal through shame on insta`,
+and `shame safety ms` (the margin, default 20).
+
+### Build / test
+
+```sh
+node tools/build-luna.js          # -> Luna_Client.user.js
+node tools/test-luna.js           # 32 fight scenarios against the built code
+node --check Luna_Client.user.js
+```
+
+`test-luna.js` cuts the helpers, `getPlayerInfo`, the whole ANTIS AND HEAL
+block and `hatFc` out of the build. It runs them against scripted ticks using
+the game's own items, config and utils modules. That proves every new path
+runs without throwing, and that each anti fires on its target state and stays
+quiet otherwise. It is not a live match. The thresholds (`healMargin`, the 35
+reach pad, the 3-tick sim) are the knobs to tune after real fights. Luna's
+death log (`Predict Damages before death` next to `Damages before death`) is
+the tool for that.
+
 ---
 
 ## Why RYN is the base
@@ -117,6 +207,10 @@ but nothing in the client needs it. It is stripped from the build.
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
+Luna_Client.user.js       Luna+ build output (Luna 1.7 + survival engine)
+src/Luna_Client_1.7.js    Luna 1.7 as supplied (input to build-luna.js)
+tools/build-luna.js       src/Luna_Client_1.7.js -> Luna_Client.user.js
+tools/test-luna.js        Luna+ survival scenarios against the build
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
