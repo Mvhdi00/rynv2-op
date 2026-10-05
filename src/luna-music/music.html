@@ -2,7 +2,7 @@
 
 <div class="page-head">
     <h1 class="page-title">Music</h1>
-    <p class="page-description">A local library that plays inside the client and can type synced lyrics into chat for you.</p>
+    <p class="page-description">A local library that plays inside the client and can type synced lyrics into chat for you. LRC AI finds each song's lyrics on its own.</p>
 </div>
 
 <div class="rm-root">
@@ -53,6 +53,18 @@
     </div>
   </div>
 
+  <div class="rm-sec open">
+    <div class="rm-sec-head"><div class="rm-sec-dot"></div><span class="rm-sec-title">LRC AI</span><span class="rm-sec-arrow">&#9660;</span></div>
+    <div class="rm-sec-body">
+      <div class="rm-sync-row"><span class="rm-sync-label">Find lyrics automatically<span class="rm-badge">AI</span></span><label class="switch-checkbox"><input id="lrc-ai-auto" type="checkbox" checked><span></span></label></div>
+      <div class="rm-sync-note">The moment a song is added &mdash; or played for the first time &mdash; LRC AI finds its synced lyrics online, translates them to English if they are not, and hands them to chat sync. No searching. Each song is looked up once and kept.</div>
+      <div class="rm-sync-note">The button on every song shows where it is: <b>&#10003; LRC</b> is ready &mdash; click it for details and a per-song offset. <b>Retry LRC</b> means nothing matched; click it to search again.</div>
+      <div class="rm-divider"></div>
+      <button id="lrc-ai-all" class="option-button wide">Find lyrics for the whole library</button>
+      <div id="lrc-ai-status" class="rm-status" style="text-align:center;"></div>
+    </div>
+  </div>
+
   <div class="rm-sec">
     <div class="rm-sec-head"><div class="rm-sec-dot"></div><span class="rm-sec-title">Add song</span><span class="rm-sec-arrow">&#9660;</span></div>
     <div class="rm-sec-body">
@@ -66,6 +78,7 @@
           <li>In the <b>LRC sync</b> box, pick the <code>.lrc</code> file &mdash; or paste its lines into the text area.</li>
           <li>Press <b>Add song</b>. It shows up in the library with its lyrics attached.</li>
         </ol>
+        <div class="rm-guide-note">With <b>LRC AI</b> on, steps 3 and 5 are optional: add the song with just its title and file, and the lyrics are found for you. A file whose tags or title carry the real song name and artist is found most reliably.</div>
         <div class="rm-guide-note">The <code>.lrc</code> has to be the synced kind &mdash; the one whose lines start with a timestamp like <code>[01:23.45]</code>. Plain lyrics still show up, but they will not follow the song. If the words drift, an <code>.lrc</code> from a different release of the track is usually the reason.</div>
       </details>
       <div class="rm-form">

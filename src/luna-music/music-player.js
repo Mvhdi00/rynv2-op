@@ -12,9 +12,13 @@
  * the 30-character chat cap and the 1500 ms / 2200 ms send spacing are Ryn's
  * own numbers.
  *
+ * LRC AI — finding, translating and caching each song's lyrics — is its own
+ * module (lrc-ai.js) and attaches to this player through the hooks marked
+ * below; the player works on its own without it.
+ *
  * Left out on purpose: the bot sync modes (mixed / bots only / unified / sync
- * bot) — there is one chat sync and it is yours; albums; and the LRC AI
- * module. A Ryn backup still imports; album tags on its songs are dropped.
+ * bot) — there is one chat sync and it is yours — and albums. A Ryn backup
+ * still imports; album tags on its songs are dropped.
  *
  * The page talks to the game only through window.__lunaMusicChat, which the
  * build exports from inside app.js next to Luna's other window exports.
@@ -93,7 +97,8 @@ const LunaMusic = (function () {
     _lyricIndex = -1;
     _lastSentWall = 0;
     _rafId = null;
-    _songSessionId = 0;
+    _songSessionId = 0;  /* bumped by play, stop and seek: drops queued chat parts */
+    _playGen = 0;        /* bumped by play and stop only: "is this still the same song?" */
     _dbgLines = [];
     _db = null;
     _DB_NAME = "LunaMusicDB";
@@ -150,7 +155,7 @@ const LunaMusic = (function () {
       if (!s || typeof s !== "object") return null;
       if (typeof s.title !== "string" || !s.title.trim()) return null;
       if (typeof s.url !== "string" || !s.url) return null;
-      return {
+      const out = {
         title: s.title.trim().slice(0, 50),
         artist: typeof s.artist === "string" ? s.artist.trim().slice(0, 30) : "",
         url: s.url,
@@ -158,7 +163,25 @@ const LunaMusic = (function () {
         liked: !!s.liked,
         saved: !!s.saved
       };
+      /* LRC AI's identity for the song, so its cached lyrics are found again
+       * without re-hashing the audio. */
+      if (typeof s.lrcId === "string" && /^[0-9a-f]{32}$/.test(s.lrcId)) out.lrcId = s.lrcId;
+      if (typeof s.lrcHash === "string" && /^[0-9a-f]{32}$/.test(s.lrcHash)) out.lrcHash = s.lrcHash;
+      if (s.lrcTags && typeof s.lrcTags === "object") {
+        const t = s.lrcTags;
+        out.lrcTags = {
+          title: typeof t.title === "string" ? t.title.slice(0, 120) : "",
+          artist: typeof t.artist === "string" ? t.artist.slice(0, 120) : "",
+          album: typeof t.album === "string" ? t.album.slice(0, 120) : ""
+        };
+      }
+      return out;
     }
+
+    /* Hooks for LRC AI (lrc-ai.js wraps these). No-ops on their own. */
+    _songAdded(index) {}
+    _lyricsEdited(index) {}
+    _initExtras(root) {}
     _applyData(data) {
       const songs = data && Array.isArray(data.songs) ? data.songs : [];
       this._songs = songs.map(s => this._normalizeSong(s)).filter(Boolean);
@@ -374,6 +397,7 @@ const LunaMusic = (function () {
       this._currentIndex = index;
       const song = this._songs[index];
       this._songSessionId++;
+      this._playGen++;
       this._stopRAF();
       this._releaseAudio();
       if (!song.url || song.url === "__FILE_TOO_LARGE__") {
@@ -443,6 +467,7 @@ const LunaMusic = (function () {
     }
     stop() {
       this._songSessionId++;
+      this._playGen++;
       this._stopRAF();
       this._releaseAudio();
       this._currentIndex = -1;
@@ -795,7 +820,8 @@ const LunaMusic = (function () {
       };
       const _startSendAllLyrics = () => {
         const song = this._currentIndex >= 0 ? this._songs[this._currentIndex] : null;
-        const lines = this._parseLRC(song ? song.lyrics || "" : "");
+        /* The playing song's timeline: its own .lrc, or what LRC AI found. */
+        const lines = song && this._lyrics.length ? this._lyrics : this._parseLRC(song ? song.lyrics || "" : "");
         if (!lines.length) {
           _stopSendAllLyrics();
           sendLyricsStatusEl.textContent = song ? "No LRC lyrics for this song." : "Play a song first.";
@@ -934,6 +960,7 @@ const LunaMusic = (function () {
         });
         this._save();
         this._toast("✓ Song added");
+        this._songAdded(this._songs.length - 1);
         songTitleInp.value = "";
         songArtistInp.value = "";
         songUrlInp.value = "";
@@ -966,6 +993,7 @@ const LunaMusic = (function () {
         this._lyrics = this._parseLRC(lyr);
         this._lyricIndex = -1;
         this._save();
+        this._lyricsEdited(i);
         this._renderSongList();
         this._toast("✓ Saved");
         lrcStatus.textContent = this._lyrics.length ? this._lyrics.length + " lines" : "";
@@ -1031,6 +1059,8 @@ const LunaMusic = (function () {
         };
         reader.readAsText(f, "utf-8");
       };
+
+      this._initExtras(root);
     }
   };
 
