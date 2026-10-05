@@ -16454,7 +16454,6 @@ function triggerKillChat() {
                     placeOffset: -5
                 }, {
                     age: 7,
-                    pre: 1,
                     group: module.exports.groups[1],
                     name: "castle wall",
                     desc: "provides powerful protection for your village",
@@ -16488,7 +16487,6 @@ function triggerKillChat() {
                     placeOffset: -5
                 }, {
                     age: 9,
-                    pre: 1,
                     group: module.exports.groups[2],
                     name: "poison spikes",
                     desc: "poisons enemies when they touch them",
@@ -16502,7 +16500,6 @@ function triggerKillChat() {
                     placeOffset: -5
                 }, {
                     age: 9,
-                    pre: 2,
                     group: module.exports.groups[2],
                     name: "spinning spikes",
                     desc: "damages enemies when they touch them",
@@ -16529,7 +16526,6 @@ function triggerKillChat() {
                     placeOffset: 5
                 }, {
                     age: 5,
-                    pre: 1,
                     group: module.exports.groups[3],
                     name: "faster windmill",
                     desc: "generates more gold over time",
@@ -16544,7 +16540,6 @@ function triggerKillChat() {
                     placeOffset: 5
                 }, {
                     age: 8,
-                    pre: 1,
                     group: module.exports.groups[3],
                     name: "power mill",
                     desc: "generates more gold over time",
@@ -16685,6 +16680,11 @@ function triggerKillChat() {
                     holdOffset: 20,
                     placeOffset: -5
                 }];
+
+            // Items carry no `pre` on purpose (same as Misery), so updateUpgrades() lists every item of the
+            // current age. The stock game stores `pre` as an offset and turns it into an id here
+            // (list[i].pre = i - pre); this table never did, so a left-in `pre` is compared against the wrong
+            // ids and castle wall, poison/spinning spikes, faster windmill and power mill vanish from the bar.
 
             // ASSIGN IDS:
             for (var i = 0; i < module.exports.list.length; ++i) {

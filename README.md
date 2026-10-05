@@ -113,10 +113,36 @@ but nothing in the client needs it. It is stripped from the build.
 
 ---
 
+## Luna Client 1.7 (standalone)
+
+`Luna_Client.user.js` is the stand-alone Luna user script (`@version 1.7`; its
+`@name` still reads 1.1). It is not an input to the mix build and is installed
+on its own.
+
+**Upgrade bar fix.** Luna 1.7 did not list every upgrade in the "SELECT ITEMS"
+bar. Five items — castle wall, poison spikes, spinning spikes, faster windmill
+and power mill — had gained a `pre` field that Luna 1.1 and Misery do not have.
+`updateUpgrades()` hides an item whose `pre` is not owned, and the stock game
+stores `pre` as an offset that it converts to an item id once the table is
+built (`list[i].pre = i - pre`). Luna's table never did that conversion, so
+each of those items was checked against the wrong id (cookie / cheese) and
+dropped out of the bar. Following the stone-wall → castle-wall build, for
+example, the bar was missing castle wall at age 7.
+
+`pre` is removed from those five items, as in Misery, so every item of the
+current age is shown. Weapons still follow their prerequisites, unchanged.
+
+One consequence: the bar now offers an item whose prerequisite you do not own
+(castle wall without a stone wall). Whether the server accepts that pick is the
+server's call; the client no longer hides it.
+
+---
+
 ## Layout
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
+Luna_Client.user.js       standalone Luna Client 1.7 (not part of the mix build)
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
