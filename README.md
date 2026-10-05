@@ -36,6 +36,7 @@ it again on its own engine.
 | **`canStillGather` reset per enemy** | A second enemy cleared the spike-push read found for the first (Misery fixed this, Luna never did). |
 | **Slow heal** | A free heal waited 1–2 full server ticks (111–222 ms) after a hit, whatever the ping. |
 | **Heal packets** | 4 packets per food, no packet budget, no food-count check. |
+| **Upgrade bar hid items** | Luna's copy of the item table never turned `pre` from a relative offset into an item id, as the game does. So at age 9 poison spikes only showed if you had cookie, and spinning spikes only if you had cheese, never both. Castle wall and the mill upgrades were also locked behind a food. |
 
 ### What Luna+ does
 
@@ -83,7 +84,7 @@ and `shame safety ms` (the margin, default 20).
 
 ```sh
 node tools/build-luna.js          # -> Luna_Client.user.js
-node tools/test-luna.js           # 32 fight scenarios against the built code
+node tools/test-luna.js           # 34 scenarios (fights + upgrade bar) against the build
 node --check Luna_Client.user.js
 ```
 

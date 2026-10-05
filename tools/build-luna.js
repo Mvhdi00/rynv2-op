@@ -92,6 +92,35 @@ edit(
 );
 
 /* ------------------------------------------------------------------ *
+ * 2b. Item prerequisites
+ *
+ * An item's `pre` is written relative ("the item N places before me") and
+ * the game turns it into an absolute id right after the table:
+ *
+ *     for (let e = 0; e < Ce.length; ++e)
+ *         Ce[e].id = e, Ce[e].pre && (Ce[e].pre = e - Ce[e].pre);
+ *
+ * Luna's copy of that loop kept the id and dropped the conversion, so the
+ * upgrade bar - `myPlayer.items.indexOf(item.pre) >= 0` - looked for item 1
+ * (cookie) or 2 (cheese) instead of the real prerequisite. At age 9 that
+ * showed poison spikes only to cookie players and spinning spikes only to
+ * cheese players, never both; castle wall and the two mill upgrades were
+ * gated on a food too. Weapons are untouched: their `pre` is already an
+ * absolute id in the game as well.
+ * ------------------------------------------------------------------ */
+
+edit(
+  "items: resolve relative `pre` like the game does",
+  `            for (var i = 0; i < module.exports.list.length; ++i) {
+                module.exports.list[i].id = i;
+            }`,
+  `            for (var i = 0; i < module.exports.list.length; ++i) {
+                module.exports.list[i].id = i;
+                if (module.exports.list[i].pre) module.exports.list[i].pre = i - module.exports.list[i].pre;
+            }`
+);
+
+/* ------------------------------------------------------------------ *
  * 3. The survival helpers
  *
  * Luna's heal() replaced and the Luna+ state + helpers added right after it.

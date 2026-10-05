@@ -17037,6 +17037,7 @@ function triggerKillChat() {
             // ASSIGN IDS:
             for (var i = 0; i < module.exports.list.length; ++i) {
                 module.exports.list[i].id = i;
+                if (module.exports.list[i].pre) module.exports.list[i].pre = i - module.exports.list[i].pre;
             }
 
             // TROLOLOLOL:

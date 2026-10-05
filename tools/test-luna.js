@@ -508,6 +508,25 @@ test("secondaryDmg reads the projectile table (bow 25, crossbow 35, repeater 30,
   eq(dmg(15), 50, "musket");
 });
 
+test("item prerequisites resolve to real ids, as in the game bundle", () => {
+  const pre = (name) => items.list.find(i => i.name === name).pre;
+  eq(pre("castle wall"), 4, "castle wall needs stone wall");
+  eq(pre("poison spikes"), 7, "poison spikes need greater spikes");
+  eq(pre("spinning spikes"), 7, "spinning spikes need greater spikes");
+  eq(pre("faster windmill"), 10, "faster windmill needs windmill");
+  eq(pre("power mill"), 11, "power mill needs faster windmill");
+});
+
+test("age 9 upgrade bar offers both poison and spinning spikes, whatever the food", () => {
+  for (const food of [0, 1, 2]) {
+    const owned = [food, 4, 7, 11, 15];
+    const offered = items.list
+      .filter(i => i.age == 9 && (i.pre == undefined || owned.indexOf(i.pre) >= 0))
+      .map(i => i.name);
+    ok(offered.includes("poison spikes") && offered.includes("spinning spikes"), `food ${food}: ${offered}`);
+  }
+});
+
 /* ---------------- faster heal key ---------------- */
 
 test("faster heal key heals inside the shame window", () => {
