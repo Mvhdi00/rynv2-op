@@ -205,8 +205,13 @@ function check(scenario, label, ok, detail) {
     results.push({ scenario, label, ok: !!ok, detail });
 }
 
-async function run(browser, name, body) {
+async function run(browser, name, body, options) {
     const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+    if (options && options.storage) {
+        await context.addInitScript(storage => {
+            for (const key in storage) localStorage.setItem(key, storage[key]);
+        }, options.storage);
+    }
     const page = await context.newPage();
     const errors = [];
     page.on("pageerror", e => errors.push(String(e && e.stack || e)));
@@ -420,9 +425,9 @@ async function placeScenarios(browser) {
 async function healScenarios(browser) {
     const FAR = { x: 3000, y: 3000 };
     const ADJACENT = { x: 1120, y: 1000 }; // inside a polearm's reach of (1000, 1000)
-    const safeDelay = st => 120 + 15 - st.state.rttLow;
+    const safeDelay = st => 120 + 20 - st.state.rttLow;
 
-    // A hit that cannot kill: wait out the window, then heal. No shame.
+    // A hit that cannot kill: wait out the window and the next tick, then heal. No shame.
     await run(browser, "H1 slow heal", async s => {
         s.enemy = FAR;
         await s.spawn();
@@ -430,14 +435,15 @@ async function healScenarios(browser) {
         await s.ticks(4);
 
         const mark = await s.mark();
-        const t0 = await s.hp(70);
+        const t0 = await s.hp(70, true);
+        await s.wait(TICK_MS);
         await s.ticks(3);
         const eats = eatsIn(await s.since(mark));
         const st = await s.heal();
         const delay = eats[0] ? eats[0].at - t0 : null;
         check("H1 slow heal", "heals 30 HP with 2 apples", eats.length === 2, eats.length);
         check("H1 slow heal", "not before the shame window has passed on the server", delay !== null && delay >= safeDelay(st) - 5, delay && delay.toFixed(1));
-        check("H1 slow heal", "and soon after it (a timer, not the next-next tick)", delay !== null && delay <= safeDelay(st) + 40, delay && delay.toFixed(1));
+        check("H1 slow heal", "on the next tick's update, once it brought no hit", delay !== null && delay >= TICK_MS - 5 && delay <= TICK_MS + 40, delay && delay.toFixed(1));
         check("H1 slow heal", "counted as a slow heal, shame stays 0", st.stats.slowHeals === 1 && st.stats.fastHeals === 0 && st.state.shame === 0, JSON.stringify(st));
     });
 
@@ -472,12 +478,15 @@ async function healScenarios(browser) {
 
             const mark = await s.mark();
             const t0 = await s.hp(60, true);
+            await s.wait(TICK_MS);
             await s.ticks(2);
-            const eats = eatsIn(await s.since(mark));
+            const sent = await s.since(mark);
+            const eats = eatsIn(sent);
             const st = await s.heal();
             const delay = eats[0] ? eats[0].at - t0 : null;
             if (owned) {
                 check(name, "no fast heal: 67.5 x 0.75 does not kill at 60", st.stats.fastHeals === 0 && delay !== null && delay >= safeDelay(st) - 5, JSON.stringify({ delay, stats: st.stats }));
+                check(name, "soldier goes on", sent.some(p => p.type === "c" && p.data[1] === 6), JSON.stringify(sent.filter(p => p.type === "c")));
             } else {
                 check(name, "fast heal: 67.5 kills at 60 without soldier", st.stats.fastHeals === 1 && delay !== null && delay < 30, JSON.stringify({ delay, stats: st.stats }));
             }
@@ -504,6 +513,7 @@ async function healScenarios(browser) {
         const t0 = await s.hp(40, true);
         await s.wait(30);
         const early = eatsIn(await s.since(mark));
+        await s.wait(TICK_MS - 30);
         await s.ticks(2);
         const all = eatsIn(await s.since(mark));
         const st = await s.heal();
@@ -511,9 +521,9 @@ async function healScenarios(browser) {
         check("H4 shame 7", "the slow heal still comes, and brings shame to 5", all.length > 0 && all[0].at - t0 >= safeDelay(st) - 5 && st.state.shame === 5, JSON.stringify({ first: all[0] && all[0].at - t0, state: st.state }));
     });
 
-    // Hits faster than the window: every eat would be fast, so none goes out
-    // until the hits stop.
-    await run(browser, "H5 continuous chip", async s => {
+    // A chip on every tick: any eat would land within 120ms of a hit, so none
+    // goes out until a tick passes without one.
+    await run(browser, "H5 chip every tick", async s => {
         s.enemy = FAR;
         await s.spawn();
         await s.food(1000);
@@ -522,14 +532,15 @@ async function healScenarios(browser) {
         const mark = await s.mark();
         let last = 0;
         for (const hp of [92, 84, 76, 68, 60]) {
-            last = await s.hp(hp);
-            await s.wait(45);
+            last = await s.hp(hp, true);
+            await s.wait(TICK_MS);
         }
+        const during = eatsIn(await s.since(mark));
         await s.ticks(3);
         const eats = eatsIn(await s.since(mark));
         const st = await s.heal();
-        check("H5 continuous chip", "no eat while hits keep coming", eats.length > 0 && eats[0].at >= last + safeDelay(st) - 5, JSON.stringify({ first: eats[0] && eats[0].at - last }));
-        check("H5 continuous chip", "then one slow heal, shame 0", st.stats.slowHeals === 1 && st.stats.fastHeals === 0 && st.state.shame === 0, JSON.stringify(st));
+        check("H5 chip every tick", "no eat while a hit comes every tick", during.length === 0 && eats.length > 0 && eats[0].at >= last + safeDelay(st) - 5, JSON.stringify({ during: during.length, first: eats[0] && eats[0].at - last }));
+        check("H5 chip every tick", "then one slow heal, shame 0", st.stats.slowHeals === 1 && st.stats.fastHeals === 0 && st.state.shame === 0, JSON.stringify(st));
     });
 
     // Regen refilled us after a hit nobody ate for: one eat at full HP takes the
@@ -547,9 +558,10 @@ async function healScenarios(browser) {
         const before = await s.heal();
 
         const mark = await s.mark();
-        await s.hp(95);
-        await s.wait(20);
-        await s.hp(100);
+        await s.hp(95, true);
+        await s.wait(TICK_MS);
+        await s.hp(100, true);
+        await s.wait(TICK_MS);
         await s.ticks(3);
         const eats = eatsIn(await s.since(mark));
         const st = await s.heal();
@@ -558,9 +570,10 @@ async function healScenarios(browser) {
         check("H6 dry eat", "shame back to 0", st.state.shame === 0, JSON.stringify(st.state));
     });
 
-    // The server refuses our eats (it is in its lockout and our count missed
-    // it): stop eating for 30s instead of feeding the lockout.
-    await run(browser, "H7 lockout", async s => {
+    // The server neither heals nor takes food: it may be in its lockout without
+    // our count knowing. No fast eats then (they would feed it), one slow probe
+    // a second, and the first answer that comes back clears the suspicion.
+    await run(browser, "H7 suspected lockout", async s => {
         s.enemy = ADJACENT;
         await s.spawn();
         await s.food(1000);
@@ -568,16 +581,75 @@ async function healScenarios(browser) {
 
         const mark = await s.mark();
         await s.hp(40, true);
+        await s.wait(TICK_MS);
         await s.ticks(5);
         const eats = eatsIn(await s.since(mark));
         const st = await s.heal();
-        check("H7 lockout", "one burst, no resends while it is unanswered", eats.length === 3, eats.length);
-        check("H7 lockout", "refusal read as the 30s lockout", st.stats.lockoutsInferred === 1 && st.state.lockedForMs > 25000, JSON.stringify(st));
+        check("H7 suspected lockout", "one burst, no resends while it is unanswered", eats.length === 3, eats.length);
+        check("H7 suspected lockout", "no answer: lockout suspected", st.stats.lockoutsInferred === 1 && st.state.suspectedLockForMs > 25000 && st.state.shame === 0, JSON.stringify(st));
 
         const mark2 = await s.mark();
         await s.hp(30, true);
-        await s.ticks(2);
-        check("H7 lockout", "no eats during the lockout", eatsIn(await s.since(mark2)).length === 0);
+        await s.wait(30);
+        const st2 = await s.heal();
+        check("H7 suspected lockout", "no fast eat while it is suspected", eatsIn(await s.since(mark2)).length === 0 && st2.stats.fastRefused >= 1, JSON.stringify(st2.stats));
+
+        await s.wait(TICK_MS - 30);
+        await s.ticks(9);
+        const probes = eatsIn(await s.since(mark2));
+        check("H7 suspected lockout", "one slow probe, a second after the suspicion", probes.length > 0 && probes.every(e => e.at === probes[0].at || e.at - probes[0].at < 5) && probes[0].at - eats[0].at >= 1000, JSON.stringify(probes.map(e => (e.at - eats[0].at).toFixed(0))));
+
+        // The first burst's heal shows up late after all.
+        await s.hp(90);
+        const st3 = await s.heal();
+        check("H7 suspected lockout", "a late heal clears it and restores the count", st3.stats.lockoutsRevoked === 1 && st3.state.suspectedLockForMs === 0 && st3.state.shame === 1, JSON.stringify(st3));
+    });
+
+    // The server's own lockout signal: the Shame! hat. Nothing eats under it.
+    await run(browser, "H8 shame hat", async s => {
+        s.enemy = ADJACENT;
+        await s.spawn();
+        await s.food(1000);
+        await s.ticks(4);
+
+        s.mySkin = 45;
+        await s.tick();
+        const mark = await s.mark();
+        await s.hp(40, true);
+        await s.wait(TICK_MS);
+        await s.ticks(3);
+        const st = await s.heal();
+        check("H8 shame hat", "no eats while it is on, even at a lethal hit", eatsIn(await s.since(mark)).length === 0 && st.state.lockedForMs > 0, JSON.stringify(st.state));
+
+        s.mySkin = 0;
+        const mark2 = await s.mark();
+        await s.ticks(3);
+        const st2 = await s.heal();
+        check("H8 shame hat", "off again: the lockout is over and the heal goes out", st2.state.lockedForMs === 0 && eatsIn(await s.since(mark2)).length > 0, JSON.stringify(st2.state));
+    });
+
+    // A hit that shows up less than a round trip after our eat was on the
+    // server before the eat: the eat was judged against it, +1, not -2.
+    await run(browser, "H9 hit overtakes the eat", async s => {
+        s.enemy = FAR;
+        await s.spawn();
+        await s.food(1000);
+        await s.ticks(4);
+
+        const mark = await s.mark();
+        await s.hp(70, true);
+        await s.wait(TICK_MS);
+        await s.send("a", [s.rows()]);
+        await s.wait(15);
+        const first = eatsIn(await s.since(mark));
+        await s.hp(60);
+        const st = await s.heal();
+        check("H9 hit overtakes the eat", "the slow heal went out on the next tick", first.length === 2, first.length);
+        check("H9 hit overtakes the eat", "rebooked as a fast eat: shame 1", st.stats.rebooked === 1 && st.state.shame === 1 && st.state.hitMaybeUsed, JSON.stringify(st));
+
+        await s.ticks(3);
+        const st2 = await s.heal();
+        check("H9 hit overtakes the eat", "the next heal books no -2 it may not get", st2.stats.slowHeals === 2 && st2.state.shame === 1, JSON.stringify(st2));
     });
 }
 
@@ -606,28 +678,37 @@ async function antiScenarios(browser) {
         check("A1 default insta", "the follow-up (musket 50 + turret 25 > 32 HP) is healed before it lands", fastIn(eats, t0), JSON.stringify({ eats: eats.length, stats: st.stats }));
     });
 
-    // Musket shot first (through soldier: 37.5), then bull polearm and turret.
-    await run(browser, "A2 reverse insta", async s => {
-        s.enemy = { x: 1190, y: 1000 };
-        s.mySkin = 6;
-        await s.spawn();
-        await s.food(1000);
-        await s.buyHat(6);
-        s.enemyWeapon = 15;
-        await s.ticks(3);
-        // The shot: spawned 70 ahead of them, flying at us.
-        const dir = Math.atan2(s.me.y - s.enemy.y, s.me.x - s.enemy.x);
-        await s.send("X", [s.enemy.x + 70 * Math.cos(dir), s.enemy.y + 70 * Math.sin(dir), dir, 1400, 3.6, 5, 0, 900]);
-        await s.tick();
-        s.enemyWeapon = 5;
+    // Musket shot first, then their primary: in bull (67.5) or in turret gear
+    // with the turret (45 + 25), one hat or the other, so at most 70.
+    for (const soldier of [true, false]) {
+        const name = soldier ? "A2 reverse insta, soldier" : "A2 reverse insta, bare";
+        await run(browser, name, async s => {
+            s.enemy = { x: 1190, y: 1000 };
+            if (soldier) s.mySkin = 6;
+            await s.spawn();
+            await s.food(1000);
+            if (soldier) await s.buyHat(6);
+            s.enemyWeapon = 15;
+            await s.ticks(3);
+            // The shot: spawned 70 ahead of them, flying at us.
+            const dir = Math.atan2(s.me.y - s.enemy.y, s.me.x - s.enemy.x);
+            await s.send("X", [s.enemy.x + 70 * Math.cos(dir), s.enemy.y + 70 * Math.sin(dir), dir, 1400, 3.6, 5, 0, 900]);
+            await s.tick();
+            s.enemyWeapon = 5;
 
-        const mark = await s.mark();
-        const t0 = await s.hp(62, true, [["Y", [900, 120]]]);
-        await s.wait(30);
-        const eats = eatsIn(await s.since(mark));
-        const st = await s.heal();
-        check("A2 reverse insta", "the follow-up (bull polearm + turret, x0.75 = 69 > 62 HP) is healed before it lands", fastIn(eats, t0), JSON.stringify({ eats: eats.length, stats: st.stats }));
-    });
+            const mark = await s.mark();
+            // Musket 50, through soldier 37.5.
+            const t0 = await s.hp(soldier ? 62 : 50, true, [["Y", [900, 120]]]);
+            await s.wait(30);
+            const eats = eatsIn(await s.since(mark));
+            const st = await s.heal();
+            if (soldier) {
+                check(name, "70 x 0.75 = 52.5 does not kill at 62: no shame spent", eats.length === 0 && st.stats.fastHeals === 0, JSON.stringify({ eats: eats.length, stats: st.stats }));
+            } else {
+                check(name, "70 kills at 50: healed before it lands", fastIn(eats, t0) && st.stats.fastHeals === 1, JSON.stringify({ eats: eats.length, stats: st.stats }));
+            }
+        });
+    }
 
     // Two enemies, each one hit short of killing us, together over it.
     for (const sync of [true, false]) {
@@ -651,6 +732,57 @@ async function antiScenarios(browser) {
                 check(name, "without it, neither alone kills: no fast heal", eats.length === 0 && st.stats.fastHeals === 0, JSON.stringify({ eats: eats.length, stats: st.stats }));
             }
         });
+    }
+
+    // A polearm in reach and a musket 300 away, both ready.
+    await run(browser, "A4 sync with a musket", async s => {
+        s.enemy = { x: 1190, y: 1000 };
+        s.others = [{ sid: 3, x: 1000, y: 1300, weapon: 15, skin: 0 }];
+        await s.spawn();
+        await s.food(1000);
+        await s.ticks(2);
+        s.others[0].weapon = 5;
+        await s.ticks(2);
+
+        const mark = await s.mark();
+        const t0 = await s.hp(80, true);
+        await s.wait(30);
+        const eats = eatsIn(await s.since(mark));
+        const st = await s.heal();
+        check("A4 sync with a musket", "67.5 + 50 > 80 HP: healed for now", fastIn(eats, t0) && st.stats.fastHeals === 1, JSON.stringify({ eats: eats.length, stats: st.stats }));
+    });
+
+    // Someone swings 400 away while we take a polearm-sized hit. That swing is
+    // not ours, so its musket follow-up is not predicted.
+    await run(browser, "A5 swing out of reach", async s => {
+        s.enemy = { x: 1400, y: 1000 };
+        s.enemySkin = 7;
+        await s.spawn();
+        await s.food(1000);
+        s.enemyWeapon = 15;
+        await s.ticks(2);
+        s.enemyWeapon = 5;
+        await s.ticks(3);
+
+        const mark = await s.mark();
+        await s.hp(32, true, [["K", [ENEMY, 0, 5]]]);
+        await s.wait(30);
+        const eats = eatsIn(await s.since(mark));
+        const st = await s.heal();
+        check("A5 swing out of reach", "no fast heal for a follow-up that is not coming", eats.length === 0 && st.stats.fastHeals === 0, JSON.stringify({ eats: eats.length, stats: st.stats }));
+    });
+
+    // Settings saved by 1.8 or older have the anti toggles off: they did nothing
+    // then. 1.9 turns them on once; after that the player's choice is kept.
+    for (const [label, saved, want] of [
+        ["A6 settings from 1.8", { test1: false, test2: false, test3: false, test4: false, placeRange: 250 }, { test1: true, test4: true, placeRange: 250 }],
+        ["A6 settings from 1.9", { test1: false, test2: true, test3: true, test4: true, autoHeal: true }, { test1: false, test4: true }],
+    ]) {
+        await run(browser, label, async s => {
+            const vars = await s.page.evaluate(() => Object.assign({}, window.vars));
+            const ok = Object.keys(want).every(key => vars[key] === want[key]);
+            check(label, "toggles as expected", ok, JSON.stringify(Object.fromEntries(Object.keys(want).map(key => [key, vars[key]]))));
+        }, { storage: { DELTEK_V4_CONFIG: JSON.stringify(saved) } });
     }
 }
 

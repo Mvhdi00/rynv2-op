@@ -10604,6 +10604,9 @@ if (tmpObj.isPlayer && tmpObj.alive) {
             // UPDATE PLAYER VALUE:
             function updatePlayerValue(index, value, updateView) {
                 if (myPlayer) {
+                    // Food going down means an eat was consumed, so eating is not locked.
+                    if (index == "food" && Number.isFinite(myPlayer.food) && value < myPlayer.food)
+                        onMyFoodSpent();
                     myPlayer[index] = value;
                     if (updateView)
                         updateStatusDisplay();
@@ -10689,6 +10692,8 @@ if (tmpObj.isPlayer && tmpObj.alive) {
             let trapBreakedTick = 0;
 
             let soldierAnti = false;
+            // Soldier for survival only: unlike soldierAnti it keeps auto gather running.
+            let forceSoldier = false;
 
             let predictMoveAngle = null;
             let lastMoveAngle = null;
@@ -11722,9 +11727,14 @@ if (tmpObj.isPlayer && tmpObj.alive) {
             // the food is used, so an eat at full HP still takes the -2.
             //
             // The server measures hit -> eat as (our send - when we saw the
-            // hit) + round trip. So an eat sent 120 + margin - ping after the
-            // damage packet is a slow eat: it heals and lowers shame. Only a
-            // hit that would kill before then is worth a fast eat.
+            // hit) + round trip, and judges the eat against the last hit before
+            // it arrived. So a slow eat waits 120 + margin - ping after the
+            // damage packet, and it also waits until we have seen the next
+            // tick: it lands after that tick, and if that tick hit us the eat
+            // would be judged against the new hit instead (+1). Sent from a
+            // tick's callback with ping under a tick, it lands before the tick
+            // after, so only hits we have seen can judge it.
+            // Only a hit that would kill before then is worth a fast eat.
             // ================================================================
             const SHAME_WINDOW = 120;
             // Quasar's proven 140 - ping comes to the same: 20ms past the window.
@@ -11733,16 +11743,31 @@ if (tmpObj.isPlayer && tmpObj.alive) {
             // A fast eat at 7 is the 8th: it heals 0 and locks eating for 30s.
             const SHAME_FAST_LIMIT = 6;
             const HEAL_FLIGHT_MS = 60;
+            // From this round trip on, no eat can be checked against the next
+            // tick before it lands; the hit that overtakes it is booked afterwards.
+            const SHAME_BLIND_RTT = 100;
+            // A fast eat that reaches the server after the next tick saves nothing
+            // over the slow one 20-35ms later, and costs +1 instead of -2.
+            const FAST_EAT_LATE = 112;
+            // While a lockout is only suspected, test it with one slow eat a second.
+            const LOCK_PROBE_MS = 1000;
             // No enemy this close before bull goes on to burn shame: the safeSoldier radius.
             const SHAME_RESET_CLEAR_RANGE = 400;
 
             let lastHitRecv = 0;
             let hitPending = false;
+            // The last hit may already have been used by an eat it overtook.
+            let hitMaybeUsed = false;
             let myShame = 0;
             let shameLockUntil = 0;
+            let lockSuspectUntil = 0;
+            let lockSuspectShame = 0;
+            let lockProbeAt = 0;
             let slowHealTimer = null;
             let healInFlightUntil = 0;
             let healCheck = null;
+            let lastEat = null;
+            let wasShameHat = false;
 
             const healStats = {
                 slowHeals: 0,
@@ -11751,16 +11776,21 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                 manualHeals: 0,
                 shameSpent: 0,
                 shameRecovered: 0,
+                rebooked: 0,
                 fastRefused: 0,
+                fastSkippedLate: 0,
                 lockouts: 0,
                 lockoutsInferred: 0,
+                lockoutsRevoked: 0,
             };
             window.lunaHeal = {
                 stats: healStats,
                 state: () => ({
                     shame: myShame,
                     lockedForMs: Math.max(0, shameLockUntil - Date.now()),
+                    suspectedLockForMs: Math.max(0, lockSuspectUntil - Date.now()),
                     hitPending: hitPending,
+                    hitMaybeUsed: hitMaybeUsed,
                     safeInMs: hitPending ? Math.max(0, shameSafeAt() - Date.now()) : 0,
                     rttLow: healRttLow(),
                 }),
@@ -11769,18 +11799,22 @@ if (tmpObj.isPlayer && tmpObj.alive) {
             function resetSurvivalHeal() {
                 lastHitRecv = 0;
                 hitPending = false;
+                hitMaybeUsed = false;
                 myShame = 0;
                 shameLockUntil = 0;
+                lockSuspectUntil = 0;
+                lockProbeAt = 0;
                 wasShameHat = false;
                 healInFlightUntil = 0;
                 healCheck = null;
+                lastEat = null;
                 if (slowHealTimer != null) {
                     clearTimeout(slowHealTimer);
                     slowHealTimer = null;
                 }
             }
 
-            // The round trip to plan with: the lowest of the last few samples,
+            // The round trip to wait with: the lowest of the last few samples,
             // so the wait is never cut short by one slow ping.
             function healRttLow() {
                 const recent = pings.slice(-4);
@@ -11788,16 +11822,42 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                 return Math.max(0, Math.min(low, 400));
             }
 
+            // The round trip to doubt with: the highest of them, plus jitter.
+            function healRttHigh() {
+                const recent = pings.slice(-4);
+                let high = recent.length ? Math.max(...recent) : (Number.isFinite(window.pingTime) ? window.pingTime : 0);
+                return Math.max(0, Math.min(high, 1000)) + 20;
+            }
+
             function shameSafeAt() {
                 return lastHitRecv + Math.max(0, SHAME_WINDOW + SHAME_MARGIN - healRttLow());
             }
 
             function isShameSafeNow() {
-                return !hitPending || Date.now() >= shameSafeAt();
+                if (!hitPending) return true;
+                if (Date.now() < shameSafeAt()) return false;
+                // damageTick is the update right after the hit; a later one means
+                // the tick after it has come in and did not hit us.
+                return tick > damageTick || healRttLow() >= SHAME_BLIND_RTT;
             }
 
             function isShameLocked() {
                 return Date.now() < shameLockUntil;
+            }
+
+            function isLockSuspect() {
+                return Date.now() < lockSuspectUntil;
+            }
+
+            function bookFastEat(from) {
+                myShame = from + 1;
+                healStats.shameSpent++;
+                if (myShame >= 8) {
+                    myShame = 0;
+                    shameLockUntil = Date.now() + SHAME_LOCK_MS + (window.pingTime || 0);
+                    healStats.lockouts++;
+                }
+                myPlayer.shameCount = myShame;
             }
 
             // One burst of eats. Only the first is judged for shame, so the
@@ -11817,26 +11877,33 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                 if (!config.inSandbox && cost && Number.isFinite(myPlayer.food)) {
                     count = Math.min(count, Math.floor(myPlayer.food / cost));
                 }
-                count = Math.min(count, Math.floor((119 - packets) / getPlacementPacketCost(false)));
+                // Slow and dry eats can wait for room under the packet limit. A fast
+                // or manual one decides whether we live: it goes out whole.
+                if (kind !== "fast" && kind !== "manual") {
+                    count = Math.min(count, Math.floor((119 - packets) / getPlacementPacketCost(false)));
+                }
                 if (count <= 0) return 0;
 
                 const now = Date.now();
+                const before = myShame;
+                let bookedFast = false;
                 if (hitPending) {
-                    if ((now - lastHitRecv) + healRttLow() > SHAME_WINDOW) {
-                        healStats.shameRecovered += Math.min(2, myShame);
-                        myShame = Math.max(0, myShame - 2);
-                    } else {
-                        myShame++;
-                        healStats.shameSpent++;
-                        if (myShame >= 8) {
-                            myShame = 0;
-                            shameLockUntil = now + SHAME_LOCK_MS + (window.pingTime || 0);
-                            healStats.lockouts++;
+                    // The same bar the slow heal waits for: a guess between 120 and
+                    // 140ms books the worse outcome.
+                    if ((now - lastHitRecv) + healRttLow() >= SHAME_WINDOW + SHAME_MARGIN) {
+                        if (!hitMaybeUsed) {
+                            healStats.shameRecovered += Math.min(2, myShame);
+                            myShame = Math.max(0, myShame - 2);
                         }
+                    } else {
+                        bookFastEat(myShame);
+                        bookedFast = true;
                     }
                     hitPending = false;
+                    hitMaybeUsed = false;
                 }
                 myPlayer.shameCount = myShame;
+                lastEat = { at: now, before: before, bookedFast: bookedFast };
 
                 for (let i = 0; i < count; i++) {
                     place(foodId, null);
@@ -11844,6 +11911,7 @@ if (tmpObj.isPlayer && tmpObj.alive) {
 
                 healInFlightUntil = now + (window.pingTime || 0) + HEAL_FLIGHT_MS;
                 if (missing > 0 && !healCheck) healCheck = { at: now, hp: myPlayer.health, food: myPlayer.food };
+                if (isLockSuspect()) lockProbeAt = now;
 
                 if (kind === "slow") healStats.slowHeals++;
                 else if (kind === "fast") healStats.fastHeals++;
@@ -11853,34 +11921,73 @@ if (tmpObj.isPlayer && tmpObj.alive) {
             }
 
             // A burst that neither raised HP nor spent food was refused: the
-            // server is in its 30s lockout and our count drifted. Follow it.
-            // Until a burst is answered no other goes out, or each resend would
-            // push the verdict back and keep feeding a lockout.
+            // server may be in its 30s lockout without our count knowing. That is
+            // only a suspicion (an answer can also just be late): it stops fast
+            // eats, slow ones keep testing it once a second, and the first heal
+            // or food spend that comes back clears it.
+            // Until a burst is answered no other slow one goes out, or each resend
+            // would push the verdict back.
             function checkHealLanded() {
                 if (!healCheck) return true;
-                if (Date.now() - healCheck.at < (window.pingTime || 0) + 250) return false;
+                if (Date.now() - healCheck.at < 2 * healRttHigh() + 250) return false;
 
                 const foodSpent = Number.isFinite(healCheck.food) && Number.isFinite(myPlayer.food) && myPlayer.food < healCheck.food;
                 if (!foodSpent && myPlayer.health <= healCheck.hp && myPlayer.health < 100) {
+                    if (!isLockSuspect()) {
+                        lockSuspectShame = myShame;
+                        lockProbeAt = Date.now();
+                        healStats.lockoutsInferred++;
+                    }
+                    lockSuspectUntil = healCheck.at + SHAME_LOCK_MS;
                     myShame = 0;
                     myPlayer.shameCount = 0;
-                    shameLockUntil = Math.max(shameLockUntil, healCheck.at + SHAME_LOCK_MS);
-                    healStats.lockoutsInferred++;
                 }
                 healCheck = null;
                 return true;
             }
 
+            function revokeLockSuspect() {
+                lockSuspectUntil = 0;
+                myShame = lockSuspectShame;
+                myPlayer.shameCount = myShame;
+                healStats.lockoutsRevoked++;
+            }
+
             // "O" for us: an HP drop stamps the hit and books the slow heal.
             function onMyHealth(damage) {
+                const now = Date.now();
                 if (damage > 0) {
-                    lastHitRecv = Date.now();
+                    // An eat sent less than a round trip ago reached the server after
+                    // this hit and was judged against it: it was a fast eat. Whether
+                    // this hit is still there for the next eat is then unknown.
+                    hitMaybeUsed = false;
+                    if (lastEat && now - lastEat.at < healRttHigh()) {
+                        if (!lastEat.bookedFast) {
+                            bookFastEat(lastEat.before);
+                            healStats.rebooked++;
+                        }
+                        hitMaybeUsed = true;
+                    }
+                    lastEat = null;
+                    lastHitRecv = now;
                     hitPending = true;
+                    // A burst in flight was sized for the HP before this hit, and its
+                    // answer no longer tells anything about a lockout.
+                    healInFlightUntil = 0;
+                    healCheck = null;
                     scheduleSlowHeal();
                 } else if (damage < 0) {
                     healCheck = null;
                     healInFlightUntil = 0;
+                    const food = myPlayer.items && items.list[myPlayer.items[0]];
+                    if (isLockSuspect() && food && -damage >= food.heal - 1) revokeLockSuspect();
                 }
+            }
+
+            // "N" food going down: one of our eats went through.
+            function onMyFoodSpent() {
+                healCheck = null;
+                if (isLockSuspect()) revokeLockSuspect();
             }
 
             function scheduleSlowHeal() {
@@ -11889,23 +11996,28 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                 slowHealTimer = setTimeout(function () {
                     slowHealTimer = null;
                     if (lastHitRecv !== hitAt) return;
-                    // Mid-insta: leave it to the tick, which retries the same heal.
-                    if (autoaim) return;
                     trySlowHeal();
                 }, Math.max(1, shameSafeAt() - Date.now()));
             }
 
+            function canSlowEat() {
+                if (Date.now() < healInFlightUntil || !checkHealLanded()) return false;
+                if (isLockSuspect() && Date.now() - lockProbeAt < LOCK_PROBE_MS) return false;
+                return isShameSafeNow();
+            }
+
+            // Only when the tick after the hit has come in, or the round trip is
+            // too long for that to be possible; otherwise the tick's callback heals.
             function trySlowHeal() {
                 if (!window.vars.autoHeal || !myPlayer || !myPlayer.alive || !inGame) return false;
-                if (myPlayer.health >= 100 || isShameLocked() || Date.now() < healInFlightUntil) return false;
-                if (!isShameSafeNow() || !checkHealLanded()) return false;
+                if (myPlayer.health >= 100 || isShameLocked() || !canSlowEat()) return false;
                 return eatBurst(100 - myPlayer.health, "slow") > 0;
             }
 
             // The server's own word on the lockout: it dresses us in the Shame! hat
             // (45) for it. While it is on, nothing we eat heals; when it comes off
-            // the lockout is over and the count is 0.
-            let wasShameHat = false;
+            // the lockout is over and the count is 0. Hits taken during it still
+            // stamp the server's hitTime, so a pending hit stays pending.
             function syncShameHat() {
                 const shameHat = myPlayer.skinIndex == 45;
                 if (shameHat) {
@@ -11914,7 +12026,7 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                     shameLockUntil = Math.max(shameLockUntil, Date.now() + 1000);
                 } else if (wasShameHat) {
                     shameLockUntil = 0;
-                    hitPending = false;
+                    lockSuspectUntil = 0;
                 }
                 wasShameHat = shameHat;
             }
@@ -11923,33 +12035,45 @@ if (tmpObj.isPlayer && tmpObj.alive) {
             // kills through the hat we are sending.
             function survivalHeal(lethal, threatNear) {
                 syncShameHat();
-                const answered = checkHealLanded();
-                if (!window.vars.autoHeal) return false;
+                checkHealLanded();
+                if (!window.vars.autoHeal || isShameLocked()) return false;
 
                 if (myPlayer.health >= 100) {
                     // Regen or lifesteal refilled us after a hit nobody ate for:
                     // an eat now takes the -2 and uses no food.
-                    if (myShame > 0 && hitPending && !threatNear && isShameSafeNow() && Date.now() >= healInFlightUntil) {
+                    if (myShame > 0 && hitPending && !hitMaybeUsed && !threatNear && !isLockSuspect() && canSlowEat()) {
                         return eatBurst(0, "dry") > 0;
                     }
                     return false;
                 }
 
-                if (isShameLocked() || Date.now() < healInFlightUntil || !answered) return false;
-                if (isShameSafeNow()) return eatBurst(100 - myPlayer.health, "slow") > 0;
+                const safe = isShameSafeNow();
 
-                if (lethal) {
-                    if (myShame <= SHAME_FAST_LIMIT) return eatBurst(100 - myPlayer.health, "fast") > 0;
-                    healStats.fastRefused++;
+                // The next tick kills. Checked before the in-flight guards, which
+                // only stop a slow heal from repeating itself.
+                if (lethal && !safe) {
+                    if (myShame > SHAME_FAST_LIMIT || isLockSuspect()) {
+                        healStats.fastRefused++;
+                    } else if ((Date.now() - lastHitRecv) + healRttLow() >= FAST_EAT_LATE) {
+                        healStats.fastSkippedLate++;
+                    } else {
+                        return eatBurst(100 - myPlayer.health, "fast") > 0;
+                    }
+                    return false;
                 }
-                return false;
+
+                if (!canSlowEat()) return false;
+                return eatBurst(100 - myPlayer.health, "slow") > 0;
             }
 
-            // The "faster heal" key: heal now, but never into the 8th shame.
+            // The "faster heal" key: heal now, but never into the 8th shame. The
+            // key press is not lined up with a tick, so a hit we have not seen yet
+            // can overtake the eat; at 7 that would be the 8th, so it is left to
+            // the tick's slow heal.
             function manualHeal() {
                 if (!myPlayer || !myPlayer.alive || myPlayer.health >= 100 || isShameLocked()) return;
                 if (!checkHealLanded()) return;
-                if (!isShameSafeNow() && myShame > SHAME_FAST_LIMIT) {
+                if (myShame > SHAME_FAST_LIMIT || isLockSuspect()) {
                     healStats.fastRefused++;
                     return;
                 }
@@ -12968,6 +13092,10 @@ if (isSpike && canSpikeTick && canTrapTick()) {
                 if (object.type == "hit") {
                     const { weapon, player } = object;
 
+                    // A swing that could not reach us did not do our damage.
+                    if (UTILS.getDistance(player.x2, player.y2, myPlayer.x2, myPlayer.y2) > myPlayer.scale * 1.8 + items.weapons[weapon].range + 60)
+                        return;
+
                     let damage = items.weapons[weapon].dmg * config.weaponVariants[player.weaponVariants[weapon]].val;
 
                     damage *= (getHatInStore(player.skinIndex).dmgMultO || 1);
@@ -13659,6 +13787,7 @@ if (isSpike && canSpikeTick && canTrapTick()) {
                     if (soldierAnti) {
                         soldierAnti = false;
                     }
+                    forceSoldier = false;
 
                     if (hits.length > 0) {
                         for (let i in hits) {
@@ -14545,9 +14674,14 @@ function triggerKillChat() {
                             const threat = { hit: 0, secondary: 0, turret: 0, spike: 0, ready: 0 };
                             threats.push(threat);
 
-                            // ANTI SYNC: a ready swing in reach, counted when two or more enemies have one
+                            // ANTI SYNC: a ready swing (or shot) in reach, counted when two or more enemies have one
                             if (primaryReload[enemy.sid] == 1 && inPrimaryRange) {
                                 threat.ready = primaryDmg;
+                            }
+                            if (enemy.weapons && enemy.weapons[1] !== undefined && secondaryReload[enemy.sid] == 1) {
+                                const secondaryName = getPlayerInfo(enemy, "secondaryWeapon");
+                                const secondaryReach = secondaryName == "hammer" ? myPlayer.scale * 1.8 + getPlayerInfo(enemy, "secondaryRange") : 450;
+                                if (enemyDist <= secondaryReach) threat.ready = Math.max(threat.ready, getPlayerInfo(enemy, "secondaryDmg"));
                             }
 
                             // PREDICT HIT
@@ -14673,9 +14807,10 @@ function triggerKillChat() {
                             const shotUs = damagesByShoots.some(shot => shot.projectile.player == enemy) || hitUs.some(hit => hit.weapon >= 9);
                             if (window.vars.test2 && shotUs) {
                                 if (primaryReload[enemy.sid] == 1 && enemyDist <= myPlayer.scale * 1.8 + getPlayerInfo(enemy, "primaryRange") + 60) {
-                                    threat.hit = primaryDmg;
+                                    // Bull primary, or a turret-gear primary with the turret shot: one hat, never both.
+                                    const turretReady = turretReload[enemy.sid] == 1;
+                                    threat.hit = Math.max(threat.hit, turretReady ? Math.max(primaryDmg, primaryDmg / 1.5 + 25) : primaryDmg);
                                 }
-                                if (turretReload[enemy.sid] == 1) threat.turret = 25;
                             }
 
                             // ANTI SPIKE TICK
@@ -14718,7 +14853,7 @@ function triggerKillChat() {
 
                         // One swing per enemy; with two or more enemies ready in reach, each
                         // of them is assumed to swing (anti sync).
-                        const syncing = window.vars.test3 && threats.filter(threat => threat.ready > 0).length >= 2;
+                        const syncing = window.vars.test3 && threats.filter(threat => threat.ready || threat.hit || threat.secondary || threat.turret).length >= 2;
                         for (const threat of threats) {
                             hitDmgPot += Math.max(threat.hit, threat.secondary, syncing ? threat.ready : 0);
                             turretDmgPot += threat.turret;
@@ -14741,8 +14876,11 @@ function triggerKillChat() {
                         // with an enemy ready to spike-tick us.
                         const readyInReach = enemiesNear.some(enemy => primaryReload[enemy.sid] == 1 &&
                             UTILS.getDistance(myPlayer.x2, myPlayer.y2, enemy.x2, enemy.y2) <= myPlayer.scale * 1.8 + getPlayerInfo(enemy, "primaryRange") + 60);
-                        if (totalDmgPot >= 100 || myPlayer.health <= totalDmgPot || (window.vars.test4 && antiTick) || (trapBreaked && readyInReach) || (isShameLocked() && readyInReach))
+                        if (totalDmgPot >= 100)
                             soldierAnti = true;
+                        // These only need the hat: stopping our own swing would cost the fight.
+                        if (myPlayer.health <= totalDmgPot || (window.vars.test4 && antiTick) || (trapBreaked && readyInReach) || ((isShameLocked() || isLockSuspect()) && readyInReach))
+                            forceSoldier = true;
 
 
 
@@ -14789,7 +14927,7 @@ function triggerKillChat() {
                         const threatNear = enemiesNear.some(enemy => UTILS.getDistance(myPlayer.x2, myPlayer.y2, enemy.x2, enemy.y2) <= SHAME_RESET_CLEAR_RANGE);
                         // The drain itself reads as poison on the tick it is due, which used to
                         // take bull off exactly then; with nobody near, 5 is not a threat.
-                        if (myPlayer.shameCount > 0 && !threatNear && !isShameLocked() && !soldierAnti && !collidingspike && (totalDmgPot - poisonDmgPot) == 0 && myPlayer.health > 5 + poisonDmgPot) {
+                        if (myPlayer.shameCount > 0 && !threatNear && !isShameLocked() && !soldierAnti && !forceSoldier && !collidingspike && (totalDmgPot - poisonDmgPot) == 0 && myPlayer.health > 5 + poisonDmgPot) {
                             shouldResetShame = true;
                         }
 
@@ -15853,7 +15991,7 @@ function triggerKillChat() {
                 }
 
                 if (isBoughtHat(6, 0)) {
-                    if (soldierAnti) {
+                    if (soldierAnti || forceSoldier) {
                         currentHat = 6;
                     }
                 }
@@ -23902,6 +24040,13 @@ try {
     if (savedSettings) {
         try {
             const parsed = JSON.parse(savedSettings);
+            // Before 1.9 the anti toggles did nothing and were saved off; start them on once.
+            if (parsed && typeof parsed == "object" && !("autoHeal" in parsed)) {
+                delete parsed.test1;
+                delete parsed.test2;
+                delete parsed.test3;
+                delete parsed.test4;
+            }
             Object.assign(window.vars, parsed);
         } catch (e) {
             console.log("Luna: Corrupt settings file, resetting.");
