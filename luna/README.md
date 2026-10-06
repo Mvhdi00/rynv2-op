@@ -57,18 +57,32 @@ after that), always on the current tick's angles and through the ledger.
 The server judges the first eat after every hit: within 120ms of the hit is
 +1 shame, later is -2. At 8, eating is locked for 30 seconds, and the eat that
 reaches 8 already heals nothing. The server measures (our send - when we saw
-the hit) + round trip, so an eat sent `120 + 20 - ping` ms after the damage
-packet is always a slow one.
+the hit) + round trip, and judges the eat against the last hit that came
+before it.
 
-- **Slow heal (shame -2):** a timer sends it at that moment. 1.8 waited for the
-  second tick update after the hit, about 120-220ms later.
+- **Slow heal (shame -2):** sent once `120 + 20 - ping` ms have passed since
+  the damage packet *and* the next tick's update has arrived without a new hit.
+  With a normal ping that is the next tick, about 111ms after the hit, so the
+  timing is the same as 1.8's. The difference is that the time is now checked
+  too: 1.8 only waited for the next tick, so with a very low ping, or a tick
+  that arrived early, its eat could still land inside the 120ms and cost +1.
+  1.8 also ate again on every tick until the heal showed up; 1.9 sends one
+  burst and waits for its answer.
 - **Fast heal (+1 shame):** only when the damage predicted for the next tick
-  kills through the hat being worn. Soldier comes first: if soldier alone makes
-  the next tick survivable, it goes on and the heal stays slow.
-- **Never the 8th:** no fast eat at shame 7, and no eats during the lockout.
-  Luna keeps its own count from the eats it sends (regen and lifesteal no
-  longer move it), follows the server's Shame! hat (45), and reads a burst that
-  neither raised HP nor spent food as the lockout.
+  kills through the hat being worn, and only while the eat can still reach the
+  server before that tick. Soldier comes first: if soldier alone makes the next
+  tick survivable, it goes on and the heal stays slow.
+- **Hits every tick:** every eat would be within 120ms of a hit, so none goes
+  out until a tick passes without one, or the next hit would kill.
+- **Never the 8th:** no fast eat at shame 7, no eats during the lockout. Luna
+  keeps its own count from the eats it sends (regen and lifesteal no longer
+  move it) and follows the server's Shame! hat (45). An eat that a hit
+  overtook on the server (the hit shows up less than a round trip after the
+  eat) is counted as +1.
+- **Suspected lockout:** a burst that neither raised HP nor spent food may
+  mean a lockout our count missed. Luna then stops fast eats and sends one
+  slow eat a second to test it. The first heal or food spend that comes back
+  clears the suspicion and restores the count.
 - **Shame reset:** after a hit nobody ate for (regen refilled us), one eat at
   full HP takes the -2 without spending food. The bull-helmet reset only runs
   with no enemy within 400, and no longer drops bull on its own drain tick.
@@ -78,19 +92,25 @@ packet is always a slow one.
 ## Antis
 
 The four anti toggles were menu entries with nothing behind them. They now
-drive the next-tick damage prediction (all on by default):
+drive the next-tick damage prediction (all on by default; settings saved by
+1.8 or older, where they were off and did nothing, start with them on once):
 
 | Toggle | After | Predicts for next tick |
 |---|---|---|
 | anti default insta | their primary hit us | their secondary + turret |
-| anti reverse insta | their shot or hammer hit us | their bull primary + turret |
-| anti sync | two or more enemies ready in reach | every one of them swinging |
+| anti reverse insta | their shot or hammer hit us | their primary in bull, or in turret gear with the turret (one hat) |
+| anti sync | two or more enemies with a ready swing or shot | every one of them hitting |
 | anti onetick | a turret-gear rush or a turret shot at us | soldier, and their hit + turret |
 
 Each enemy now counts as one swing per tick (primary or secondary, never both)
 plus a turret shot and a spike. 1.8 counted the same swing up to four times,
 and hits only matched when the damage was exactly equal, which rounded health
-(67.5 seen as 68) never is.
+(67.5 seen as 68) never is. A swing from an enemy who could not reach us is no
+longer taken as the hit that hurt us.
+
+Soldier for survival (a lethal next tick, a onetick, our trap breaking with an
+enemy ready, a lockout with an enemy ready) only changes the hat: auto gather
+keeps swinging. Only a predicted 100+ still stops it, as in 1.8.
 
 ## Checking it
 
