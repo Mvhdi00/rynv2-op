@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.3
+// @version         2.4
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -42087,8 +42087,46 @@ html.ryn-in-lobby .ryn-v2-wrapper {
   const isProd = true;
   const version = isProd ? "5.9.4" : "Dev";
   const loadedFast = document.head === null;
+  /* Injected late, the client cannot keep the page's own copy of the game from
+     starting, so two copies run side by side and fight over the canvas, the
+     human check, the Play button and the server list: Play stops answering and
+     the server list stops switching. That is a setting in the userscript
+     manager, not something to fix from in here, so it is said out loud. The
+     old warning went through Logger, which prints nothing in a release build,
+     so nobody ever saw it. */
   if (!loadedFast) {
-    Logger.warn("Ryn Type 2 loading warning! It is generally recommended to use faster injection mode.");
+    const RYN_LATE_TEXT = "Ryn Type 2 was injected late, so the game is running twice and Play / server switching will not work. " +
+      "In Tampermonkey: Settings, Config mode: Advanced, then Inject Mode: Instant. Save, then reload this page.";
+    try {
+      console.warn("[RYN] " + RYN_LATE_TEXT);
+    } catch (e) {}
+    const showLateNotice = () => {
+      try {
+        if (document.getElementById("ryn-late-notice") || !document.body) {
+          return;
+        }
+        const note = document.createElement("div");
+        note.id = "ryn-late-notice";
+        note.style.cssText = "position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2147483646;" +
+          "max-width:min(92vw,640px);padding:12px 40px 12px 16px;border-radius:12px;background:#2a1216;color:#ffd9de;" +
+          "border:1px solid rgba(255,140,150,0.45);box-shadow:0 10px 30px rgba(0,0,0,0.5);" +
+          "font:600 13px/1.45 'Manrope','Segoe UI',system-ui,sans-serif;text-align:left;";
+        note.textContent = RYN_LATE_TEXT;
+        const close = document.createElement("span");
+        close.textContent = "✕";
+        close.style.cssText = "position:absolute;right:12px;top:10px;cursor:pointer;opacity:0.8;";
+        close.addEventListener("click", () => note.remove());
+        note.appendChild(close);
+        document.body.appendChild(note);
+      } catch (e) {}
+    };
+    if (document.body) {
+      showLateNotice();
+    } else {
+      document.addEventListener("DOMContentLoaded", showLateNotice, {
+        once: true
+      });
+    }
   }
   Logger.test("Ryn Type 2 initialization..");
   // The altcha proof-of-work is only ever consumed by RYN.startGame(), and
