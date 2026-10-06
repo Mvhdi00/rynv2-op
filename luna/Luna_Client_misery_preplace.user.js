@@ -3,7 +3,7 @@
 // @namespace       luna-fixed
 // @author          Luna and Skye, with help from Zenith and XTRFY
 // @description     Luna 1.1 fixed by raptor, with Ryn Type 2's Music page and LRC AI
-// @version         1.8
+// @version         1.9
 // @match           *://moomoo.io/*
 // @match           *://*.moomoo.io/*
 // @run-at          document-start
@@ -8950,8 +8950,9 @@ function __lunaBoot() {
                              sendAtckState();
                         } else if (keyStr === window.vars.keyAutoMills) {
                             autoMills = !autoMills;
-                        } else if (keyNum == 81) {
+                        } else if (keyStr === window.vars.test193) {
                             qPress = true;
+                            manualHeal();
                         } else if (keyStr === window.vars.keyAutoGrind) {
                             gPressed = !gPressed;
                         } else if (keyStr === window.vars.keyPlaceSpike) {
@@ -8983,8 +8984,8 @@ function __lunaBoot() {
                             if (keyNum == 32) {
                                 attackState = 0;
                                 sendAtckState();
-                            } else if (keyNum == 81) {
-                                qPress = true;
+                            } else if (keyStr === window.vars.test193) {
+                                qPress = false;
                             }
                             else if(keyStr === window.vars.keyPlaceSpike) {
                                 spikePress = false;
@@ -9082,6 +9083,7 @@ function sendLockDir() {
                 cancelPlacementRestore();
                 cancelDelayedPlacers();
                 resetPlaceSync();
+                resetSurvivalHeal();
 
                 try {
                     factorem.refreshAds([2], true);
@@ -10567,6 +10569,7 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                     cancelPlacementRestore();
                     cancelDelayedPlacers();
                     resetPlaceSync();
+                    resetSurvivalHeal();
 
                     myPlayer = tmpPlayer;
                     camX = myPlayer.x;
@@ -11164,8 +11167,12 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                 return 4 + (includeDirectionPacket ? 1 : 0) + restorePacket;
             }
 
+            // Placers stop this many packets short of the cap, so a heal (4 per
+            // food) always has room for three eats in the same second.
+            const HEAL_PACKET_RESERVE = 12;
+
             function hasPlacementPacketBudget(includeDirectionPacket = true) {
-                return packets + getPlacementPacketCost(includeDirectionPacket) <= 119;
+                return packets + getPlacementPacketCost(includeDirectionPacket) <= 119 - HEAL_PACKET_RESERVE;
             }
 
             function getPlacementRestoreWeapon() {
@@ -11705,10 +11712,248 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                 }
             }
 
-            function heal(value) {
-                for (let i = 0; i < value; i += items.list[myPlayer.items[0]].heal) {
-                    place(myPlayer.items[0], null);
+            // ================================================================
+            // SURVIVAL HEAL: shame-safe timing and our own shame count
+            //
+            // Server rule (player.js buildItem): every damage stamps hitTime.
+            // The first eat after it is judged: within 120ms of the hit is
+            // +1 shame, later is -2. At 8 eating is locked for 30s, and the
+            // eat that reaches 8 already heals nothing. The check runs before
+            // the food is used, so an eat at full HP still takes the -2.
+            //
+            // The server measures hit -> eat as (our send - when we saw the
+            // hit) + round trip. So an eat sent 120 + margin - ping after the
+            // damage packet is a slow eat: it heals and lowers shame. Only a
+            // hit that would kill before then is worth a fast eat.
+            // ================================================================
+            const SHAME_WINDOW = 120;
+            // Quasar's proven 140 - ping comes to the same: 20ms past the window.
+            const SHAME_MARGIN = 20;
+            const SHAME_LOCK_MS = 30000;
+            // A fast eat at 7 is the 8th: it heals 0 and locks eating for 30s.
+            const SHAME_FAST_LIMIT = 6;
+            const HEAL_FLIGHT_MS = 60;
+            // No enemy this close before bull goes on to burn shame: the safeSoldier radius.
+            const SHAME_RESET_CLEAR_RANGE = 400;
+
+            let lastHitRecv = 0;
+            let hitPending = false;
+            let myShame = 0;
+            let shameLockUntil = 0;
+            let slowHealTimer = null;
+            let healInFlightUntil = 0;
+            let healCheck = null;
+
+            const healStats = {
+                slowHeals: 0,
+                fastHeals: 0,
+                dryEats: 0,
+                manualHeals: 0,
+                shameSpent: 0,
+                shameRecovered: 0,
+                fastRefused: 0,
+                lockouts: 0,
+                lockoutsInferred: 0,
+            };
+            window.lunaHeal = {
+                stats: healStats,
+                state: () => ({
+                    shame: myShame,
+                    lockedForMs: Math.max(0, shameLockUntil - Date.now()),
+                    hitPending: hitPending,
+                    safeInMs: hitPending ? Math.max(0, shameSafeAt() - Date.now()) : 0,
+                    rttLow: healRttLow(),
+                }),
+            };
+
+            function resetSurvivalHeal() {
+                lastHitRecv = 0;
+                hitPending = false;
+                myShame = 0;
+                shameLockUntil = 0;
+                wasShameHat = false;
+                healInFlightUntil = 0;
+                healCheck = null;
+                if (slowHealTimer != null) {
+                    clearTimeout(slowHealTimer);
+                    slowHealTimer = null;
                 }
+            }
+
+            // The round trip to plan with: the lowest of the last few samples,
+            // so the wait is never cut short by one slow ping.
+            function healRttLow() {
+                const recent = pings.slice(-4);
+                let low = recent.length ? Math.min(...recent) : (Number.isFinite(window.pingTime) ? window.pingTime : 0);
+                return Math.max(0, Math.min(low, 400));
+            }
+
+            function shameSafeAt() {
+                return lastHitRecv + Math.max(0, SHAME_WINDOW + SHAME_MARGIN - healRttLow());
+            }
+
+            function isShameSafeNow() {
+                return !hitPending || Date.now() >= shameSafeAt();
+            }
+
+            function isShameLocked() {
+                return Date.now() < shameLockUntil;
+            }
+
+            // One burst of eats. Only the first is judged for shame, so the
+            // model moves once per burst. `missing` <= 0 is a dry eat.
+            function eatBurst(missing, kind) {
+                if (!myPlayer || !myPlayer.alive) return 0;
+                if (isShameLocked()) return 0;
+                // Assassin gear cannot eat at all; an attempt would only read as a lockout.
+                if (myPlayer.skinIndex == 56) return 0;
+
+                const foodId = myPlayer.items[0];
+                const food = items.list[foodId];
+                if (!food) return 0;
+
+                let count = missing > 0 ? Math.ceil(missing / food.heal) : 1;
+                const cost = food.req && food.req[1];
+                if (!config.inSandbox && cost && Number.isFinite(myPlayer.food)) {
+                    count = Math.min(count, Math.floor(myPlayer.food / cost));
+                }
+                count = Math.min(count, Math.floor((119 - packets) / getPlacementPacketCost(false)));
+                if (count <= 0) return 0;
+
+                const now = Date.now();
+                if (hitPending) {
+                    if ((now - lastHitRecv) + healRttLow() > SHAME_WINDOW) {
+                        healStats.shameRecovered += Math.min(2, myShame);
+                        myShame = Math.max(0, myShame - 2);
+                    } else {
+                        myShame++;
+                        healStats.shameSpent++;
+                        if (myShame >= 8) {
+                            myShame = 0;
+                            shameLockUntil = now + SHAME_LOCK_MS + (window.pingTime || 0);
+                            healStats.lockouts++;
+                        }
+                    }
+                    hitPending = false;
+                }
+                myPlayer.shameCount = myShame;
+
+                for (let i = 0; i < count; i++) {
+                    place(foodId, null);
+                }
+
+                healInFlightUntil = now + (window.pingTime || 0) + HEAL_FLIGHT_MS;
+                if (missing > 0 && !healCheck) healCheck = { at: now, hp: myPlayer.health, food: myPlayer.food };
+
+                if (kind === "slow") healStats.slowHeals++;
+                else if (kind === "fast") healStats.fastHeals++;
+                else if (kind === "dry") healStats.dryEats++;
+                else if (kind === "manual") healStats.manualHeals++;
+                return count;
+            }
+
+            // A burst that neither raised HP nor spent food was refused: the
+            // server is in its 30s lockout and our count drifted. Follow it.
+            // Until a burst is answered no other goes out, or each resend would
+            // push the verdict back and keep feeding a lockout.
+            function checkHealLanded() {
+                if (!healCheck) return true;
+                if (Date.now() - healCheck.at < (window.pingTime || 0) + 250) return false;
+
+                const foodSpent = Number.isFinite(healCheck.food) && Number.isFinite(myPlayer.food) && myPlayer.food < healCheck.food;
+                if (!foodSpent && myPlayer.health <= healCheck.hp && myPlayer.health < 100) {
+                    myShame = 0;
+                    myPlayer.shameCount = 0;
+                    shameLockUntil = Math.max(shameLockUntil, healCheck.at + SHAME_LOCK_MS);
+                    healStats.lockoutsInferred++;
+                }
+                healCheck = null;
+                return true;
+            }
+
+            // "O" for us: an HP drop stamps the hit and books the slow heal.
+            function onMyHealth(damage) {
+                if (damage > 0) {
+                    lastHitRecv = Date.now();
+                    hitPending = true;
+                    scheduleSlowHeal();
+                } else if (damage < 0) {
+                    healCheck = null;
+                    healInFlightUntil = 0;
+                }
+            }
+
+            function scheduleSlowHeal() {
+                if (slowHealTimer != null) clearTimeout(slowHealTimer);
+                const hitAt = lastHitRecv;
+                slowHealTimer = setTimeout(function () {
+                    slowHealTimer = null;
+                    if (lastHitRecv !== hitAt) return;
+                    // Mid-insta: leave it to the tick, which retries the same heal.
+                    if (autoaim) return;
+                    trySlowHeal();
+                }, Math.max(1, shameSafeAt() - Date.now()));
+            }
+
+            function trySlowHeal() {
+                if (!window.vars.autoHeal || !myPlayer || !myPlayer.alive || !inGame) return false;
+                if (myPlayer.health >= 100 || isShameLocked() || Date.now() < healInFlightUntil) return false;
+                if (!isShameSafeNow() || !checkHealLanded()) return false;
+                return eatBurst(100 - myPlayer.health, "slow") > 0;
+            }
+
+            // The server's own word on the lockout: it dresses us in the Shame! hat
+            // (45) for it. While it is on, nothing we eat heals; when it comes off
+            // the lockout is over and the count is 0.
+            let wasShameHat = false;
+            function syncShameHat() {
+                const shameHat = myPlayer.skinIndex == 45;
+                if (shameHat) {
+                    myShame = 0;
+                    myPlayer.shameCount = 0;
+                    shameLockUntil = Math.max(shameLockUntil, Date.now() + 1000);
+                } else if (wasShameHat) {
+                    shameLockUntil = 0;
+                    hitPending = false;
+                }
+                wasShameHat = shameHat;
+            }
+
+            // The tick's heal. `lethal`: the damage predicted for the next tick
+            // kills through the hat we are sending.
+            function survivalHeal(lethal, threatNear) {
+                syncShameHat();
+                const answered = checkHealLanded();
+                if (!window.vars.autoHeal) return false;
+
+                if (myPlayer.health >= 100) {
+                    // Regen or lifesteal refilled us after a hit nobody ate for:
+                    // an eat now takes the -2 and uses no food.
+                    if (myShame > 0 && hitPending && !threatNear && isShameSafeNow() && Date.now() >= healInFlightUntil) {
+                        return eatBurst(0, "dry") > 0;
+                    }
+                    return false;
+                }
+
+                if (isShameLocked() || Date.now() < healInFlightUntil || !answered) return false;
+                if (isShameSafeNow()) return eatBurst(100 - myPlayer.health, "slow") > 0;
+
+                if (lethal) {
+                    if (myShame <= SHAME_FAST_LIMIT) return eatBurst(100 - myPlayer.health, "fast") > 0;
+                    healStats.fastRefused++;
+                }
+                return false;
+            }
+
+            // The "faster heal" key: heal now, but never into the 8th shame.
+            function manualHeal() {
+                if (!myPlayer || !myPlayer.alive || myPlayer.health >= 100 || isShameLocked()) return;
+                if (!checkHealLanded()) return;
+                if (!isShameSafeNow() && myShame > SHAME_FAST_LIMIT) {
+                    healStats.fastRefused++;
+                    return;
+                }
+                eatBurst(100 - myPlayer.health, "manual");
             }
 
             function isBoughtHat(id, type) {
@@ -12612,6 +12857,8 @@ if (isSpike && canSpikeTick && canTrapTick()) {
                     let damage = tmpObj.health - value;
                     tmpObj.health = value;
 
+                    if (tmpObj == myPlayer) onMyHealth(damage);
+
                     if (damage > 0) {
                         tmpObj.hitTime = Date.now();
 
@@ -12626,7 +12873,9 @@ if (isSpike && canSpikeTick && canTrapTick()) {
                             }
                         }
                     } else {
-                        if (tmpObj.hitTime) {
+                        // Our own count comes from the eats we send (eatBurst), not
+                        // from HP rises: regen and lifesteal raise HP without eating.
+                        if (tmpObj.hitTime && tmpObj != myPlayer) {
                             let o = Date.now() - tmpObj.hitTime;
                             if (o <= 120) {
                                 tmpObj.shameCount = tmpObj.shameCount + 1;
@@ -12706,6 +12955,15 @@ if (isSpike && canSpikeTick && canTrapTick()) {
                 }, speed);
             }
 
+            // Spike damage on contact, bare and through soldier.
+            const SPIKE_DAMAGES = [20, 30, 35, 45, 20 * .75, 30 * .75, 35 * .75, 45 * .75];
+
+            // A damage we saw against one we expected. Health can arrive rounded,
+            // so a 67.5 hit reads as 67 or 68; exact equality missed it.
+            function sameDamage(seen, expected) {
+                return Math.abs(seen - expected) < .6;
+            }
+
             function distributionDamages(object) {
                 if (object.type == "hit") {
                     const { weapon, player } = object;
@@ -12719,7 +12977,7 @@ if (isSpike && canSpikeTick && canTrapTick()) {
                     damage = UTILS.fixTo(damage, 2);
 
                     for (let i in damages) {
-                        if (damages[i] == damage) {
+                        if (sameDamage(damages[i], damage)) {
                             damagesByHits.push({ damage: damage, player: player, weapon: weapon });
                             damages.splice(i, 1);
 
@@ -12733,7 +12991,7 @@ if (isSpike && canSpikeTick && canTrapTick()) {
                     damage = UTILS.fixTo(damage, 2);
 
                     for (let i in damages) {
-                        if (damages[i] == damage) {
+                        if (sameDamage(damages[i], damage)) {
                             damagesByShoots.push({ projectile: projectile, damage: damage });
                             damages.splice(i, 1);
 
@@ -12742,7 +13000,7 @@ if (isSpike && canSpikeTick && canTrapTick()) {
                     }
                 } else if (object.type == "spikes") {
                     for (let damage of damages) {
-                        if (damage == 20 || damage == 30 || damage == 35 || damage == 45 || damage == (20 * .75) || damage == (30 * .75) || damage == (35 * .75) || damage == (45 * .75)) {
+                        if (SPIKE_DAMAGES.some(value => sameDamage(damage, value))) {
                             spikeDamages.push(damage);
                         }
                     }
@@ -12856,13 +13114,13 @@ if (isSpike && canSpikeTick && canTrapTick()) {
                     if (playerSecondary == HAMMER)
                         return weapon.dmg * 1.5 * getVariantMultiplier(secondaryVariant);
 
-                    // Ranged secondary weapons with hardcoded damage
+                    // Ranged secondaries hit for their projectile's damage
                     if (playerSecondary == BOW)
-                        return 15;
+                        return 25;
                     if (playerSecondary == CROSSBOW)
-                        return 30;
-                    if (playerSecondary == REPEATER)
                         return 35;
+                    if (playerSecondary == REPEATER)
+                        return 30;
                     if (playerSecondary == MUSKET)
                         return 50;
 
@@ -14193,15 +14451,16 @@ function triggerKillChat() {
                         let secDmgPot = 0;
                         let poisonDmgPot = 0;
 
-                        // DAMAGE BY POISON
+                        // DAMAGE BY POISON (and bull's drain: both run on the same 1s timer)
                         for (let damage of damages) {
-                            if (damage == 5 || damage == (5 * .75)) {
+                            if (Math.abs(damage - 5) < .6 || Math.abs(damage - 5 * .75) < .6) {
                                 damageByPoisonTick = tick;
                             }
                         }
 
-                        // PREDICT POISON DAMAGE
-                        if ((tick - damageByPoisonTick) % 9 == 8 || (tick - damageByPoisonTick) % 9 == 9) {
+                        // PREDICT POISON DAMAGE: the 1s timer comes round every 9 or 10 ticks
+                        const sincePoison = tick - damageByPoisonTick;
+                        if (damageByPoisonTick > 0 && (sincePoison == 8 || sincePoison == 9)) {
                             poisonDmgPot = 5;
                         }
 
@@ -14220,12 +14479,9 @@ function triggerKillChat() {
 
                         if (collidingspike && spikeDamages.length > 0) {
                             for (let dmg of spikeDamages) {
-                                // Check if this damage value has the 0.75 multiplier
-                                if (dmg == (20 * 0.75) || dmg == (30 * 0.75) || dmg == (35 * 0.75) || dmg == (45 * 0.75)) {
-                                    spikeDmgPot += dmg / 0.75; // Reverse the multiplier
-                                } else {
-                                    spikeDmgPot += dmg; // Add normally
-                                }
+                                // Back to the spike's own damage: the hat factor is applied to the whole pot later.
+                                const bare = [20, 30, 35, 45].find(value => sameDamage(dmg, value * .75));
+                                spikeDmgPot += bare !== undefined ? bare : dmg;
                             }
                         }
 
@@ -14272,12 +14528,27 @@ function triggerKillChat() {
 
 
                         // PREDICTION FOR ALL ENEMIES
+                        // Each enemy is one threat for the next tick: one weapon swing
+                        // (primary or secondary, never both), a turret shot, and a spike.
+                        // Counting an enemy's hit once per reason added the same swing
+                        // up to four times, and every overcount was a fast heal (+1 shame).
                         let hitDmgPot = 0;
                         let turretDmgPot = 0;
                         let predicted = false;
+                        const threats = [];
+                        canStillGather = false;
 
                         for (let enemy of enemiesNear) {
-                            let inPrimaryRange = UTILS.getDistance(myPlayer.x2, myPlayer.y2, enemy.x2, enemy.y2) <= myPlayer.scale * 1.8 + getPlayerInfo(enemy, "primaryRange");
+                            const enemyDist = UTILS.getDistance(myPlayer.x2, myPlayer.y2, enemy.x2, enemy.y2);
+                            const primaryDmg = getPlayerInfo(enemy, "primaryDmg");
+                            let inPrimaryRange = enemyDist <= myPlayer.scale * 1.8 + getPlayerInfo(enemy, "primaryRange");
+                            const threat = { hit: 0, secondary: 0, turret: 0, spike: 0, ready: 0 };
+                            threats.push(threat);
+
+                            // ANTI SYNC: a ready swing in reach, counted when two or more enemies have one
+                            if (primaryReload[enemy.sid] == 1 && inPrimaryRange) {
+                                threat.ready = primaryDmg;
+                            }
 
                             // PREDICT HIT
                             if (primaryReload[enemy.sid] == 1 && inPrimaryRange) {
@@ -14285,138 +14556,126 @@ function triggerKillChat() {
                                 if (collidingspike) {
                                     // If we werent colliding just predict
                                     if (!lastcolliding) {
-                                        hitDmgPot += getPlayerInfo(enemy, "primaryDmg");
+                                        threat.hit = primaryDmg;
                                     }
                                     // If we were colliding predict if enemy last reload wasnt 1
                                     else if (enemy.lastPrimaryReload < 1) {
-                                        hitDmgPot += getPlayerInfo(enemy, "primaryDmg");
+                                        threat.hit = primaryDmg;
                                     }
                                     else if (secondaryReload[myPlayer.sid] == 1 && !lastPredicted) {
                                         predicted = true;
-                                        hitDmgPot += getPlayerInfo(enemy, "primaryDmg");
+                                        threat.hit = primaryDmg;
                                     }
                                 }
                                 // When we will collide
                                 else if (willcollide) {
-                                    hitDmgPot += getPlayerInfo(enemy, "primaryDmg");
+                                    threat.hit = primaryDmg;
                                 }
                                 // Autosteal predict
-                                else if (myPlayer.health <= getPlayerInfo(enemy, "primaryDmg")) {
-                                    hitDmgPot += getPlayerInfo(enemy, "primaryDmg");
+                                else if (myPlayer.health <= primaryDmg) {
+                                    threat.hit = primaryDmg;
                                 }
 
                             }
 
                             // PREDICT TURRET HIT
-                            if (UTILS.getDistance(enemy.x2, enemy.y2, myPlayer.x2, myPlayer.y2) <= 350 && turretReload[enemy.sid] == 1) {
+                            if (enemyDist <= 350 && turretReload[enemy.sid] == 1) {
                                 // When colliding spike
                                 if (collidingspike && enemy.lastPrimaryReload == 1 && primaryReload[enemy.sid] < 1) {
-                                    turretDmgPot += 25;
+                                    threat.turret = 25;
                                 }
                                 // When we will be knockbacked into spike
                                 else if (willcollide && primaryReload[enemy.sid] < 1) {
-                                    turretDmgPot += 25;
+                                    threat.turret = 25;
                                 }
                                 // Prediction for autosteal turret
-                                else if (myPlayer.health <= 25 && (hitDmgPot + turretDmgPot + spikeDmgPot) < 25) {
-                                    turretDmgPot += 25;
+                                else if (myPlayer.health <= 25 && (threat.hit + spikeDmgPot) < 25) {
+                                    threat.turret = 25;
                                 }
                             }
 
-                            // VELOCITY TICK ANTI
-                            if (UTILS.getDistance(enemy.xVel, enemy.yVel, myPlayer.xVel, myPlayer.yVel) > 150 && UTILS.getDistance(enemy.xVel, enemy.yVel, myPlayer.xVel, myPlayer.yVel) < 350) {
-                                if (turretReload[enemy.sid] < 1 && primaryReload[enemy.sid] == 1 && enemy.skinIndex == 53) {
-                                    turretDmgPot += 25;
-                                    hitDmgPot += getPlayerInfo(enemy, "primaryDmg");
+                            // VELOCITY TICK ANTI (anti onetick): a turret-gear rush from outside melee reach
+                            if (window.vars.test4) {
+                                const closing = UTILS.getDistance(enemy.xVel, enemy.yVel, myPlayer.xVel, myPlayer.yVel);
+                                if (closing > 150 && closing < 350 && turretReload[enemy.sid] < 1 && primaryReload[enemy.sid] == 1 && enemy.skinIndex == 53) {
+                                    threat.turret = 25;
+                                    threat.hit = primaryDmg;
                                 }
                             }
 
-                            // KNOCKBACK ANTI
-                            canStillGather = false;
+                            // KNOCKBACK ANTI: their hit pushes us onto a spike or cactus. Checked
+                            // from where we will be and from where we are; one push, counted once.
                             if (!imTrapped && primaryReload[enemy.sid] == 1 && inPrimaryRange) {
-                                let posX = myPlayer.xVel + 111 * (.3 + getPlayerInfo(enemy, "primaryKnockback")) * Math.cos(Math.atan2(myPlayer.yVel - enemy.yVel, myPlayer.xVel - enemy.xVel));
-                                let posY = myPlayer.yVel + 111 * (.3 + getPlayerInfo(enemy, "primaryKnockback")) * Math.sin(Math.atan2(myPlayer.yVel - enemy.yVel, myPlayer.xVel - enemy.xVel));
+                                const knock = 111 * (.3 + getPlayerInfo(enemy, "primaryKnockback"));
+                                const origins = [
+                                    [myPlayer.xVel, myPlayer.yVel, Math.atan2(myPlayer.yVel - enemy.yVel, myPlayer.xVel - enemy.xVel)],
+                                    [myPlayer.x2, myPlayer.y2, Math.atan2(myPlayer.y2 - enemy.y2, myPlayer.x2 - enemy.x2)],
+                                ];
 
-                                for (let spike of spikes_enemy) {
-                                    if (UTILS.lineInRect(
-                                        spike.x - (myPlayer.scale + spike.scale), spike.y - (myPlayer.scale + spike.scale),
-                                        spike.x + (myPlayer.scale + spike.scale), spike.y + (myPlayer.scale + spike.scale),
-                                        myPlayer.xVel, myPlayer.yVel,
-                                        posX, posY
-                                    )) {
-                                        spikeDmgPot += spike.dmg;
-                                        hitDmgPot += getPlayerInfo(enemy, "primaryDmg");
-                                        canStillGather = true;
-                                        break;
+                                for (const [fromX, fromY, away] of origins) {
+                                    const posX = fromX + knock * Math.cos(away);
+                                    const posY = fromY + knock * Math.sin(away);
+                                    let landed = 0;
+
+                                    for (let spike of spikes_enemy) {
+                                        if (UTILS.lineInRect(
+                                            spike.x - (myPlayer.scale + spike.scale), spike.y - (myPlayer.scale + spike.scale),
+                                            spike.x + (myPlayer.scale + spike.scale), spike.y + (myPlayer.scale + spike.scale),
+                                            fromX, fromY,
+                                            posX, posY
+                                        )) {
+                                            landed = spike.dmg;
+                                            break;
+                                        }
                                     }
-                                }
 
-                                for (let cactus of cactuses) {
-                                    if (UTILS.lineInRect(
-                                        cactus.x - cactus.scale, cactus.y - cactus.scale,
-                                        cactus.x + cactus.scale, cactus.y + cactus.scale,
-                                        myPlayer.xVel, myPlayer.yVel,
-                                        posX, posY
-                                    )) {
-                                        spikeDmgPot += 35;
-                                        hitDmgPot += getPlayerInfo(enemy, "primaryDmg");
-                                        canStillGather = true;
-                                        break;
-                                    }
-                                }
-                            }
-                             if (!imTrapped && primaryReload[enemy.sid] == 1 && inPrimaryRange) {
-                                let posX = myPlayer.x2 + 111 * (.3 + getPlayerInfo(enemy, "primaryKnockback")) * Math.cos(Math.atan2(myPlayer.y2 - enemy.y2, myPlayer.x2 - enemy.x2));
-                                let posY = myPlayer.y2 + 111 * (.3 + getPlayerInfo(enemy, "primaryKnockback")) * Math.sin(Math.atan2(myPlayer.y2 - enemy.y2, myPlayer.x2 - enemy.x2));
-
-                                for (let spike of spikes_enemy) {
-                                    if (UTILS.lineInRect(
-                                        spike.x - (myPlayer.scale + spike.scale), spike.y - (myPlayer.scale + spike.scale),
-                                        spike.x + (myPlayer.scale + spike.scale), spike.y + (myPlayer.scale + spike.scale),
-                                        myPlayer.x2, myPlayer.y2,
-                                        posX, posY
-                                    )) {
-                                        spikeDmgPot += spike.dmg;
-                                        hitDmgPot += getPlayerInfo(enemy, "primaryDmg");
-                                        canStillGather = true;
-                                        break;
-                                    }
-                                }
-
-                                for (let cactus of cactuses) {
-                                    if (UTILS.lineInRect(
-                                        cactus.x - cactus.scale, cactus.y - cactus.scale,
-                                        cactus.x + cactus.scale, cactus.y + cactus.scale,
-                                        myPlayer.x2, myPlayer.y2,
-                                        posX, posY
-                                    )) {
-                                        spikeDmgPot += 35;
-                                        hitDmgPot += getPlayerInfo(enemy, "primaryDmg");
-                                        canStillGather = true;
-                                        break;
-                                    }
-                                }
-                            }
-
-
-                            // ANTI NORMAL INSTAKILL
-                            if (getPlayerInfo(enemy, "secondaryWeapon") == "hammer" || getPlayerInfo(enemy, "secondaryWeapon") == "musket" || getPlayerInfo(enemy, "secondaryWeapon") == "crossbow" || getPlayerInfo(enemy, "secondaryWeapon") == "repeater crossbow" || getPlayerInfo(enemy, "secondaryWeapon") == "bow") {
-                                if (damagesByHits.length > 0 && UTILS.getDistance(enemy.x, enemy.y, myPlayer.x2, myPlayer.y2) <= 400) {
-                                    if (turretReload[enemy.sid] == 1) {
-                                        turretDmgPot += 25;
-                                        if (secondaryReload[enemy.sid] == 1) {
-                                            if (getPlayerInfo(enemy, "secondaryWeapon") == "hammer") {
-                                                secDmgPot += (getPlayerInfo(enemy, "secondaryDmg") / 1.5);
-                                            }
-                                            else {
-                                                secDmgPot += getPlayerInfo(enemy, "secondaryDmg");
+                                    if (!landed) {
+                                        for (let cactus of cactuses) {
+                                            if (UTILS.lineInRect(
+                                                cactus.x - cactus.scale, cactus.y - cactus.scale,
+                                                cactus.x + cactus.scale, cactus.y + cactus.scale,
+                                                fromX, fromY,
+                                                posX, posY
+                                            )) {
+                                                landed = 35;
+                                                break;
                                             }
                                         }
                                     }
-                                    else if (secondaryReload[enemy.sid] == 1) {
-                                        secDmgPot += getPlayerInfo(enemy, "secondaryDmg");
+
+                                    if (landed) {
+                                        threat.spike = Math.max(threat.spike, landed);
+                                        threat.hit = primaryDmg;
+                                        canStillGather = true;
+                                        break;
                                     }
                                 }
+                            }
+
+                            // ANTI DEFAULT INSTA: their primary just hit us, so their
+                            // secondary and turret are what lands next tick.
+                            const hitUs = damagesByHits.filter(hit => hit.player == enemy);
+                            if (window.vars.test1 && hitUs.some(hit => hit.weapon < 9)) {
+                                const secondaryName = getPlayerInfo(enemy, "secondaryWeapon");
+                                const secondaryReach = secondaryName == "hammer" ? myPlayer.scale * 1.8 + getPlayerInfo(enemy, "secondaryRange") + 60 : 450;
+                                const turretReady = turretReload[enemy.sid] == 1;
+
+                                if (turretReady) threat.turret = 25;
+                                if (secondaryReload[enemy.sid] == 1 && enemyDist <= secondaryReach) {
+                                    // A hammer follow-up with the turret is swung in turret gear, not bull.
+                                    const secondaryDmg = getPlayerInfo(enemy, "secondaryDmg");
+                                    threat.secondary = Math.max(threat.secondary, secondaryName == "hammer" && turretReady ? secondaryDmg / 1.5 : secondaryDmg);
+                                }
+                            }
+
+                            // ANTI REVERSE INSTA: their secondary (a shot or a hammer swing) hit
+                            // us first, so their bull primary and turret come next tick.
+                            const shotUs = damagesByShoots.some(shot => shot.projectile.player == enemy) || hitUs.some(hit => hit.weapon >= 9);
+                            if (window.vars.test2 && shotUs) {
+                                if (primaryReload[enemy.sid] == 1 && enemyDist <= myPlayer.scale * 1.8 + getPlayerInfo(enemy, "primaryRange") + 60) {
+                                    threat.hit = primaryDmg;
+                                }
+                                if (turretReload[enemy.sid] == 1) threat.turret = 25;
                             }
 
                             // ANTI SPIKE TICK
@@ -14434,25 +14693,36 @@ function triggerKillChat() {
                                     if (objectManager.checkItemLocation(config.x, config.y, config.scale, 0.6, id, false, enemy, visibleObjects)) {
                                         if (UTILS.getDistance(myPlayer.xVel, myPlayer.yVel, config.x, config.y) <= 35 + config.scale) {
                                             if (inPrimaryRange && primaryReload[enemy.sid] == 1) {
-                                                if (100 <= (getPlayerInfo(enemy, "primaryDmg") + 45)) {
+                                                if (100 <= (primaryDmg + 45)) {
                                                     spikeTickAnti = true;
                                                 }
-                                                if ((myPlayer.health / 0.75) <= (getPlayerInfo(enemy, "primaryDmg") + 45)) {
-                                                    spikeDmgPot += 45;
-                                                    hitDmgPot += getPlayerInfo(enemy, "primaryDmg");
+                                                if ((myPlayer.health / 0.75) <= (primaryDmg + 45)) {
+                                                    threat.spike = Math.max(threat.spike, 45);
+                                                    threat.hit = primaryDmg;
                                                     break;
                                                 }
                                             }
                                             else if (myPlayer.health <= 70 && damagesByHits.length > 0) {
-                                                spikeDmgPot += 45;
-                                                if (turretReload[enemy.sid]) {
-                                                    turretDmgPot += 25;
+                                                // One spike is all they can place: stop at the first spot.
+                                                threat.spike = Math.max(threat.spike, 45);
+                                                if (turretReload[enemy.sid] == 1) {
+                                                    threat.turret = 25;
                                                 }
+                                                break;
                                             }
                                         }
                                     }
                                 }
                             }
+                        }
+
+                        // One swing per enemy; with two or more enemies ready in reach, each
+                        // of them is assumed to swing (anti sync).
+                        const syncing = window.vars.test3 && threats.filter(threat => threat.ready > 0).length >= 2;
+                        for (const threat of threats) {
+                            hitDmgPot += Math.max(threat.hit, threat.secondary, syncing ? threat.ready : 0);
+                            turretDmgPot += threat.turret;
+                            spikeDmgPot += threat.spike;
                         }
 
                         lastcolliding = collidingspike;
@@ -14465,7 +14735,13 @@ function triggerKillChat() {
                         if (totalDmgPot > 140)
                             totalDmgPot = 140;
 
-                        if (totalDmgPot >= 100)
+                        // Soldier first: if the next tick kills us bare, wear soldier before
+                        // spending shame on a fast heal. Also on a turret shot flying at us from
+                        // an enemy with a ready hit (anti onetick), and the tick our trap broke
+                        // with an enemy ready to spike-tick us.
+                        const readyInReach = enemiesNear.some(enemy => primaryReload[enemy.sid] == 1 &&
+                            UTILS.getDistance(myPlayer.x2, myPlayer.y2, enemy.x2, enemy.y2) <= myPlayer.scale * 1.8 + getPlayerInfo(enemy, "primaryRange") + 60);
+                        if (totalDmgPot >= 100 || myPlayer.health <= totalDmgPot || (window.vars.test4 && antiTick) || (trapBreaked && readyInReach) || (isShameLocked() && readyInReach))
                             soldierAnti = true;
 
 
@@ -14508,8 +14784,12 @@ function triggerKillChat() {
                             }
                         }
 
-                        // SHAME RESET
-                        if (myPlayer.shameCount > 0 && !soldierAnti && !collidingspike && poisonDmgPot == 0 && totalDmgPot == 0) {
+                        // SHAME RESET: bull's -5/s drain is a hit the next slow heal turns
+                        // into -2. Never with an enemy close: bull replaces soldier.
+                        const threatNear = enemiesNear.some(enemy => UTILS.getDistance(myPlayer.x2, myPlayer.y2, enemy.x2, enemy.y2) <= SHAME_RESET_CLEAR_RANGE);
+                        // The drain itself reads as poison on the tick it is due, which used to
+                        // take bull off exactly then; with nobody near, 5 is not a threat.
+                        if (myPlayer.shameCount > 0 && !threatNear && !isShameLocked() && !soldierAnti && !collidingspike && (totalDmgPot - poisonDmgPot) == 0 && myPlayer.health > 5 + poisonDmgPot) {
                             shouldResetShame = true;
                         }
 
@@ -14520,7 +14800,8 @@ function triggerKillChat() {
                         spikeTickAnti = false;
                         shouldResetShame = false;
 
-                        if (currentHat == 6)
+                        // hat() only sends a hat we own, so only an owned soldier cuts the damage.
+                        if (currentHat == 6 && isBoughtHat(6, 0))
                             totalDmgPot *= 0.75;
                         if (currentHat == 7)
                             totalDmgPot += 5;
@@ -14529,12 +14810,8 @@ function triggerKillChat() {
                             healing = true;
 
 
-                        // HEAL
-                        let damageHealed = false;
-                        if (((healing && myPlayer.shameCount < 7) || (tick - damageTick) > 0) && myPlayer.health < 100) {
-                            heal(100 - myPlayer.health);
-                            damageHealed = true;
-                        }
+                        // HEAL: shame-safe unless the next tick would kill us
+                        let damageHealed = survivalHeal(healing, threatNear);
 
                         // REPLACE: breaks preplace was covering, or that waited for the tick
                         settleReplaceQueue();
@@ -14583,6 +14860,10 @@ function triggerKillChat() {
                         if (player.spikeDamage <= 0) continue;
                         player.spikeDamage = 0;
                     }
+
+                    // This tick's damage has been read; what arrives next belongs to the next tick.
+                    damages = [];
+                    damagesByShoots = [];
                 });
 
                 // PRE PLACER: sent from scheduleDelayedPlacers, on this tick's angles.
@@ -23573,7 +23854,12 @@ try {
         autoPush: true,
 
         // Defense
+        autoHeal: true,
         safeSoldier: true,
+        test1: true, // anti default insta
+        test2: true, // anti reverse insta
+        test3: true, // anti sync
+        test4: true, // anti onetick
         antiSmart: false,
         antiRetrap: true,
 
@@ -23696,6 +23982,8 @@ defense: [
 title: "General",
 
 items: [
+
+{ type: 'toggle', name: "auto heal (shame safe)", id: "autoHeal" },
 
 { type: 'toggle', name: "auto soldier", id: "safeSoldier" },
 
