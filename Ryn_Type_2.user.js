@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.2
+// @version         2.3
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -93,6 +93,10 @@ if (!_watchRynBranding()) {
    empty container — moving a rendered one would mean moving an iframe, and an
    iframe that changes parent is reloaded — and it is handed back to the
    lobby's own slot on the way out, which is where any later challenge belongs.
+
+   Builds with #verifyDialog work differently. Play has no gate; the check is
+   asked after the press, in that dialog. There step 4 follows step 3 and the
+   challenge is left in the game's dialog (see GameUI.liftVerifyDialog).
 
    One element animates, on transform alone, and only while the rail is
    unfinished. When the screen goes, the element, the stylesheet, every
@@ -313,6 +317,12 @@ html { background-color: #07070A !important; }
     if (gone) {
       return false;
     }
+    // Not in builds with #verifyDialog. The challenge is asked after Play
+    // there, inside that dialog, and taking the widget out of it would leave
+    // the dialog with nothing to answer.
+    if (document.getElementById("verifyDialog") !== null) {
+      return false;
+    }
     const widget = document.getElementById("turnstileWidget");
     if (widget === null || widget.parentNode === gateSlot || widget.firstChild !== null) {
       return false;
@@ -456,27 +466,51 @@ html { background-color: #07070A !important; }
   const onParsed = () => {
     stage(1);
     attach();
+    // Builds that carry #verifyDialog have no play gate to wait for: Play is
+    // pressable from the start, and the human check happens after the press,
+    // in that dialog. There the session is ready once the servers are in, so
+    // step 4 follows step 3 instead of firing at parse time and skipping it.
+    const gateless = document.getElementById("verifyDialog") !== null;
+    const listed = () => {
+      stage(3);
+      if (gateless) {
+        stage(4);
+      }
+    };
     // step 3 — the game's server list. The bundle mounts a <select> into
     // #serverBrowser once its /servers fetch resolves, and shows
     // #menuCardHolder in the same callback; either one arriving is the list
     // being in.
     const browser = document.getElementById("serverBrowser");
     const holder = document.getElementById("menuCardHolder");
+    // Newer builds render the list as their own region and server pickers.
+    // The picker gets its button and an empty list the moment the bundle
+    // runs, so a child of its own means nothing; a row in that list is the
+    // list having arrived.
+    const picker = document.getElementById("regionSelect");
     const listedIn = () => {
       if (browser !== null && browser.querySelector("select") !== null) {
-        stage(3);
+        listed();
+        return true;
+      }
+      if (picker !== null && picker.querySelector(".dropdownRow") !== null) {
+        listed();
         return true;
       }
       if (holder !== null && holder.style.display === "block") {
-        stage(3);
+        listed();
         return true;
       }
       return false;
     };
-    if (browser === null && holder === null) {
-      stage(3);
+    if (browser === null && holder === null && picker === null) {
+      listed();
     } else {
       watch(browser, {
+        childList: true,
+        subtree: true
+      }, listedIn);
+      watch(picker, {
         childList: true,
         subtree: true
       }, listedIn);
@@ -491,7 +525,7 @@ html { background-color: #07070A !important; }
     const play = document.getElementById("enterGame");
     if (play === null) {
       stage(4);
-    } else {
+    } else if (!gateless) {
       watch(play, {
         attributes: true,
         attributeFilter: [ "class" ]
@@ -1417,8 +1451,8 @@ window.grbtp = 35;
    *
    * The API host is derived the same way the bundle derives it — note that the
    * live site is on api-prod2, not api.moomoo.io. A device id travels with the
-   * request and is kept in the same cookie the game uses, so bots and the main
-   * client are not seen as unrelated devices.
+   * request and is kept where the game keeps its own, localStorage "moo_did",
+   * so bots and the main client are not seen as unrelated devices.
    *
    * On any failure this returns null and the caller falls back to the old
    * form. That is very likely to be refused, but a refused connection is a
@@ -1433,18 +1467,20 @@ window.grbtp = 35;
     if (/^dev[a-z0-9-]*\.moomoo\.io$/.test(h)) return "https://api-dev.moomoo.io";
     return "https://api.moomoo.io";
   };
-  const _cookie = name => {
-    try {
-      const m = new RegExp("(?:^|; )" + name + "=([^;]*)").exec(document.cookie);
-      return m ? decodeURIComponent(m[1]) : undefined;
-    } catch (_) {
-      return undefined;
+  // The same storage and key as the game's own xn("moo_did") / fi("moo_did").
+  const _deviceId = {
+    get() {
+      try {
+        return localStorage.getItem("moo_did") || undefined;
+      } catch (_) {
+        return undefined;
+      }
+    },
+    set(value) {
+      try {
+        localStorage.setItem("moo_did", value);
+      } catch (_) {}
     }
-  };
-  const _setCookie = (name, value) => {
-    try {
-      document.cookie = name + "=" + encodeURIComponent(value) + ";path=/;max-age=31536000;samesite=lax";
-    } catch (_) {}
   };
   /* The game also puts its signed-in account token in this request. That is
      deliberately left out here: a bot connection has no business carrying the
@@ -1461,7 +1497,7 @@ window.grbtp = 35;
         },
         body: JSON.stringify({
           captcha: captcha,
-          did: _cookie("moo_did") || undefined,
+          did: _deviceId.get(),
           host: host
         }),
         signal: AbortSignal.timeout(8e3)
@@ -1477,7 +1513,7 @@ window.grbtp = 35;
       }
       if (!res.ok) return null;
       const body = await res.json();
-      if (body && body.did) _setCookie("moo_did", body.did);
+      if (body && body.did) _deviceId.set(body.did);
       return body && body.ticket ? "tk:" + body.ticket : null;
     } catch (e) {
       Logger.warn("[RYN BOT] join failed:", e && e.message);
@@ -5889,6 +5925,179 @@ window.grbtp = 35;
     return _foodTextureImage;
   }
 
+  /* ── The overlay canvas ───────────────────────────────────────────────────
+   *
+   * The game no longer draws with a canvas 2D context. Its main context is now
+   * its own WebGL batch renderer that mimics part of the 2D API — save,
+   * restore, translate, rotate, scale, setTransform, fillRect, drawImage, and a
+   * few shapes of its own (line, disc, circle, ring) — and nothing else: no
+   * beginPath, arc, moveTo, lineTo, stroke, fill, fillText. And
+   * gameCanvas.getContext("2d") returns null, because the canvas already
+   * holds a WebGL context.
+   *
+   * Everything the client draws over the game — health bars, hitboxes,
+   * tracers, markers, text — is written against the full 2D API. Handed the
+   * game's context, the first beginPath threw inside the game's own frame
+   * loop and took the loop down with it on the first frame.
+   *
+   * So the client gets a real 2D canvas of its own, laid exactly over the
+   * game canvas at the same resolution, and cleared at the top of every game
+   * frame. To keep what it draws in the right place, the game renderer's
+   * transform is mirrored: its six transform calls are wrapped once, at the
+   * moment the renderer is created, and a copy of its matrix is kept here.
+   * When client code asks for a context it gets the overlay with that matrix
+   * applied, so world positions land exactly where the game's own drawing
+   * put them. The renderer's matrix is in canvas pixels with the usual 2D
+   * semantics, so the copy is exact.
+   *
+   * On a build where the game still uses a real 2D context, ctxFor() hands
+   * that context back untouched and the overlay is never created. */
+  const RynOverlay = {
+    canvas: null,
+    ctx: null,
+    game: null,
+    renderer: null,
+    m: [ 1, 0, 0, 1, 0, 0 ],
+    stack: [],
+    attach(renderer, canvas) {
+      if (!renderer || this.renderer === renderer) {
+        return;
+      }
+      this.renderer = renderer;
+      if (canvas) {
+        this.game = canvas;
+      }
+      const self = this;
+      const mirror = (name, apply) => {
+        const original = renderer[name];
+        if (typeof original !== "function") {
+          return;
+        }
+        renderer[name] = function() {
+          try {
+            apply.apply(self, arguments);
+          } catch (_) {}
+          return original.apply(this, arguments);
+        };
+      };
+      mirror("setTransform", function(a, b, c, d, e, f) {
+        this.m = [ a, b, c, d, e, f ];
+      });
+      mirror("translate", function(x, y) {
+        const m = this.m;
+        m[4] += m[0] * x + m[2] * y;
+        m[5] += m[1] * x + m[3] * y;
+      });
+      mirror("rotate", function(angle) {
+        const m = this.m, cos = Math.cos(angle), sin = Math.sin(angle);
+        const a = m[0] * cos + m[2] * sin, b = m[1] * cos + m[3] * sin;
+        m[2] = m[2] * cos - m[0] * sin;
+        m[3] = m[3] * cos - m[1] * sin;
+        m[0] = a;
+        m[1] = b;
+      });
+      mirror("scale", function(x, y) {
+        const m = this.m;
+        m[0] *= x;
+        m[1] *= x;
+        m[2] *= y;
+        m[3] *= y;
+      });
+      mirror("save", function() {
+        this.stack.push(this.m.slice());
+      });
+      mirror("restore", function() {
+        if (this.stack.length) {
+          this.m = this.stack.pop();
+        }
+      });
+    },
+    ensure() {
+      const game = this.game || document.getElementById("gameCanvas");
+      if (!game) {
+        return null;
+      }
+      this.game = game;
+      if (this.canvas === null) {
+        const canvas = document.createElement("canvas");
+        canvas.id = "ryn-overlay";
+        canvas.style.cssText = "position:fixed;left:0;top:0;pointer-events:none;";
+        if (game.parentNode) {
+          game.parentNode.insertBefore(canvas, game.nextSibling);
+        } else {
+          (document.body || document.documentElement).appendChild(canvas);
+        }
+        this.canvas = canvas;
+        this.ctx = canvas.getContext("2d");
+      }
+      return this.ctx;
+    },
+    // A context the client can draw on with the whole 2D API.
+    ctxFor(given) {
+      if (given && typeof given.beginPath === "function") {
+        return given;
+      }
+      if (this.renderer === null) {
+        return given || null;
+      }
+      const ctx = this.ensure();
+      if (ctx === null) {
+        return null;
+      }
+      const m = this.m;
+      ctx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
+      return ctx;
+    },
+    // Top of a game frame: follow the game canvas's size and position, clear.
+    beginFrame() {
+      if (this.renderer === null) {
+        return;
+      }
+      const ctx = this.ensure();
+      if (ctx === null) {
+        return;
+      }
+      const game = this.game, canvas = this.canvas;
+      if (canvas.width !== game.width) canvas.width = game.width;
+      if (canvas.height !== game.height) canvas.height = game.height;
+      const box = game.getBoundingClientRect(), style = canvas.style;
+      const left = box.left + "px", top = box.top + "px", width = box.width + "px", height = box.height + "px";
+      if (style.left !== left) style.left = left;
+      if (style.top !== top) style.top = top;
+      if (style.width !== width) style.width = width;
+      if (style.height !== height) style.height = height;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = 1;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  };
+  /* Calls the game makes into the client from inside its own frame loop. One
+     of them throwing used to end the loop — the game froze on its first frame
+     — so each is guarded: a failure falls back to what the game would have
+     done itself, and is reported once rather than every frame. */
+  const _rynHookFailures = new Set();
+  const _rynGuard = (owner, name, fallback) => {
+    const original = owner && owner[name];
+    if (typeof original !== "function" || original._rynGuarded) {
+      return;
+    }
+    const guarded = function() {
+      try {
+        return original.apply(this, arguments);
+      } catch (e) {
+        if (!_rynHookFailures.has(name)) {
+          _rynHookFailures.add(name);
+          try {
+            console.warn("[RYN] render hook " + name + " failed, falling back:", e);
+          } catch (_) {}
+        }
+        return fallback ? fallback.apply(this, arguments) : undefined;
+      }
+    };
+    guarded._rynGuarded = true;
+    owner[name] = guarded;
+  };
+
   const Renderer = new class {
     _mapColors=MAP_COLORS;
     _renderObjects=[];
@@ -6134,6 +6343,8 @@ window.grbtp = 35;
       ctx.globalAlpha = previous;
     }
     _preRender() {
+      // The overlay is cleared before the game draws anything this frame.
+      RynOverlay.beginFrame();
       ZoomHandler_default.smoothUpdate();
       // Advances the shaft-grip system's own frame counter and idle-sway phase
       // off the timestamp already sampled here, so it reads no clock of its own.
@@ -6150,16 +6361,17 @@ window.grbtp = 35;
     _gameCtx=null;
     _smoothingState=null;
     gameCtx() {
-      if (!Settings_default._renderOptimization || this._gameCtx === null || !this._gameCanvas || !this._gameCanvas.isConnected) {
+      if (!Settings_default._renderOptimization || !this._gameCanvas || !this._gameCanvas.isConnected) {
         const canvas = document.querySelector("#gameCanvas");
         if (!canvas) {
           return null;
         }
         this._gameCanvas = canvas;
+        // null on a canvas that already holds the game's WebGL context
         this._gameCtx = canvas.getContext("2d");
         this._smoothingState = null;
       }
-      return this._gameCtx;
+      return RynOverlay.ctxFor(this._gameCtx);
     }
     _postRender() {
       const now = performance.now();
@@ -8091,37 +8303,31 @@ window.grbtp = 35;
   }();
   /* BUILD_ID, BUILD_SALT and mixKey are not in the bundle: it imports them
      from a separate "moomoo-protocol" module, which the page resolves through
-     its import map. Reading them from there rather than copying their values
-     means a new build changes nothing here — and copying them would not work
-     anyway, since they change with every build.
+     its import map. They change with every build, so they are read from that
+     module rather than copied.
 
-     The import is started once at load and the promise is kept, so anything
-     that needs it either has it or can wait for it. */
+     They are read from the copy the game itself imported. The injector hands
+     every module the bundle loads to RYN._modules, so this is the same module
+     instance the game is using, with no second load. An earlier version
+     imported it again by bare name at document-start; that is before the page
+     has declared its import map, and in browsers that only accept one import
+     map, starting a module load that early locks the map out for the game as
+     well. */
   const _RYN_proto = {
-    mod: null,
-    ready: null,
-    load() {
-      if (this.ready) return this.ready;
-      this.ready = (async () => {
-        try {
-          const m = await import("moomoo-protocol");
-          this.mod = m;
-          return m;
-        } catch (e) {
-          try {
-            Logger.warn("[RYN] protocol module unavailable:", e && e.message);
-          } catch (_) {}
-          this.mod = null;
-          return null;
-        }
-      })();
-      return this.ready;
+    get mod() {
+      try {
+        const m = RYN._modules && RYN._modules["moomoo-protocol"];
+        return m || null;
+      } catch (_) {
+        // RYN is declared further down; before it exists there is no module yet
+        return null;
+      }
     },
     buildId() {
-      return this.mod && this.mod.BUILD_ID !== undefined ? this.mod.BUILD_ID : null;
+      const m = this.mod;
+      return m && m.BUILD_ID !== undefined ? m.BUILD_ID : null;
     }
   };
-  _RYN_proto.load();
   let _RYN_Z = null;
   class PacketManager {
     client;
@@ -31648,6 +31854,48 @@ html.ryn-in-lobby .ryn-v2-wrapper {
    one, so it is lifted here rather than left behind. */
 #ryn-menu-frame { z-index: 100001 !important; }
 
+/* The game's own human check, which this build opens after Play when it has
+   no token yet (see liftVerifyDialog). It has to sit over the lobby and over
+   the client menu, and it has to take clicks: the Cloudflare box inside is
+   answered there. Its look stays the game's. The two classes below are
+   fallbacks that are set only when that look did not survive the move. */
+#verifyBackdrop.showing { z-index: 100002 !important; pointer-events: auto !important; }
+#verifyDialog.showing { z-index: 100003 !important; pointer-events: auto !important; }
+#verifyBackdrop.ryn-verify-hold:not(.showing),
+#verifyDialog.ryn-verify-hold:not(.showing) {
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+#verifyBackdrop.ryn-verify-plain.showing {
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    display: block !important;
+    background: rgba(4,4,8,0.62) !important;
+}
+#verifyDialog.ryn-verify-plain.showing {
+    position: fixed !important;
+    left: 50% !important;
+    top: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    width: max-content;
+    max-width: min(92vw, 380px);
+    padding: 20px 22px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.10);
+    background: #101016;
+    color: #F3F2F7;
+    font: 500 14px/1.45 'Manrope', 'Segoe UI', system-ui, sans-serif;
+    text-align: center;
+    box-shadow: 0 18px 48px rgba(0,0,0,0.55);
+}
+
 #ryn-lobby *, #ryn-lobby *::before, #ryn-lobby *::after { box-sizing: border-box; }
 
 /* "forwards", never "both". Under "both" an element renders at the keyframe's
@@ -35149,12 +35397,22 @@ html.ryn-in-lobby .ryn-v2-wrapper {
   // game uses, and the entry matching this tab's ?server=region:name is the one
   // reported. If the fetch fails the browser label is still better than nothing,
   // so it is used as the fallback.
-  const RYN_SERVER_API = (location.hostname === "sandbox.moomoo.io" ? "https://api-sandbox.moomoo.io" : "https://api.moomoo.io") + "/servers?v=1.27";
+  // The bundle's own API host (api-prod2 / api-sandbox2 on the live sites).
+  const RYN_SERVER_API = _apiBase() + "/servers?v=1.27";
   const RYN_SERVER_POLL_MS = 1e4;
+  /* Which server this tab is on. The game's own server module knows exactly;
+     without it, this build keeps the choice in the URL hash (#region:name)
+     rather than the ?server= query older builds used, and both are read. */
   const _rynCurrentServer = () => {
     try {
-      const q = new URLSearchParams(location.search).get("server");
-      if (typeof q !== "string") return null;
+      let q = "";
+      try {
+        const list = RYN._serverList;
+        if (list && typeof list.key === "function") q = list.key();
+      } catch (_) {}
+      if (!q) q = decodeURIComponent((location.hash || "").replace(/^#/, ""));
+      if (!q) q = new URLSearchParams(location.search).get("server") || "";
+      if (typeof q !== "string" || q === "") return null;
       const [region, name] = q.split(":");
       if (!region || !name) return null;
       return {
@@ -35178,6 +35436,20 @@ html.ryn-in-lobby .ryn-v2-wrapper {
   };
   const _rynPollServerCount = async () => {
     const here = _rynCurrentServer();
+    // The game's own list, when it is there: the same numbers, no extra fetch.
+    try {
+      const list = RYN._serverList;
+      if (list && here && typeof list.serversIn === "function") {
+        const servers = list.serversIn(here.region) || [];
+        for (let i = 0; i < servers.length; i++) {
+          const g = servers[i];
+          if (g && String(g.name) === here.name) {
+            GameUI_default.updatePlayers(Math.min(g.playerCount, g.playerCapacity) + "/" + g.playerCapacity);
+            return;
+          }
+        }
+      }
+    } catch (_) {}
     try {
       const res = await fetch(RYN_SERVER_API, {
         cache: "no-store"
@@ -37063,7 +37335,10 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       //   #loadingText, #diedText
       //                     the bundle's own two messages, which stand in for
       //                     the lobby rather than sitting beside it
-      const sacred = [ "turnstileWidget", "gameUI", "actionBar", "gameCanvas", "loadingText", "diedText" ].map(id => doc.getElementById(id)).filter(node => node !== null);
+      //   #verifyDialog, #verifyBackdrop
+      //                     the human check this build opens after Play;
+      //                     hidden, Play just does nothing
+      const sacred = [ "turnstileWidget", "gameUI", "actionBar", "gameCanvas", "loadingText", "diedText", "verifyDialog", "verifyBackdrop" ].map(id => doc.getElementById(id)).filter(node => node !== null);
       const spare = node => {
         if (node.contains(lobby)) {
           return true;
@@ -37097,7 +37372,9 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         menuCardHolder: true,
         loadingText: true,
         diedText: true,
-        turnstileWidget: true
+        turnstileWidget: true,
+        verifyDialog: true,
+        verifyBackdrop: true
       };
       const sweep = () => {
         const kids = mainMenu.children;
@@ -37115,6 +37392,108 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       new MutationObserver(sweep).observe(mainMenu, {
         childList: true
       });
+    }
+
+    /* The game's own human check, kept in front of the lobby.
+     *
+     * This build no longer holds Play back until a token arrives. Play can be
+     * pressed at any time. If there is no token yet, the bundle parks the
+     * press, opens #verifyDialog ("Checking you're human...", the Cloudflare
+     * box when it wants a click, or why the check could not load), and
+     * connects as soon as the token lands. The widget renders
+     * "interaction-only" into #turnstileWidget, which belongs in that dialog.
+     *
+     * The lobby is an opaque layer at z-index 100000, so a dialog left where
+     * the page put it shows up behind it, and the rules that hide the game's
+     * menu can hide it entirely. Either way Play seemed to do nothing. The
+     * dialog and its backdrop are moved up to <body>, with the widget still
+     * inside, and the stylesheet puts them above the lobby. The move happens
+     * here, at DOMContentLoaded, while the widget is still empty: a rendered
+     * widget carries its iframe with it, and a re-parented iframe reloads.
+     */
+    liftVerifyDialog() {
+      const doc = document;
+      const dialog = doc.getElementById("verifyDialog");
+      if (dialog === null || this._verifyLifted === true) {
+        return;
+      }
+      this._verifyLifted = true;
+      const backdrop = doc.getElementById("verifyBackdrop");
+      const widget = doc.getElementById("turnstileWidget");
+      const rendered = () => widget !== null && widget.firstChild !== null;
+      // A page that keeps the widget anywhere else keeps it under the lobby,
+      // so it goes into the dialog, the one place the bundle shows when it
+      // needs an answer. Above the retry button if there is one.
+      if (widget !== null && !dialog.contains(widget) && !rendered()) {
+        const retry = doc.getElementById("verifyRetry");
+        if (retry !== null && retry.parentNode !== null && dialog.contains(retry)) {
+          retry.parentNode.insertBefore(widget, retry);
+        } else {
+          dialog.appendChild(widget);
+        }
+      }
+      const lift = (node, force) => {
+        const host = doc.body;
+        if (node === null || host === null || node.parentNode === host) {
+          return;
+        }
+        if (!force && node.contains(widget) && rendered()) {
+          return;
+        }
+        host.appendChild(node);
+      };
+      lift(backdrop, false);
+      lift(dialog, false);
+      // The bundle shows the dialog by adding "showing" and hides it by taking
+      // that away; both are checked here as they happen.
+      //
+      // Shown but out of sight means something still hides it, so it goes to
+      // <body> even if that costs the widget a reload: a challenge nobody can
+      // see is worse than one that restarts. If its own styling did not come
+      // with it (static, or no box at all), it gets a plain modal look of
+      // ours, so it never shows up as a stray block.
+      //
+      // Hidden but still drawn means the page's own rule for hiding it did not
+      // come along either. It is held invisible rather than display:none, so a
+      // widget inside keeps a box to run in.
+      // Every class is added only if missing. The observer below watches the
+      // dialog's class attribute, and even re-adding a class it already has
+      // is a write that would wake it again.
+      const mark = (node, cls) => {
+        if (!node.classList.contains(cls)) {
+          node.classList.add(cls);
+        }
+      };
+      const settle = () => {
+        const showing = dialog.classList.contains("showing");
+        for (const node of [ backdrop, dialog ]) {
+          if (node === null) {
+            continue;
+          }
+          let style = null;
+          try {
+            style = getComputedStyle(node);
+          } catch (e) {}
+          const unseen = node.getClientRects().length === 0;
+          if (!showing) {
+            if (!unseen && style !== null && style.visibility !== "hidden" && style.opacity !== "0") {
+              mark(node, "ryn-verify-hold");
+            }
+            continue;
+          }
+          if (unseen) {
+            lift(node, true);
+          }
+          if (unseen || style === null || style.position === "static" || style.display === "none") {
+            mark(node, "ryn-verify-plain");
+          }
+        }
+      };
+      new MutationObserver(settle).observe(dialog, {
+        attributes: true,
+        attributeFilter: [ "class" ]
+      });
+      settle();
     }
 
     buildLobby() {
@@ -37191,7 +37570,17 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       }
       const enterGame = doc.getElementById("enterGame");
       if (enterGame !== null) {
-        enterGame.textContent = "Enter Game";
+        /* The label is written into the button's own <span>, never over it.
+           This build looks that span up once at startup and writes "Enter
+           Game" / "Play as Guest" into it as you sign in and out; replacing
+           the button's text deletes the span, the lookup comes back empty,
+           and the very first write throws and stops the whole bundle. */
+        const label = enterGame.getElementsByTagName("span")[0];
+        if (label) {
+          label.textContent = "Enter Game";
+        } else {
+          enterGame.textContent = "Enter Game";
+        }
         row.appendChild(enterGame);
       }
       nameGroup.appendChild(row);
@@ -37230,7 +37619,10 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       // what decides when the slot is on screen.
       const gate = el("div", "rl-gate");
       const turnstile = doc.getElementById("turnstileWidget");
-      if (turnstile !== null) {
+      if (doc.getElementById("verifyDialog") !== null) {
+        // This build asks in a dialog of its own; see liftVerifyDialog().
+        this.liftVerifyDialog();
+      } else if (turnstile !== null) {
         gate.appendChild(turnstile);
       }
       body.appendChild(gate);
@@ -37308,14 +37700,44 @@ html.ryn-in-lobby .ryn-v2-wrapper {
        * It runs only while the lobby is showing. #menuCardHolder is
        * display:none for the whole of a round, so the moment one starts this
        * stops, and there is nothing of it left running during play. */
-      const SERVER_API = (isSandbox ? "https://api-sandbox.moomoo.io" : "https://api.moomoo.io") + "/servers?v=1.27";
+      // Same host the bundle derives — api-prod2 / api-sandbox2 on the live
+      // sites, not the api / api-sandbox hosts this used to name.
+      const SERVER_API = _apiBase() + "/servers?v=1.27";
       const LIVE_INTERVAL = 5e3;
       let liveCounts = null;
       let liveTimer = 0;
       let liveBusy = false;
+      let moduleWatch = 0;
+
+      /* Nothing in the new build repaints a <select>, so the observer that used
+         to announce the list's arrival never fires. Until the game's module is
+         there, look for it on a short interval; the moment it is, one sync
+         subscribes to its change events and this stops. */
+      const watchForModule = () => {
+        if (moduleWatch !== 0 || subscribedTo !== null) {
+          return;
+        }
+        const started = Date.now();
+        moduleWatch = setInterval(() => {
+          if (subscribedTo !== null || Date.now() - started > 6e4) {
+            clearInterval(moduleWatch);
+            moduleWatch = 0;
+            return;
+          }
+          if (serverList() !== null) {
+            queueSync();
+          }
+        }, 250);
+      };
 
       const readLive = () => {
         if (liveBusy || typeof fetch !== "function") {
+          return;
+        }
+        // The module's counts are the game's own and it refreshes them itself
+        // while the lobby is up; fetching the same list again would be noise.
+        if (serverList() !== null) {
+          queueSync();
           return;
         }
         liveBusy = true;
@@ -37346,6 +37768,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       };
 
       const startLive = () => {
+        watchForModule();
         if (liveTimer !== 0) {
           return;
         }
@@ -37364,7 +37787,55 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       // appended, and the disabled options above each block carry the region's
       // display name, so everything on screen here is read back out of the
       // bundle's own render rather than fetched a second time.
+      /* The game's own server-list module, once the bundle has handed it over
+         (the exposeServerList hook). Builds that still render a <select> never
+         set it, and the lobby falls back to reading the select as before. */
+      const serverList = () => {
+        try {
+          const list = RYN._serverList;
+          return list && typeof list.regions === "function" && typeof list.serversIn === "function" ? list : null;
+        } catch (_) {
+          return null;
+        }
+      };
+      // The module's view of the same model the select used to provide: one
+      // entry per server, "<region>:<name>" as the value, with the region's
+      // display name and measured ping.
+      const readServerList = list => {
+        const regions = list.regions();
+        if (!regions || regions.length === 0) {
+          return null;
+        }
+        const current = typeof list.key === "function" ? list.key() : "";
+        const model = [];
+        for (let i = 0; i < regions.length; i++) {
+          const region = regions[i];
+          const servers = list.serversIn(region.id) || [];
+          for (let j = 0; j < servers.length; j++) {
+            const server = servers[j];
+            const value = String(server.region) + ":" + String(server.name);
+            const capacity = Number(server.playerCapacity);
+            const players = Number(server.playerCount);
+            model.push({
+              value: value,
+              key: String(server.region),
+              name: String(server.name),
+              region: region.name || String(server.region),
+              players: isFinite(players) && isFinite(capacity) ? Math.min(players, capacity) : -1,
+              capacity: isFinite(capacity) ? capacity : -1,
+              ping: region.ping === null || region.ping === undefined ? -1 : Math.round(region.ping),
+              selected: value === current
+            });
+          }
+        }
+        return model;
+      };
       const readModel = () => {
+        const list = serverList();
+        if (list !== null) {
+          subscribe(list);
+          return readServerList(list);
+        }
         const select = selectElement();
         if (select === null) {
           return null;
@@ -37418,6 +37889,20 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       // on would navigate to the address you are already at, so it does
       // nothing instead.
       const choose = value => {
+        /* With the module, choosing is the game's own choose(): it updates the
+           selection in place (no page reload any more), keeps it in the URL
+           hash, and drops a lingering connection so Play goes to the server
+           picked rather than the one you were last on. */
+        const list = serverList();
+        if (list !== null) {
+          if (typeof list.key === "function" && list.key() === value) {
+            return;
+          }
+          const split = value.indexOf(":");
+          list.choose(split < 0 ? value : value.slice(0, split), split < 0 ? "" : value.slice(split + 1));
+          queueSync();
+          return;
+        }
         const select = selectElement();
         if (select === null || select.value === value) {
           return;
@@ -37426,6 +37911,16 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         select.dispatchEvent(new Event("change", {
           bubbles: true
         }));
+      };
+      // Refresh on the module's own change events — a new listing, a ping pass,
+      // a selection made anywhere. Registered once per module.
+      let subscribedTo = null;
+      const subscribe = list => {
+        if (subscribedTo === list || typeof list.onChange !== "function") {
+          return;
+        }
+        subscribedTo = list;
+        list.onChange(() => queueSync());
       };
 
       const applyFilter = next => {
@@ -38310,16 +38805,25 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       this.selectSkinColor(CustomStorage.get("skin_color") || 0);
       const enterGameButton = enterGame;
       let _enterGame = enterGameButton.onclick;
-      enterGameButton.onclick = function() {
+      const wrapped = function(...args) {
         delete enterGameButton.onclick;
         if (typeof _enterGame === "function") {
-          _enterGame.call(this);
+          _enterGame.apply(this, args);
         } else {
           RYN.startGame();
         }
         enterGameButton.onclick = _enterGame;
       };
+      enterGameButton.onclick = wrapped;
+      // The getter matters as much as the setter. This build calls the button
+      // directly as well as through clicks — Enter in #nameInput runs
+      // `enterGame.onclick(event)`, and a touch tap goes through
+      // hookTouchEvents' `e.onclick && e.onclick(event)` — and an accessor
+      // with no getter reads as undefined: Enter threw, a tap did nothing.
       Object.defineProperty(enterGameButton, "onclick", {
+        get() {
+          return wrapped;
+        },
         set(callback) {
           _enterGame = callback;
         },
@@ -38598,7 +39102,14 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     Hook.replace("DisableResetMoveDir", /\w+=\{\},\w+\.send\("\w+"\)/, "");
     Hook.append("offset", /\W170\W.+?(\w+)=\w+\-\w+\/2.+?(\w+)=\w+\-\w+\/2;/, "RYN._offset._setXY($1,$2);");
     Hook.prepend("renderEntity", /\w+\.health>NUM{0}.+?(\w+)\.fillStyle=(\w+)==(\w+)/, ";RYN._hooks._EntityRenderer._render($1,$2,$3);false&&");
-    Hook.append("renderItemPush", /,(\w+)\.blocker,\w+.+?2\)\)/, ",RYN._Renderer._renderObjects.push($1)");
+    /* Every object drawn this frame is handed to the renderer once. The draw
+       loop now walks a pre-filtered list of visible objects and can leave an
+       iteration early, so the push goes at the top of the iteration, where it
+       sees every one. The old pattern ran on from the blocker outline to the
+       next "2))" — in this build that is inside the aura effect of another
+       function, where the push changed the particle maths and never saw an
+       object. */
+    Hook.replace("renderItemPush", /for\(let (\w+)=0;\1<(\w+)\.length;\+\+\1\)if\((\w+)=\2\[\1\],(\w+)=\3\.x\+\3\.xWiggle-/, "for(let $1=0;$1<$2.length;++$1)if($3=$2[$1],RYN._Renderer._renderObjects.push($3),$4=$3.x+$3.xWiggle-");
     // The game's damage text, whole. It is the only showText call in the
     // bundle — the other mention is the text manager's own definition — so
     // the arguments are enough to name it: the manager, the position, and the
@@ -38624,6 +39135,17 @@ html.ryn-in-lobby .ryn-v2-wrapper {
        any of that is matching the minifier's mood. Losing this hook costs the
        whole game-socket send path, so it is written to survive. */
     Hook.replace("exposeGameNet", /const (\w+)=\{socket:null,connected:/, "const $1=RYN._myClient._gameNet={socket:null,connected:");
+    /* The server list. This build no longer renders it as a <select> in
+       #serverBrowser — which is what the lobby used to read, and why the list
+       stayed on "Waiting for the server list". It keeps the list in a module
+       with a proper interface instead: regions(), serversIn(region), key(),
+       choose(region, name), and onChange(callback) fired on every refresh.
+       Handing that module to the lobby replaces scraping a dropdown. */
+    Hook.replace("exposeServerList", /const (\w+)=\{init:function\((\w+)\)\{(\w+)=\2\.baseHost,/, "const $1=RYN._serverList={init:function($2){$3=$2.baseHost,");
+    /* The game's WebGL renderer, the moment it is created and before the
+       first resize sets its base transform, so the overlay can mirror every
+       transform it ever has. The statement is `M=Bu(canvas,atlasOptions);`. */
+    Hook.append("attachOverlay", /(\w+)=\w+\((\w+),\w+\?\{pageSize:[^;]*;/, "RYN._overlay&&RYN._overlay.attach($1,$2);");
     Hook.replace("exposeGameCrypto", /(\w+)=\{mode:(\w+),key:/, "$1=RYN._myClient._gameCrypto={mode:$2,key:");
     Hook.replace("captureTurnstile", /onGotTurnstileToken=function\((\w+)\)\{(\w+)=\1,/, "onGotTurnstileToken=function($1){$2=$1,RYN._myClient._turnstileToken=$1,");
 
@@ -38691,7 +39213,15 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     // Now declared alongside two more and the function takes the page index.
     Hook.append("RemovePingState", /let \w+=null,\w+=-1,\w+=null;function \w+\(\w*\)\{/, "return;");
     Hook.prepend("preRender", /(\w+)\.lineWidth=NUM{4},/, "RYN._hooks._ObjectRenderer._preRender($1);");
-    Hook.replace("RenderGrid", /("#91b2db".+?)(for.+?)(\w+\.stroke)/, "$1$3");
+    /* The background grid: two loops of faint lines right after the grid's
+       own `globalAlpha=.06`, now drawn with a line() helper and no stroke()
+       call. The old pattern anchored on "#91b2db" and deleted everything up to
+       the next `.stroke` — but in this build that colour first appears in a
+       list of map palette constants, so it deleted 900 characters of map
+       generation instead (the river shallows, the rock scatter, their
+       constants), and the frame loop died on the first missing name. This one
+       anchors on the grid itself and removes only the two loops. */
+    Hook.replace("RenderGrid", /(\w+\.strokeStyle="#000",\w+\.globalAlpha=\.06;const \w+=\w+\/18;)for\([^;]*;[^;]*;[^)]*\)[^;]*;for\([^;]*;[^;]*;[^)]*\)[^;]*;/, "$1");
     Hook.replace("upgradeItem", /(upgradeItem.+?onclick.+?)\w+\.send\("\w+",(\w+)\)\}/, "$1RYN._Possess.c()._ModuleHandler._upgradeItem($2)}");
     const data = Hook.match("DeathMarker", /99999.+?(\w+)=\{x:(\w+)/);
     Hook.append("playerDied", /NUM{99999};function \w+\(\)\{/, `if(RYN._settings._autospawn){${data[1]}={x:${data[2]}.x,y:${data[2]}.y};return};`);
@@ -38700,7 +39230,13 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     Hook.replace("removeSkins", /(\(\)\{)(let \w+="";for\(let)/, "$1return;$2");
     Hook.prepend("unlockedItems", /\w+\.list\[\w+\]\.pre==/, "true||");
     Hook.replace("gameColor", /rgba\(0, 0, 70, 0.35\)/, "rgba(20, 4, 45, 0.45)");
-    Hook.prepend("renderPlayer", /function (\w+)\(\w+,\w+\)\{\w+=\w+\|\|\w+,/, "RYN._hooks._renderPlayer=$1;");
+    /* The renderer defaults its own second parameter: `function Kx(e,t){t=t||M,`.
+       Requiring that — the variable defaulted is the parameter itself — is what
+       tells it apart. The looser pattern this used to be (any `a=b||c,` at the
+       top of a two-argument function) now matches the sign-in dialog's opener
+       first, `function Zi(e,t){Xa=t||null,`, and every place that draws a
+       player through this hook would have popped the sign-in box instead. */
+    Hook.prepend("renderPlayer", /function (\w+)\(\w+,(\w+)\)\{\2=\2\|\|\w+,/, "RYN._hooks._renderPlayer=$1;");
     // Melee animation and grip. Three surgical sites in the player renderer:
     // the weapon sprite draw (both of them), the pair of hand circles, and the
     // whole-player rotation in the render loop. Each hands off to
@@ -38742,6 +39278,42 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     return Hook.code;
   };
   const formatCode_default = formatCode2;
+  /* The page's import map, read by us as well as by the browser.
+   *
+   * The bundle imports one module by bare name, and only an import map can say
+   * where a bare name lives. The browser keeps its own copy, but whether that
+   * copy is still usable by the time the bundle runs depends on the browser and
+   * on what else happened first — so the entries are also read here and the
+   * injector resolves through them itself. Addresses in an inline map are
+   * relative to the document, which is what they are resolved against. */
+  const _rynImportMap = {
+    imports: {},
+    absorb(node) {
+      try {
+        const map = JSON.parse(node.textContent || "{}");
+        const table = map && map.imports || {};
+        for (const key in table) {
+          this.imports[key] = new URL(table[key], document.baseURI).href;
+        }
+      } catch (_) {}
+    },
+    resolve(spec) {
+      try {
+        document.querySelectorAll('script[type="importmap"]').forEach(node => this.absorb(node));
+      } catch (_) {}
+      if (Object.prototype.hasOwnProperty.call(this.imports, spec)) {
+        return this.imports[spec];
+      }
+      // "pkg/" style entries map a whole prefix; the longest match wins.
+      let best = null;
+      for (const key in this.imports) {
+        if (key.endsWith("/") && spec.startsWith(key) && (best === null || key.length > best.length)) {
+          best = key;
+        }
+      }
+      return best === null ? null : new URL(spec.slice(best.length), this.imports[best]).href;
+    }
+  };
   const Injector = new class {
     init(node) {
       this.loadScript(node.src);
@@ -38764,11 +39336,38 @@ html.ryn-in-lobby .ryn-v2-wrapper {
           return baseUrl + path.replace(/^\.\.?\//, "");
         }
       };
+      /* Where an import actually points. A relative path is relative to the
+         bundle, as before. A bare name ("moomoo-protocol") is not a path at
+         all: the page's import map says where it lives, and resolving it
+         against the bundle's folder invents a file that does not exist. When
+         the map cannot be read the name is left bare, so the browser's own
+         copy of the map still gets the chance to resolve it. */
+      const resolveSpecifier = path => {
+        if (/^(\.{1,2}\/|\/)/.test(path)) return toAbs(path);
+        if (/^[a-z][a-z0-9+.-]*:/i.test(path)) return path;
+        return _rynImportMap.resolve(path) || path;
+      };
       let hadStaticImport = false;
-      code = code.replace(/(^|[\n;])\s*import\s*(\{[^}]*\}|\*\s+as\s+[\w$]+|[\w$]+)?\s*(?:,\s*(\{[^}]*\}|[\w$]+))?\s*from\s*(["'])([^"']+)\4\s*;?/g, (full, lead, spec1, spec2, quote, path) => {
+      let moduleIndex = 0;
+      /* Static imports become awaited dynamic ones, since the code runs through
+         Function() and not as a module.
+
+         The anchor is a lookbehind rather than a captured character. The
+         capture used to eat the `;` ending one import, so the import straight
+         after it no longer started at a boundary and was never rewritten. This
+         build has two imports back to back, and the second one reached
+         Function() as a bare `import` statement — a SyntaxError, and the game
+         never started. A lookbehind reads the original text, so every import
+         in a run is found.
+
+         Each module's namespace is also handed to RYN by its specifier, which
+         is how the bots get the build's protocol constants: from the very
+         module the game itself imported, with no second load. */
+      code = code.replace(/(?<=^|[\n;}])\s*import\s*(\{[^}]*\}|\*\s+as\s+[\w$]+|[\w$]+)?\s*(?:,\s*(\{[^}]*\}|[\w$]+))?\s*from\s*(["'])([^"']+)\3\s*;?/g, (full, spec1, spec2, quote, path) => {
         if (/import\s*\(/.test(full)) return full;
         hadStaticImport = true;
-        const abs = toAbs(path);
+        const abs = resolveSpecifier(path);
+        const ns = "__rynModule" + moduleIndex++;
         const parts = [];
         const conv = spec => {
           spec = spec.trim();
@@ -38792,13 +39391,19 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         const c2 = spec2 ? conv(spec2) : null;
         if (c1 && c1.startsWith("{") && c1 !== "{}") parts.push(c1); else if (c1 && !c1.startsWith("{")) parts.push(c1);
         if (c2 && c2.startsWith("{") && c2 !== "{}") parts.push(c2); else if (c2 && !c2.startsWith("{")) parts.push(c2);
-        if (parts.length === 0) {
-          return lead + `await import(${JSON.stringify(abs)});`;
-        }
-        const stmts = parts.map(p => `const ${p} = await import(${JSON.stringify(abs)});`).join("");
-        return lead + stmts;
+        let stmts = `const ${ns} = await import(${JSON.stringify(abs)});` +
+          `if (typeof RYN === "object" && RYN) (RYN._modules = RYN._modules || {})[${JSON.stringify(path)}] = ${ns};`;
+        for (const p of parts) stmts += `const ${p} = ${ns};`;
+        return stmts;
       });
       code = code.replace(/(\bimport\s*\(\s*)(["'])(\.\.?\/[^"']+)\2/g, (m, kw, quote, path) => kw + quote + toAbs(path) + quote);
+      /* `import.meta` only exists inside a module; anywhere else it is a
+         syntax error for the whole program, so one occurrence (this build has
+         one, in the lazy touch-controls loader) stops Function() from running
+         a single line. The bundle only reads .url from it, which is the
+         address it was loaded from. */
+      code = code.replace(/\bimport\.meta\.url\b/g, JSON.stringify(src));
+      code = code.replace(/\bimport\.meta\b/g, "({url:" + JSON.stringify(src) + "})");
       this.waitForBody(() => {
         Function(code)();
       });
@@ -38832,6 +39437,13 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     const handleScriptElement = node => {
       const isScript = node instanceof HTMLScriptElement;
       const isLink = node instanceof HTMLLinkElement;
+      // The import map is left alone. It is inline, so the filter below tests
+      // its JSON — which names /assets/ paths, so it used to be deleted, and
+      // with it the only record of where the bundle's bare import lives.
+      if (isScript && node.type === "importmap") {
+        _rynImportMap.absorb(node);
+        return;
+      }
       const regex = /frvr|jquery|howler|assets|cookie|securepubads|google|ads/i;
       if (isScript && regex.test(node.src) || isLink && regex.test(node.href) || regex.test(node.innerHTML)) {
         scriptExecuteHandler(node);
@@ -43965,6 +44577,13 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       return ts && typeof ts.render === "function" ? ts : null;
     }
     _hasToken() {
+      // Builds with #verifyDialog run the whole challenge themselves, after
+      // Play, retry button included, and keep no token flag on the button.
+      // There is nothing to supervise there, and rendering under the bundle
+      // would take its widget away from it.
+      if (document.getElementById("verifyDialog") !== null) {
+        return true;
+      }
       const btn = document.getElementById("enterGame");
       // `disabled` on #enterGame is the bundle's own "we hold a token" flag:
       // onGotTurnstileToken removes it in the same expression that assigns the
@@ -44130,6 +44749,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     _Renderer: Renderer_default,
     _DamageText: DamageText_default,
     _MeleeAnim: MeleeAnim_default,
+    _overlay: RynOverlay,
     _WeaponAnim: WeaponAnim_default,
     _ZoomHandler: ZoomHandler_default,
     _hooks: {
@@ -44151,6 +44771,39 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     }
   };
   win.RYN = RYN;
+  /* The three draws the game hands its own context to, and which draw with the
+     full 2D API, get the overlay instead (see RynOverlay). The rest keep the
+     game's context: the weapon and hand draws interleave with the game's own
+     body drawing and only use calls its renderer supports. */
+  for (const [owner, name] of [ [ EntityRenderer_default, "_render" ], [ ObjectRenderer_default, "_preRender" ], [ ObjectRenderer_default, "_render" ] ]) {
+    const original = owner[name];
+    if (typeof original === "function") {
+      owner[name] = function(ctx, ...rest) {
+        const target = RynOverlay.ctxFor(ctx);
+        if (!target) return;
+        return original.call(this, target, ...rest);
+      };
+    }
+  }
+  // Every call the game makes into the client from its frame loop, with what
+  // the game would have done itself if the client's version fails.
+  _rynGuard(Renderer_default, "_preRender");
+  _rynGuard(Renderer_default, "_postRender");
+  _rynGuard(Renderer_default, "_mapPreRender");
+  _rynGuard(Renderer_default, "_objectAlpha", () => 1);
+  _rynGuard(Renderer_default, "_objectTint", sprite => sprite);
+  _rynGuard(Renderer_default, "_buildingSprite", sprite => sprite);
+  _rynGuard(Renderer_default, "_drawAnimal", (ctx, sprite, size) => ctx.drawImage(sprite, -size, -size, size * 2, size * 2));
+  _rynGuard(EntityRenderer_default, "_render");
+  _rynGuard(ObjectRenderer_default, "_preRender");
+  _rynGuard(ObjectRenderer_default, "_render");
+  _rynGuard(DamageText_default, "_show");
+  _rynGuard(MeleeAnim_default, "_drawWeapon", (draw, player, weapon, variant, x, y, ctx) => draw(weapon, variant, x, y, ctx));
+  _rynGuard(MeleeAnim_default, "_drawHands", (circle, player, arm, hndS, hndD) => {
+    circle(player.scale * Math.cos(arm), player.scale * Math.sin(arm), 14);
+    circle(player.scale * hndD * Math.cos(-arm * hndS), player.scale * hndD * Math.sin(-arm * hndS), 14);
+  });
+  _rynGuard(MeleeAnim_default, "_bodyRot", player => player.dirPlus);
   try {
     setInterval(() => {
       try {
@@ -49024,7 +49677,16 @@ try {
   }, 80);
   const _targetCanvas = document.createElement("canvas");
   _targetCanvas.style.cssText = "position:fixed;top:0;left:0;pointer-events:none;z-index:9999;";
-  document.body.appendChild(_targetCanvas);
+  // This runs at document-start, when there is no <body> yet. Appending to it
+  // directly threw and took the rest of the script after this line with it —
+  // the target overlay, its resize and draw loop, and the farm handlers below.
+  if (document.body) {
+    document.body.appendChild(_targetCanvas);
+  } else {
+    document.addEventListener("DOMContentLoaded", () => document.body.appendChild(_targetCanvas), {
+      once: true
+    });
+  }
   const _resizeTargetCanvas = () => {
     _targetCanvas.width = window.innerWidth;
     _targetCanvas.height = window.innerHeight;
