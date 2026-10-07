@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.1
+// @version         2.2
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -613,7 +613,10 @@ window.grbtp = 35;
       }
     }
     async getChallenge() {
-      const res = await fetch("https://api.moomoo.io/verify");
+      // The game's API host moved in 2025 (see RYN_API_BASE). A body that is
+      // not a challenge is reported as such rather than as a JSON parse error.
+      const res = await fetch(RYN_API_BASE + "/verify");
+      if (!res.ok) throw new Error("no altcha challenge (" + res.status + ")");
       return res.json();
     }
     async solve(chal) {

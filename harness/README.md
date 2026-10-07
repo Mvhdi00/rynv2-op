@@ -19,6 +19,35 @@ appears when the userscript loses a load-order race, the other only when a
 sprite host is unreachable. Both are one line in a console the player never
 opens. The harness makes each of them a reproducible pass/fail.
 
+## The 2025 game (RYN Type 2)
+
+The 2025 bundle is a different shape — an ES module with a bare `moomoo-protocol`
+import, a WebGL renderer, pinned (masked) sessions, a `/join` ticket step, FRVR
+sign-in — so it has its own harness, which needs no `build-page.js` step:
+
+```sh
+node boot-2025.js [vanilla|fast|late|…+pinned|all] [ryn.js]   # the real bundle, in Chromium
+node ryn-rewrite-check.js   # RYN's own Regexer + formatCode2 + import conversion, run and inspected
+node ryn-protocol-2025.js   # the wire format, from the bundle and from RYN
+node ryn-hooks-check.js     # each hook: does it match, does what it injects resolve
+python3 ryn-2025-mutate.py  # break the fixes on purpose; a static check must go red
+python3 ryn-boot-mutate.py  # same, for what only the browser can show
+```
+
+`boot-2025.js` serves `fixtures/moomoo_index_new.js` and `moomoo_vendor_new.js`
+as modules from `https://moomoo.io/assets/` behind an import map, stubs
+`moomoo-protocol`, the FRVR SDK (with the `auth` surface sign-in calls) and
+Turnstile (including Cloudflare's "already rendered" refusal), mocks
+`api-prod2.moomoo.io` (`/servers`, `/join`, `/name-check`, `/top`), and puts
+`server.js` behind `routeWebSocket` speaking the 2025 world packets. With
+`+pinned` the server masks, salts and signs with the game's own primitives,
+lifted out of the bundle by `proto-2025.js` — so the masking is the bundle's,
+not this harness's idea of it. It then plays: server list, Sign in, Enter Game,
+spawn, the player on screen, RYN's overlay, and a bot through RYN's own menu.
+
+`fast` injects RYN before `<head>` exists; `late` after it, which is how the
+page's own copy of the game ends up running alongside RYN's.
+
 ## Setup
 
 ```sh
