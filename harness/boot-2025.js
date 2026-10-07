@@ -215,6 +215,33 @@ async function run(mode) {
     });
   });
 
+  if (process.env.TRACE_ID) {
+    // Debug aid: who takes a given element out of the document.
+    await page.addInitScript({ content: `(function () {
+      const id = ${JSON.stringify(process.env.TRACE_ID)};
+      const note = (how) => (window.__trace = window.__trace || []).push(how + ": " + (new Error().stack || "").split("\\n").slice(2, 8).join(" <- "));
+      const rm = Element.prototype.remove;
+      Element.prototype.remove = function () { if (this.id === id) note("remove"); return rm.apply(this, arguments); };
+      const rc = Node.prototype.removeChild;
+      Node.prototype.removeChild = function (c) { if (c && c.id === id) note("removeChild"); return rc.apply(this, arguments); };
+      const ap = Node.prototype.appendChild;
+      Node.prototype.appendChild = function (c) { if (c && c.id === id) note("appendChild to " + (this.id || this.nodeName)); return ap.apply(this, arguments); };
+      const ih = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML");
+      Object.defineProperty(Element.prototype, "innerHTML", { configurable: true, get: ih.get, set(v) { if (this.querySelector && this.querySelector("#" + id)) note("innerHTML on " + (this.id || this.nodeName)); return ih.set.call(this, v); } });
+      document.addEventListener("DOMContentLoaded", () => note("DCL exists=" + !!document.getElementById(id)), true);
+    })();` });
+  }
+  // Who sends a frame too short to carry a signature: record the stack.
+  await page.addInitScript({ content: `(function () {
+    const send = WebSocket.prototype.send;
+    WebSocket.prototype.send = function (d) {
+      try {
+        const n = d && (d.byteLength !== undefined ? d.byteLength : d.length);
+        if (n !== undefined && n <= 6) (window.__shortFrames = window.__shortFrames || []).push(n + " bytes: " + (new Error().stack || "").split("\\n").slice(2, 7).join(" <- "));
+      } catch (e) {}
+      return send.apply(this, arguments);
+    };
+  })();` });
   // Keep a copy of the code RYN hands to Function(), so a failure inside the
   // rewritten bundle can be traced to the hook that produced it.
   await page.addInitScript({ content: `(function () {
@@ -226,7 +253,11 @@ async function run(mode) {
     } });
   })();` });
   if (mode === "fast") {
-    await page.addInitScript({ content: "window.__headAtStart = document.head === null;\n" + ryn });
+    /* Top frame only. RYN draws its own menu in a blob: iframe, and
+     * addInitScript would run a second RYN inside it — which no userscript
+     * manager does for a @match of *://*.moomoo.io/* — and report that copy's
+     * missing #gameUI as a failure of the real one. */
+    await page.addInitScript({ content: "if (window.top === window && location.protocol !== \"blob:\") {\nwindow.__headAtStart = document.head === null;\n" + ryn + "\n}" });
   }
   await page.goto("https://moomoo.io/", { waitUntil: "domcontentloaded" });
 
@@ -285,6 +316,8 @@ async function run(mode) {
     renderer: !!window.__renderer, drawCalls: window.__drawCalls,
   }));
 
+  out.shortFrames = await page.evaluate(() => window.__shortFrames || []);
+  if (process.env.TRACE_ID) console.log((await page.evaluate(() => window.__trace || [])).join("\n"));
   if (mode !== "vanilla") {
     const code = await page.evaluate(() => window.__rynBundleCode || null);
     out.bundleRan = !!code;
@@ -354,6 +387,7 @@ function report(r) {
   ok(r.sockets.every(u => /token=tk%3AT\d/.test(u) && /[?&]b=test-build/.test(u)),
      "the socket carries the /join ticket (tk:) and ?b=<BUILD_ID>");
   ok(r.spawnSent, "the spawn frame reached the server");
+  if (r.shortFrames && r.shortFrames.length) console.log("    short frames sent:\n        " + r.shortFrames.slice(0, 3).join("\n        "));
   ok(r.notes.filter(n => /server rejected/.test(n)).length === 0, "the server accepted every frame" +
      (r.notes.length ? ":\n        " + r.notes.slice(0, 5).join("\n        ") : ""));
   ok(r.after.gameUI && r.after.gameUI !== "none", "the in-game UI is showing (" + r.after.gameUI + ")");

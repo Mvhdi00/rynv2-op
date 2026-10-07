@@ -2496,6 +2496,17 @@ window.grbtp = 35;
     needXP: 5e3,
     val: 1.18,
     color: "#be5454"
+  }, {
+    // 2025: a fifth tier, members only, with lifesteal. A weapon at this tier
+    // read WeaponVariants[4] as undefined in every damage sum.
+    id: 4,
+    src: "_e",
+    lifesteal: .15,
+    membersOnly: true,
+    xp: 2e4,
+    needXP: 8e3,
+    val: 1.18,
+    color: "#3fbf7f"
   } ];
   const Projectiles = [ {
     id: 0,
@@ -3399,6 +3410,42 @@ window.grbtp = 35;
       noEat: true,
       spdMult: 1.1,
       invisTimer: 1e3
+    },
+    // New in the 2025 store. Without them, any player wearing one made every
+    // `"x" in hat` check in the damage and regen maths throw.
+    [59]: {
+      index: 47,
+      id: 59,
+      name: "Scout Hat",
+      price: 3500,
+      scale: 120,
+      description: "move faster but take more damage",
+      spdMult: 1.08,
+      dmgMult: 1.12
+    },
+    [60]: {
+      index: 48,
+      id: 60,
+      name: "Frost Helm",
+      price: 7e3,
+      scale: 120,
+      description: "normal speed in snow and reduces damage taken",
+      coldM: 1,
+      spdMult: .94,
+      dmgMult: .88
+    },
+    [61]: {
+      index: 49,
+      id: 61,
+      name: "Crab Shell",
+      dontSell: true,
+      earned: true,
+      price: 0,
+      scale: 120,
+      description: "dropped by the Crab King. reflects damage and reduces damage taken",
+      dmg: .3,
+      dmgMult: .85,
+      spdMult: .92
     }
   };
   const Accessories = {
@@ -5175,7 +5222,7 @@ window.grbtp = 35;
       if ("sDmg" in weapon) {
         damage *= weapon.sDmg;
       }
-      const hat = Hats[isTank ? 40 : this.hatID];
+      const hat = Hats[isTank ? 40 : this.hatID] || Hats[0];
       if ("bDmg" in hat) {
         damage *= hat.bDmg;
       }
@@ -7482,73 +7529,117 @@ window.grbtp = 35;
     chargePlayer: true,
     drop: [ "food", 1e3 ]
   }, {
+    // 9-14 are the 2025 game's own. Ids 9-11 used to hold sandbox "skull"
+    // variants; the 2025 bundle has one table for both hosts and gives those
+    // ids to the boar, the yeti and the Crab King. 12-14 did not exist here
+    // at all, so Animal.update read .health off undefined and threw on every
+    // tick a sheep or a crab was in view.
     id: 9,
-    name: "💀MOOFIE",
-    src: "wolf_2",
+    name: "Boar",
+    src: "boar_1",
     hostile: true,
-    fixedSpawn: true,
-    dontRun: true,
-    hitScare: 50,
-    spawnDelay: 6e4,
-    noTrap: true,
-    nameScale: 35,
-    dmg: 12,
-    colDmg: 100,
-    killScore: 3e3,
-    health: 9e3,
-    weightM: .45,
-    speed: .0015,
-    turnSpeed: .0025,
-    scale: 94,
-    viewRange: 1440,
+    dmg: 14,
+    killScore: 800,
+    health: 900,
+    weightM: .55,
+    speed: .00105,
+    turnSpeed: .0012,
+    scale: 76,
+    viewRange: 700,
     chargePlayer: true,
-    drop: [ "food", 3e3 ],
-    minSpawnRange: .85,
-    maxSpawnRange: .9
+    drop: [ "food", 150 ]
   }, {
     id: 10,
-    name: "💀Wolf",
-    src: "wolf_1",
+    name: "Yeti",
+    src: "yeti_1",
     hostile: true,
-    fixedSpawn: true,
-    dontRun: true,
-    hitScare: 50,
-    spawnDelay: 3e4,
-    dmg: 10,
-    killScore: 700,
-    health: 500,
-    weightM: .45,
-    speed: .00115,
-    turnSpeed: .0025,
-    scale: 88,
-    viewRange: 1440,
+    dmg: 25,
+    killScore: 4500,
+    health: 3200,
+    weightM: .35,
+    speed: 8e-4,
+    turnSpeed: 8e-4,
+    scale: 95,
+    viewRange: 750,
+    leapForce: .6,
     chargePlayer: true,
-    drop: [ "food", 400 ],
-    minSpawnRange: .85,
-    maxSpawnRange: .9
+    drop: [ "food", 800 ]
   }, {
     id: 11,
-    name: "💀Bully",
-    src: "bull_1",
+    name: "Crab King",
+    src: "crab_1",
+    boss: true,
     hostile: true,
-    fixedSpawn: true,
     dontRun: true,
-    hitScare: 50,
-    dmg: 20,
-    killScore: 5e3,
-    health: 5e3,
-    spawnDelay: 1e5,
-    weightM: .45,
-    speed: .00115,
-    turnSpeed: .0025,
-    scale: 94,
-    viewRange: 1440,
-    chargePlayer: true,
-    drop: [ "food", 800 ],
-    minSpawnRange: .85,
-    maxSpawnRange: .9
+    fixedSpawn: true,
+    noTrap: true,
+    dmg: 45,
+    killScore: 4e3,
+    health: 48e4,
+    weightM: 0,
+    speed: 45e-5,
+    turnSpeed: 7e-4,
+    scale: 280,
+    viewRange: 1800,
+    hitRange: 400,
+    hitDelay: 700
+  }, {
+    id: 12,
+    src: "sheep_1",
+    hostile: false,
+    killScore: 200,
+    health: 650,
+    weightM: .7,
+    speed: 9e-4,
+    turnSpeed: .001,
+    scale: 72,
+    drop: [ "food", 150 ]
+  }, {
+    id: 13,
+    name: "Crab",
+    src: "crab_1",
+    diver: true,
+    hostile: true,
+    noTrap: true,
+    dmg: 14.4,
+    killScore: 400,
+    health: 500,
+    weightM: .5,
+    speed: .0014,
+    turnSpeed: .003,
+    scale: 78,
+    viewRange: 4e3,
+    chargePlayer: true
+  }, {
+    id: 14,
+    name: "Crabling",
+    src: "crab_1",
+    diver: true,
+    hostile: true,
+    noTrap: true,
+    dmg: 6,
+    killScore: 200,
+    health: 250,
+    weightM: .5,
+    speed: .0017,
+    turnSpeed: .004,
+    scale: 39,
+    viewRange: 4e3,
+    chargePlayer: true
   } ];
   const Animals_default = Animals;
+  // A type the table does not know yet — the next update's new animal — is
+  // treated as a passive one of average size rather than read off undefined.
+  const ANIMAL_UNKNOWN = {
+    id: -1,
+    src: "",
+    hostile: false,
+    health: 1e3,
+    scale: 72,
+    speed: 1e-3,
+    turnSpeed: .002
+  };
+  const animalType = type => Animals_default[type] || ANIMAL_UNKNOWN;
   const colors = [ [ "orange", "red" ], [ "aqua", "blue" ] ];
   // Velocity Tick's stand point. The client's own violet — the same one the
   // volcano ring is drawn in — and thin enough to read the ground, a structure
@@ -8317,7 +8408,11 @@ window.grbtp = 35;
       if (gameNet && gameNet.socket && typeof gameNet.send === "function") {
         this._watchSocket(gameNet.socket);
         const crypto = this.client._gameCrypto;
-        const cryptoReady = crypto && crypto.key && crypto.tables;
+        // The main socket sends through the bundle, which signs with ITS
+        // session. Until the bundle has built that session (see `_bundle` on
+        // exposeGameCrypto) its send() writes frames raw, and the server drops
+        // the connection on the first one.
+        const cryptoReady = crypto && crypto.key && crypto.tables && (crypto._bundle || !this.client.isOwner);
         if (!cryptoReady) {
           return;
         }
@@ -8456,7 +8551,7 @@ window.grbtp = 35;
       super(client2);
     }
     canBeTrapped() {
-      return !("noTrap" in Animals_default[this.type]);
+      return !("noTrap" in animalType(this.type));
     }
     update(id, type, x, y, angle, health, nameIndex) {
       this.id = id;
@@ -8464,7 +8559,7 @@ window.grbtp = 35;
       this.pos.previous.setVec(this.pos.current);
       this.pos.current._setXY(x, y);
       this.setFuturePosition();
-      const animal = Animals_default[type];
+      const animal = animalType(type);
       this.angle = angle;
       this.prevHealth = this.currentHealth;
       this.currentHealth = health;
@@ -8749,7 +8844,9 @@ window.grbtp = 35;
       return res.food >= food && res.wood >= wood && res.stone >= stone && res.gold >= gold;
     }
     getItemCount(group) {
-      const item = ItemGroups[group];
+      const item = ItemGroups[group] || {
+        limit: 99
+      };
       return {
         count: this.itemCount.get(group) || 0,
         limit: this.isSandbox ? "sandboxLimit" in item ? item.sandboxLimit : 99 : item.limit
@@ -8822,8 +8919,8 @@ window.grbtp = 35;
       return 1;
     }
     getDmgOverTime() {
-      const hat = Hats[this.hatID];
-      const accessory = Accessories[this.accessoryID];
+      const hat = Hats[this.hatID] || Hats[0];
+      const accessory = Accessories[this.accessoryID] || Accessories[0];
       let damage = 0;
       if ("healthRegen" in hat) {
         damage += hat.healthRegen;
@@ -10891,6 +10988,103 @@ window.grbtp = 35;
       }, 3e3);
     }
     handlePlayerInit(player) {}
+    /* ── 2025 world packets ───────────────────────────────────────────────
+     * The 2025 server sends the player update as three lists:
+     *
+     *   a( [sid, x, y, dir*100] x N,
+     *      [sid, build, weapon, variant, team, leader, skin, tail, icon, z] x M,
+     *      [sids that went out of view] )
+     *
+     * and a player's appearance only when it changes — the bundle keeps the
+     * rest on its own player objects. The animal update is the same idea:
+     *
+     *   I( [sid, index, x, y, dir*100, health, nameIndex, state] x N,
+     *      [sids that went out of view] )
+     *
+     * The client's model reads the 2024 layout — 13 fields per visible player,
+     * 7 per animal, direction in radians, everything in view every tick — and
+     * reading the new one with that stride put x where the weapon goes and the
+     * weapon where the hat goes. Every tick threw in predictWeapons, and the
+     * rest of the tick (damage text, tick actions, the enemy sweep) never ran.
+     *
+     * So the last-known state per sid is kept here, the new lists are applied
+     * to it the way the bundle applies them, and the 2024 layout is rebuilt
+     * from what is in view. */
+    proto2025=null;
+    _seenPlayers=new Map;
+    _seenAnimals=new Map;
+    _players2024(pos, look, gone) {
+      const seen = this._seenPlayers;
+      const row = sid => {
+        let r = seen.get(sid);
+        if (r === void 0) {
+          r = [ sid, 0, 0, 0, -1, 0, 0, null, 0, 0, 0, 0, 0 ];
+          r.visible = false;
+          seen.set(sid, r);
+        }
+        return r;
+      };
+      if (Array.isArray(pos)) {
+        for (let i = 0; i + 3 < pos.length; i += 4) {
+          const r = row(pos[i]);
+          r[1] = pos[i + 1];
+          r[2] = pos[i + 2];
+          r[3] = pos[i + 3] / 100;
+          r.visible = true;
+        }
+      }
+      if (Array.isArray(look)) {
+        for (let i = 0; i + 9 < look.length; i += 10) {
+          const r = row(look[i]);
+          for (let k = 1; k <= 9; k++) r[3 + k] = look[i + k];
+        }
+      }
+      if (Array.isArray(gone)) {
+        for (let i = 0; i < gone.length; i++) {
+          const r = seen.get(gone[i]);
+          if (r !== void 0) r.visible = false;
+        }
+      }
+      const known = this.client.PlayerManager.playerData;
+      const out = [];
+      for (const r of seen.values()) {
+        if (!r.visible) continue;
+        if (!known.has(r[0])) continue;
+        for (let k = 0; k < 13; k++) out.push(r[k]);
+      }
+      return out;
+    }
+    _animals2024(rows, gone) {
+      const seen = this._seenAnimals;
+      if (Array.isArray(rows)) {
+        for (let i = 0; i + 7 < rows.length; i += 8) {
+          const sid = rows[i];
+          let r = seen.get(sid);
+          if (r === void 0 || r[1] !== rows[i + 1]) {
+            r = [ sid, rows[i + 1], 0, 0, 0, 0, 0 ];
+            seen.set(sid, r);
+          }
+          r[2] = rows[i + 2];
+          r[3] = rows[i + 3];
+          r[4] = rows[i + 4] / 100;
+          r[5] = rows[i + 5];
+          r[6] = rows[i + 6];
+          r.visible = true;
+        }
+      }
+      if (Array.isArray(gone)) {
+        for (let i = 0; i < gone.length; i++) {
+          const r = seen.get(gone[i]);
+          if (r !== void 0) r.visible = false;
+        }
+      }
+      const out = [];
+      for (const r of seen.values()) {
+        if (!r.visible) continue;
+        for (let k = 0; k < 7; k++) out.push(r[k]);
+      }
+      return out;
+    }
     handleMessage(event) {
       const decoder = this.client.PacketManager.Decoder;
       if (decoder === null) {
@@ -10952,6 +11146,9 @@ window.grbtp = 35;
        case "io-init":
         this.client.connectSuccess = true;
         this.client.clientID = temp[1];
+        this._seenPlayers.clear();
+        this._seenAnimals.clear();
+        this.proto2025 = null;
         try {
           /* io-init grew a fifth field in 2025. The bundle's own reader:
            *
@@ -10982,7 +11179,22 @@ window.grbtp = 35;
             };
           }
         } catch (e) {}
-        PacketManager2.pingRequest();
+        /* Not yet, for the main player. This listener runs BEFORE the game's
+         * own onmessage (it was attached in the WebSocket construct trap), so
+         * at this moment the bundle has not built its session from io-init —
+         * and the bundle's send() with no session writes the frame raw: four
+         * bytes of msgpack, no signature. The server drops the connection on
+         * a frame like that. One task later the bundle has its keys. A bot's
+         * socket is RYN's own, so its ping can go now. */
+        if (this.client.isOwner) {
+          setTimeout(() => {
+            try {
+              PacketManager2.pingRequest();
+            } catch (_) {}
+          }, 0);
+        } else {
+          PacketManager2.pingRequest();
+        }
         if (this.client.isOwner) {
           GameUI_default.loadGame();
           Logger.test("Successfully connected to a server..");
@@ -11053,6 +11265,8 @@ window.grbtp = 35;
           // bundle on a possession switch. It is the server's own payload, so
           // the replay is exact rather than reconstructed.
           player._rynSpawnRaw = data2;
+          // A sid can be handed to a new player; their appearance is their own.
+          this._seenPlayers.delete(data2[1]);
           // A connection's first "D" is an arrival; every later one is that
           // player respawning. The Chat Log tells them apart by the connection
           // id in data2[0], which is also how a leave is matched back to a
@@ -11109,7 +11323,12 @@ window.grbtp = 35;
         }
 
        case "a":
-        PlayerManager2.updatePlayer(temp[1]);
+        {
+          const args = decoded[1];
+          // The 2025 update always carries its three lists; the 2024 one, one.
+          if (args.length >= 3) this.proto2025 = true; else if (args.length === 1 && this.proto2025 === null) this.proto2025 = false;
+          PlayerManager2.updatePlayer(this.proto2025 === false ? temp[1] : this._players2024(args[0], args[1], args[2]));
+        }
         // The tick boundary, and so the boundary a hit's damage numbers are
         // added up across. Whiteout flushes at the same point, after the
         // players have been moved to this tick's positions.
@@ -11126,7 +11345,7 @@ window.grbtp = 35;
         break;
 
        case "I":
-        PlayerManager2.updateAnimal(temp[1] || []);
+        PlayerManager2.updateAnimal(this.proto2025 === false ? temp[1] || [] : this._animals2024(decoded[1][0], decoded[1][1]));
         break;
 
        case "H":
@@ -11291,6 +11510,15 @@ window.grbtp = 35;
         {
           const id = temp[1];
           const message = temp[2];
+          // 2025: sid -1 is the server speaking (restarts, events), not a player.
+          if (id === -1) {
+            if (this.client.isOwner) {
+              try {
+                ChatLog_default.ready && ChatLog_default._push("chat", -1, "Server", String(message == null ? "" : message), "", false);
+              } catch (_) {}
+            }
+            break;
+          }
           const player = PlayerManager2.playerData.get(id);
           if (this.client.isOwner) {
             RYNLink.handleChat(this.client, id, player, message);
@@ -32269,6 +32497,8 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     background: var(--rl-iris-12);
     border-color: var(--rl-iris-45);
 }
+/* members-only and not signed in: still listed, visibly not joinable */
+.rs-row.rs-locked { opacity: .5; }
 
 .rs-id { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
 .rs-name {
@@ -35321,9 +35551,54 @@ html.ryn-in-lobby .ryn-v2-wrapper {
   // game uses, and the entry matching this tab's ?server=region:name is the one
   // reported. If the fetch fails the browser label is still better than nothing,
   // so it is used as the fallback.
-  const RYN_SERVER_API = (location.hostname === "sandbox.moomoo.io" ? "https://api-sandbox.moomoo.io" : "https://api.moomoo.io") + "/servers?v=1.27";
+  /* The API host, worked out the way the 2025 bundle works it out. It moved:
+   * moomoo.io now talks to api-prod2 (sandbox.moomoo.io to api-sandbox2), and
+   * api.moomoo.io is no longer what the page uses — reading the server list
+   * from there is how the right-hand panel sat on "waiting for the server
+   * list" for good. */
+  const RYN_API_BASE = (() => {
+    const host = location.hostname;
+    const pinned = /^(prod|sandbox)-[a-z0-9]+\.moomoo\.io$/.exec(host);
+    const plain = host === "moomoo.io" || host === "www.moomoo.io" ? "prod" : host === "sandbox.moomoo.io" ? "sandbox" : null;
+    if (pinned || plain) return "https://api-" + (plain || pinned[1]) + "2.moomoo.io";
+    if (host === "sandbox-dev.moomoo.io") return "https://api-sandbox.moomoo.io";
+    if (/^dev[a-z0-9-]*\.moomoo\.io$/.test(host)) return "https://api-dev.moomoo.io";
+    return "https://api.moomoo.io";
+  })();
+  const RYN_SERVER_API = RYN_API_BASE + "/servers?v=1.27";
+  // The bundle's own server model (see the exposeServers hook): regions,
+  // servers, which one Play joins, and choose(region, name) to change it.
+  const rynServers = () => {
+    try {
+      const servers = RYN._servers;
+      return servers && typeof servers.regions === "function" && typeof servers.serversIn === "function" ? servers : null;
+    } catch (_) {
+      return null;
+    }
+  };
   const RYN_SERVER_POLL_MS = 1e4;
   const _rynCurrentServer = () => {
+    try {
+      const servers = rynServers();
+      const picked = servers !== null ? servers.selected() : null;
+      if (picked) {
+        return {
+          region: String(picked.region),
+          name: String(picked.name)
+        };
+      }
+    } catch (_) {}
+    try {
+      // 2025 keeps the choice in the hash, "#<region>:<name>".
+      const hash = decodeURIComponent((location.hash || "").replace(/^#/, ""));
+      if (hash.indexOf(":") > 0) {
+        const [region, name] = hash.split(":");
+        if (region && name) return {
+          region: region,
+          name: name
+        };
+      }
+    } catch (_) {}
     try {
       const q = new URLSearchParams(location.search).get("server");
       if (typeof q !== "string") return null;
@@ -37490,13 +37765,19 @@ html.ryn-in-lobby .ryn-v2-wrapper {
        * It runs only while the lobby is showing. #menuCardHolder is
        * display:none for the whole of a round, so the moment one starts this
        * stops, and there is nothing of it left running during play. */
-      const SERVER_API = (isSandbox ? "https://api-sandbox.moomoo.io" : "https://api.moomoo.io") + "/servers?v=1.27";
+      const SERVER_API = RYN_SERVER_API;
       const LIVE_INTERVAL = 5e3;
       let liveCounts = null;
       let liveTimer = 0;
       let liveBusy = false;
 
       const readLive = () => {
+        // The 2025 bundle re-reads the list itself every five seconds while
+        // the menu is up and tells us (onChange below); a second poll of the
+        // same endpoint would only spend the rate limit Play also needs.
+        if (rynServers() !== null) {
+          return;
+        }
         if (liveBusy || typeof fetch !== "function") {
           return;
         }
@@ -37546,7 +37827,58 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       // appended, and the disabled options above each block carry the region's
       // display name, so everything on screen here is read back out of the
       // bundle's own render rather than fetched a second time.
+      /* 2025: no <select> any more. The bundle keeps the list in an object of
+       * its own (exposed as RYN._servers) with regions(), serversIn(region),
+       * selected() and choose(region, name), and draws two dropdowns from it.
+       * Servers can be members-only now ("auth"), joinable only signed in. */
+      const readServers = servers => {
+        const model = [];
+        const picked = servers.selected();
+        let regions = [];
+        try {
+          regions = servers.regions();
+        } catch (_) {}
+        for (let r = 0; r < regions.length; r++) {
+          const region = regions[r];
+          let list = [];
+          try {
+            list = servers.serversIn(region.id);
+          } catch (_) {}
+          for (let i = 0; i < list.length; i++) {
+            const server = list[i];
+            const value = String(region.id) + ":" + String(server.name);
+            let joinable = true;
+            try {
+              joinable = servers.joinable(server);
+            } catch (_) {}
+            model.push({
+              value: value,
+              key: String(region.id),
+              name: String(server.name),
+              region: region.name || String(region.id),
+              players: Number(server.playerCount),
+              capacity: Number(server.playerCapacity),
+              ping: typeof region.ping === "number" ? region.ping : -1,
+              members: !!server.auth,
+              joinable: joinable,
+              selected: !!picked && String(picked.region) === String(region.id) && String(picked.name) === String(server.name)
+            });
+          }
+        }
+        return model;
+      };
+      let serversHooked = false;
       const readModel = () => {
+        const servers = rynServers();
+        if (servers !== null) {
+          if (!serversHooked && typeof servers.onChange === "function") {
+            serversHooked = true;
+            try {
+              servers.onChange(() => queueSync());
+            } catch (_) {}
+          }
+          return readServers(servers);
+        }
         const select = selectElement();
         if (select === null) {
           return null;
@@ -37600,6 +37932,23 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       // on would navigate to the address you are already at, so it does
       // nothing instead.
       const choose = value => {
+        const servers = rynServers();
+        if (servers !== null) {
+          const split = value.indexOf(":");
+          const region = split < 0 ? value : value.slice(0, split);
+          const name = split < 0 ? "" : value.slice(split + 1);
+          const picked = servers.selected();
+          if (picked && String(picked.region) === region && String(picked.name) === name) {
+            return;
+          }
+          // The bundle's own choose(): it updates its dropdowns, the address
+          // bar and what Play joins, exactly as picking from its menu does.
+          try {
+            servers.choose(region, name);
+          } catch (_) {}
+          queueSync();
+          return;
+        }
         const select = selectElement();
         if (select === null || select.value === value) {
           return;
@@ -37703,7 +38052,15 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         if (parts.name.textContent !== name) {
           parts.name.textContent = name;
         }
-        const under = server.ping >= 0 ? server.region + " · " + server.ping + "ms" : server.region;
+        let under = server.ping >= 0 ? server.region + " · " + server.ping + "ms" : server.region;
+        if (server.members) {
+          under += " · members";
+        }
+        const locked = server.joinable === false;
+        if (row.classList.contains("rs-locked") !== locked) {
+          row.classList.toggle("rs-locked", locked);
+          row.title = locked ? "Members only: sign in to join this server" : "";
+        }
         if (parts.region.textContent !== under) {
           parts.region.textContent = under;
         }
@@ -38806,6 +39163,8 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     Hook.replace("totalDamage", /(\w+)\.showText\((\w+),(\w+),NUM{50},[\d.]+,NUM{500},Math\.abs\((\w+)\),[^()]+\)/, "RYN._DamageText._show($1,$2,$3,$4)");
     Hook.replace("objectAlpha", /(\w+)\.globalAlpha=(\w+)\.hideFromEnemy\?([\d.]+):1,/, "$1.globalAlpha=RYN._Renderer._objectAlpha()*($2.hideFromEnemy?$3:1),");
     Hook.replace("buildingTint", /\.isItem\?\((\w+)=(\w+)\((\w+)\),/, ".isItem?($1=RYN._Renderer._buildingSprite($2($3),$3),");
+    // 2025 draws a structure with an if-statement rather than a ternary.
+    Hook.replace("buildingTint2025", /\.isItem\)\{if\((\w+)=(\w+)\((\w+)\),/, ".isItem){if($1=RYN._Renderer._buildingSprite($2($3),$3),");
     // $3 is the resource being drawn, and it is now handed through so the
     // renderer can tell food from wood and stone. buildingTint has always
     // passed its object the same way.
@@ -38824,8 +39183,14 @@ html.ryn-in-lobby .ryn-v2-wrapper {
      * and echoed back verbatim. */
     Hook.replace("exposeGameNet", /const (\w+)=\{socket:null,connected:(!1|!\[\]),socketId:/,
       "const $1=RYN._myClient._gameNet={socket:null,connected:$2,socketId:");
-    Hook.replace("exposeGameCrypto", /(\w+)=\{mode:(\w+),key:/, "$1=RYN._myClient._gameCrypto={mode:$2,key:");
+    // `_bundle` marks the session the game itself built and sends with. RYN's
+    // own io-init reader builds one a moment earlier, for bots; a frame sent
+    // on the main socket before the bundle's exists goes out unsigned.
+    Hook.replace("exposeGameCrypto", /(\w+)=\{mode:(\w+),key:/, "$1=RYN._myClient._gameCrypto={_bundle:!0,mode:$2,key:");
     Hook.replace("captureTurnstile", /onGotTurnstileToken=function\((\w+)\)\{(\w+)=\1,/, "onGotTurnstileToken=function($1){$2=$1,RYN._myClient._turnstileToken=$1,");
+    // The 2025 server list: the object the bundle's two dropdowns are drawn
+    // from and that Play joins through. RYN's server panel reads it.
+    Hook.replace("exposeServers", /const (\w+)=\{init:function\((\w+)\)\{(\w+)=\2\.baseHost,/, "const $1=RYN._servers={init:function($2){$3=$2.baseHost,");
 
     /* ── LOGIN: release the two latches that make a failure permanent ──────
      *
@@ -38916,7 +39281,12 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       "let $5=null");
     Hook.replace("handleBuy", /\w+\.send\("\w+",1,(\w+),(\w+)\)/, "RYN._Possess.c()._ModuleHandler._buy($2,$1,true)");
     Hook.prepend("RemovePingCall", /\w+&&clearTimeout/, "return;");
-    Hook.append("RemovePingState", /let \w+=-1;function \w+\(\)\{/, "return;");
+    /* The game's pong handler. RemovePingCall stops the game's own pings —
+     * RYN sends them — and this stops its handler from turning a pong it
+     * never asked for into "ping = now - (-1)": a 13-digit window.pingTime
+     * that RYN's readout then took as the ping. 2025 split the handler from
+     * its tier helper, so the anchor is the handler's own first statement. */
+    Hook.append("RemovePingState", /function \w+\(\)\{(?=const \w+=Date\.now\(\)-\w+;window\.pingTime=)/, "return;");
     Hook.prepend("preRender", /(\w+)\.lineWidth=NUM{4},/, "RYN._Renderer._guardCall(RYN._hooks._ObjectRenderer,\"_preRender\",$1);");
     /* The grid. The 2024 pattern — from the river colour, across a `for`, to
      * the next `.stroke` — matched 1,238 characters of the 2025 bundle: from
@@ -39031,6 +39401,18 @@ html.ryn-in-lobby .ryn-v2-wrapper {
   let Injector_lastCode = null;
   const Injector = new class {
     init(node) {
+      /* Late injection: the page's own copy of the game has already run and
+       * rendered ITS Turnstile widget into #turnstileWidget. Turnstile refuses
+       * a second render into a container it has seen ("already rendered"),
+       * returns undefined, and RYN's copy then waits for a token that never
+       * comes. A fresh node with the same id is a container it has never
+       * seen. At document-start the widget is empty and this is a no-op. */
+      try {
+        const widget = document.getElementById("turnstileWidget");
+        if (widget && widget.parentNode && widget.childNodes.length) {
+          widget.parentNode.replaceChild(widget.cloneNode(false), widget);
+        }
+      } catch (e) {}
       this.loadScript(node.src);
     }
     loadScript(src) {
