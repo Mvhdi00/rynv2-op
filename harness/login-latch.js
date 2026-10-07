@@ -26,7 +26,12 @@ const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-const RYN = process.argv[2] || path.resolve(__dirname, "../ryn/Ryn_Type_2.user.js");
+/* The 2024 client and the 2024 bundle. Ryn_Type_2 was retargeted at the 2025
+ * bundle, where this latch does not exist in this shape at all — the game
+ * rewrote it, and `ryn-hooks-check.js` plus `ryn-protocol-2025.js` cover the
+ * new one. Pointing this file at the new client would not be a stricter test,
+ * it would be a test of the wrong pair. */
+const RYN = process.argv[2] || path.resolve(__dirname, "../ryn/RYN_Client_v5.4.user.js");
 const BUNDLE = process.argv[3] || path.resolve(__dirname, "fixtures/moomoo_bundle.js");
 const src = fs.readFileSync(RYN, "utf8");
 const bundle = fs.readFileSync(BUNDLE, "utf8");

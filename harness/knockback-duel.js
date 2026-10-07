@@ -32,6 +32,23 @@ const RYN = process.argv[2] || path.resolve(__dirname, "../ryn/RYN_Client_v5.4.u
 const GLOTUS = process.argv[3] ||
   "/root/.claude/uploads/84985967-839c-5cb9-84f9-ceebbe0cce70/cef1a7ac-Glotus_Client_Moomoo.io5.5.5.txt";
 
+/* Glotus is the reference this duel compares against, and it lives in the
+ * session uploads directory rather than in the repo — that directory is
+ * per-session, so the file is gone in any later container. Fail with the
+ * reason instead of an ENOENT stack trace: the bench is not broken, its
+ * fixture is simply not here. Pass a path to run it.
+ *
+ *   node knockback-duel.js <glotus.js>
+ */
+if (!require("fs").existsSync(GLOTUS)) {
+  console.log(require("path").basename(process.argv[1]) +
+    ": the Glotus reference is not available in this container.");
+  console.log("  expected at: " + GLOTUS);
+  console.log("  It lives in the session uploads directory, which does not survive a new");
+  console.log("  session. Pass a path to run this duel:  node " + require("path").basename(process.argv[1]) + " <glotus.js>");
+  process.exit(2);
+}
+
 function lift(src, header, label) {
   const m = new RegExp(header).exec(src);
   if (!m) throw new Error("could not find " + label);
