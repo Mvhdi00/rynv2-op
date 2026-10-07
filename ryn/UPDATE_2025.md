@@ -16,7 +16,7 @@ This pass was verified the other way round: the real 2025 bundle runs in
 Chromium with RYN on top, and the test plays it.
 
 ```
-node harness/boot-2025.js            # the real bundle in a browser: 11 configurations
+node harness/boot-2025.js            # the real bundle in a browser: 11 configurations, 324 checks
 node harness/ryn-rewrite-check.js    # RYN's own rewrite of the bundle, run and inspected
 node harness/ryn-protocol-2025.js    # the wire format, read out of the bundle and RYN
 node harness/ryn-hooks-check.js      # every hook: does it match, does what it injects resolve

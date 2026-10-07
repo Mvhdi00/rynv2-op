@@ -71,8 +71,15 @@ MUTATIONS = [
      '      const signIn = doc.getElementById("signInButton");', '      const signIn = null;'),
     ("fast", "the account card opens under the lobby",
      '      [ "verifyDialog", "accountCard", "profileCard", "clanCard", "confirmCard" ].forEach(id => lift(id, false));', ""),
-    ("late", "the page's own copy renders Turnstile too",
-     "        if (fromPage) return \"ryn-page-copy\";\n", ""),
+    # Withdrawn, not missed: "the page's own copy renders Turnstile too"
+    # (removing wrapTurnstile's `fromPage` refusal). Since the page's own copy
+    # is stopped at its first line it never reaches Turnstile, so the refusal
+    # is unreachable here — kept in the client as the fallback for a bundle
+    # whose first line the stop does not catch, and replaced by a mutation of
+    # the stop itself:
+    ("late", "the page's module is let run on after RYN's copy has started",
+     "        throw stopped;\n      };\n      docProto.createElement = stopPageCopy;",
+     "        return nativeCreateElement.apply(this, arguments);\n      };\n      docProto.createElement = stopPageCopy;"),
     # ── bots: RYN's own login and its own session ──────────────────────────
     ("fast", "a bot skips /join and connects with the raw captcha token",
      "        token = await rynJoinTicket(new URL(href).host, token.slice(3)).then(ticket => ticket || token, () => token);\n", ""),
