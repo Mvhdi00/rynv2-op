@@ -16,15 +16,95 @@ This pass was verified the other way round: the real 2025 bundle runs in
 Chromium with RYN on top, and the test plays it.
 
 ```
-node harness/boot-2025.js            # the real bundle in a browser: 18 configurations, 576 checks
+node harness/boot-2025.js            # the real bundle in a browser: 25 configurations, 856 checks
 node harness/ryn-rewrite-check.js    # RYN's own rewrite of the bundle, run and inspected
 node harness/ryn-protocol-2025.js    # the wire format, read out of the bundle and RYN
 node harness/ryn-hooks-check.js      # every hook: does it match, does what it injects resolve
 node harness/ryn-sign-check.js       # RYN's frame signature against HMAC-SHA256 and the game's
 node harness/ryn-wire-check.js       # RYN's own session for bots against the game's functions
-python3 harness/ryn-2025-mutate.py   # 45 deliberate breakages, static checks: 45 caught
-python3 harness/ryn-boot-mutate.py   # 32 deliberate breakages, browser test: 32 caught
+node harness/ryn-shame-check.js      # RYN's shame counter against the server's own rule
+python3 harness/ryn-2025-mutate.py   # 49 deliberate breakages, static checks: 49 caught
+python3 harness/ryn-boot-mutate.py   # 41 deliberate breakages, browser test: 41 caught
 ```
+
+---
+
+## Round four: the sign-in card after a kill, shame 20, bots on the live join
+
+### A sign-in card every kill, and the kill visuals broken: one hook
+
+Every corpse, every one of the twenty kill animations and every ghost RYN
+draws goes through the game's own player drawer, which the `renderPlayer` hook
+captures from the bundle. Its pattern was "the first two-argument function that
+opens on `a = b || c,`". On the 2024 bundle that was the player drawer. On the
+2025 one the first such function is the game's **sign-in card opener**,
+`function Zi(e,t){Xa=t||null,rc=e||"",lc.style.display="block",…`.
+
+So from the first kill on, every frame a corpse was on screen, RYN "drew" it by
+opening the sign-in card. The card's message was RYN's corpse data, shown as
+"[object Object]". The card also took the mouse wheel, so the zoom stopped
+too. The pattern now names the drawer exactly: `t=t||M,t.lineWidth=`, which
+matches only that function on both bundles.
+
+Found by adding a kill to the browser test (`+kill`) and tracing what opened
+the card. The rewrite check now insists the captured function is the drawer,
+and `+visuals` turns on every Visual option and kills the rival once under
+each of the 22 kill-animation settings. Before: all 22 opened the card. Now:
+none, with no errors.
+
+### Shame 20: RYN's counter, not the server
+
+The server's rule is unchanged in the 2025 bundle: on **eating**, if you were
+hit since your last food, a heal within 120 ms adds one, and at 8 you get the
+clown for 30 seconds and the count starts over; a slower heal takes two off.
+RYN cannot see eating, only health going up. Its model counted every gain
+after a hit as an apple and never reset at 8. In 2025, health also comes back
+from emerald lifesteal, cheese's heal over time, healing pads and regen hats,
+so players showed 20 with no clown.
+
+It now counts only gains that look like food: 20, 30 or 40 (apple, cheese,
+cookie), or whatever was left to full. It also resets at 8, as the server
+does. Auto Heal stops instant heals at 7 of its own count, so the inflated
+count was also holding your heals back. `ryn-shame-check.js` plays health
+sequences into the model; the old one fails 5 of its 8 checks.
+
+### Bots
+
+**Does a bot need a token?** Yes, its own Cloudflare check (one per join, used
+once), the same as your own join. Bots join as guests, so no account is
+needed except on the shield (members-only) servers. RYN solves the check
+automatically. Sometimes Cloudflare wants a click.
+
+What made bots fail when it did:
+
+- **Cloudflare wanted a click, and nobody saw it.** The bot's check showed
+  itself as a small box in the bottom-right corner, said nothing, and gave up
+  after 20 seconds. RYN then fell back on two tokens that cannot work in 2025:
+  - your own, which your join has already spent at `/join`, and which, if it
+    hadn't been, your next Play would then find spent;
+  - a 2024-style captcha the 2025 join does not take.
+
+  The join API refused the bot and its row vanished. Now the check comes to
+  the middle of the screen with "Cloudflare wants a click to let your bot in"
+  and waits two minutes. With no token, RYN says why and stops. Tested with a
+  25-second click (`+slowclick`) against a join API that takes each token
+  once, as Cloudflare does: v2.4 never opened a socket; now the bot joins.
+- **Names can be taken.** A registered player's name is theirs alone; the
+  game checks `/name-check` and refuses "This name belongs to someone else".
+  The default bot name was yours, and if you are signed in it is taken.
+  Every bot is now its base plus its slot number, always (yytt1, yytt2…), cut
+  to 15 characters with the number kept whole. A name the API calls taken is
+  skipped for the next free one (yytt1 → yytt101). A bot the server silently
+  never spawns tries the next name and says so. A bot the server turns away
+  shows the server's own reason.
+- **A device id.** The 2025 join API gives each browser a device id and the
+  game sends it back on every join. Each bot is now a device of its own: an id
+  of its own, kept for next time, never yours and never shared by two bots at
+  once.
+- **The sitekey** a bot's token is minted for is read from the game, not
+  assumed.
+
+If a bot still fails, it now says why on screen.
 
 ---
 
@@ -388,9 +468,13 @@ as guests.
 ## Hook status
 
 68 of 70 hooks install on the 2025 bundle (round two added `exposeResize`,
-`viewport`, `nameColor` and `fastSign`; round three `zoomOutCap`). `gameInit` served an altcha start
-path the game no longer has; `buildingTint`'s ternary is now an if-statement,
-matched by `buildingTint2025`.
+`viewport`, `nameColor` and `fastSign`; round three `zoomOutCap`). `gameInit`
+served an altcha start path the game no longer has; `buildingTint`'s ternary
+is now an if-statement, matched by `buildingTint2025`.
+
+Installing is not enough. `renderPlayer` installed on 2025 and captured the
+wrong function (round four), so the rewrite check now also asks that the
+function it captures is the player drawer.
 
 ## Not verified, and what to know
 
@@ -402,7 +486,9 @@ matched by `buildingTint2025`.
 - **Anti-userscript code.** The 2025 game probes for userscript managers, may
   show a red "userscript" warning bar, and reports integrity flags to the server
   (`T` packet). RYN does not hide from this. If the server acts on those flags,
-  RYN cannot prevent it.
+  RYN cannot prevent it. Bots send no such reports, and RYN does not forge them:
+  if the live server drops connections that never report, bots will be dropped
+  soon after joining. That now shows on screen with the server's reason.
 - **Members-only servers** need you signed in; bots cannot join them.
 - **The live build.** moomoo.io cannot be fetched from here, so the hooks are
   tested against the build this started from (`index-cfaab428`), and the bot

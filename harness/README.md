@@ -32,6 +32,7 @@ node ryn-protocol-2025.js   # the wire format, from the bundle and from RYN
 node ryn-hooks-check.js     # each hook: does it match, does what it injects resolve
 node ryn-sign-check.js      # RYN's own frame signature against HMAC-SHA256 and the game's
 node ryn-wire-check.js      # RYN's own 2025 session (bots) against the game's functions
+node ryn-shame-check.js     # RYN's shame counter against the server's own rule
 python3 ryn-2025-mutate.py  # break the fixes on purpose; a static check must go red
 python3 ryn-boot-mutate.py  # same, for what only the browser can show
 ```
@@ -69,6 +70,19 @@ The flags, each one a way the live game behaves that a plain run would not show:
 - `+members`, `+busy` (or `JOIN_REFUSE=members|busy`) — the join API turns the
   bot away as a guest on a server for signed-in players, or answers its first
   join "too many". The bot must say why, and in the second case get in.
+- `+kill` — the rival dies to me. Nothing may ask me to sign in, and RYN must
+  keep drawing: its corpse is drawn through the game's player drawer, which a
+  loose hook pattern had swapped for the sign-in card's opener on 2025.
+  `+visuals` turns every Visual option on and kills the rival under each kill
+  animation in turn. `SHOW_TRACE=<element id>` prints the stack of whatever
+  shows that element; it is how the card's opener was found.
+- `+heal` — the server hurts me down to 60; Auto Heal has to eat.
+- Bots on the 2025 join: the fake API takes each Cloudflare token once, as the
+  real one does; it gives each new device an id; and `/name-check` says the
+  harness bot's first name (bot11) is taken. `+slowclick` answers the bot's
+  check only after 25 s; `+tserror` fails it outright (the bot must say so,
+  and never offer a token twice); `+silentname` has the server ignore a spawn
+  under one name; `+kickname` has it turn the bot away with a reason.
 
 Every run also checks that only one copy of the game runs (late injection used to
 run the page's own copy beside RYN's), that Turnstile's script loads once and no

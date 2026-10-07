@@ -144,6 +144,21 @@ const wandered = longMatches.filter(([n]) => !LONG_OK.has(n)).map(([n, len]) => 
 say(wandered.length === 0, "no hook's pattern wanders across the bundle" +
     (wandered.length ? " — " + wandered.join(", ") : " (long by design: " + longMatches.map(([n, len]) => n + " " + len).join(", ") + ")"));
 
+/* A hook that captures a game function by the shape of its first line can
+ * match and still capture the WRONG function. renderPlayer's old pattern did
+ * exactly that on 2025: it took the sign-in card's opener, and every corpse,
+ * kill animation and ghost RYN drew opened the card instead. The function it
+ * captures has to be the player drawer — (player, ctx), and it sets the
+ * context's line width before anything else. */
+{
+  const m = /RYN\._hooks\._renderPlayer=([\w$]+);/.exec(code);
+  const name = m && m[1];
+  const def = name ? new RegExp("function " + name.replace(/\$/g, "\\$") + "\\(\\w+,(\\w+)\\)\\{([^}]{0,160})").exec(code) : null;
+  const draws = !!def && new RegExp("^" + def[1] + "=" + def[1] + "\\|\\|[\\w$]+," + def[1] + "\\.lineWidth=").test(def[2]) && !/style\.display/.test(def[2]);
+  say(draws, "renderPlayer captures the game's player drawer" +
+      (def ? " (" + name + ": " + def[2].slice(0, 48) + "…)" : name ? " (" + name + ": no such function)" : " (nothing captured)"));
+}
+
 // declarations: anything the rewritten code still uses must still be declared
 const declared = c => {
   const set = new Map();

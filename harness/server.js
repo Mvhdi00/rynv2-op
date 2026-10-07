@@ -63,6 +63,12 @@ function attach(ws, log, opts) {
      * valid spawn look identical to one that does — which is how a spawn sent
      * before the transport was negotiated went unnoticed here. */
     requireSpawn = false,
+    /* Names this server will not spawn a player under, and says nothing about
+     * — the way a name that belongs to someone else can be refused. */
+    ignoreNames = [],
+    // ...or turns away with a reason ("B"), as the game's server does
+    kickNames = {},
+    onSpawned = null,
     /* 2025 moved three world packets to new layouts:
      *   a  [sid,x,y,dir*100]x4, [sid,build,weapon,variant,team,leader,skin,tail,icon,z]x10, [hidden sids]
      *   I  [sid,index,x,y,dir*100,health,nameIndex,state]x8, [hidden sids]
@@ -171,7 +177,16 @@ function attach(ws, log, opts) {
       expectedSeq = seq;
 
       if (log) log("c2s", letter, "seq=" + seq, JSON.stringify(frame[1]).slice(0, 120));
-      if (letter === "M") spawn();
+      if (letter === "M") {
+        const name = Array.isArray(frame[1]) && frame[1][0] && frame[1][0].name;
+        if (kickNames[name]) {
+          send("B", [kickNames[name]]);
+          setTimeout(() => ws.close(), 50);
+        } else if (ignoreNames.indexOf(name) < 0) {
+          if (!spawned && onSpawned) onSpawned(name);
+          spawn();
+        }
+      }
       if (sim && spawned) simPacket(letter, frame[1]);
       // the real server answers a ping with an empty "0"
       if (letter === "0") send("0", []);
@@ -192,6 +207,19 @@ function attach(ws, log, opts) {
        * way the real game does it anyway. */
       send: (letter, args) => send(letter, args),
       mySid,
+      /* The rival dies to me, the way the 2025 server says it: its health to
+       * zero, my kill count up, and from the next tick on it is in the update's
+       * out-of-view list instead of its position list. */
+      killFoe: () => {
+        send("O", [foeSid, 0]);
+        send("N", ["kills", ++myKills, 1]);
+        foeDead = 1;
+      },
+      // back on its feet where it fell, in the next tick's position list
+      reviveFoe: () => {
+        foeDead = 0;
+        send("O", [foeSid, 100]);
+      },
     });
 
     ws.send(Buffer.from(encode(["io-init", pinned ? [7, seed, keyHex, ENCRYPTED_MODE, 1] : [7, seed, keyHex, ENCRYPTED_MODE]])));
@@ -208,6 +236,8 @@ function attach(ws, log, opts) {
     const mid = 7e3;
     const midY = 6e3;
     const foeSid = 2;
+    let foeDead = 0;  // 1: died this tick, 2: dead and gone (session.killFoe)
+    let myKills = 0;
 
     // ── sim: my player's swing, by the game's own rules (see `sim` above) ──
     const SIM_TICK = 111;
@@ -424,12 +454,15 @@ function attach(ws, log, opts) {
         return;
       }
       if (proto === 2025) {
+        // a dead rival is out of view: listed once as gone, then not at all
+        const foe = foeDead ? [] : [foeSid, mid + 150 + wobble, midY + 40, 300];
         send("a", [
-          [mySid, mid, midY, 0, foeSid, mid + 150 + wobble, midY + 40, 300],
+          [mySid, mid, midY, 0].concat(foe),
           full ? [mySid, -1, 0, 0, null, 0, 0, 0, 0, 0,
                   foeSid, -1, 5, 1, null, 0, 6, 11, 1, 0] : [],
-          [],
+          foeDead === 1 ? [foeSid] : [],
         ]);
+        if (foeDead === 1) foeDead = 2;
         return;
       }
       // 13 fields per player
@@ -450,10 +483,10 @@ function attach(ws, log, opts) {
       }
       const wobble = Math.sin(t / 8) * 60;
       sendPlayers(wobble, false);
-      if (t % 9 === 0) send("O", [foeSid, 60 + (t % 40)]);
+      if (t % 9 === 0 && !foeDead) send("O", [foeSid, 60 + (t % 40)]);
       // A hit on the rival every few ticks: the damage number the game floats
       // up from them ("8": x, y, value, type), so a screenshot has one alive.
-      if (proto === 2025 && t % 3 === 0) send("8", [mid + 150 + wobble, midY + 40, 17, 0]);
+      if (proto === 2025 && t % 3 === 0 && !foeDead) send("8", [mid + 150 + wobble, midY + 40, 17, 0]);
       if (t % 15 === 0) send("M", [3, 1]);
     }
 

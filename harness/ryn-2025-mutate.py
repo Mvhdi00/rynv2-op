@@ -20,6 +20,7 @@ CHECKS = [
     ("rewrite", ["node", "harness/ryn-rewrite-check.js"]),
     ("sign", ["node", "harness/ryn-sign-check.js"]),
     ("wire", ["node", "harness/ryn-wire-check.js"]),
+    ("shame", ["node", "harness/ryn-shame-check.js"]),
 ]
 
 MUTATIONS = [
@@ -133,6 +134,18 @@ MUTATIONS = [
     ("RynWire's fallback alphabet loses the 2025 letters",
      'c2s = [ "M", "D", "9", "e", "F", "z", "H", "K", "L", "N", "b", "P", "Q", "c", "6", "S", "0", "T", "R", "A", "V" ];',
      'c2s = [ "M", "D", "9", "e", "F", "z", "H", "K", "L", "N", "b", "P", "Q", "c", "6", "S", "0" ];'),
+    # ── round four: the player drawer, shame ─────────────────────────────
+    ("renderPlayer goes back to its loose pattern (on 2025: the sign-in card's opener)",
+     'Hook.prepend("renderPlayer", /function (\\w+)\\(\\w+,(\\w+)\\)\\{\\2=\\2\\|\\|\\w+,\\2\\.lineWidth=/,',
+     'Hook.prepend("renderPlayer", /function (\\w+)\\(\\w+,\\w+\\)\\{\\w+=\\w+\\|\\|\\w+,/,'),
+    ("the shame count takes every gain after a hit for an apple again",
+     "} else if (this.receivedDamage !== null && this._foodHeal(previousHealth, currentHealth)) {",
+     "} else if (this.receivedDamage !== null) {"),
+    ("the shame count runs past 8 again, with no clown",
+     "          if (this.shameCount >= 8) {\n            this.shameActive = true;",
+     "          if (false) {\n            this.shameActive = true;"),
+    ("a cookie is no longer food to the shame count",
+     "return is(20) || is(30) || is(40) ||", "return is(20) || is(30) ||"),
     # ── the zoom ──────────────────────────────────────────────────────────
     ("zoomOutCap no longer finds the game's zoom-out cap",
      'Hook.replace("zoomOutCap", /const (\w+)=(\w+)\*1\.15;/,', 'Hook.replace("zoomOutCap", /const (\w+)=(\w+)\*1\.25;/,'),

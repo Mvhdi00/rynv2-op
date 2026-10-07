@@ -33,6 +33,13 @@
  *                reshapes it between builds (bots must still join)
  *   grind        Auto Grind on, the server playing the swing (server.js sim)
  *   trap         Trap Animal on, a 2025 boar standing still a step away
+ *   kill         the rival dies to me: no sign-in prompt, RYN keeps drawing
+ *   visuals      every Visual option on, a kill under each kill animation
+ *   heal         the server hurts me: Auto Heal has to eat
+ *   slowclick    a bot's check wants a click, answered only after 25 s
+ *   silentname   the server ignores a bot's spawn under one name, silently
+ *   kickname     the server turns a bot away by name, saying why ("B")
+ *   tserror      a bot's Cloudflare check fails outright
  *   quiet        the server sends no player update on a tick with no change
  *   heartbeat    quiet, but an empty update once a second
  *   members      the join API turns the bot away: a signed-in players' server
@@ -207,7 +214,7 @@ function reshape(code) {
  *     widgets have no size until then, as Cloudflare's do. */
 const TS_SCRIPT_MS = 500;
 const TS_SOLVE_MS = 900;
-const TURNSTILE = interactive => `(function () {
+const TURNSTILE = (interactive, errorBots) => `(function () {
   window.__tsLoads = (window.__tsLoads || 0) + 1;
   if (window.turnstile && window.turnstile.__harness) {
     console.warn("[Cloudflare Turnstile] Turnstile already has been loaded. Was Turnstile imported multiple times?");
@@ -245,6 +252,11 @@ const TURNSTILE = interactive => `(function () {
       if (/\\/assets\\/index-[^/]*\\.js/.test(new Error().stack || "")) window.__tsByPage = (window.__tsByPage || 0) + 1;
       seen.add(el);
       const id = "ts" + (++n);
+      // +tserror: a check that is not the game's own fails outright
+      if (${!!errorBots} && !(el && el.id === "turnstileWidget")) {
+        setTimeout(function () { try { o && o["error-callback"] && o["error-callback"](); } catch (e) {} }, 300);
+        return id;
+      }
       const frame = document.createElement("iframe");
       frame.className = "cf-turnstile-frame";
       frame.style.cssText = "border:0;display:block;" + (o && o.appearance === "interaction-only" ? "width:0;height:0;" : "width:300px;height:65px;");
@@ -299,7 +311,18 @@ const SERVERS = [
 async function run(spec) {
   const [mode, ...flags] = spec.split("+");
   const pinned = flags.includes("pinned");
-  const interactive = flags.includes("interactive");
+  /* +slowclick: a bot's challenge wants a click, and the person takes 25
+   * seconds to get to it — past the 20 a bot's check used to wait. */
+  const slowclick = flags.includes("slowclick");
+  /* +silentname: the server ignores a bot that spawns as bot1101 — not a word,
+   * just no spawn. The bot has to notice, say so, and come back as bot1201. */
+  const silentname = flags.includes("silentname");
+  // +kickname: the server turns the bot away by name, saying why ("B")
+  const kickname = flags.includes("kickname");
+  /* +tserror: a bot's Cloudflare check fails. No token, no bot — and it must
+   * not reach for yours, which your own join has already spent. */
+  const tserror = flags.includes("tserror");
+  const interactive = flags.includes("interactive") || slowclick;
   const reshaped = flags.includes("reshaped");
   /* +members / +busy (or JOIN_REFUSE=members|busy): the join API refuses the
    * bot the way the live one can —
@@ -325,6 +348,19 @@ async function run(spec) {
    * the 2025 server leaves an animal that is not moving. Then the boar goes
    * and a crab takes its place, which no trap can hold. */
   const trap = flags.includes("trap");
+  /* +kill: the rival dies to me (server.js session.killFoe). Watched for
+   * three seconds after: nothing asks you to sign in, and RYN keeps drawing —
+   * its corpse and kill animation run on exactly this. */
+  const kill = flags.includes("kill");
+  /* +visuals: every option on RYN's Visual page switched on, the ones off by
+   * default included, and the rival killed once under each of the twenty kill
+   * animations in turn. Each of them draws the victim through the game's own
+   * player drawer; all of them went through the sign-in card's opener instead
+   * before renderPlayer was pinned. */
+  const visuals = flags.includes("visuals");
+  /* +heal: the server takes my health down to 60 (a hit, "O" for my sid).
+   * Auto Heal is on by default; it has to eat. */
+  const heal = flags.includes("heal");
   const out = { mode: spec, base: mode, pinned, interactive, joinRefuse, errors: [], consoleErrors: [], sockets: [], joins: [], frames: [], notes: [], swings: [], simEvents: [] };
   const browser = await chromium.launch({
     executablePath: "/opt/pw-browsers/chromium",
@@ -365,7 +401,7 @@ async function run(spec) {
     if (url.hostname === "cdn.frvr.com") return send(FRVR_SDK, "text/javascript");
     if (url.hostname === "challenges.cloudflare.com") {
       await new Promise(r => setTimeout(r, TS_SCRIPT_MS));
-      return send(TURNSTILE(interactive), "text/javascript");
+      return send(TURNSTILE(interactive, tserror), "text/javascript");
     }
     if (url.hostname === "api.moomoo.io") {
       // the pre-2025 API host. The 2025 bundle on moomoo.io talks to
@@ -387,9 +423,24 @@ async function run(spec) {
           headers: { "access-control-allow-origin": "*" } });
         if (n >= 2 && joinRefuse === "members") return refuse(403, { error: "auth" });
         if (n === 2 && joinRefuse === "busy") return refuse(429, { error: "rate" });
-        return send(JSON.stringify({ ticket: "T" + n, did: "did-1" }), "application/json");
+        /* A Cloudflare token is good once: the API's siteverify refuses one
+         * it has seen, and the join answers 403. A bot that falls back on
+         * your token — already spent on your own join — is refused here as
+         * it would be live. */
+        out.captchas = out.captchas || new Set();
+        if (body.captcha && out.captchas.has(body.captcha)) { out.reused = (out.reused || 0) + 1; return refuse(403, {}); }
+        if (body.captcha) out.captchas.add(body.captcha);
+        // a device id for a first join, the one it sent back for a later one
+        return send(JSON.stringify({ ticket: "T" + n, did: body.did || "did-" + n }), "application/json");
       }
-      if (url.pathname === "/name-check") return send("{}", "application/json");
+      /* Names that belong to someone. The bot the harness adds is typed as
+       * "bot1", so slot 1 makes it bot11 — taken here, so a bot has to step
+       * past it to bot1101. */
+      if (url.pathname === "/name-check") {
+        const name = url.searchParams.get("name") || "";
+        (out.nameChecks = out.nameChecks || []).push(name);
+        return send(JSON.stringify(name === "bot11" ? { reserved: true } : {}), "application/json");
+      }
       if (url.pathname === "/top") return send(JSON.stringify({ players: [], clans: [] }), "application/json");
       return send("{}", "application/json");
     }
@@ -414,6 +465,10 @@ async function run(spec) {
     server.attach(sock, (...a) => {
       out.frames.push(a.join(" ").slice(0, 160));
       conn.letters.push(a[1]);
+      if (a[0] === "c2s" && a[1] === "M" && conn.spawnName === undefined) {
+        const m = /"name":"([^"]*)"/.exec(String(a[3] || ""));
+        conn.spawnName = m ? m[1] : null;
+      }
       if (a[0] === "c2s" && a[1] === "M" && out.conns[0] === conn && !out.spawnAt) out.spawnAt = Date.now();
     }, {
       requireSpawn: true,
@@ -432,6 +487,10 @@ async function run(spec) {
       pinned,
       crypto: pinned ? wire() : null,
       mixKey: mixKeyStub,
+      onSession: session => { if (out.conns[0] === conn) out.session = session; },
+      ignoreNames: silentname && out.conns[0] !== conn ? ["bot1101"] : [],
+      kickNames: kickname && out.conns[0] !== conn ? { bot1101: "This name belongs to someone else" } : {},
+      onSpawned: name => { conn.spawnedAs = name; },
       onViolation: (why, detail) => {
         conn.violations.push(why);
         out.notes.push("server rejected a frame: " + why + (detail ? " (" + detail + ")" : ""));
@@ -439,6 +498,27 @@ async function run(spec) {
     });
   });
 
+  if (process.env.SHOW_TRACE) {
+    // Debug aid: who shows a given element (sets its style.display).
+    await page.addInitScript({ content: `(function () {
+      const id = ${JSON.stringify(process.env.SHOW_TRACE)};
+      const d = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "style");
+      const proxies = new WeakMap();
+      Object.defineProperty(HTMLElement.prototype, "style", { configurable: true, enumerable: d.enumerable, set: d.set, get: function () {
+        const real = d.get.call(this);
+        if (this.id !== id) return real;
+        let p = proxies.get(real);
+        if (!p) {
+          p = new Proxy(real, {
+            set(t, k, v) { if (k === "display" && v !== "none") (window.__showStacks = window.__showStacks || []).push(v + ": " + (new Error().stack || "").split("\\n").slice(2, 14).join(" <- ")); t[k] = v; return true; },
+            get(t, k) { const v = t[k]; return typeof v === "function" ? v.bind(t) : v; },
+          });
+          proxies.set(real, p);
+        }
+        return p;
+      } });
+    })();` });
+  }
   if (process.env.TRACE_ID) {
     // Debug aid: who takes a given element out of the document.
     await page.addInitScript({ content: `(function () {
@@ -455,8 +535,13 @@ async function run(spec) {
       document.addEventListener("DOMContentLoaded", () => note("DCL exists=" + !!document.getElementById(id)), true);
     })();` });
   }
-  if (grind || trap) {
-    const settings = JSON.stringify(grind ? { _autoGrind: true } : { _trapAnimal: true });
+  if (grind || trap || visuals) {
+    const settings = JSON.stringify(grind ? { _autoGrind: true } : trap ? { _trapAnimal: true } : {
+      _myNameColor: true, _markRynPlayers: true, _showPlayerID: true, _weaponReloadRing: true, _renderHP: true,
+      _positionPrediction: true, _playerTurretReloadBar: true, _displayPlayerAngle: true, _objectTint: true,
+      _weather: true, _deathCorpse: true, _itemHealthBar: true, _itemHealthBarEnemy: true, _structureColors: true,
+      _weaponHitbox: true, _collisionHitbox: true, _placementHitbox: true, _possiblePlacement: true, _meleeAnimation: true,
+    });
     await page.addInitScript({ content: `try { if (window.top === window) localStorage.setItem("RYN", ${JSON.stringify(settings)}); } catch (e) {}` });
   }
   /* How many copies of the game ran, and whose. The bundle sets
@@ -621,6 +706,76 @@ async function run(spec) {
     out.canvasSizes = (await page.evaluate(() => window.__gameCanvasSizes || 0)) - before;
   }
 
+  if (kill && out.session) {
+    const look = () => page.evaluate(() => {
+      const shown = id => {
+        const e = document.getElementById(id);
+        if (!e) return false;
+        for (let n = e; n; n = n.parentElement) {
+          const cs = getComputedStyle(n);
+          if (cs.display === "none" || cs.visibility === "hidden") return false;
+        }
+        const r = e.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      };
+      const toast = document.getElementById("rynBotToast"), notes = document.getElementById("friendNotes");
+      const cv = document.getElementById("ryn-gl-overlay");
+      let px = -1;
+      if (cv && cv.width) {
+        const d = cv.getContext("2d").getImageData(0, 0, cv.width, cv.height).data;
+        px = 0;
+        for (let i = 3; i < d.length; i += 16) if (d[i] > 0) px++;
+      }
+      const chain = [];
+      for (let n = document.getElementById("accountCard"); n && n !== document.body; n = n.parentElement)
+        chain.push((n.id || n.className || n.tagName) + ":" + getComputedStyle(n).display + (n.style.display ? "(" + n.style.display + ")" : ""));
+      return { accountCard: shown("accountCard"), notes: notes ? notes.textContent.trim() : "",
+               toast: toast && toast.style.opacity !== "0" ? toast.textContent : "", overlayPx: px,
+               chain: chain.join(" < "), died: shown("diedText"), menu: shown("mainMenu"), gameUI: shown("gameUI") };
+    });
+    const errorsBefore = out.errors.length, faultsBefore = (out.renderFaults || []).length;
+    out.beforeKill = await look();
+    out.session.killFoe();
+    const seen = [];
+    for (let i = 0; i < 12; i++) {
+      await page.waitForTimeout(250);
+      seen.push(await look());
+      if (i === 3) fs.writeFileSync(path.join(__dirname, "boot-2025-" + spec.replace(/\+/g, "-") + "-kill.png"), await page.screenshot({ type: "png" }));
+    }
+    out.kill = { seen, errors: out.errors.slice(errorsBefore), faults: (out.renderFaults || []).slice(faultsBefore) };
+    if (process.env.SHOW_TRACE) console.log((await page.evaluate(() => window.__showStacks || [])).join("\n\n"));
+    if (process.env.KILL_DEBUG) console.log("before: " + JSON.stringify(out.beforeKill) + "\n" + seen.map(v => JSON.stringify(v)).join("\n"));
+  }
+
+  if (heal && out.session) {
+    const from = out.frames.length;
+    out.session.send("O", [out.session.mySid, 60]);
+    await page.waitForTimeout(1500);
+    const sent = out.frames.slice(from).filter(f => /^c2s /.test(f));
+    out.heal = { frames: sent.slice(0, 12), ate: sent.some(f => /^c2s z seq=\d+ \[0,false\]/.test(f)) && sent.some(f => /^c2s F seq=\d+ \[1,/.test(f)) };
+    // back to full, so what is measured after this is the usual scene
+    out.session.send("O", [out.session.mySid, 100]);
+    await page.waitForTimeout(500);
+  }
+
+  if (visuals && out.session) {
+    const menu = page.frames().find(f => /^blob:/.test(f.url()));
+    const styles = menu ? await menu.evaluate(() => [...document.querySelectorAll("#_killAnimation option")].map(o => o.value)).catch(() => []) : [];
+    const errorsBefore = out.errors.length, faultsBefore = (out.renderFaults || []).length;
+    const sweep = [];
+    for (const id of styles) {
+      await menu.evaluate(v => { const el = document.getElementById("_killAnimation"); el.value = v; el.dispatchEvent(new Event("change", { bubbles: true })); }, id).catch(() => {});
+      out.session.reviveFoe();
+      await page.waitForTimeout(400);
+      out.session.killFoe();
+      await page.waitForTimeout(700);
+      const card = await page.evaluate(() => { const c = document.getElementById("accountCard"); return !!c && c.style.display === "block"; });
+      sweep.push({ id, card, errors: out.errors.length - errorsBefore, faults: (out.renderFaults || []).length - faultsBefore });
+      if (id === "angel") fs.writeFileSync(path.join(__dirname, "boot-2025-" + spec.replace(/\+/g, "-") + "-angel.png"), await page.screenshot({ type: "png" }));
+    }
+    out.visuals = { styles, sweep, errors: out.errors.slice(errorsBefore), faults: (out.renderFaults || []).slice(faultsBefore) };
+  }
+
   if (grind) {
     // The two upgrades, picked the way a player picks them: the game's own
     // upgrade buttons (RYN learns its inventory from these clicks).
@@ -735,9 +890,12 @@ async function run(spec) {
       }
       const t1 = Date.now();
       // a bot's token is a challenge of its own; when it wants a click, the
-      // person clicks it if they can see it
-      while (Date.now() - t1 < 15000 && !(out.conns.length > before && out.conns[before].letters.includes("M"))) {
-        await answerChallenge();
+      // person clicks it if they can see it (+slowclick: after 25 s)
+      let label = null;
+      while (Date.now() - t1 < (slowclick ? 40000 : silentname ? 25000 : 15000) &&
+             !(out.conns.length > before && out.conns[before].letters.includes("M") && (!silentname || out.conns[before].spawnedAs))) {
+        if (slowclick && label === null) label = await page.evaluate(() => [...document.querySelectorAll("div")].some(d => /Cloudflare wants a click to let your bot in/.test(d.textContent) && d.getBoundingClientRect().width > 0)).catch(() => null) || null;
+        if (!slowclick || Date.now() - t1 > 25000) await answerChallenge();
         await page.waitForTimeout(250);
       }
       // RYN's bot pings once at io-init and again only after it has READ the
@@ -746,8 +904,10 @@ async function run(spec) {
       while (Date.now() - t2 < 9000 && out.conns[before] && out.conns[before].letters.filter(l => l === "0").length < 2) await page.waitForTimeout(250);
       const c = out.conns[before];
       const toast = await page.evaluate(() => (document.getElementById("rynBotToast") || {}).textContent || "").catch(() => "");
+      const devices = await page.evaluate(() => { try { return { mine: localStorage.getItem("moo_did"), bots: JSON.parse(localStorage.getItem("_ryn_bot_dids") || "[]") }; } catch (e) { return null; } }).catch(() => null);
       return c ? { url: c.url, spawned: c.letters.includes("M"), frames: c.letters.length, violations: c.violations, toast,
-                   pings: c.letters.filter(l => l === "0").length } : { error: "no bot socket opened", toast };
+                   pings: c.letters.filter(l => l === "0").length, spawnName: c.spawnName, spawnedAs: c.spawnedAs, devices, label,
+                   join: out.joins.length > 1 ? out.joins[out.joins.length - 1] : null } : { error: "no bot socket opened", toast };
     })();
   }
 
@@ -998,6 +1158,11 @@ function report(r) {
     ok(r.bot.error === "no bot socket opened" && /signed-in players/.test(r.bot.toast || ""),
        "a bot the join API refuses as a guest on a members-only server says why and opens no socket (" +
        (r.bot.error || "it connected") + "; said: " + JSON.stringify(r.bot.toast || "") + ")");
+  } else if (r.bot && r.mode.includes("tserror")) {
+    const b = r.bot;
+    ok(!r.reused && /No Cloudflare check for the bot/.test(b.toast || ""),
+       "a bot whose Cloudflare check fails says so, and never offers /join a token it has already seen (" +
+       (r.reused || 0) + " reused; said: " + JSON.stringify(b.toast || "") + ")");
   } else if (r.bot) {
     const b = r.bot;
     if (r.joinRefuse === "busy") ok(/Too many joins/.test(b.toast || "") && r.joins.length >= 3,
@@ -1005,7 +1170,23 @@ function report(r) {
     ok(!b.error && /token=tk%3AT\d/.test(b.url) && /[?&]b=test-build/.test(b.url),
        "a bot connects with its own /join ticket and the build id" + (b.error ? " — " + b.error : " (" + String(b.url).replace(/^wss:\/\/[^/]+/, "") + ")"));
     ok(!b.error && b.spawned, "the bot's spawn frame reached the server" + (b.error ? "" : " (" + b.frames + " frames)"));
-    ok(!b.error && b.pings >= 2, "the bot reads what the server sends — it answered a pong with its next ping" +
+    if (r.mode.includes("kickname")) ok(/turned a bot away: This name belongs to someone else/.test(b.toast || ""),
+       "a bot the server turns away says why, in the server's own words (said: " + JSON.stringify(b.toast || "") + ")");
+    if (r.mode.includes("silentname")) ok(b.spawnedAs === "bot1201" && /never let it spawn/.test(b.toast || ""),
+       "a bot the server silently will not spawn under its name says so and comes back under the next one (spawned as " +
+       JSON.stringify(b.spawnedAs) + "; said: " + JSON.stringify(b.toast || "") + ")");
+    if (r.mode.includes("slowclick")) ok(b.label === true && !b.error && b.spawned,
+       "a bot's check that wants a click says so in the middle of the screen, and waits 25 s for it (" + (b.label ? "label shown" : "no label") + ")");
+    /* Typed as "bot1", slot 1: bot11, which the name check says belongs to
+     * someone, so the bot steps past it to the next free number. */
+    ok(!b.error && b.spawnName === "bot1101", "a bot's name carries its number and steps past one that is taken (typed bot1: bot11 is taken, joined as " +
+       JSON.stringify(b.spawnName) + ")");
+    const d = b.devices || {};
+    ok(!b.error && b.join && b.join.did !== d.mine && (d.bots || []).length > 0 && d.bots.indexOf(d.mine) < 0,
+       "a bot is a device of its own to the join API: it never sends yours, and keeps the one it was given (" +
+       "yours " + JSON.stringify(d.mine) + ", the bot's " + JSON.stringify(d.bots) + ")");
+    // (+kickname sends the bot away on purpose: there is nothing after that to read)
+    if (!r.mode.includes("kickname")) ok(!b.error && b.pings >= 2, "the bot reads what the server sends — it answered a pong with its next ping" +
        (r.pinned ? ", through the per-message mask" : "") + " (" + (b.pings || 0) + " pings)");
     ok(!b.error && b.violations.length === 0, "the server accepted every frame the bot sent — RYN's own signing" +
        (r.pinned ? " and masking" : "") + (b.violations && b.violations.length ? ": " + b.violations[0] : ""));
@@ -1028,6 +1209,24 @@ function report(r) {
        (g.offToggled ? g.afterOff + " swings after, mouse " + (g.offState.mouseState ? "still down" : "up") : "the menu's Auto Grind switch was not found") + ")");
     if (g.releasedState) ok(g.afterEnemy === 0 && g.releasedState.mouseState === 0, "with an enemy in reach Auto Grind stops and lets go of the attack (" +
        g.afterEnemy + " swings after, mouse " + (g.releasedState.mouseState ? "still down" : "up") + ")");
+  }
+  if (r.heal) ok(r.heal.ate, "Auto Heal eats when the server hurts me down to 60" + (r.heal.ate ? "" : " — sent: " + (r.heal.frames.join(" | ") || "nothing")));
+  if (r.visuals) {
+    const v = r.visuals;
+    const firstBad = v.sweep.find(x => x.errors || x.faults);
+    ok(v.styles.length >= 20 && v.errors.length === 0 && v.faults.length === 0,
+       "every visual on, the rival killed under each of the " + v.styles.length + " kill animations: no page error, no render hook failed" +
+       (firstBad ? " — first at " + firstBad.id + ": " + (v.errors[0] || v.faults[0]) : ""));
+    const carded = v.sweep.filter(x => x.card).map(x => x.id);
+    ok(carded.length === 0, "no kill animation opens the sign-in card" + (carded.length ? " — " + carded.join(", ") : ""));
+  }
+  if (r.kill) {
+    const k = r.kill, last = k.seen[k.seen.length - 1] || {};
+    const asked = k.seen.filter(v => v.accountCard || /sign|log ?in|account|register/i.test(v.notes + " " + v.toast));
+    ok(asked.length === 0, "a kill brings up no sign-in card and no sign-in message" + (asked.length ? ": " + JSON.stringify(asked[0]) : ""));
+    ok(k.errors.length === 0 && k.faults.length === 0, "RYN draws on through a kill: no page error, no render hook failed" +
+       (k.errors.length ? ": " + k.errors[0] : k.faults.length ? ": " + k.faults[0] : ""));
+    ok(last.overlayPx > 50, "RYN's overlay still draws three seconds after the kill (" + last.overlayPx + " px)");
   }
   if (r.trap) {
     const t = r.trap;
@@ -1069,7 +1268,8 @@ function report(r) {
   const modes = which === "all" ? ["vanilla", "fast", "late", "vanilla+pinned", "fast+pinned", "late+pinned",
     "vanilla+interactive", "fast+interactive", "late+interactive", "late+hidpi", "late+grind",
     "late+grind+quiet", "late+grind+heartbeat", "late+trap+quiet", "fast+pinned+reshaped", "late+pinned+reshaped",
-    "fast+members", "fast+busy"] : which.split(",");
+    "fast+members", "fast+busy", "late+kill", "late+visuals", "late+heal", "fast+slowclick", "fast+silentname",
+    "fast+kickname", "fast+tserror"] : which.split(",");
   for (const m of modes) {
     let r;
     try { r = await run(m); } catch (e) { console.log("\n== " + m + "\n  FAIL  harness crashed: " + e.stack); process.exitCode = 1; continue; }
