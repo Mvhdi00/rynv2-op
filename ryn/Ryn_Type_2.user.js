@@ -5799,9 +5799,358 @@ window.grbtp = 35;
     return _foodTextureImage;
   }
 
+  /* ── The 2025 renderer ─────────────────────────────────────────────────
+   * The game no longer draws with a CanvasRenderingContext2D. #gameCanvas
+   * carries a WebGL context, and the bundle draws through a batch renderer of
+   * its own that implements save/restore/translate/rotate/scale/setTransform,
+   * fillStyle/strokeStyle/lineWidth/globalAlpha, fillRect, a five-argument
+   * drawImage and a handful of primitives of its own (line, disc, circle,
+   * ring, text, fillRoundRect). Nothing else.
+   *
+   * Every RYN hook that draws is handed that object where it used to get a 2D
+   * context, and RYN draws with paths — beginPath, arc, lineTo, fill, stroke,
+   * fillText. The first such call threw inside the game's frame, the frame
+   * never reached endFrame() or its requestAnimFrame, and the canvas went on
+   * showing the last frame that did finish: the menu's world, no player in it.
+   *
+   * Renderer._adopt() gives the renderer the rest of the 2D API by forwarding
+   * it to a transparent 2D canvas laid exactly over the game's. The renderer's
+   * transform is mirrored on every save/restore/translate/rotate/scale/
+   * setTransform, so a path drawn at (x, y) inside the game's own translate
+   * lands exactly where the game's own sprite did. What the renderer can do
+   * itself it still does, in its own layer order. */
+  const GL2D_FORWARD = [ "beginPath", "closePath", "moveTo", "lineTo", "arc", "arcTo", "ellipse", "quadraticCurveTo", "bezierCurveTo", "rect", "roundRect", "fill", "stroke", "fillText", "strokeText", "strokeRect", "clearRect", "isPointInPath", "isPointInStroke", "createLinearGradient", "createRadialGradient", "createConicGradient", "createPattern", "getImageData", "putImageData", "createImageData" ];
+  const GL2D_PROPS = {
+    font: "10px sans-serif",
+    textAlign: "start",
+    textBaseline: "alphabetic",
+    lineCap: "butt",
+    lineJoin: "miter",
+    miterLimit: 10,
+    lineDashOffset: 0,
+    shadowBlur: 0,
+    shadowColor: "rgba(0, 0, 0, 0)",
+    shadowOffsetX: 0,
+    shadowOffsetY: 0,
+    globalCompositeOperation: "source-over",
+    imageSmoothingEnabled: true,
+    imageSmoothingQuality: "low",
+    direction: "inherit",
+    filter: "none"
+  };
+  const GL2D_PROP_KEYS = Object.keys(GL2D_PROPS);
+
   const Renderer = new class {
     _mapColors=MAP_COLORS;
     _renderObjects=[];
+    _gl=null;
+    _glFaults=0;
+    _glLastFault="";
+    // Adopt the game's renderer: called on the object the bundle builds its
+    // frame with, right where it is created. Returns it, extended.
+    _adopt(M, canvas) {
+      if (!M || typeof M !== "object" || M.__ryn) return M;
+      if (typeof CanvasRenderingContext2D === "function" && M instanceof CanvasRenderingContext2D) return M;
+      const bridge = {
+        M: M,
+        canvas: canvas && canvas.nodeType === 1 ? canvas : null,
+        overlay: null,
+        octx: null,
+        xf: [ 1, 0, 0, 1, 0, 0 ],
+        stack: [],
+        ver: 1,
+        synced: 0,
+        props: {},
+        propsShared: false,
+        propsVer: 1,
+        propsSynced: 0,
+        style: [ null, null, null, null ],
+        clips: [],
+        dirty: false
+      };
+      this._gl = bridge;
+      const xf = bridge.xf;
+      const orig = {};
+      [ "save", "restore", "translate", "rotate", "scale", "setTransform", "measureText", "fillRect", "drawImage" ].forEach(k => {
+        orig[k] = typeof M[k] === "function" ? M[k] : null;
+      });
+      const mul = (a, b, c, d, e, f) => {
+        const A = xf[0], B = xf[1], C = xf[2], D = xf[3], E = xf[4], F = xf[5];
+        xf[0] = A * a + C * b;
+        xf[1] = B * a + D * b;
+        xf[2] = A * c + C * d;
+        xf[3] = B * c + D * d;
+        xf[4] = A * e + C * f + E;
+        xf[5] = B * e + D * f + F;
+        bridge.ver++;
+      };
+      const gameCanvas = () => {
+        if (bridge.canvas && bridge.canvas.isConnected) return bridge.canvas;
+        bridge.canvas = document.getElementById("gameCanvas");
+        return bridge.canvas;
+      };
+      const overlay = () => {
+        const game = gameCanvas();
+        if (!game || !game.parentNode) return null;
+        let cv = bridge.overlay;
+        if (!cv || !cv.isConnected) {
+          cv = document.createElement("canvas");
+          cv.id = "ryn-gl-overlay";
+          cv.style.cssText = "position:absolute;top:0;left:0;pointer-events:none;z-index:48;";
+          game.parentNode.insertBefore(cv, game.nextSibling);
+          bridge.overlay = cv;
+          bridge.octx = cv.getContext("2d");
+          bridge.synced = bridge.propsSynced = 0;
+          bridge.style = [ null, null, null, null ];
+          bridge.clips.length = 0;
+        }
+        if (cv.width !== game.width || cv.height !== game.height) {
+          cv.width = game.width;
+          cv.height = game.height;
+          bridge.synced = bridge.propsSynced = 0;
+          bridge.style = [ null, null, null, null ];
+          bridge.clips.length = 0;
+        }
+        return bridge.octx;
+      };
+      const sync = () => {
+        const o = overlay();
+        if (o === null) return null;
+        if (bridge.synced !== bridge.ver) {
+          o.setTransform(xf[0], xf[1], xf[2], xf[3], xf[4], xf[5]);
+          bridge.synced = bridge.ver;
+        }
+        if (bridge.propsSynced !== bridge.propsVer) {
+          const props = bridge.props;
+          for (let i = 0; i < GL2D_PROP_KEYS.length; i++) {
+            const key = GL2D_PROP_KEYS[i];
+            const value = key in props ? props[key] : GL2D_PROPS[key];
+            try {
+              if (o[key] !== value) o[key] = value;
+            } catch (e) {}
+          }
+          try {
+            o.setLineDash(props.__dash || []);
+          } catch (e) {}
+          bridge.propsSynced = bridge.propsVer;
+        }
+        const st = bridge.style;
+        if (st[0] !== M.fillStyle) o.fillStyle = st[0] = M.fillStyle;
+        if (st[1] !== M.strokeStyle) o.strokeStyle = st[1] = M.strokeStyle;
+        if (st[2] !== M.lineWidth && typeof M.lineWidth === "number") o.lineWidth = st[2] = M.lineWidth;
+        if (st[3] !== M.globalAlpha && typeof M.globalAlpha === "number") o.globalAlpha = st[3] = M.globalAlpha;
+        bridge.dirty = true;
+        return o;
+      };
+      const writeProp = (key, value) => {
+        if (bridge.propsShared) {
+          bridge.props = Object.assign({}, bridge.props);
+          bridge.propsShared = false;
+        }
+        bridge.props[key] = value;
+        bridge.propsVer++;
+      };
+      M.save = function() {
+        bridge.stack.push(xf[0], xf[1], xf[2], xf[3], xf[4], xf[5], bridge.props);
+        bridge.propsShared = true;
+        return orig.save.apply(M, arguments);
+      };
+      M.restore = function() {
+        const stack = bridge.stack;
+        if (stack.length >= 7) {
+          bridge.props = stack.pop();
+          bridge.propsShared = true;
+          bridge.propsVer++;
+          xf[5] = stack.pop();
+          xf[4] = stack.pop();
+          xf[3] = stack.pop();
+          xf[2] = stack.pop();
+          xf[1] = stack.pop();
+          xf[0] = stack.pop();
+          bridge.ver++;
+          // A clip lives on the overlay's own state stack; it ends where the
+          // save it was made under ends.
+          const depth = stack.length / 7;
+          while (bridge.clips.length && bridge.clips[bridge.clips.length - 1] > depth) {
+            bridge.clips.pop();
+            try {
+              bridge.octx.restore();
+            } catch (e) {}
+            bridge.synced = bridge.propsSynced = 0;
+            bridge.style = [ null, null, null, null ];
+          }
+        }
+        return orig.restore.apply(M, arguments);
+      };
+      M.translate = function(x, y) {
+        mul(1, 0, 0, 1, +x || 0, +y || 0);
+        return orig.translate.apply(M, arguments);
+      };
+      M.rotate = function(r) {
+        const c = Math.cos(r), n = Math.sin(r);
+        mul(c, n, -n, c, 0, 0);
+        return orig.rotate.apply(M, arguments);
+      };
+      M.scale = function(x, y) {
+        mul(x, 0, 0, y === void 0 ? x : y, 0, 0);
+        return orig.scale.call(M, x, y === void 0 ? x : y);
+      };
+      M.setTransform = function(a, b, c, d, e, f) {
+        if (a !== null && typeof a === "object") {
+          f = a.f;
+          e = a.e;
+          d = a.d;
+          c = a.c;
+          b = a.b;
+          a = a.a;
+        }
+        xf[0] = a;
+        xf[1] = b;
+        xf[2] = c;
+        xf[3] = d;
+        xf[4] = e;
+        xf[5] = f;
+        bridge.ver++;
+        return orig.setTransform.call(M, a, b, c, d, e, f);
+      };
+      M.transform = function(a, b, c, d, e, f) {
+        mul(a, b, c, d, e, f);
+        return orig.setTransform.call(M, xf[0], xf[1], xf[2], xf[3], xf[4], xf[5]);
+      };
+      M.getTransform = function() {
+        return new DOMMatrix(xf);
+      };
+      M.measureText = function(text, size) {
+        if (arguments.length >= 2 && typeof size === "number" && orig.measureText) {
+          return orig.measureText.apply(M, arguments);
+        }
+        const o = sync();
+        return o ? o.measureText(text) : {
+          width: 0
+        };
+      };
+      M.fillRect = function(x, y, w, h) {
+        if (typeof M.fillStyle !== "string") {
+          const o = sync();
+          return o ? o.fillRect(x, y, w, h) : void 0;
+        }
+        return orig.fillRect.apply(M, arguments);
+      };
+      M.drawImage = function(img) {
+        if (!img) return;
+        // A sprite goes into the renderer's texture atlas the first time it is
+        // drawn and is never re-read, so an image drawn before it has loaded
+        // would stay blank for good.
+        if (typeof HTMLImageElement === "function" && img instanceof HTMLImageElement && !(img.complete && img.naturalWidth)) return;
+        if (!img.width || !img.height) return;
+        if (arguments.length > 5) {
+          const o = sync();
+          return o ? o.drawImage.apply(o, arguments) : void 0;
+        }
+        return orig.drawImage.apply(M, arguments);
+      };
+      M.setLineDash = function(list) {
+        writeProp("__dash", Array.isArray(list) ? list.slice() : []);
+      };
+      M.getLineDash = function() {
+        return (bridge.props.__dash || []).slice();
+      };
+      M.clip = function() {
+        const o = sync();
+        if (o === null) return;
+        o.save();
+        bridge.clips.push(bridge.stack.length / 7);
+        bridge.synced = 0;
+        return o.clip.apply(o, arguments);
+      };
+      M.resetTransform = function() {
+        return M.setTransform(1, 0, 0, 1, 0, 0);
+      };
+      for (const name of GL2D_FORWARD) {
+        if (typeof M[name] === "function") continue;
+        M[name] = function() {
+          const o = sync();
+          if (o === null) return name === "measureText" ? {
+            width: 0
+          } : void 0;
+          return o[name].apply(o, arguments);
+        };
+      }
+      for (const key of GL2D_PROP_KEYS) {
+        if (key in M) continue;
+        Object.defineProperty(M, key, {
+          configurable: true,
+          get() {
+            return key in bridge.props ? bridge.props[key] : GL2D_PROPS[key];
+          },
+          set(value) {
+            writeProp(key, value);
+          }
+        });
+      }
+      if (!("canvas" in M)) {
+        Object.defineProperty(M, "canvas", {
+          configurable: true,
+          get: gameCanvas
+        });
+      }
+      Object.defineProperty(M, "__ryn", {
+        value: bridge
+      });
+      bridge.overlayCanvas = overlay;
+      return M;
+    }
+    // Start of a frame: wipe what RYN drew on the overlay last frame.
+    _glFrameStart() {
+      const bridge = this._gl;
+      if (bridge === null || !bridge.octx || !bridge.dirty) return;
+      const o = bridge.octx;
+      try {
+        while (bridge.clips.length) {
+          bridge.clips.pop();
+          o.restore();
+        }
+        o.setTransform(1, 0, 0, 1, 0, 0);
+        o.clearRect(0, 0, o.canvas.width, o.canvas.height);
+      } catch (e) {}
+      bridge.synced = bridge.propsSynced = 0;
+      bridge.style = [ null, null, null, null ];
+      bridge.dirty = false;
+    }
+    // The game's frame, guarded. Anything RYN's hooks throw inside it used to
+    // end the frame early — and with it the requestAnimFrame at its tail, so
+    // the picture froze for good. A bad frame is now one bad frame: what was
+    // batched is flushed, and the loop goes on.
+    _frame(fn) {
+      try {
+        fn();
+      } catch (e) {
+        this._fault(e);
+        try {
+          const bridge = this._gl;
+          if (bridge !== null && typeof bridge.M.endFrame === "function") bridge.M.endFrame();
+        } catch (_) {}
+      }
+    }
+    // Run one of RYN's drawing hooks without letting it take the frame down.
+    // Fixed arity rather than ...rest: this runs per player per frame.
+    _guardCall(obj, name, a, b, c, d, e, f, g) {
+      try {
+        return obj[name](a, b, c, d, e, f, g);
+      } catch (err) {
+        this._fault(err);
+      }
+    }
+    _fault(e) {
+      this._glFaults++;
+      const text = String(e && e.stack || e).split("\n").slice(0, 3).join(" | ");
+      if (text !== this._glLastFault && this._glFaults < 50) {
+        this._glLastFault = text;
+        try {
+          console.warn("[RYN] render hook failed (frame kept going):", text);
+        } catch (_) {}
+      }
+    }
     lastLogTime=performance.now();
     _dtSamples=[];
     _dtSum=0;
@@ -6044,6 +6393,7 @@ window.grbtp = 35;
       ctx.globalAlpha = previous;
     }
     _preRender() {
+      this._glFrameStart();
       ZoomHandler_default.smoothUpdate();
       // Advances the shaft-grip system's own frame counter and idle-sway phase
       // off the timestamp already sampled here, so it reads no clock of its own.
@@ -6060,6 +6410,11 @@ window.grbtp = 35;
     _gameCtx=null;
     _smoothingState=null;
     gameCtx() {
+      // On the 2025 page the canvas holds a WebGL context and getContext("2d")
+      // answers null; the adopted renderer is the game's drawing surface.
+      if (this._gl !== null) {
+        return this._gl.M;
+      }
       if (!Settings_default._renderOptimization || this._gameCtx === null || !this._gameCanvas || !this._gameCanvas.isConnected) {
         const canvas = document.querySelector("#gameCanvas");
         if (!canvas) {
@@ -6115,7 +6470,11 @@ window.grbtp = 35;
       if (ctx === null) {
         return;
       }
-      if (Settings_default._lowQuality) {
+      // The shadowBlur trick patches the context's PROTOTYPE. The adopted
+      // renderer is a plain object, whose prototype is Object.prototype — so
+      // it is only ever done to a real 2D context.
+      const real2d = typeof CanvasRenderingContext2D === "function" && ctx instanceof CanvasRenderingContext2D;
+      if (Settings_default._lowQuality && real2d) {
         if (!ctx.__lqPatched) {
           const proto = Object.getPrototypeOf(ctx);
           const origDesc = Object.getOwnPropertyDescriptor(proto, "shadowBlur");
@@ -6131,7 +6490,7 @@ window.grbtp = 35;
           ctx.__lqPatched = true;
         }
         this._setSmoothing(ctx, false);
-      } else {
+      } else if (real2d) {
         if (ctx.__lqPatched) {
           const proto = Object.getPrototypeOf(ctx);
           const origDesc = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, "shadowBlur");
@@ -38412,6 +38771,10 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     // ...and it ends `qx(),km(),requestAnimFrame(_0)` — two calls, where the
     // old pattern expected a bare identifier then one call.
     Hook.append("postRenderLoop", /\w+\(\),\w+\(\),requestAnimFrame\(\w+\)/, ";RYN._Renderer._postRender();");
+    // The frame itself, guarded, so nothing RYN draws can stop the loop.
+    Hook.replace("frameGuard", /(\w+)\(\),(\w+)\(\),requestAnimFrame\((\w+)\)/, "RYN._Renderer._frame($1),$2(),requestAnimFrame($3)");
+    // The renderer the frame is drawn with, the moment it exists.
+    Hook.replace("adoptRenderer", /(\w+)=(\w+)\((\w+),(\w+)\?\{pageSize:\+\4\[1\],maxPages:\+\4\[2\]\}:null\);/, "$1=RYN._Renderer._adopt($2($3,$4?{pageSize:+$4[1],maxPages:+$4[2]}:null),$3);");
     Hook.append("mapPreRender", /(\w+)\.lineWidth=NUM{4};/, "RYN._Renderer._mapPreRender($1);");
     // The minimap legend. All three sit inline in the bundle's minimap draw as
     // literal colour strings, each unique in the file, so they are swapped
@@ -38426,8 +38789,15 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     Hook.prepend("LockRotationClient", /return \w+\?\(\!/, "return RYN._Possess.angle();");
     Hook.replace("DisableResetMoveDir", /\w+=\{\},\w+\.send\("\w+"\)/, "");
     Hook.append("offset", /\W170\W.+?(\w+)=\w+\-\w+\/2.+?(\w+)=\w+\-\w+\/2;/, "RYN._offset._setXY($1,$2);");
-    Hook.prepend("renderEntity", /\w+\.health>NUM{0}.+?(\w+)\.fillStyle=(\w+)==(\w+)/, ";RYN._hooks._EntityRenderer._render($1,$2,$3);false&&");
-    Hook.append("renderItemPush", /,(\w+)\.blocker,\w+.+?2\)\)/, ",RYN._Renderer._renderObjects.push($1)");
+    // Guarded: an overlay that throws used to end the game's frame early (see
+    // Renderer._frame); now it costs that overlay, not the picture.
+    Hook.prepend("renderEntity", /\w+\.health>NUM{0}.+?(\w+)\.fillStyle=(\w+)==(\w+)/, ";RYN._Renderer._guardCall(RYN._hooks._EntityRenderer,\"_render\",$1,$2,$3);false&&");
+    /* Every structure and resource drawn this frame, for the overlays drawn on
+     * them later. 2025 split the draw in two — Xx() buckets the visible
+     * objects by layer, Si(layer) draws one bucket — so the old anchor on the
+     * blocker ring now matched 650 characters further on, in the middle of a
+     * player's aura maths. Anchored on Si's own loop head instead. */
+    Hook.replace("renderItemPush", /if\((\w+)=(\w+)\[(\w+)\],(\w+)=\1\.x\+\1\.xWiggle-(\w+),/, "if($1=$2[$3],RYN._Renderer._renderObjects.push($1),$4=$1.x+$1.xWiggle-$5,");
     // The game's damage text, whole. It is the only showText call in the
     // bundle — the other mention is the text manager's own definition — so
     // the arguments are enough to name it: the manager, the position, and the
@@ -38445,7 +38815,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     // `.isItem?(...)` form, which the bundle no longer has.
     Hook.replace("resourceTint", /(\w+)=(\w+)\((\w+)\),(\w+)\.drawImage\(\1,(\w+)-\1\.width/, "$1=RYN._Renderer._objectTint($2($3),$3),$4.drawImage($1,$5-$1.width");
     Hook.replace("animalTint", /(animals\/".+?)(\w+)\.drawImage\((\w+),-(\w+),-\4,\4\*2,\4\*2\)/, "$1RYN._Renderer._drawAnimal($2,$3,$4)");
-    Hook.append("renderItem", /70, 0.35\)",(\w+).+?\w+\)/, ",RYN._hooks._ObjectRenderer._render($1)");
+    Hook.append("renderItem", /70, 0.35\)",(\w+).+?\w+\)/, ",RYN._Renderer._guardCall(RYN._hooks._ObjectRenderer,\"_render\",$1)");
     Hook.append("RemoveSendAngle", /clientSendRate\)/, "&&false");
     Hook.replace("handleEquip", /\w+\.send\("\w+",0,(\w+),(\w+)\)/, "RYN._Possess.c()._ModuleHandler._equip($2,$1,true,true)");
     /* `!1` is written `![]` by the current bundle's obfuscator, and `-1` as an
@@ -38547,8 +38917,14 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     Hook.replace("handleBuy", /\w+\.send\("\w+",1,(\w+),(\w+)\)/, "RYN._Possess.c()._ModuleHandler._buy($2,$1,true)");
     Hook.prepend("RemovePingCall", /\w+&&clearTimeout/, "return;");
     Hook.append("RemovePingState", /let \w+=-1;function \w+\(\)\{/, "return;");
-    Hook.prepend("preRender", /(\w+)\.lineWidth=NUM{4},/, "RYN._hooks._ObjectRenderer._preRender($1);");
-    Hook.replace("RenderGrid", /("#91b2db".+?)(for.+?)(\w+\.stroke)/, "$1$3");
+    Hook.prepend("preRender", /(\w+)\.lineWidth=NUM{4},/, "RYN._Renderer._guardCall(RYN._hooks._ObjectRenderer,\"_preRender\",$1);");
+    /* The grid. The 2024 pattern — from the river colour, across a `for`, to
+     * the next `.stroke` — matched 1,238 characters of the 2025 bundle: from
+     * a colour constant, through the river-pool maths, to a `.strokeStyle`
+     * in another function, and deleted all of it, `const Oe=…` included. The
+     * render loop then threw "Oe is not defined" on every frame. The grid is
+     * now two loops of M.line() after `globalAlpha=.06`; only those go. */
+    Hook.replace("RenderGrid", /(\.globalAlpha=\.06;const (\w+)=\w+\/18;)for\(var (\w+)=[^;]+;\3<\w+;\3\+=\2\)\3>0&&\w+\.line\([^)]*\);for\(let (\w+)=[^;]+;\4<\w+;\4\+=\2\)\4>0&&\w+\.line\([^)]*\);/, "$1");
     Hook.replace("upgradeItem", /(upgradeItem.+?onclick.+?)\w+\.send\("\w+",(\w+)\)\}/, "$1RYN._Possess.c()._ModuleHandler._upgradeItem($2)}");
     const data = Hook.match("DeathMarker", /99999.+?(\w+)=\{x:(\w+)/);
     Hook.append("playerDied", /NUM{99999};function \w+\(\)\{/, `if(RYN._settings._autospawn){${data[1]}={x:${data[2]}.x,y:${data[2]}.y};return};`);
@@ -38565,9 +38941,9 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     // returns control to the original code for every weapon neither of them
     // carries a profile for -- shield, every bow, both crossbows and the
     // musket -- and for anyone holding a building item.
-    Hook.replace("meleeWeapon", /(\w+)\((\w+)\.weapons\[(\w+)\.weaponIndex\],(\w+)\.weaponVariants\[\3\.weaponVariant\]\.src,\3\.scale,0,(\w+)\)/, "RYN._MeleeAnim._drawWeapon($1,$3,$2.weapons[$3.weaponIndex],$4.weaponVariants[$3.weaponVariant].src,$3.scale,0,$5)", "g");
-    Hook.replace("meleeHands", /(\w+)\.fillStyle=(\w+)\.skinColors\[(\w+)\.skinColor\],(\w+)\(\3\.scale\*Math\.cos\((\w+)\),\3\.scale\*Math\.sin\(\5\),NUM{14}\),\4\(\3\.scale\*(\w+)\*Math\.cos\(-\5\*(\w+)\),\3\.scale\*\6\*Math\.sin\(-\5\*\7\),NUM{14}\)/, "$1.fillStyle=$2.skinColors[$3.skinColor],RYN._MeleeAnim._drawHands($4,$3,$5,$7,$6,$1)");
-    Hook.replace("meleeBody", /(\w+)=\((\w+)==(\w+)\?(\w+)\(\):\2\.dir\)\+\2\.dirPlus/, "$1=($2==$3?$4():$2.dir)+RYN._MeleeAnim._bodyRot($2)");
+    Hook.replace("meleeWeapon", /(\w+)\((\w+)\.weapons\[(\w+)\.weaponIndex\],(\w+)\.weaponVariants\[\3\.weaponVariant\]\.src,\3\.scale,0,(\w+)\)/, "RYN._Renderer._guardCall(RYN._MeleeAnim,\"_drawWeapon\",$1,$3,$2.weapons[$3.weaponIndex],$4.weaponVariants[$3.weaponVariant].src,$3.scale,0,$5)", "g");
+    Hook.replace("meleeHands", /(\w+)\.fillStyle=(\w+)\.skinColors\[(\w+)\.skinColor\],(\w+)\(\3\.scale\*Math\.cos\((\w+)\),\3\.scale\*Math\.sin\(\5\),NUM{14}\),\4\(\3\.scale\*(\w+)\*Math\.cos\(-\5\*(\w+)\),\3\.scale\*\6\*Math\.sin\(-\5\*\7\),NUM{14}\)/, "$1.fillStyle=$2.skinColors[$3.skinColor],RYN._Renderer._guardCall(RYN._MeleeAnim,\"_drawHands\",$4,$3,$5,$7,$6,$1)");
+    Hook.replace("meleeBody", /(\w+)=\((\w+)==(\w+)\?(\w+)\(\):\2\.dir\)\+\2\.dirPlus/, "$1=($2==$3?$4():$2.dir)+(RYN._Renderer._guardCall(RYN._MeleeAnim,\"_bodyRot\",$2)??$2.dirPlus)");
     // The bundle's entire chat display:
     //
     //     function dl(e,t){const i=Rt(e);i&&(i.chatMessage=t,i.chatCountdown=y.chatCountdown)}
@@ -38598,7 +38974,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
      * the server list" for good, and one that is missing threw in complete().
      * Bounded and guarded now; the real SDK still gets its four seconds. */
     Hook.replace("sdkReady",
-      /window\.frvrSdkInitPromise\.then\(\(\)=>window\.FRVR\.bootstrapper\.complete\(\)\)\.then\(\(\)=>(\w+)\(\)\)/,
+      /window\.frvrSdkInitPromise\.then\(\(\)=>(?:window\.)?FRVR\.bootstrapper\.complete\(\)\)\.then\(\(\)=>(\w+)\(\)\)/,
       "RYN._sdkReady().then(()=>{try{window.FRVR&&window.FRVR.bootstrapper&&window.FRVR.bootstrapper.complete()}catch(e){}}).then(()=>$1())");
     Hook.replace("cowName", /this\.aiTypes=\[\{id:0,src:"cow_1",/, 'this.aiTypes=[{id:0,name:"by rap",src:"cow_1",');
     Hook.replace("wolfName", /name:"Wolf",src:"wolf_1"/, 'name:"wolfy",src:"wolf_1"');
