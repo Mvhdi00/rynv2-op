@@ -17,7 +17,7 @@ const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
 const BASE = path.join(ROOT, "src/Ryn_Type_2-2.5.js");
-const OUT = path.join(ROOT, "Ryn_Type_2.user.js");
+const OUT = process.env.RYN_OUT ? path.resolve(process.env.RYN_OUT) : path.join(ROOT, "Ryn_Type_2.user.js");
 
 let code = fs.readFileSync(BASE, "utf8");
 const applied = [];
@@ -155,21 +155,41 @@ edit(
           return origLine.apply(M, arguments);
         };
       }
-      /* Your own name, coloured even when the nameColor hook did not bind.
-       * The hook reports in every time it runs (Renderer._nameHookAt); while
-       * it is silent, a nameplate whose text is your nickname takes the
-       * colour here instead. */
+      /* Your own name, in your colour, on the top layer.
+       *
+       * The game draws a nameplate as tinted glyphs in its WebGL atlas. The
+       * nameColor hook only picks the tint, so anything that gets in its way
+       * on a given build leaves the name white. Here the game's own call for
+       * your nameplate is recognised exactly — the text is the name of the
+       * game's own player object for you (Renderer._W) and the position is
+       * that player's nameplate line — and drawn by RYN instead, on the
+       * overlay canvas above the whole frame, at the same spot and size. Every
+       * other piece of text, a clan tag included, goes through untouched. */
       if (typeof M.text === "function") {
         const origText = M.text;
         M.text = function(str, x, y, size, style) {
           try {
-            if (style && typeof style === "object" && style.outline && Settings_default._myNameColor && Settings_default._myNameColorValue && Date.now() - Renderer._nameHookAt > 1e3) {
-              const own = AC();
-              const nick = own && own.myPlayer && own.myPlayer.nickname;
-              if (nick && str === nick) {
-                style = Object.assign({}, style, {
-                  color: Settings_default._myNameColorValue
-                });
+            const own = Renderer._W;
+            if (own && Settings_default._myNameColor && Settings_default._myNameColorValue && style && typeof style === "object" && style.outline && typeof str === "string" && str !== "" && str === own.name) {
+              const off = RYN._offset;
+              const cfg = RYN._config;
+              const nameY = cfg && typeof cfg.nameY === "number" ? cfg.nameY : Config_default.nameY;
+              if (off && Math.abs(y - (own.y - off.y - own.scale - nameY)) < 1) {
+                M.save();
+                try {
+                  M.font = size + "px Hammersmith One";
+                  M.textAlign = "center";
+                  M.textBaseline = "middle";
+                  M.lineJoin = "round";
+                  M.lineWidth = style.outlineWidth || 8;
+                  M.strokeStyle = style.outline;
+                  M.strokeText(str, x, y);
+                  M.fillStyle = Settings_default._myNameColorValue;
+                  M.fillText(str, x, y);
+                } finally {
+                  M.restore();
+                }
+                return typeof M.measureText === "function" ? M.measureText(str, size) : 0;
               }
             }
           } catch (e) {}
@@ -293,11 +313,24 @@ edit(
       try {
         if (player === me && Settings_default._myNameColor && Settings_default._myNameColorValue) {`,
   `    _nameHookAt=0;
+    // The game's own player object for you, as the render loop last passed
+    // it (nameColor hook and the entity overlay both see it).
+    _W=null;
     _nameColor(player, me, color) {
       try {
         this._nameHookAt = Date.now();
+        if (me) this._W = me;
         const isMe = player === me || !!(player && me && player.sid != null && player.sid === me.sid);
         if (isMe && Settings_default._myNameColor && Settings_default._myNameColorValue) {`
+);
+
+edit(
+  "name colour: the entity overlay hands over your player object",
+  `    _render(ctx, entity, player) {
+      // World state comes from the active entity`,
+  `    _render(ctx, entity, player) {
+      if (player) Renderer_default._W = player;
+      // World state comes from the active entity`
 );
 
 /* ------------------------------------------------------------------ *
@@ -353,6 +386,110 @@ edit(
       } catch (_) {}
     },
     release(did) {}`
+);
+
+/* ------------------------------------------------------------------ *
+ * 4b. Bots: load Cloudflare Turnstile when the game did not
+ *
+ * A signed-in player joins with their account instead of a Turnstile token,
+ * so the game never loads Cloudflare's script and window.turnstile does not
+ * exist. Every bot needs a token (bots join as guests), and asking for one
+ * failed at once with "turnstile API not available". The script is loaded on
+ * demand now, the way Glotus does it: the page's own <script> if it is already
+ * there or on its way, otherwise one added here.
+ * ------------------------------------------------------------------ */
+
+edit(
+  "bots: load Turnstile on demand",
+  `  const generateTurnstileToken = () => new Promise((resolve, reject) => {
+    try {
+      const ts = window.turnstile || window.top && window.top.turnstile;`,
+  `  const RYN_TURNSTILE_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+  let rynTurnstileLoading = null;
+  const rynTurnstileApi = () => {
+    try {
+      const ts = window.turnstile || window.top && window.top.turnstile;
+      return ts && typeof ts.render === "function" ? ts : null;
+    } catch (_) {
+      return null;
+    }
+  };
+  // Resolves with the Turnstile API, loading Cloudflare's script first when
+  // nothing on the page has. One load at a time; a failed one is forgotten so
+  // the next bot tries again.
+  const rynLoadTurnstile = () => {
+    const ready = rynTurnstileApi();
+    if (ready) return Promise.resolve(ready);
+    if (rynTurnstileLoading) return rynTurnstileLoading;
+    const loading = new Promise((resolve, reject) => {
+      let script = null;
+      try {
+        script = Array.from(document.querySelectorAll("script[src]")).find(node => {
+          try {
+            const url = new URL(node.src, location.href);
+            return url.origin + url.pathname === RYN_TURNSTILE_SRC;
+          } catch (_) {
+            return false;
+          }
+        }) || null;
+      } catch (_) {}
+      let poll = 0, timer = 0;
+      const finish = (error, api) => {
+        clearInterval(poll);
+        clearTimeout(timer);
+        if (rynTurnstileLoading === loading) rynTurnstileLoading = null;
+        if (error) reject(error); else resolve(api);
+      };
+      // The API can define itself a moment after its script's load event, and
+      // the page's own <script> may have loaded before this was asked: polled.
+      poll = setInterval(() => {
+        const api = rynTurnstileApi();
+        if (api) finish(null, api);
+      }, 100);
+      timer = setTimeout(() => finish(new Error("the Cloudflare script could not be loaded")), 2e4);
+      if (script === null) {
+        try {
+          script = document.createElement("script");
+          script.src = RYN_TURNSTILE_SRC + "?render=explicit";
+          script.async = true;
+          script.addEventListener("error", () => finish(new Error("the Cloudflare script was blocked (content blocker?)")), {
+            once: true
+          });
+          (document.head || document.documentElement).appendChild(script);
+        } catch (e) {
+          finish(e);
+        }
+      }
+    });
+    rynTurnstileLoading = loading;
+    return loading;
+  };
+  const generateTurnstileToken = () => rynLoadTurnstile().then(() => new Promise((resolve, reject) => {
+    try {
+      const ts = window.turnstile || window.top && window.top.turnstile;`
+);
+
+edit(
+  "bots: close the Turnstile loader wrapper",
+  "    } catch (e) {\n      reject(e);\n    }\n  });\n  // ── Verification, minted before the press",
+  "    } catch (e) {\n      reject(e);\n    }\n  }));\n  // ── Verification, minted before the press"
+);
+
+edit(
+  "bots: the token pool loads Turnstile when it is switched on",
+  `    _ready() {
+      try {
+        const ts = window.turnstile || window.top && window.top.turnstile;
+        return !!(ts && typeof ts.render === "function");`,
+  `    _ready() {
+      try {
+        const ts = window.turnstile || window.top && window.top.turnstile;
+        // Nothing on the page loaded Cloudflare (a signed-in player never
+        // needs it): a pool that is switched on loads it itself.
+        if (!(ts && typeof ts.render === "function") && this.enabled) {
+          rynLoadTurnstile().catch(() => {});
+        }
+        return !!(ts && typeof ts.render === "function");`
 );
 
 /* ------------------------------------------------------------------ *
