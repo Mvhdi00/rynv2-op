@@ -36,9 +36,17 @@ const BUNDLES = process.argv.length > 3
 
 const src = fs.readFileSync(RYN, "utf8");
 
-/* RYN's own Regexer expands NUM{n} into \d{n}; mirror it so the patterns here
- * are the patterns that actually run. */
-const expand = s => s.replace(/NUM\{(\d+)\}/g, "\\d{$1}");
+/* RYN's own Regexer, mirrored so the patterns here are the patterns that
+ * actually run. NUM{n} is the NUMBER n in any of the forms a minifier might
+ * write it (4, 0x4, 0b100, 04) — not "n digits", which is what this used to
+ * expand it to, reporting four healthy hooks as missing. \w also takes `$`
+ * and non-ASCII letters, as minified names do. */
+const NUMBER_FORMS = [[2, "0b0*"], [8, "0+"], [10, ""], [16, "0x0*"]];
+const expand = s => s
+  .replace(/\{VAR\}/g, "(?:let|var|const)")
+  .replace(/\{QUOTE\{(\w+)\}\}/g, "(?:'$1'|\"$1\"|`$1`)")
+  .replace(/NUM\{(\d+)\}/g, (m, n) => "(?:" + NUMBER_FORMS.map(([r, p]) => p + Number(n).toString(r)).join("|") + ")")
+  .replace(/\\w/g, "(?:[^\\x00-\\x7F-]|\\$|\\w)");
 
 /* Pull every Hook.<op>("name", /re/, "replacement") out of the client. The
  * replacement may be a concatenation of string literals across lines. */
@@ -150,11 +158,16 @@ function declIndex(bundle, name) {
  * left every other check green — reporting a non-match without failing on it is
  * not a test, it is a log line.
  *
- * The eight absent from this list do not match and are not expected to; the
- * report says why each one is gone. Add a name here once its hook is fixed. */
+ * The two absent from this list do not match and are not expected to:
+ * gameInit served the altcha start path the 2025 bundle no longer has, and
+ * buildingTint's ternary became the if-statement buildingTint2025 matches.
+ * Add a name here once its hook is fixed. */
 const EXPECTED = new Set([
   "preRenderLoop",
   "postRenderLoop",
+  "frameGuard",
+  "adoptRenderer",
+  "mapPreRender",
   "mapSelfColor",
   "mapTeamColor",
   "mapDeathMarker",
@@ -163,7 +176,9 @@ const EXPECTED = new Set([
   "offset",
   "renderEntity",
   "renderItemPush",
+  "totalDamage",
   "objectAlpha",
+  "buildingTint2025",
   "resourceTint",
   "animalTint",
   "renderItem",
@@ -172,17 +187,26 @@ const EXPECTED = new Set([
   "exposeGameNet",
   "exposeGameCrypto",
   "captureTurnstile",
+  "exposeServers",
   "connectLatch",
   "connectLatchFix",
   "connectGuardRelease",
   "disconnectRelease",
   "spawnLatchRelease",
+  "cryptoSession",
+  "cryptoInbound",
+  "cryptoSign",
+  "cryptoOutbound",
+  "cryptoBuild",
   "exposeCryptoFns",
   "handleBuy",
   "RemovePingCall",
+  "RemovePingState",
+  "preRender",
   "RenderGrid",
   "upgradeItem",
   "DeathMarker",
+  "playerDied",
   "updateNotificationRemove",
   "checkTrusted",
   "removeSkins",
@@ -190,12 +214,15 @@ const EXPECTED = new Set([
   "gameColor",
   "renderPlayer",
   "meleeWeapon",
+  "meleeHands",
   "meleeBody",
   "chatMute",
   "maskFRVR",
   "scaleWidth",
   "scaleHeight",
   "maskLerp",
+  "noAds",
+  "sdkReady",
   "cowName",
   "wolfName",
   "freezeTurnSpeed",

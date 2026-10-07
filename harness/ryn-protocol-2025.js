@@ -85,26 +85,46 @@ const strip = c => c.replace(/\/\*[\s\S]*?\*\//g, "")
   .split("\n").filter(l => !/^\s*(\/\/|\*)/.test(l)).join("\n");
 
 const handle = strip(slice("handleMessage(event) {", "handleMessage"));
-say(/applyMask\(bytes,\s*enc\.maskVal\(/.test(handle),
-    "incoming frames are unmasked before they are decoded");
+/* The bundle unmasks IN PLACE on a view of event.data, keyed on
+ * wf(xe.mask.s2c, ++xe.received) — and on the main socket xe is the very
+ * object RYN reads. So RYN must read a copy keyed on received+1 and change
+ * neither the buffer nor the count; only a bot's own socket is unmasked in
+ * place with its own counter. The first version of this did the reverse and
+ * corrupted every frame after io-init on a pinned connection. */
+{
+  const unmasks = handle.match(/applyMask\(bytes,\s*enc\.\w+\(/g) || [];
+  const viaWf = handle.match(/applyMask\(bytes,\s*enc\.maskIn\(cryptoIn\.mask\.s2c,/g) || [];
+  say(unmasks.length === 2 && viaWf.length === unmasks.length,
+      "incoming frames — the main socket's and a bot's — are unmasked with the s2c mask through wf(), " +
+      "the bundle's receive-side function (" + viaWf.length + "/" + unmasks.length + ")");
+}
+say(/bytes\s*=\s*bytes\.slice\(\)/.test(handle) && /\(cryptoIn\.received\s*>>>\s*0\)\s*\+\s*1/.test(handle),
+    "on the main socket RYN unmasks a COPY keyed on the count the bundle is about to use");
+say(!/cryptoIn\._bundle[\s\S]{0,400}cryptoIn\.received\s*=\s*\(/.test(handle.slice(handle.indexOf("if (cryptoIn._bundle)"), handle.indexOf("} else {", handle.indexOf("if (cryptoIn._bundle)")))),
+    "and never advances the bundle's own receive count");
 say(/received\s*=\s*\(\s*cryptoIn\.received\s*\|\|\s*0\s*\)\s*\+\s*1/.test(handle),
-    "with a per-message counter, which is what the mask value is derived from");
+    "a bot's socket keeps its own per-message counter");
 
-const ioinit = src.slice(src.indexOf('case "io-init":'), src.indexOf('case "io-init":') + 1800);
+const ioinit = src.slice(src.indexOf('case "io-init":'), src.indexOf('case "io-init":') + 4200);
 const io = strip(ioinit);
 say(/args\[4\]\s*===\s*1/.test(io), "io-init's fifth field is read as the `pinned` flag");
 say(/enc\.mixKey\(baseKey,\s*seed\)/.test(io), "a pinned key is mixed with the seed");
 say(/enc\.Po\(seed,\s*enc\.salt\)/.test(io), "and the opcode tables are salted with BUILD_SALT");
 say(/enc\.maskFrom\(key\)/.test(io), "and the mask is derived from the mixed key");
-say(/mask:\s*pinned/.test(io) && /mask:\s*pinned\s*&&\s*enc\.maskFrom\s*\?/.test(io) || /mask:\s*pinned/.test(io),
-    "an unpinned connection gets no mask, as the bundle does");
+say(/mask:\s*pinned\s*&&\s*enc\.maskFrom\s*\?/.test(io), "an unpinned connection gets no mask, as the bundle does");
+say(/if \(this\.client\.isOwner\) \{\s*setTimeout\(\(\) => \{[\s\S]{0,80}pingRequest\(\)/.test(io),
+    "the main socket's first ping waits a task — before then the bundle has no session and sends raw");
 
 const bot = strip(src.slice(src.indexOf("const botCrypto = this.client._gameCrypto;"),
                             src.indexOf("const botCrypto = this.client._gameCrypto;") + 1600));
 say(/applyMask\(d\.subarray\(enc\.jt\)/.test(bot),
     "outgoing bot frames mask the PAYLOAD only, leaving the signature clear");
-say(/maskVal\(botCrypto\.mask,\s*n\)/.test(bot),
-    "keyed on the sequence number, which is what the bundle uses outbound");
+say(/maskVal\(botCrypto\.mask\.c2s,\s*o\)/.test(bot),
+    "keyed on the c2s mask and the frame's own signature — bf(xe.mask.c2s, signature), as the bundle sends");
+
+const sendPath = strip(slice("    _send(data) {", "PacketManager._send"));
+say(/crypto\._bundle\s*\|\|\s*!this\.client\.isOwner/.test(sendPath),
+    "nothing goes out on the main socket until the bundle's own session exists");
 
 // ── the primitives it binds ───────────────────────────────────────────────
 /* A login hook can keep matching and still stop INSTALLING the call it exists
@@ -157,29 +177,36 @@ console.log("\n  THE LOGIN HOOKS — matching is not enough, they must install\n
       "connectGuardRelease covers BOTH of xh's early returns (no server, server full)");
 }
 
-console.log("\n  THE BINDING — lazy, and it cannot take the game down\n");
-/* Taken to the end of the statement, not to the first `);` — the regex literal
- * inside the hook contains `);` itself, so a lazy match stopped at the pattern
- * and reported the replacement as missing everything. */
+console.log("\n  THE BINDING — lazy, found by shape, and it cannot take the game down\n");
 const hookStart = src.indexOf('Hook.replace("exposeCryptoFns"');
-const hook = src.slice(hookStart, src.indexOf('"let $5=null");', hookStart) + 20);
+const hook = src.slice(src.indexOf("const cryptoName = "), src.indexOf("let \" + session + \"=null\");", hookStart) + 30);
 say(/Object\.defineProperty\(RYN,'_enc'/.test(hook),
     "_enc is a lazy getter, so the names resolve after every declaration has run");
 say(/try\{/.test(hook) && /catch\(e\)\{return null\}/.test(hook),
-    "and it is wrapped, so a renamed identifier degrades the bot path rather than throwing");
-say(!/Eo:Eo|jt:jt|Po:Po|Ro:Ro/.test(hook),
-    "it no longer binds Eo/jt/Po/Ro, which in this bundle are a keybind map, the " +
-    "Turnstile token, a DOM button and an array — all declared after the injection point");
-
-/* The one that mattered: those four are `let`/`const` further down the module,
- * so the old eager injection threw a TDZ ReferenceError while the rewritten
- * bundle was still evaluating and killed the whole game at load. */
-const inj = nb.indexOf("const Gl=new q0,Sf=new V0;let xe=null");
-for (const [name, pat] of [["Eo", /let st=\{\},ia=\{\},Eo=\{\}/], ["jt", /let jt,Se,Ii/],
-                           ["Po", /Po=document\.getElementById/], ["Ro", /Ro=\[\];function/]]) {
-  const m = pat.exec(nb);
-  say(!!m && m.index > inj, name + " really is declared after the injection point (" +
-      (m ? m.index : "?") + " > " + inj + ") — a TDZ, not a guess");
+    "and it is wrapped, so a missing name degrades the bot path rather than throwing");
+say(!/Eo:yf|jt:So|Ro:vf|Po:Ll|maskFrom:kf|applyMask:Nl|maskVal:bf/.test(hook),
+    "no minified name is written into it — each is captured from the code that uses it");
+for (const [label, re] of [
+  ["cryptoSession", /Hook\.match\("cryptoSession"/], ["cryptoInbound", /Hook\.match\("cryptoInbound"/],
+  ["cryptoSign", /Hook\.match\("cryptoSign"/], ["cryptoOutbound", /Hook\.match\("cryptoOutbound"/],
+  ["cryptoBuild", /Hook\.match\("cryptoBuild"/]]) {
+  say(re.test(src), label + " is captured by pattern");
+}
+// ...and the patterns really do find the bundle's primitives: run them here.
+{
+  const pat = name => {
+    const at = src.indexOf('Hook.match("' + name + '", ');
+    const lit = src.slice(at).match(/, (\/(?:[^\/\\\n]|\\.)+\/)\);/)[1];
+    return new RegExp(eval(lit).source.replace(/\\w/g, "(?:[^\\x00-\\x7F-]|\\$|\\w)"));
+  };
+  const session = pat("cryptoSession").exec(nb), inbound = pat("cryptoInbound").exec(nb);
+  const signing = pat("cryptoSign").exec(nb), outbound = pat("cryptoOutbound").exec(nb), build = pat("cryptoBuild").exec(nb);
+  say(!!session && session[2] === "vf" && session[5] === "z0" && session[9] === "Ll" && session[10] === "K0" && session[11] === "kf",
+      "on the fixture they find vf, mixKey (z0), Ll, BUILD_SALT (K0) and kf");
+  say(!!inbound && inbound[1] === "Nl" && inbound[2] === "wf", "the receive side's Nl and wf");
+  say(!!signing && signing[1] === "yf" && signing[4] === "So", "the signer yf and the signature width So");
+  say(!!outbound && outbound[2] === "bf", "the send side's bf");
+  say(!!build && build[1] === "Q0", "and BUILD_ID (Q0) from the socket URL");
 }
 
 console.log("\n  Not covered: the live server accepting any of this, and the moomoo-protocol");

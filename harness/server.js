@@ -142,6 +142,8 @@ function attach(ws, log, opts) {
 
       if (log) log("c2s", letter, "seq=" + seq, JSON.stringify(frame[1]).slice(0, 120));
       if (letter === "M") spawn();
+      // the real server answers a ping with an empty "0"
+      if (letter === "0") send("0", []);
     });
 
     ws.on("close", () => { if (onClose) onClose(violations); });
@@ -200,7 +202,10 @@ function attach(ws, log, opts) {
         4, mid - 60, midY - 120, 0, 35, null, 4, foeSid,     // enemy spike
       ]]);
       // loadAI: 7 fields per animal [sid,index,x,y,dir,health,nameIndex]
-      if (proto === 2025) send("I", [[9, 0, mid + 300, midY - 200, 0, 100, 0, 0], []]);
+      // 2025 also brought new animals (9-14); a crab is in view so a client
+      // that only knows the old nine has to cope with one.
+      if (proto === 2025) send("I", [[9, 0, mid + 300, midY - 200, 0, 100, 0, 0,
+                                      10, 13, mid - 320, midY + 220, 157, 500, 0, 0], []]);
       else send("I", [[9, 0, mid + 300, midY - 200, 0, 100, 0]]);
       send("G", [[mySid, "tester", 12, 0, foeSid, "rival", 8, 0]]);
       send("T", [0, 1, 1]);

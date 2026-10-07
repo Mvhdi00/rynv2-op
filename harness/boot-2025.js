@@ -182,6 +182,7 @@ async function run(spec) {
   page.on("pageerror", e => out.errors.push(String(e && e.stack || e).split("\n").slice(0, 4).join(" | ")));
   page.on("console", m => {
     if (m.type() === "error") out.consoleErrors.push(m.text().slice(0, 300));
+    if (/\[RYN\] render hook failed/.test(m.text())) (out.renderFaults = out.renderFaults || []).push(m.text().slice(0, 240));
     if (process.env.VERBOSE) console.log("    [console." + m.type() + "] " + m.text().slice(0, 300));
   });
 
@@ -376,6 +377,15 @@ async function run(spec) {
   await page.waitForTimeout(2500);
 
   out.after = await page.evaluate(() => ({
+    // what RYN drew this frame on its overlay over the WebGL canvas
+    overlayPx: (() => {
+      const cv = document.getElementById("ryn-gl-overlay");
+      if (!cv || !cv.width) return -1;
+      const d = cv.getContext("2d").getImageData(0, 0, cv.width, cv.height).data;
+      let n = 0;
+      for (let i = 3; i < d.length; i += 16) if (d[i] > 0) n++;
+      return n;
+    })(),
     enterGame: (() => { const b = document.getElementById("enterGame"); if (!b) return null; const r = b.getBoundingClientRect();
       return { cls: b.className, rect: [r.x, r.y, r.width, r.height].map(Math.round), top: (document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) || {}).id }; })(),
     tsRenders: window.__tsRenders,
@@ -463,10 +473,16 @@ function report(r) {
   ok(r.sockets.every(u => /token=tk%3AT\d/.test(u) && /[?&]b=test-build/.test(u)),
      "the socket carries the /join ticket (tk:) and ?b=<BUILD_ID>");
   ok(r.spawnSent, "the spawn frame reached the server");
+  const pings = r.frames.filter(f => /^c2s 0 /.test(f)).length;
+  ok(pings >= 1, "the client pings the server (" + pings + ")");
   if (r.shortFrames && r.shortFrames.length) console.log("    short frames sent:\n        " + r.shortFrames.slice(0, 3).join("\n        "));
   ok(r.notes.filter(n => /server rejected/.test(n)).length === 0, "the server accepted every frame" +
      (r.notes.length ? ":\n        " + r.notes.slice(0, 5).join("\n        ") : ""));
   ok(r.after.gameUI && r.after.gameUI !== "none", "the in-game UI is showing (" + r.after.gameUI + ")");
+  if (r.base !== "vanilla") {
+    ok(r.after.overlayPx > 50, "RYN's overlay draws over the WebGL canvas (" + r.after.overlayPx + " px)");
+    ok(!r.renderFaults, "no RYN render hook failed" + (r.renderFaults ? ": " + r.renderFaults[0] : ""));
+  }
   ok(r.centre.skin > 300, "the player is drawn at the centre of the screen (" + r.centre.skin +
      " of 900 centre px are not grass " + r.centre.outline + ")");
 }

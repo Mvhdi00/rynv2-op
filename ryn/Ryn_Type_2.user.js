@@ -1410,6 +1410,30 @@ window.grbtp = 35;
   // `fresh` forces an inline mint and skips the pool. Used for the one retry
   // after a socket that closed before `io-init`, which is what a token the
   // server would not take looks like from here.
+  // The 2025 join: a captcha token in, a one-use socket ticket out.
+  const rynJoinTicket = (host, captcha) => {
+    if (typeof fetch !== "function") return Promise.resolve(null);
+    const signal = typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(8e3) : void 0;
+    return fetch(RYN_API_BASE + "/join", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        captcha: captcha,
+        host: host
+      }),
+      signal: signal
+    }).then(response => {
+      if (response.status === 403 || response.status === 429) {
+        try {
+          console.log("[RYN BOT] /join refused (" + response.status + (response.status === 429 ? ", too many attempts" : ", members-only server or bad token") + ")");
+        } catch (_) {}
+        return null;
+      }
+      return response.ok ? response.json().then(body => body && body.ticket ? "tk:" + body.ticket : null) : null;
+    });
+  };
   const createSocket = async (href, fresh = false) => {
     let url = href;
     let pooled = false;
@@ -1465,7 +1489,21 @@ window.grbtp = 35;
           console.log("[RYN BOT] altcha fallback (likely rejected)");
         } catch (e) {}
       }
-      url = origin + "/?token=" + encodeURIComponent(token);
+      /* 2025: the game no longer connects with the Turnstile token itself.
+       * It trades it at <api>/join for a one-use ticket and connects with
+       * `?token=tk:<ticket>`, and every socket URL also carries the build it
+       * was made for as `b=` — a socket without it is a client from before
+       * the update. The ticket is the bundle's own flow, line for line; like
+       * the bundle, a /join that is down falls back to the raw token. Bots
+       * join as guests: they do not carry the account you are signed in to. */
+      if (typeof token === "string" && token.indexOf("cf:") === 0) {
+        token = await rynJoinTicket(new URL(href).host, token.slice(3)).then(ticket => ticket || token, () => token);
+      }
+      let buildId = null;
+      try {
+        buildId = RYN._enc && RYN._enc.buildId;
+      } catch (_) {}
+      url = origin + "/?token=" + encodeURIComponent(token) + (buildId != null ? "&b=" + encodeURIComponent(buildId) : "");
     }
     // Replace what was just spent now rather than on the next press, so a run
     // of spawns keeps finding the pool warm.
@@ -43616,6 +43654,13 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         if (this._rynDirect) {
           return original.apply(this, arguments);
         }
+        // The game's own frames, counted for the PACKET readout. 2025 sends
+        // them through a WebSocket.prototype.send it saved at load, which the
+        // per-socket counter in PacketManager never sees — the readout sat at
+        // zero while the game was sending all the time.
+        try {
+          if (owner && owner.PacketManager) owner.PacketManager.packetCount += 1;
+        } catch (_) {}
         const active = self.active;
         if (active !== null && active !== owner && POSSESS_ROUTED_SENDS.has(type)) {
           try {
