@@ -116,6 +116,12 @@ function attach(ws, log, opts) {
      * (group 7), "S" with the new count on every place and every break, and a
      * place over the limit refused. */
     sim = null,
+    // the hat my player wears (2025, outside `sim`): its look row's skin
+    mySkin = 0,
+    // the rival kept out of the way (a picture of me alone)
+    foeAway = false,
+    // a Crab King (2025 boss, index 11) in view, above me
+    boss = false,
   } = opts || {};
   {
     const seed = (Math.random() * 0xffffffff) >>> 0;
@@ -387,7 +393,8 @@ function attach(ws, log, opts) {
         // what an animal standing still looks like on the 2025 wire
         send("I", [[11, 9, mid + 120, midY, 314, 900, 0, 0], []]);
       } else if (proto === 2025) send("I", [[9, 0, mid + 300, midY - 200, 0, 100, 0, 0,
-                                             10, 13, mid - 320, midY + 220, 157, 500, 0, 0], []]);
+                                             10, 13, mid - 320, midY + 220, 157, 500, 0, 0]
+                                             .concat(boss ? [12, 11, mid, midY - 470, 157, 300000, 0, 0] : []), []]);
       else send("I", [[9, 0, mid + 300, midY - 200, 0, 100, 0]]);
       send("G", [[mySid, "tester", 12, 0, foeSid, "rival", 8, 0]]);
       send("T", [0, 1, 1]);
@@ -455,10 +462,10 @@ function attach(ws, log, opts) {
       }
       if (proto === 2025) {
         // a dead rival is out of view: listed once as gone, then not at all
-        const foe = foeDead ? [] : [foeSid, mid + 150 + wobble, midY + 40, 300];
+        const foe = foeDead ? [] : [foeSid, mid + (foeAway ? 900 : 150) + wobble, midY + 40, 300];
         send("a", [
           [mySid, mid, midY, 0].concat(foe),
-          full ? [mySid, -1, 0, 0, null, 0, 0, 0, 0, 0,
+          full ? [mySid, -1, 0, 0, null, 0, mySkin, 0, 0, 0,
                   foeSid, -1, 5, 1, null, 0, 6, 11, 1, 0] : [],
           foeDead === 1 ? [foeSid] : [],
         ]);

@@ -31,7 +31,7 @@ MUTATIONS = [
     ("viewport no longer finds the tail of the game's resize",
      r'\5\.resize\(\6\*\3\)/, "RYN._Renderer._viewport', r'\5\.resize\(\6\)/, "RYN._Renderer._viewport'),
     ("nameColor no longer finds where the game picks a name's colour",
-     r'(\w+)=\1\?(\w+):"#fff",(\w+)=\{color:\4,/', r'(\w+)=\1\?(\w+):"#fff",(\w+)=\{colour:\4,/'),
+     r'(\w+)=\2\?((?:\w|\.)+):("#fff"|"#ffffff"|(?:\w|\.)+)(?=[,;])/', r'(\w+)=\2\?((?:\w|\.)+):("#ffe"|"#ffffff"|(?:\w|\.)+)(?=[;])/'),
     # ── frame signatures ───────────────────────────────────────────────────
     ("fastSign no longer finds the game's signing call",
      r'\],\w+\),\w+=new Uint8Array\(\w+\+\w+\[)/,', r'\],\w+\),\w+=new Uint16Array\(\w+\+\w+\[)/,'),
@@ -51,7 +51,7 @@ MUTATIONS = [
      "        return toAbs(spec);"),
     # ── the rewrite: hooks that ate the bundle or wandered off ─────────────
     ("RenderGrid goes back to the 2024 pattern (deletes `const Oe`)",
-     '    Hook.replace("RenderGrid", /(\\.globalAlpha=\\.06;const (\\w+)=\\w+\\/18;)for\\(var (\\w+)=[^;]+;\\3<\\w+;\\3\\+=\\2\\)\\3>0&&\\w+\\.line\\([^)]*\\);for\\(let (\\w+)=[^;]+;\\4<\\w+;\\4\\+=\\2\\)\\4>0&&\\w+\\.line\\([^)]*\\);/, "$1");\n',
+     '    Hook.replace("RenderGrid", /(\\.globalAlpha=\\.06;const (\\w+)=[^;]+;)for\\((?:var|let) (\\w+)=[^;]+;\\3<\\w+;\\3\\+=\\2\\)\\3>0&&\\w+\\.line\\([^)]*\\);for\\((?:var|let) (\\w+)=[^;]+;\\4<\\w+;\\4\\+=\\2\\)\\4>0&&\\w+\\.line\\([^)]*\\);/, "$1");\n',
      '    Hook.replace("RenderGrid", /("#91b2db".+?)(for.+?)(\\w+\\.stroke)/, "$1$3");\n'),
     ("renderItemPush goes back to the 2024 anchor (wanders into aura maths)",
      '    Hook.replace("renderItemPush", /if\\((\\w+)=(\\w+)\\[(\\w+)\\],(\\w+)=\\1\\.x\\+\\1\\.xWiggle-(\\w+),/, "if($1=$2[$3],RYN._Renderer._renderObjects.push($1),$4=$1.x+$1.xWiggle-$5,");\n',

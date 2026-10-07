@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.5
+// @version         2.6
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -100,11 +100,27 @@ if (!_watchRynBranding()) {
    ====================================================================== */
 
 const RYN_BOOT = (function rynBootScreen() {
-  const STEPS = [ "Initializing", "Loading interface", "Fetching servers", "Preparing session", "Ready" ];
+  /* What the screen is waiting for, not what it has done: each line stays up
+   * exactly as long as that wait takes — the page, the game itself, the
+   * server list, then Cloudflare's check (or, signed in, nothing but the
+   * session) — with the seconds counted once a wait runs past a moment. It
+   * used to hold every load for at least 2.3 s and each line for at least
+   * 0.36 s, whatever the client was actually doing. */
+  const STEPS = [ "Loading the page", "Loading the game", "Fetching servers", "Waiting for Cloudflare", "Ready" ];
   const LAST = STEPS.length - 1;
-  const MIN_VISIBLE = 2300;
-  const STEP_HOLD = 360;
-  const HARD_CAP = 9000;
+  const MIN_VISIBLE = 0;
+  const STEP_HOLD = 120;
+  // A load that is still going is waited on — up to here.
+  const HARD_CAP = 3e4;
+  const label = n => {
+    if (n !== 3) return STEPS[n];
+    // Signed in, the game needs no check: what is left is the session.
+    try {
+      const signedIn = !!document.querySelector("#accountRow a, #rl-account .rl-acc-out:not([hidden])");
+      if (signedIn) return "Opening your session";
+    } catch (e) {}
+    return STEPS[3];
+  };
   // Waiting on a challenge is the one wait worth giving real time to: an
   // interactive one needs a person, and dropping into the lobby mid-challenge
   // is what this is here to avoid.
@@ -360,7 +376,8 @@ html { background-color: #07070A !important; }
     if (gone) {
       return;
     }
-    text.textContent = STEPS[shown];
+    const waited = Math.floor((Date.now() - shownAt) / 1e3);
+    text.textContent = label(shown) + (shown < LAST && waited >= 2 ? " · " + waited + "s" : "");
     step.textContent = shown + "/" + LAST;
     fill.style.transform = "scaleX(" + shown / LAST + ")";
     if (shown >= LAST) {
@@ -374,7 +391,7 @@ html { background-color: #07070A !important; }
     }
     // The minimum is on the screen, not on the client: everything behind it
     // has already finished by the time this is reachable.
-    const wait = Math.max(520, MIN_VISIBLE - (Date.now() - openedAt));
+    const wait = Math.max(260, MIN_VISIBLE - (Date.now() - openedAt));
     doneTimer = setTimeout(dismiss, wait);
   };
 
@@ -562,6 +579,14 @@ html { background-color: #07070A !important; }
 
   attach();
   paint();
+  // the seconds on a wait that is taking a while
+  const ticker = setInterval(() => {
+    if (gone || shown >= LAST) {
+      clearInterval(ticker);
+      return;
+    }
+    paint();
+  }, 1e3);
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", onParsed, {
       once: true
@@ -707,7 +732,10 @@ window.grbtp = 35;
    * (RynWire.learn); the constant is the 2025 key, for until either is seen. */
   let rynGameSitekey = null;
   const rynSitekey = () => rynGameSitekey || RYN_SITEKEY;
-  const generateTurnstileToken = () => new Promise((resolve, reject) => {
+  // The pool's own (hidden) check. Cloudflare's script is loaded first when
+  // the game has not loaded it (rynTurnstile, below).
+  const generateTurnstileToken = () => rynTurnstile().then(() => _mintHiddenToken(), () => _mintHiddenToken());
+  const _mintHiddenToken = () => new Promise((resolve, reject) => {
     try {
       const ts = window.turnstile || window.top && window.top.turnstile;
       if (!ts || typeof ts.render !== "function") {
@@ -1489,14 +1517,25 @@ window.grbtp = 35;
    * take, 429 too many joins from this address for now. An API that cannot be
    * reached is the one case the bundle connects with the raw token anyway.
    *
-   * `did` is the device id the API hands out on a first join and expects
-   * back on every later one; the game keeps its own in localStorage as
-   * moo_did. A bot sends one of its own (RynBotDevices) and the answer may
-   * carry a new one, which is passed back up. */
-  const rynJoinTicket = (host, captcha, did) => {
+   * The device id is this browser's: moo_did, the one the game sends with
+   * your own join, and whatever id the API answers with is kept in its place,
+   * as the game keeps it. That is what Glotus's bots send, and they get in on
+   * the live game. v2.5 gave every bot a device of its own instead — no id at
+   * all on its first join — which is a new device to the API for each bot,
+   * and a new device is the one thing a join API has every reason to be
+   * strict with. */
+  const rynDeviceId = () => {
+    try {
+      return localStorage.getItem("moo_did") || null;
+    } catch (_) {
+      return null;
+    }
+  };
+  const rynJoinTicket = (host, captcha) => {
     if (typeof fetch !== "function") return Promise.resolve({
       ticket: null,
-      error: "network"
+      error: "network",
+      status: 0
     });
     const signal = typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(8e3) : void 0;
     return fetch(RYN_API_BASE + "/join", {
@@ -1506,7 +1545,7 @@ window.grbtp = 35;
       },
       body: JSON.stringify({
         captcha: captcha,
-        did: did || void 0,
+        did: rynDeviceId() || void 0,
         host: host
       }),
       signal: signal
@@ -1514,81 +1553,349 @@ window.grbtp = 35;
       if (response.status === 403 || response.status === 429) {
         return response.json().catch(() => ({})).then(body => ({
           ticket: null,
-          error: response.status === 429 ? "busy" : body && body.error === "auth" ? "members" : "refused"
+          error: response.status === 429 ? "busy" : body && body.error === "auth" ? "members" : "refused",
+          status: response.status
         }));
       }
       if (!response.ok) return {
         ticket: null,
-        error: "network"
+        error: "network",
+        status: response.status
       };
-      return response.json().then(body => body && body.ticket ? {
-        ticket: "tk:" + body.ticket,
-        error: null,
-        did: typeof body.did === "string" && body.did ? body.did : null
-      } : {
-        ticket: null,
-        error: "network"
+      return response.json().then(body => {
+        try {
+          if (body && typeof body.did === "string" && body.did) localStorage.setItem("moo_did", body.did);
+        } catch (_) {}
+        return body && body.ticket ? {
+          ticket: "tk:" + body.ticket,
+          error: null,
+          status: response.status
+        } : {
+          ticket: null,
+          error: "network",
+          status: response.status
+        };
       }, () => ({
         ticket: null,
-        error: "network"
+        error: "network",
+        status: response.status
       }));
     }, () => ({
       ticket: null,
-      error: "network"
+      error: "network",
+      status: 0
     }));
   };
-  /* A device id for each bot, the way the game keeps one for you.
+  /* The Cloudflare check for a bot, shown — the way Glotus shows it.
    *
-   * The 2025 join API gives a browser an id on its first join and the game
-   * sends it back with every join after (moo_did). Each bot is its own device
-   * here: it takes an id nobody else is using from the ones bots have been
-   * given before, or none — and then the API issues one, which is kept for
-   * the next bot. Two bots never share one at the same time, and none of
-   * them is ever yours. */
-  const RYN_BOT_DIDS_KEY = "_ryn_bot_dids";
-  const RynBotDevices = {
-    inUse: new Set,
-    _load() {
+   * RYN used to run a bot's check invisibly ("interaction-only", in a corner)
+   * and only bring it forward if Cloudflare asked for a click. Glotus renders
+   * the check as an ordinary, visible widget in a card in the middle of the
+   * screen and leaves it there until it is done, and its bots get in. So a
+   * bot's check is that card now: most of the time it ticks itself in a
+   * second or two and goes; when Cloudflare wants a click, the box is in
+   * front of you, with a line saying what it is for. Two at a time (Glotus
+   * runs two); the rest wait their turn below them. Three minutes each.
+   * Cancel, or Escape, stops every check that is waiting. The card does not
+   * cover the game: you can keep playing while it works. */
+  const RYN_VERIFY_TIMEOUT_MS = 18e4;
+  const RYN_VERIFY_AT_ONCE = 2;
+  /* Cloudflare's script, loaded by RYN when the game has not.
+   *
+   * The game only loads Turnstile for a player who needs it, and a player
+   * signed in to an account does not: their join goes through on the account
+   * alone. Signed in, there was no window.turnstile on the page at all, and
+   * every bot stopped at "turnstile API not available" before it had tried
+   * anything. A bot is a guest and always needs a check, so RYN loads the
+   * script itself — the same file, the same way the game does (Glotus does
+   * this too) — and waits for it. A tag already on the page is waited on
+   * rather than added twice. */
+  const RYN_TURNSTILE_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+  let _rynTurnstileLoad = null;
+  const rynTurnstileApi = () => {
+    try {
+      const ts = window.turnstile || window.top && window.top.turnstile;
+      return ts && typeof ts.render === "function" ? ts : null;
+    } catch (_) {
+      return window.turnstile && typeof window.turnstile.render === "function" ? window.turnstile : null;
+    }
+  };
+  const rynTurnstile = () => {
+    const ready = rynTurnstileApi();
+    if (ready !== null) return Promise.resolve(ready);
+    if (_rynTurnstileLoad !== null) return _rynTurnstileLoad;
+    const load = new Promise((resolve, reject) => {
+      let script = null;
       try {
-        const list = JSON.parse(localStorage.getItem(RYN_BOT_DIDS_KEY) || "[]");
-        return Array.isArray(list) ? list.filter(d => typeof d === "string" && d) : [];
-      } catch (_) {
-        return [];
+        script = [ ...document.querySelectorAll("script[src]") ].find(node => {
+          try {
+            const url = new URL(node.src, location.href);
+            return url.origin + url.pathname === RYN_TURNSTILE_SRC && !node.__rynFailed;
+          } catch (_) {
+            return false;
+          }
+        }) || null;
+      } catch (_) {}
+      const fresh = script === null;
+      if (fresh) {
+        script = document.createElement("script");
+        script.src = RYN_TURNSTILE_SRC + "?render=explicit";
+        script.async = true;
+        script.defer = true;
+      }
+      let settled = false;
+      const poll = setInterval(() => {
+        if (rynTurnstileApi() !== null) finish(null);
+      }, 100);
+      const timer = setTimeout(() => finish(new Error("Cloudflare's script did not load in 20 s")), 2e4);
+      function finish(error) {
+        if (settled) return;
+        settled = true;
+        clearInterval(poll);
+        clearTimeout(timer);
+        const api = rynTurnstileApi();
+        if (api !== null) {
+          resolve(api);
+          return;
+        }
+        try {
+          script.__rynFailed = true;
+          if (fresh) script.remove();
+        } catch (_) {}
+        reject(error || new Error("Cloudflare loaded, but its check is not there"));
+      }
+      script.addEventListener("load", () => setTimeout(() => finish(null), 0), {
+        once: true
+      });
+      script.addEventListener("error", () => finish(new Error("Cloudflare's script could not be loaded (blocked by an extension or tracking protection?)")), {
+        once: true
+      });
+      if (fresh) (document.head || document.documentElement).appendChild(script);
+    });
+    _rynTurnstileLoad = load.then(api => {
+      _rynTurnstileLoad = null;
+      return api;
+    }, error => {
+      _rynTurnstileLoad = null;
+      throw error;
+    });
+    return _rynTurnstileLoad;
+  };
+  const RynBotVerify = {
+    active: new Set,
+    queue: [],
+    panel: null,
+    // How many checks are open or waiting, for anything that wants to say so.
+    get pending() {
+      return this.active.size + this.queue.length;
+    },
+    request(label) {
+      return new Promise((resolve, reject) => {
+        this.queue.push({
+          label: label || "Bot",
+          resolve: resolve,
+          reject: reject,
+          done: false,
+          card: null,
+          status: null,
+          widgetId: null,
+          api: null,
+          timer: 0
+        });
+        this._pump();
+      });
+    },
+    cancelAll(why) {
+      for (const req of [ ...this.queue, ...this.active ]) this._finish(req, new Error(why || "the check was cancelled"));
+    },
+    _pump() {
+      while (this.active.size < RYN_VERIFY_AT_ONCE && this.queue.length > 0) {
+        const req = this.queue.shift();
+        if (req.done) continue;
+        this.active.add(req);
+        this._start(req);
+      }
+      this._update();
+    },
+    _panel() {
+      if (this.panel !== null && this.panel.root.isConnected) return this.panel;
+      const root = document.createElement("div");
+      root.id = "ryn-bot-verify";
+      root.setAttribute("role", "dialog");
+      root.setAttribute("aria-label", "Verify bot connection");
+      root.style.cssText = "position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2147483647;" +
+        "background:#20242c;color:#fff;border:1px solid #41464d;border-radius:12px;padding:16px 18px;width:340px;" +
+        "max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);overflow:auto;box-sizing:border-box;" +
+        "font:14px 'Noto Sans',sans-serif;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.5);pointer-events:auto;";
+      const title = document.createElement("div");
+      title.style.cssText = "font-weight:800;font-size:16px;margin-bottom:4px;";
+      const note = document.createElement("div");
+      note.style.cssText = "color:#c0c5ca;font-size:12px;margin-bottom:10px;";
+      const list = document.createElement("div");
+      list.style.cssText = "display:flex;flex-direction:column;gap:10px;align-items:center;";
+      const cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.textContent = "Cancel";
+      cancel.style.cssText = "margin-top:12px;padding:6px 18px;cursor:pointer;background:#30343a;color:#e2e5e8;" +
+        "border:2px solid #41464d;border-radius:5px;font:inherit;font-weight:800;";
+      cancel.onclick = () => this.cancelAll("the check was cancelled");
+      root.append(title, note, list, cancel);
+      const onKey = event => {
+        if (event.key !== "Escape" || this.panel === null) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        this.cancelAll("the check was cancelled");
+      };
+      document.addEventListener("keydown", onKey, true);
+      (document.body || document.documentElement).appendChild(root);
+      this.panel = {
+        root: root,
+        title: title,
+        note: note,
+        list: list,
+        close: () => {
+          document.removeEventListener("keydown", onKey, true);
+          root.remove();
+        }
+      };
+      return this.panel;
+    },
+    _update() {
+      if (this.active.size === 0 && this.queue.length === 0) {
+        if (this.panel !== null) {
+          this.panel.close();
+          this.panel = null;
+        }
+        return;
+      }
+      const panel = this._panel();
+      const many = this.pending > 1;
+      panel.title.textContent = many ? "Verify bot connections" : "Verify bot connection";
+      panel.note.textContent = "Cloudflare checks each bot before the game lets it in." +
+        (this.queue.length ? " " + this.queue.length + " more waiting." : "");
+    },
+    _start(req) {
+      const panel = this._panel();
+      const card = document.createElement("div");
+      card.style.cssText = "width:100%;box-sizing:border-box;padding:8px;border:1px solid #41464d;border-radius:6px;background:#171b21;";
+      const label = document.createElement("div");
+      label.style.cssText = "color:#c0c5ca;font-size:12px;margin-bottom:4px;overflow-wrap:anywhere;";
+      label.textContent = req.label;
+      const status = document.createElement("div");
+      status.style.cssText = "font-size:12px;margin-bottom:6px;";
+      status.textContent = "Checking…";
+      const host = document.createElement("div");
+      host.style.cssText = "min-height:65px;display:flex;justify-content:center;";
+      card.append(label, status, host);
+      panel.list.appendChild(card);
+      req.card = card;
+      req.status = status;
+      req.timer = setTimeout(() => this._finish(req, new Error("nobody answered the Cloudflare check")), RYN_VERIFY_TIMEOUT_MS);
+      if (rynTurnstileApi() === null) status.textContent = "Loading Cloudflare…";
+      rynTurnstile().then(ts => {
+        if (req.done) return;
+        status.textContent = "Checking…";
+        this._render(req, ts, host, status);
+      }, error => this._finish(req, error));
+    },
+    _render(req, ts, host, status) {
+      req.api = ts;
+      try {
+        req.widgetId = ts.render(host, {
+          sitekey: rynSitekey(),
+          theme: "dark",
+          retry: "never",
+          "refresh-expired": "manual",
+          callback: token => {
+            if (typeof token === "string" && token) this._finish(req, null, token);
+            else this._finish(req, new Error("the check gave no token"));
+          },
+          "error-callback": code => this._finish(req, new Error("turnstile error-callback" + (code ? " " + code : ""))),
+          "expired-callback": () => this._finish(req, new Error("turnstile expired")),
+          "timeout-callback": () => this._finish(req, new Error("the Cloudflare check timed out")),
+          "unsupported-callback": () => this._finish(req, new Error("this browser is not supported by the Cloudflare check")),
+          "before-interactive-callback": () => {
+            if (req.done) return;
+            status.textContent = "Cloudflare wants a click to let your bot in — tick the box";
+            status.style.color = "#ffd166";
+            try {
+              rynBotNotice("Cloudflare wants a click for a bot — tick the box in the middle of the screen");
+            } catch (_) {}
+          },
+          "after-interactive-callback": () => {
+            if (req.done) return;
+            status.textContent = "Checking…";
+            status.style.color = "";
+          }
+        });
+        // A callback can run inside render, before it returns the id.
+        if (req.done) {
+          this._remove(req);
+        } else if (req.widgetId === null || req.widgetId === void 0) {
+          this._finish(req, new Error("the Cloudflare check could not be opened"));
+        }
+      } catch (e) {
+        this._finish(req, e instanceof Error ? e : new Error(String(e)));
       }
     },
-    take() {
-      for (const did of this._load()) {
-        if (!this.inUse.has(did)) {
-          this.inUse.add(did);
-          return did;
-        }
-      }
-      return null;
-    },
-    keep(did) {
-      if (typeof did !== "string" || !did) return;
-      this.inUse.add(did);
+    _remove(req) {
       try {
-        const list = this._load();
-        if (list.indexOf(did) < 0) {
-          list.push(did);
-          localStorage.setItem(RYN_BOT_DIDS_KEY, JSON.stringify(list.slice(-64)));
-        }
+        if (req.api && req.widgetId !== null && req.widgetId !== void 0) req.api.remove(req.widgetId);
+      } catch (_) {}
+      req.widgetId = null;
+      try {
+        if (req.card) req.card.remove();
       } catch (_) {}
     },
-    release(did) {
-      if (did) this.inUse.delete(did);
+    _finish(req, error, token) {
+      if (req.done) return;
+      req.done = true;
+      clearTimeout(req.timer);
+      this._remove(req);
+      this.active.delete(req);
+      const queued = this.queue.indexOf(req);
+      if (queued >= 0) this.queue.splice(queued, 1);
+      if (error) req.reject(error);
+      else req.resolve(token);
+      this._pump();
     }
+  };
+  /* moomoo-protocol — mixKey, BUILD_SALT, BUILD_ID — for a bot's session.
+   * RYN takes it where its copy of the bundle imports it; on a build that
+   * reaches it some other way, it is imported here from the page's import
+   * map, the way Glotus loads it. A pinned server cannot be joined without
+   * it: the key and the opcode tables both come from it. */
+  let _rynProtocolLoad = null;
+  const rynProtocolReady = () => {
+    if (RynWire.protocol() !== null) return Promise.resolve(true);
+    if (_rynProtocolLoad !== null) return _rynProtocolLoad;
+    let url = null;
+    try {
+      url = Injector_importMap.resolve("moomoo-protocol");
+    } catch (_) {}
+    if (!url) return Promise.resolve(false);
+    const load = import(url).then(mod => {
+      if (!mod || typeof mod.mixKey !== "function") return false;
+      window.RYN = window.RYN || {};
+      RYN._modules = RYN._modules || {};
+      if (!RYN._modules["moomoo-protocol"]) RYN._modules["moomoo-protocol"] = mod;
+      _rynEncCache = null;
+      return true;
+    }, () => false);
+    _rynProtocolLoad = load.then(ok => {
+      if (!ok) _rynProtocolLoad = null;
+      return ok;
+    });
+    return _rynProtocolLoad;
   };
   const RYN_JOIN_REFUSED = {
     members: "Bots can't join this server: it is for signed-in players, and bots join as guests. Pick a server without the shield.",
     refused: "The join API refused this bot's Cloudflare token. If a check box appeared, it has to be answered.",
     busy: "Too many joins from your address right now — wait a little and add the bot again."
   };
-  const createSocket = async (href, fresh = false) => {
+  const createSocket = async (href, fresh = false, label = "") => {
     let url = href;
     let pooled = false;
-    let did = null;
     if (/moomoo/.test(href)) {
       const origin = new URL(href).origin;
       // A server for signed-in players takes no guests, and every bot is one:
@@ -1624,13 +1931,22 @@ window.grbtp = 35;
         }
       }
       let why = "";
+      const where = (() => {
+        try {
+          const here = RYN._servers && RYN._servers.selected();
+          return here ? " · " + here.region + " " + here.name : "";
+        } catch (_) {
+          return "";
+        }
+      })();
+      const verify = () => RynBotVerify.request((label || "Bot") + where);
       if (!token) {
         try {
-          const cf = await generateTurnstileToken();
+          const cf = await verify();
           if (cf) {
             token = "cf:" + cf;
             try {
-              console.log("[RYN BOT] generated fresh turnstile token");
+              console.log("[RYN BOT] Cloudflare check passed");
             } catch (e) {}
           }
         } catch (e) {
@@ -1647,7 +1963,7 @@ window.grbtp = 35;
        * not take. Both ended the same way — the API refused the bot and its
        * row vanished — only later, with a challenge spent and nothing said. */
       if (!token) {
-        rynBotNotice("No Cloudflare check for the bot (" + (why || "nothing came back") + "). " +
+        if (!/cancelled/.test(why)) rynBotNotice("No Cloudflare check for the bot (" + (why || "nothing came back") + "). " +
           (/answered|timeout|timed out/.test(why) ? "When the check box shows, tick it — then add the bot again." : "Add the bot again in a moment."));
         throw new Error("no captcha token: " + why);
       }
@@ -1657,11 +1973,12 @@ window.grbtp = 35;
        * was made for as `b=` — a socket without it is a client from before
        * the update. The ticket is the bundle's own flow, line for line; like
        * the bundle, a /join that is down falls back to the raw token. Bots
-       * join as guests: they do not carry the account you are signed in to. */
+       * join as guests: they do not carry the account you are signed in to.
+       * The host is the server's name alone, as the bundle and Glotus send
+       * it. */
       if (typeof token === "string" && token.indexOf("cf:") === 0) {
-        const host = new URL(href).host;
-        did = RynBotDevices.take();
-        let joined = await rynJoinTicket(host, token.slice(3), did);
+        const host = new URL(href).hostname;
+        let joined = await rynJoinTicket(host, token.slice(3));
         // Too many joins at once: wait, and offer a new token (one that has
         // been offered is spent, whatever the answer was).
         for (let retry = 1; joined.error === "busy" && retry <= 2; retry++) {
@@ -1669,25 +1986,34 @@ window.grbtp = 35;
           await new Promise(resolve => setTimeout(resolve, 3e3 * retry));
           let again = null;
           try {
-            again = await generateTurnstileToken();
+            again = await verify();
           } catch (_) {}
           if (!again) break;
-          joined = await rynJoinTicket(host, again, did);
-        }
-        if (joined.did && joined.did !== did) {
-          RynBotDevices.release(did);
-          did = joined.did;
-          RynBotDevices.keep(did);
+          joined = await rynJoinTicket(host, again);
         }
         if (joined.ticket) {
           token = joined.ticket;
         } else if (joined.error !== "network") {
-          RynBotDevices.release(did);
-          rynBotNotice(RYN_JOIN_REFUSED[joined.error] || "The join API refused this bot (" + joined.error + ").");
+          rynBotNotice((RYN_JOIN_REFUSED[joined.error] || "The join API refused this bot (" + joined.error + ").") +
+            (joined.status ? " [HTTP " + joined.status + "]" : ""));
           throw new Error("join refused: " + joined.error);
+        } else if (joined.status) {
+          // Not an answer the bundle reads: like the bundle, it goes on with
+          // the raw token — and says what came back, in case that fails too.
+          try {
+            console.warn("[RYN BOT] /join answered HTTP " + joined.status + "; connecting with the Cloudflare token itself, as the game does");
+          } catch (_) {}
         }
         // "network": like the bundle, connect with the raw token
       }
+      // A pinned server's session needs moomoo-protocol (rynProtocolReady).
+      try {
+        if (!await rynProtocolReady()) {
+          try {
+            console.warn("[RYN BOT] moomoo-protocol is not loaded; a pinned server will refuse this bot");
+          } catch (_) {}
+        }
+      } catch (_) {}
       // The build the server wants is on the player's own socket URL — the
       // game put it there — so it is read from there first.
       let buildId = null;
@@ -1716,11 +2042,6 @@ window.grbtp = 35;
     }
     ws.binaryType = "arraybuffer";
     ws._rynPooledToken = pooled;
-    // The bot's device id is its own until this socket closes.
-    if (did) {
-      ws._rynDid = did;
-      ws.addEventListener("close", () => RynBotDevices.release(did));
-    }
     return ws;
   };
   const createSocket_default = createSocket;
@@ -3187,6 +3508,7 @@ window.grbtp = 35;
     defaultSalt = 1;
     sigBytes = 6;
     mode = 1;
+    serversVersion = null;
     learned = false;
     // Arithmetic the obfuscator writes constants as ("-14*-489+50*200+-16829").
     _num(expr) {
@@ -3204,6 +3526,10 @@ window.grbtp = 35;
       try {
         const key = /sitekey:[\w$]+/.test(text) && /"(0x4[\w-]{18,40})"/.exec(text);
         if (key && rynGameSitekey === null) rynGameSitekey = key[1];
+      } catch (e) {}
+      try {
+        const list = /\/servers\?v=([\d.]+)/.exec(text);
+        if (list) this.serversVersion = list[1];
       } catch (e) {}
       try {
         const c2s = /([\w$]+)=\[("M","D","9"(?:,"[^"\\]{1,3}")*)\],([\w$]+)=([-+*\d\s]+)[,;]/.exec(text);
@@ -3568,7 +3894,7 @@ window.grbtp = 35;
   const Navbar_default = "<div id=\"navbar-container\">\n  <div class=\"rail-brand\">\n    <span class=\"rail-mark\">RYN</span>\n    <span class=\"rail-sub\">Type 2</span>\n  </div>\n\n  <div id=\"ryn-search-wrap\">\n    <input id=\"ryn-search-input\" type=\"text\" placeholder=\"Search settings\" autocomplete=\"off\" spellcheck=\"false\">\n    <span id=\"ryn-search-clear\" title=\"Clear\">&#10005;</span>\n    <div id=\"ryn-search-dropdown\"></div>\n  </div>\n\n  <div class=\"rail-label\">Categories</div>\n  <nav>\n    <button data-id=\"1\" class=\"open-menu active\"><span class=\"nav-index\">01</span><span class=\"nav-label\">Keybinds</span></button>\n    <button data-id=\"3\" class=\"open-menu\"><span class=\"nav-index\">02</span><span class=\"nav-label\">Visual</span></button>\n    <button data-id=\"2\" class=\"open-menu\"><span class=\"nav-index\">03</span><span class=\"nav-label\">Combat</span></button>\n    <button data-id=\"4\" class=\"open-menu\"><span class=\"nav-index\">04</span><span class=\"nav-label\">Misc</span></button>\n    <button data-id=\"7\" class=\"open-menu\"><span class=\"nav-index\">05</span><span class=\"nav-label\">Music</span></button>\n    <button data-id=\"5\" class=\"open-menu\"><span class=\"nav-index\">06</span><span class=\"nav-label\">Bots</span></button>\n  </nav>\n\n  <div class=\"rail-label\">In this category</div>\n  <div id=\"nav-outline\"></div>\n\n  <div class=\"rail-foot\">\n    <span id=\"ryn-version\">Ryn Type 2</span>\n    <svg id=\"close-button\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" title=\"Close menu\">\n      <line x1=\"5\" y1=\"5\" x2=\"19\" y2=\"19\" stroke-linecap=\"round\"/>\n      <line x1=\"19\" y1=\"5\" x2=\"5\" y2=\"19\" stroke-linecap=\"round\"/>\n    </svg>\n  </div>\n</div>";
   const Devtool_default = "";
   const Keybinds_default = "<div class=\"menu-page opened\" data-id=\"1\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Keybinds</h1>\n        <p class=\"page-description\">Click a key to start editing, then press the key or mouse button you want. Backspace clears a binding. A key used twice is marked as a conflict on both rows.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Items &amp; Weapons<span class=\"sec-sub\">Hotbar placement and the weapon slots.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Food</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_food\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Wall</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_wall\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spike\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Windmill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_windmill\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Farm</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_farm\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Trap</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_trap\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Turret</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_turret\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spawn</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spawn\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Client<span class=\"sec-sub\">Opening this menu and firing the instakill sequence.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Menu</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_toggleMenu\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Instakill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_instakill\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Chat Log</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_chatLogKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Quick Actions<span class=\"sec-sub\">One-press build patterns and on/off switches for the automations.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Quad Spikes</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_fourSpikes\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Quad Traps</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_fourTraps\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Boost Spike Rush</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_boostSpikes\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Automill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoMillKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Dash</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_dashMovementKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Velocity Tick Spacing (hold)</span>\n                    <span class=\"opt-desc\">Hold to be walked back onto the purple mark, the range Velocity Tick fires at. Held, not toggled &mdash; let go and your feet are yours again. The tick itself still fires on its own once you are standing in the band.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_velocityTickSpacingKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Auto Grind</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoGrindKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Autoplacer</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoplacerKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Controls<span class=\"sec-sub\">Everything that commands the bots you have connected.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spawn Bot</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spawnBot\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Kill All Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_killAllBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Hold Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_holdBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Release Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_releaseBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Bot Auto-Attack</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAutoAttack\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Auto Farm</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAutoFarm\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Repel Alts</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_repelAlts\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Bot Random Movement</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_scatterBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Avoid Shield Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAvoidShieldKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Volley Fire</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botVolleyKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Freeze Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_freezeBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Lock bot position</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_lockBotPosition\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n    <div class=\"section\">\n        <div class=\"section-title\">Possession<span class=\"sec-sub\">Which of your characters you are controlling. These three keys are taken before anything else sees them &mdash; the game maps the arrows to movement, so letting one through would walk the character you just left.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Next character</span>\n                    <span class=\"opt-desc\">Steps forward through you and every bot that is in the game.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessNext\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Previous character</span>\n                    <span class=\"opt-desc\">The same ring, backwards.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessPrev\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Back to your own character</span>\n                    <span class=\"opt-desc\">Jumps straight back to you from wherever you are.</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessMain\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n</div>";
-  const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Combat</h1>\n        <p class=\"page-description\">Every automation the client runs during a fight, ordered by the moment it fires: the kill sequence first, then how it places, how it survives, and what it does with the rest of the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Kill Sequences<span class=\"sec-sub\">Timed weapon and hat chains that try to finish a target outright.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_toolSpearInsta\">Tool Spear Insta</label>\n                    <span class=\"opt-desc\">Tool hammer into polearm burst.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_toolSpearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeGearInsta\">Spike Gear Insta</label>\n                    <span class=\"opt-desc\">Spike placement combined with a gear swap on the same tick.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeGearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\n                    <span class=\"opt-desc\">Ranged finisher chaining musket and bow shots.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_musketBowInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Sync<span class=\"sec-sub\">Landing separate sources of damage on the same server tick.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\n                    <span class=\"opt-desc\">Lines up your hits with whatever else is about to damage the target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\n                    <span class=\"opt-desc\">Times your swing to a turret shot landing.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_velocityTick\">Velocity Tick</label>\n                    <span class=\"opt-desc\">Turret shot and diamond polearm landing together, off a charge into the target. It fires by itself once you are standing in the range the two sync at, 220 to 245 units &mdash; the purple mark on the target is that spot. To be walked onto the mark, hold the Velocity Tick Spacing key (Keybinds &rarr; Quick Actions); it never takes your movement on its own. Needs turret gear, a bull helmet and a diamond polearm.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_velocityTick\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSync\">Spike sync</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSyncHammer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeSync2\">Spike Sync 2</label>\n                    <span class=\"opt-desc\">Runs with Autopush. While a shove is walking a trapped target onto a spike - the purple line - Spike KB is held, because its knockback moves them away from you, which is off the line the shove is walking them down. Then the tick they actually touch the spike, the swing goes out on that same tick: they are trapped, pinned against it and already taking its damage, so the hit lands with the spike's own. The turret shot follows on the next tick. Like Spike KB, but where Spike KB fires on a knockback that would put them in a spike, this waits until they are in it - and it needs the shove to have been live, so an enemy merely standing near a spike is still Spike KB's. Runs on this switch alone; Velocity Tick keeps its own conditions and turning it off does not affect this. Needs Autopush on, and a diamond polearm with the turret.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync2\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Placement<span class=\"sec-sub\">Where spikes and traps go, and how fast they get replaced.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacer\">Autoplacer</label>\n                    <span class=\"opt-desc\">Keeps spikes going down around you without holding the key.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoplacer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoplacer radius</span>\n                    <span class=\"opt-desc\">How far from you the autoplacer is allowed to build.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Placer scanners</span>\n                    <span class=\"opt-desc\">How many spots the autoplacer looks at once. The first one is aimed at the enemy; each of the others owns its own slice of the ring around you and never builds in another's, so the open ground on your other sides gets used instead of ignored. 1 is the enemy-facing scanner alone.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerScanners\" type=\"range\" step=\"1\" min=\"1\" max=\"6\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacerResolution\">Placer resolution</label>\n                    <span class=\"opt-desc\">How finely the autoplacer cuts the ring around you when it looks for ground. A spike on the ring blocks about 153 degrees of it, so what is left is a few arcs and the slots between builds are thin - finer steps find slots a coarser pass walks straight past. One step moves the landing point 13.8 units at 36, 6.9 at 72, 3.4 at 144 and 2.5 at 200, and the furthest a wanted direction can sit from a sample is half of that. 144 is the resolution this client shipped on and reproduces it exactly; 200 is the default. Nothing else changes between them - same validation, same collision solve, same scoring, same prediction, same scheduler. Legality is solved for the whole ring at once rather than asked one angle at a time, and the sin/cos table is built once for the whole session, so the finer settings cost no trigonometry and no allocation per tick. Preplace and replace draw candidates from this same table, so raising it makes the prediction finer as well as the placement. Used flat, every tick.</span>\n                </div>\n                <select id=\"_autoplacerResolution\" class=\"ryn-select\">\n                    <option value=\"36\">36 - coarse</option>\n                    <option value=\"72\">72 - balanced</option>\n                    <option value=\"144\">144 - original</option>\n                    <option value=\"200\">200 - default</option>\n                </select>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_prePlace\">Preplace</label>\n                    <span class=\"opt-desc\">Puts the next spike down before the target arrives at it.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_prePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spamPrePlace\">Spam Preplace</label>\n                    <span class=\"opt-desc\">Sends a preplace on its forecast rather than waiting for the break it is predicting, and lets one refused for being a tick early try the same slot again on the next tick instead of being locked out of it by its own send. This is what takes an enemy build's ground on the tick it falls: the placement is already at the server, instead of starting a round trip when the deletion packet arrives. Costs packets on the guesses that miss.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spamPrePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <span class=\"option-title\">Retrap Resend</span>\n                        <span class=\"opt-desc\">Extra sends of the same replacement while an enemy is breaking out of your trap, timed into the rest of the tick and offset for your ping. It starts early and gets louder: four swings out it is already holding the slot with one send, two swings out it spends half, and on the last tick all of them, swept back across the window from a ping-compensated anchor so the same claim exists at several moments rather than one. The trap they are standing in is also looked further ahead than any other build, so the replacement is booked - and the ground reserved - well before the break instead of arriving to contest it afterwards. It is the same claim sent again, not a second placement, so it takes no extra ground and files nothing; only the packets are new. Worth it here and nowhere else: a trapped enemy cannot walk away from the ground being fought over, so this is the one forecast their movement cannot spoil, and the trap they are breaking is the most valuable slot on the board. 0 turns it off. Needs Spam Preplace on.</span>\n                    </div>\n                    <label class=\"slider\">\n                        <span class=\"slider-value\"></span>\n                        <input id=\"_retrapResend\" type=\"range\" step=\"1\" min=\"0\" max=\"6\">\n                    </label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_replace\">Replace</label>\n                    <span class=\"opt-desc\">Rebuilds a broken spike the moment it goes down.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_replace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <span class=\"option-title\">Replace Burst</span>\n                        <span class=\"opt-desc\">How many builds one deletion may put down. A freed slot is ground, not a point, and one build is one thing to refuse - the enemy takes the slot beside it and the ground is theirs anyway. Several non-overlapping builds around the same opening cannot all be answered. This raises only the ceiling: the value floor, the reservation ledger, the per-item caps, the non-overlap rule and the packet budget still apply to every build in the burst, so an opening worth one build still gets one. Only a deletion plans this deep; an ordinary tick is unchanged.</span>\n                    </div>\n                    <label class=\"slider\">\n                        <span class=\"slider-value\"></span>\n                        <input id=\"_replaceBurst\" type=\"range\" step=\"1\" min=\"3\" max=\"6\">\n                    </label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\n                    <span class=\"opt-desc\">Builds to block an incoming placement against you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_placementDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapKB\">Trap KB</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapKB\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeKB\">Spike KB</label>\n                    <span class=\"opt-desc\">Swings the primary when the knockback would put them in one of your spikes, or when they are already standing in one. Katana or polearm.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeKB\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Healing, shielding and the hats that keep you alive.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoheal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoShield\">Auto Shield</label>\n                    <span class=\"opt-desc\">Raises the shield against incoming melee.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_rangedShield\">Ranged Shield</label>\n                    <span class=\"opt-desc\">Also shields against projectiles.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_rangedShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_empDefense\">Emp Defense</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_empDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoemp\">Auto emp</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoemp\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_soldierDefault\">Soldier default</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_soldierDefault\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeSoldier\">Safe Soldier</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeSoldier\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeWalk\">Safe walk</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeWalk\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Anti Systems<span class=\"sec-sub\">Reactions to what other players and the world do to you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\n                    <span class=\"opt-desc\">Reacts to an enemy closing in on you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_antienemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antianimal\">Anti animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antianimal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antispike\">Anti spike</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antispike\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiSpikePush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiRetrap\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you wear, and when it changes.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\n                    <span class=\"opt-desc\">Swaps to the hat that suits the biome you are standing in.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_biomehats\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\n                    <span class=\"opt-desc\">Picks gear from the threat in front of you rather than a fixed set.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_adaptiveGearSwitching\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_tailPriority\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_cowboyWhenSafe\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\n                    <span class=\"opt-desc\">Pushes a target toward your own spikes.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto Push Range</span>\n                    <span class=\"opt-desc\">How close a target has to be before autopush engages.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_trapStandoff\">Trap Standoff</label>\n                    <span class=\"opt-desc\">Keeps you off an enemy held in your trap. Your body is the only thing that can push a trapped player out - a weapon hit cannot, because the trap zeroes their velocity, but walking into them moves their position directly. Blocks only the part of your movement that closes the gap, so you still circle and reposition normally. Auto Push does the opposite on purpose and takes priority when it is on.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_trapStandoff\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Trap Standoff Distance</span>\n                    <span class=\"opt-desc\">The closest you will get. The game starts pushing at 70, so 70 and up stops the push outright; under 70 you still overlap and still shove them, and the number only caps how deep the overlap gets. Holding a direction against the line orbits outward a little before turning back in, so you sit between this number and about 28 above it - and a melee swing reaches weapon range plus 63, which is 128 for the shortest primary in the game, so every weapon stays in reach across the whole slider.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_trapStandoffRange\" type=\"range\" step=\"1\" min=\"50\" max=\"90\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\n                    <span class=\"opt-desc\">Short burst movement instead of a steady walk.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_dashMovement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\n                    <span class=\"opt-desc\">Breaks the structures standing between you and a target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autobreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_breakPosition\">Break Position</label>\n                        <span class=\"opt-desc\">Which trap Autobreak takes. Inside: only the trap you are caught in. Outside: only traps you are not in. Spikes break the same either way.</span>\n                    </div>\n                    <select id=\"_breakPosition\" class=\"ryn-select\">\n                        <option value=\"inside\">Inside</option>\n                        <option value=\"outside\">Outside</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_automill\">Automill</label>\n                    <span class=\"opt-desc\">Leaves windmills behind you while you move.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_automill\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\n                    <span class=\"opt-desc\">Gathers resources on its own when nothing is threatening you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoGrind\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetPrimary\">Grind Until (primary)</label>\n                        <span class=\"opt-desc\">Which variant to take your primary weapon to. Grinding idles once both slots reach their target, and picks straight back up if you raise one.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetPrimary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                        <option value=\"emerald\">Emerald (members)</option>\n                    </select>\n                </div>\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetSecondary\">Grind Until (secondary)</label>\n                        <span class=\"opt-desc\">The same for your secondary. Only the great hammer is ground here, so this does nothing while you carry anything else.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetSecondary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                        <option value=\"emerald\">Emerald (members)</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPlay\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_turretSteal\">Turret steal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSteal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapAnimal\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
+  const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Combat</h1>\n        <p class=\"page-description\">Every automation the client runs during a fight, ordered by the moment it fires: the kill sequence first, then how it places, how it survives, and what it does with the rest of the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Kill Sequences<span class=\"sec-sub\">Timed weapon and hat chains that try to finish a target outright.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_toolSpearInsta\">Tool Spear Insta</label>\n                    <span class=\"opt-desc\">Tool hammer into polearm burst.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_toolSpearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeGearInsta\">Spike Gear Insta</label>\n                    <span class=\"opt-desc\">Spike placement combined with a gear swap on the same tick.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeGearInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\n                    <span class=\"opt-desc\">Ranged finisher chaining musket and bow shots.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_musketBowInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Sync<span class=\"sec-sub\">Landing separate sources of damage on the same server tick.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\n                    <span class=\"opt-desc\">Lines up your hits with whatever else is about to damage the target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\n                    <span class=\"opt-desc\">Times your swing to a turret shot landing.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_velocityTick\">Velocity Tick</label>\n                    <span class=\"opt-desc\">Turret shot and diamond polearm landing together, off a charge into the target. It fires by itself once you are standing in the range the two sync at, 220 to 245 units &mdash; the purple mark on the target is that spot. To be walked onto the mark, hold the Velocity Tick Spacing key (Keybinds &rarr; Quick Actions); it never takes your movement on its own. Needs turret gear, a bull helmet and a diamond polearm.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_velocityTick\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSync\">Spike sync</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSyncHammer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeSync2\">Spike Sync 2</label>\n                    <span class=\"opt-desc\">Runs with Autopush. While a shove is walking a trapped target onto a spike - the purple line - Spike KB is held, because its knockback moves them away from you, which is off the line the shove is walking them down. Then the tick they actually touch the spike, the swing goes out on that same tick: they are trapped, pinned against it and already taking its damage, so the hit lands with the spike's own. The turret shot follows on the next tick. Like Spike KB, but where Spike KB fires on a knockback that would put them in a spike, this waits until they are in it - and it needs the shove to have been live, so an enemy merely standing near a spike is still Spike KB's. Runs on this switch alone; Velocity Tick keeps its own conditions and turning it off does not affect this. Needs Autopush on, and a diamond polearm with the turret.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync2\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Placement<span class=\"sec-sub\">Where spikes and traps go, and how fast they get replaced.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacer\">Autoplacer</label>\n                    <span class=\"opt-desc\">Keeps spikes going down around you without holding the key.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoplacer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoplacer radius</span>\n                    <span class=\"opt-desc\">How far from you the autoplacer is allowed to build.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Placer scanners</span>\n                    <span class=\"opt-desc\">How many spots the autoplacer looks at once. The first one is aimed at the enemy; each of the others owns its own slice of the ring around you and never builds in another's, so the open ground on your other sides gets used instead of ignored. 1 is the enemy-facing scanner alone.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerScanners\" type=\"range\" step=\"1\" min=\"1\" max=\"6\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacerResolution\">Placer resolution</label>\n                    <span class=\"opt-desc\">How finely the autoplacer cuts the ring around you when it looks for ground. A spike on the ring blocks about 153 degrees of it, so what is left is a few arcs and the slots between builds are thin - finer steps find slots a coarser pass walks straight past. One step moves the landing point 13.8 units at 36, 6.9 at 72, 3.4 at 144 and 2.5 at 200, and the furthest a wanted direction can sit from a sample is half of that. 144 is the resolution this client shipped on and reproduces it exactly; 200 is the default. Nothing else changes between them - same validation, same collision solve, same scoring, same prediction, same scheduler. Legality is solved for the whole ring at once rather than asked one angle at a time, and the sin/cos table is built once for the whole session, so the finer settings cost no trigonometry and no allocation per tick. Preplace and replace draw candidates from this same table, so raising it makes the prediction finer as well as the placement. Used flat, every tick.</span>\n                </div>\n                <select id=\"_autoplacerResolution\" class=\"ryn-select\">\n                    <option value=\"36\">36 - coarse</option>\n                    <option value=\"72\">72 - balanced</option>\n                    <option value=\"144\">144 - original</option>\n                    <option value=\"200\">200 - default</option>\n                </select>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_prePlace\">Preplace</label>\n                    <span class=\"opt-desc\">Puts the next spike down before the target arrives at it.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_prePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spamPrePlace\">Spam Preplace</label>\n                    <span class=\"opt-desc\">Sends a preplace on its forecast rather than waiting for the break it is predicting, and lets one refused for being a tick early try the same slot again on the next tick instead of being locked out of it by its own send. This is what takes an enemy build's ground on the tick it falls: the placement is already at the server, instead of starting a round trip when the deletion packet arrives. Costs packets on the guesses that miss.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spamPrePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <span class=\"option-title\">Retrap Resend</span>\n                        <span class=\"opt-desc\">Extra sends of the same replacement while an enemy is breaking out of your trap, timed into the rest of the tick and offset for your ping. It starts early and gets louder: four swings out it is already holding the slot with one send, two swings out it spends half, and on the last tick all of them, swept back across the window from a ping-compensated anchor so the same claim exists at several moments rather than one. The trap they are standing in is also looked further ahead than any other build, so the replacement is booked - and the ground reserved - well before the break instead of arriving to contest it afterwards. It is the same claim sent again, not a second placement, so it takes no extra ground and files nothing; only the packets are new. Worth it here and nowhere else: a trapped enemy cannot walk away from the ground being fought over, so this is the one forecast their movement cannot spoil, and the trap they are breaking is the most valuable slot on the board. 0 turns it off. Needs Spam Preplace on.</span>\n                    </div>\n                    <label class=\"slider\">\n                        <span class=\"slider-value\"></span>\n                        <input id=\"_retrapResend\" type=\"range\" step=\"1\" min=\"0\" max=\"6\">\n                    </label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_replace\">Replace</label>\n                    <span class=\"opt-desc\">Rebuilds a broken spike the moment it goes down.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_replace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <span class=\"option-title\">Replace Burst</span>\n                        <span class=\"opt-desc\">How many builds one deletion may put down. A freed slot is ground, not a point, and one build is one thing to refuse - the enemy takes the slot beside it and the ground is theirs anyway. Several non-overlapping builds around the same opening cannot all be answered. This raises only the ceiling: the value floor, the reservation ledger, the per-item caps, the non-overlap rule and the packet budget still apply to every build in the burst, so an opening worth one build still gets one. Only a deletion plans this deep; an ordinary tick is unchanged.</span>\n                    </div>\n                    <label class=\"slider\">\n                        <span class=\"slider-value\"></span>\n                        <input id=\"_replaceBurst\" type=\"range\" step=\"1\" min=\"3\" max=\"6\">\n                    </label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\n                    <span class=\"opt-desc\">Builds to block an incoming placement against you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_placementDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapKB\">Trap KB</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapKB\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeKB\">Spike KB</label>\n                    <span class=\"opt-desc\">Swings the primary when the knockback would put them in one of your spikes, or when they are already standing in one. Katana or polearm.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeKB\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Healing, shielding and the hats that keep you alive.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoheal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoShield\">Auto Shield</label>\n                    <span class=\"opt-desc\">Raises the shield against incoming melee.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_rangedShield\">Ranged Shield</label>\n                    <span class=\"opt-desc\">Also shields against projectiles.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_rangedShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_empDefense\">Emp Defense</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_empDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoemp\">Auto emp</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoemp\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_soldierDefault\">Soldier default</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_soldierDefault\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeSoldier\">Safe Soldier</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeSoldier\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_frostHelmInSnow\">Frost Helm in snow</label><span class=\"opt-desc\">In the snow biome, wear Frost Helm wherever soldier would go on.</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_frostHelmInSnow\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeWalk\">Safe walk</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeWalk\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Anti Systems<span class=\"sec-sub\">Reactions to what other players and the world do to you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\n                    <span class=\"opt-desc\">Reacts to an enemy closing in on you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_antienemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antianimal\">Anti animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antianimal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antispike\">Anti spike</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antispike\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiSpikePush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiRetrap\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you wear, and when it changes.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\n                    <span class=\"opt-desc\">Swaps to the hat that suits the biome you are standing in.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_biomehats\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\n                    <span class=\"opt-desc\">Picks gear from the threat in front of you rather than a fixed set.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_adaptiveGearSwitching\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_tailPriority\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_cowboyWhenSafe\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\n                    <span class=\"opt-desc\">Pushes a target toward your own spikes.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto Push Range</span>\n                    <span class=\"opt-desc\">How close a target has to be before autopush engages.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_trapStandoff\">Trap Standoff</label>\n                    <span class=\"opt-desc\">Keeps you off an enemy held in your trap. Your body is the only thing that can push a trapped player out - a weapon hit cannot, because the trap zeroes their velocity, but walking into them moves their position directly. Blocks only the part of your movement that closes the gap, so you still circle and reposition normally. Auto Push does the opposite on purpose and takes priority when it is on.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_trapStandoff\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Trap Standoff Distance</span>\n                    <span class=\"opt-desc\">The closest you will get. The game starts pushing at 70, so 70 and up stops the push outright; under 70 you still overlap and still shove them, and the number only caps how deep the overlap gets. Holding a direction against the line orbits outward a little before turning back in, so you sit between this number and about 28 above it - and a melee swing reaches weapon range plus 63, which is 128 for the shortest primary in the game, so every weapon stays in reach across the whole slider.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_trapStandoffRange\" type=\"range\" step=\"1\" min=\"50\" max=\"90\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\n                    <span class=\"opt-desc\">Short burst movement instead of a steady walk.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_dashMovement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\n                    <span class=\"opt-desc\">Breaks the structures standing between you and a target.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autobreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_breakPosition\">Break Position</label>\n                        <span class=\"opt-desc\">Which trap Autobreak takes. Inside: only the trap you are caught in. Outside: only traps you are not in. Spikes break the same either way.</span>\n                    </div>\n                    <select id=\"_breakPosition\" class=\"ryn-select\">\n                        <option value=\"inside\">Inside</option>\n                        <option value=\"outside\">Outside</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_automill\">Automill</label>\n                    <span class=\"opt-desc\">Leaves windmills behind you while you move.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_automill\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\n                    <span class=\"opt-desc\">Gathers resources on its own when nothing is threatening you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoGrind\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetPrimary\">Grind Until (primary)</label>\n                        <span class=\"opt-desc\">Which variant to take your primary weapon to. Grinding idles once both slots reach their target, and picks straight back up if you raise one.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetPrimary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                        <option value=\"emerald\">Emerald (members)</option>\n                    </select>\n                </div>\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetSecondary\">Grind Until (secondary)</label>\n                        <span class=\"opt-desc\">The same for your secondary. Only the great hammer is ground here, so this does nothing while you carry anything else.</span>\n                    </div>\n                    <select id=\"_autoGrindTargetSecondary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                        <option value=\"emerald\">Emerald (members)</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPlay\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_turretSteal\">Turret steal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSteal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapAnimal\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
   // ==========================================================================
   // Kill animation styles — the one list
   //
@@ -5201,8 +5527,8 @@ window.grbtp = 35;
       this.potentialDamage += this.client.ProjectileManager.totalDamage;
       const actualSpikeDamage = this.potentialSpikeDamage;
       const potentialDamage = this.potentialDamage + actualSpikeDamage;
-      const soldierDefense = Hats[6].dmgMult;
-      const soldierMult = myPlayer.hatID === 6 ? soldierDefense : 1;
+      const soldierDefense = Hats[this.client._ModuleHandler.defenseHat()].dmgMult;
+      const soldierMult = myPlayer.hatID === 6 || myPlayer.hatID === 60 ? Hats[myPlayer.hatID].dmgMult : 1;
       if (potentialDamage * soldierDefense >= myPlayer.currentHealth) {
         this.detectedDangerEnemy = true;
       } else if (potentialDamage * soldierMult >= myPlayer.currentHealth) {
@@ -6145,11 +6471,11 @@ window.grbtp = 35;
           this.spikeSyncThreat = true;
         }
       }
-      const soldierDefense = Hats[6].dmgMult;
+      const soldierDefense = Hats[this.client._ModuleHandler.defenseHat()].dmgMult;
       if (this.potentialDamage * soldierDefense >= myPlayer.currentHealth) {
         return 3;
       }
-      const soldierMult = myPlayer.hatID === 6 ? soldierDefense : 1;
+      const soldierMult = myPlayer.hatID === 6 || myPlayer.hatID === 60 ? Hats[myPlayer.hatID].dmgMult : 1;
       if (this.potentialDamage * soldierMult >= myPlayer.currentHealth) {
         return 2;
       }
@@ -6609,9 +6935,100 @@ window.grbtp = 35;
      * glyphs — one character per fillText, tinted in the shader — so the
      * fillText patch that matched whole names never matches again. The colour
      * is decided where the game decides it instead (nameColor hook). */
+    // The colour for a name drawn as `text`, when only the text is known.
+    _nameColorByText(text) {
+      try {
+        if (Settings_default._myNameColor && Settings_default._myNameColorValue && this._isMyName(text)) return Settings_default._myNameColorValue;
+        if (RYN_IS_OWNER_BUILD && Settings_default._markRynPlayers && RYNPresence.hasName(text)) return RYN_RED_NAME;
+      } catch (e) {}
+      return null;
+    }
+    // Your name as the server knows it, or as you typed it to play.
+    _isMyName(text) {
+      const me = AC() && AC().myPlayer;
+      const nick = me && me.nickname;
+      if (typeof nick === "string" && nick !== "") return text === nick;
+      try {
+        const typed = (localStorage.getItem("moo_name") || "").trim();
+        return typed !== "" && text === typed;
+      } catch (e) {
+        return false;
+      }
+    }
+    // When a name of yours was last drawn on the overlay from the game's own
+    // text call (M.text in _adopt); renderMyName stands in while it is not.
+    _nameTopAt=0;
+    _drawName(ctx, str, x, y, size, style) {
+      ctx.save();
+      ctx.font = size + "px Hammersmith One";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.lineJoin = "round";
+      if (style.outline) {
+        ctx.strokeStyle = style.outline;
+        ctx.lineWidth = style.outlineWidth || 8;
+        ctx.strokeText(str, x, y);
+      }
+      ctx.fillStyle = style.color;
+      ctx.fillText(str, x, y);
+      ctx.restore();
+    }
+    /* Your name in your colour on the top layer, from the player itself, for
+     * a build whose renderer was never seen drawing it (no M.text call with
+     * your name in the last few frames). Laid out the way the game lays out a
+     * name: the clan tag first, at seven tenths of the size, the two centred
+     * together over the player. */
+    renderMyName(ctx, entity) {
+      if (!Settings_default._myNameColor || !Settings_default._myNameColorValue || !entity || !entity.isPlayer) return;
+      if (performance.now() - this._nameTopAt < 300) return;
+      const me = AC() && AC().myPlayer;
+      if (!me || entity.sid !== me.id) return;
+      const name = typeof entity.name === "string" && entity.name !== "" ? entity.name : me.nickname;
+      if (typeof name !== "string" || name === "") return;
+      const team = entity.team, clan = entity.clan;
+      const tag = !clan ? team ? "[" + team + "]" : "" : team == clan ? "[" + clan + "]" : "[" + (team || "solo") + ":" + clan + "]";
+      const size = entity.nameScale || 30, tagSize = size * .7;
+      const measure = (text, px) => {
+        const M = this._gl && this._gl.M;
+        try {
+          const w = M && typeof M.measureText === "function" ? M.measureText(text, px) : null;
+          if (typeof w === "number" && isFinite(w)) return w;
+          if (w && typeof w.width === "number") return w.width;
+        } catch (e) {}
+        ctx.save();
+        ctx.font = px + "px Hammersmith One";
+        const m = ctx.measureText(text).width;
+        ctx.restore();
+        return m;
+      };
+      const before = tag ? measure(tag + " ", tagSize) : 0;
+      const all = before + measure(name, size);
+      const offset = RYN._offset;
+      const nameY = RYN._config && typeof RYN._config.nameY === "number" ? RYN._config.nameY : Config_default.nameY;
+      const left = entity.x - offset.x - all / 2;
+      this._drawName(ctx, name, left + before + (all - before) / 2, entity.y - offset.y - entity.scale - nameY, size, {
+        color: Settings_default._myNameColorValue,
+        outline: "#3d3f42",
+        outlineWidth: entity.nameScale ? 11 : 8
+      });
+    }
+    // Black at no more than 15% all told: the ground grid's stroke.
+    _faintBlack(style, alpha) {
+      const a = typeof alpha === "number" ? alpha : 1;
+      if (!(a > 0)) return false;
+      const s = String(style).replace(/\s+/g, "").toLowerCase();
+      let own = null;
+      if (s === "#000" || s === "#000000" || s === "black" || s === "rgb(0,0,0)") own = 1;
+      else {
+        const m = /^rgba\(0,0,0,([\d.]+)\)$/.exec(s) || /^#000000([0-9a-f]{2})$/.exec(s);
+        if (m) own = m[0][0] === "#" ? parseInt(m[1], 16) / 255 : parseFloat(m[1]);
+      }
+      return own !== null && own * a <= .15;
+    }
     _nameColor(player, me, color) {
       try {
-        if (player === me && Settings_default._myNameColor && Settings_default._myNameColorValue) {
+        const isMe = player === me || !!(player && me && player.sid != null && player.sid === me.sid);
+        if (isMe && Settings_default._myNameColor && Settings_default._myNameColorValue) {
           return Settings_default._myNameColorValue;
         }
         if (RYN_IS_OWNER_BUILD && Settings_default._markRynPlayers && player && player.name && RYNPresence.hasName(player.name)) {
@@ -6831,12 +7248,68 @@ window.grbtp = 35;
         // would stay blank for good.
         if (typeof HTMLImageElement === "function" && img instanceof HTMLImageElement && !(img.complete && img.naturalWidth)) return;
         if (!img.width || !img.height) return;
+        // Marked when the renderer refused it (a tainted or broken image), and
+        // cleared again when its src changes.
+        if (img.__rynBad === true) return;
         if (arguments.length > 5) {
           const o = sync();
           return o ? o.drawImage.apply(o, arguments) : void 0;
         }
-        return orig.drawImage.apply(M, arguments);
+        try {
+          return orig.drawImage.apply(M, arguments);
+        } catch (e) {
+          try {
+            img.__rynBad = true;
+          } catch (_) {}
+        }
       };
+      /* The ground grid, gone — the lines, not the code that draws them. They
+       * are black at a few percent, dead straight and long, across the whole
+       * view, and nothing else the game draws is all of that. The RenderGrid
+       * hook takes the loops out of the fixture build; the live build drew its
+       * grid on regardless (your screenshot: one pixel in nine of the grass
+       * was grid), so this is what removes it there, whatever shape its code
+       * has taken. */
+      const origLine = typeof M.line === "function" ? M.line : null;
+      if (origLine !== null) {
+        M.line = function(x1, y1, x2, y2) {
+          if ((x1 === x2 || y1 === y2) && Math.abs(x2 - x1) + Math.abs(y2 - y1) >= 300 && Renderer._faintBlack(M.strokeStyle, M.globalAlpha)) return;
+          return origLine.apply(this, arguments);
+        };
+      }
+      /* Names: your own in your colour, RYN players' marked — and on top.
+       *
+       * The nameColor hook does this where the game picks a name's colour;
+       * on the live build it found nothing, and v2.5.1's fallback here only
+       * ran while the hook was silent and only for a style with an outline,
+       * and your name stayed white. Now every name the renderer is given that
+       * is yours is drawn in your colour, whatever the hook did, and drawn a
+       * second time on RYN's overlay, exactly where the game put it: above
+       * everything the game draws, so nothing of the game's can sit on top
+       * of it. */
+      const origText = typeof M.text === "function" ? M.text : null;
+      if (origText !== null) {
+        M.text = function(str, x, y, size, style) {
+          if (typeof str === "string" && str !== "") {
+            const color = Renderer._nameColorByText(str);
+            if (color !== null) {
+              const tinted = Object.assign({}, style !== null && typeof style === "object" ? style : {}, {
+                color: color
+              });
+              const out = origText.call(this, str, x, y, size, tinted);
+              try {
+                const o = sync();
+                if (o !== null) {
+                  Renderer._drawName(o, str, x, y, size, tinted);
+                  Renderer._nameTopAt = performance.now();
+                }
+              } catch (e) {}
+              return out;
+            }
+          }
+          return origText.apply(this, arguments);
+        };
+      }
       M.setLineDash = function(list) {
         writeProp("__dash", Array.isArray(list) ? list.slice() : []);
       };
@@ -8466,6 +8939,7 @@ window.grbtp = 35;
       Renderer_default.renderBar(ctx, entity);
       Renderer_default.renderHP(ctx, entity);
       Renderer_default.renderShame(ctx, entity);
+      Renderer_default.renderMyName(ctx, entity);
     }
     drawHitScale(ctx, entity) {
       if (!Settings_default._weaponHitbox) {
@@ -12122,6 +12596,12 @@ window.grbtp = 35;
           const seed = args[1] >>> 0;
           const keyHex = args[2];
           const pinned = args[4] === 1;
+          /* A bot on a pinned server with no moomoo-protocol: every frame it
+           * sent would be signed with the wrong key and the server would drop
+           * it as "Invalid Connection" with nothing to say why. */
+          if (!this.client.isOwner && pinned && (!enc || !enc.mixKey || enc.salt == null)) {
+            rynBotNotice("The server pins its sessions, and RYN could not load the game's protocol module (moomoo-protocol) to sign the bot's frames. Reload the page and add the bot again.");
+          }
           if (enc && enc.jt !== undefined && keyHex !== undefined && args[1] !== undefined) {
             const baseKey = enc.Ro(keyHex);
             const key = pinned && enc.mixKey ? enc.mixKey(baseKey, seed) : baseKey;
@@ -22766,6 +23246,11 @@ window.grbtp = 35;
           ModuleHandler._rynFiredTick = ModuleHandler.tickCount;
         }
         reloading.resetByType(weaponType);
+      } else if (ModuleHandler.grindHold) {
+        // Pressed once and kept down (Auto Grind); let go on the first tick
+        // nothing holds it, through didReset below.
+        if (!ModuleHandler.mouseHeld) ModuleHandler.attack(this.getAttackAngle());
+        this.didReset = true;
       } else if (!attacking && sentAngle !== 0) {
         ModuleHandler.stopAttack();
         this.didReset = true;
@@ -23065,7 +23550,7 @@ window.grbtp = 35;
       // theirs. Taking the union rather than any one of them makes it sticky:
       // a single-tick dropout in one term cannot flip the accessory, so the
       // wings do not flicker at the edge of soldier's range.
-      const soldierActive = myPlayer.hatID === 6 || ModuleHandler.forceHat === 6 || ModuleHandler.shouldEquipSoldier;
+      const soldierActive = myPlayer.hatID === 6 || myPlayer.hatID === 60 || ModuleHandler.forceHat === 6 || ModuleHandler.shouldEquipSoldier;
       if (soldierActive && useShadow) {
         return 19;
       }
@@ -23128,7 +23613,7 @@ window.grbtp = 35;
       const {current: current, future: future} = myPlayer.pos;
       const {actual: actual} = ModuleHandler.getHatStore();
       const useFlipper = ModuleHandler.canBuy(0, 31);
-      const useSoldier = ModuleHandler.canBuy(0, 6);
+      const useSoldier = ModuleHandler.canBuy(0, 6) || ModuleHandler.canBuy(0, ModuleHandler.defenseHat());
       const useWinter = ModuleHandler.canBuy(0, 15);
       const useActual = ModuleHandler.canBuy(0, actual);
       const useBooster = ModuleHandler.canBuy(0, 12);
@@ -23600,19 +24085,22 @@ window.grbtp = 35;
       return false;
     }
     _spikeLike(value) {
-      const mult = Hats[6].dmgMult;
+      const mult = Hats[6].dmgMult, frost = Hats[60].dmgMult;
       for (let i = 0; i < NS_SPIKE_DAMAGES.length; i++) {
         const base = NS_SPIKE_DAMAGES[i];
-        if (Math.abs(value - base) < NS_EPS || Math.abs(value - base * mult) < NS_EPS) {
+        if (Math.abs(value - base) < NS_EPS || Math.abs(value - base * mult) < NS_EPS || Math.abs(value - base * frost) < NS_EPS) {
           return true;
         }
       }
       return false;
     }
     _reversed(value) {
-      const mult = Hats[6].dmgMult;
+      const mult = Hats[6].dmgMult, frost = Hats[60].dmgMult;
       for (let i = 0; i < NS_SPIKE_DAMAGES.length; i++) {
         const base = NS_SPIKE_DAMAGES[i];
+        if (Math.abs(value - base * frost) < NS_EPS) {
+          return value / frost;
+        }
         if (Math.abs(value - base * mult) < NS_EPS) {
           return value / mult;
         }
@@ -23693,7 +24181,7 @@ window.grbtp = 35;
       }
       if (!this.sawPoison) {
         for (let i = 0; i < this.damages.length; i++) {
-          if (Math.abs(this.damages[i] - NS_POISON_DAMAGE) < NS_EPS || Math.abs(this.damages[i] - NS_POISON_DAMAGE * Hats[6].dmgMult) < NS_EPS) {
+          if (Math.abs(this.damages[i] - NS_POISON_DAMAGE) < NS_EPS || Math.abs(this.damages[i] - NS_POISON_DAMAGE * Hats[6].dmgMult) < NS_EPS || Math.abs(this.damages[i] - NS_POISON_DAMAGE * Hats[60].dmgMult) < NS_EPS) {
             this.sawPoison = true;
             break;
           }
@@ -24062,10 +24550,10 @@ window.grbtp = 35;
       if (this.shouldResetShame && ModuleHandler.canBuy(0, 7)) {
         ModuleHandler.setForceHat(7);
       }
-      if ((this.imTrapped && this.spikeDmgCount > 0 || this.spikeTickAnti) && ModuleHandler.canBuy(0, 6)) {
+      if ((this.imTrapped && this.spikeDmgCount > 0 || this.spikeTickAnti) && ModuleHandler.canBuy(0, ModuleHandler.defenseHat())) {
         ModuleHandler.setForceHat(6);
       }
-      if (this.soldierAnti && ModuleHandler.canBuy(0, 6)) {
+      if (this.soldierAnti && ModuleHandler.canBuy(0, ModuleHandler.defenseHat())) {
         ModuleHandler.soldierAnti = true;
       }
       //     spikeTickAnti = false; shouldResetShame = false;
@@ -24080,8 +24568,8 @@ window.grbtp = 35;
       //     if (currentHat == 7) totalDmgPot += 5;
       //     if (myPlayer.health <= totalDmgPot) healing = true;
       this.currentHat = ModuleHandler.plannedHat();
-      if (this.currentHat === 6) {
-        this.totalDmgPot *= Hats[6].dmgMult;
+      if (this.currentHat === 6 || this.currentHat === 60) {
+        this.totalDmgPot *= Hats[this.currentHat].dmgMult;
       }
       if (this.currentHat === 7) {
         this.totalDmgPot += Math.abs(Hats[7].healthRegen);
@@ -24367,7 +24855,7 @@ window.grbtp = 35;
     // Angel Wings ([1, 13]) is not on this list and is not bought anywhere
     // else: nothing in the client equips it any more, and _equip is the only
     // other path that reaches _buy.
-    buyList=[ [ 0, 40 ], [ 0, 6 ], [ 0, 53 ], [ 0, 7 ], [ 0, 12 ], [ 0, 22 ], [ 1, 11 ], [ 1, 19 ], [ 1, 21 ], [ 1, 18 ] ];
+    buyList=[ [ 0, 40 ], [ 0, 6 ], [ 0, 60 ], [ 0, 53 ], [ 0, 7 ], [ 0, 12 ], [ 0, 22 ], [ 1, 11 ], [ 1, 19 ], [ 1, 21 ], [ 1, 18 ] ];
     constructor(client2) {
       this.client = client2;
     }
@@ -24553,12 +25041,23 @@ window.grbtp = 35;
       const middleAngle = Math.atan2(centerY - myPlayer.pos.current.y, centerX - myPlayer.pos.current.x);
       const action = this.getGrindAction(nearestTurret);
       if (action === null) return;
-      if (reloading.isReloaded(action.weapon)) {
+      /* Held, from two ticks before the reload is done, rather than tapped
+       * the tick it is. The server swings a held weapon the tick its reload
+       * runs out; a tap only counts if it lands between that tick's
+       * decrement and the next one. RYN's tick is the server's update, and a
+       * 2025 server that has nothing to say while you stand still grinding
+       * sends no update at all — RYN then runs its own ticks, deliberately a
+       * little late (SocketManager._watchTicks) — so with an ordinary ping the
+       * tap arrived one tick after the window: a swing every 668 ms instead
+       * of every 556, the "heavy" breaking. Held across the end of the
+       * reload, the swing is the server's own timing again. The press is let
+       * go the first tick Auto Grind is not grinding (UpdateAttack). */
+      if (reloading.isReloaded(action.weapon, 2)) {
         ModuleHandler.moduleActive = true;
         ModuleHandler.useAngle = middleAngle;
         ModuleHandler.forceHat = action.hat;
         ModuleHandler.forceWeapon = action.weapon;
-        ModuleHandler.shouldAttack = true;
+        ModuleHandler.grindHold = true;
       }
     }
   }
@@ -31967,6 +32466,10 @@ window.grbtp = 35;
     forceWeapon=null;
     useHat=null;
     forceHat=null;
+    // Auto Grind's press, kept down across the end of a reload (this tick),
+    // and whether a press of this handler's is down right now.
+    grindHold=false;
+    mouseHeld=false;
     shouldEquipSoldier=false;
     // Novastorm's soldierAnti: raised by the survival engine when the raw
     // predicted damage reaches 100, and the last hat rule to run in hatFc, so it
@@ -32143,15 +32646,29 @@ window.grbtp = 35;
     // adjusted for that hat, then the heal. Every module that can still change
     // the hat after the engine runs sets 53, which changes no damage taken, so
     // the answer is stable at that point in the schedule.
+    // The defensive hat for where you stand: Frost Helm in the snow biome
+    // when it is owned and the option is on, the soldier helmet everywhere
+    // else.
+    defenseHat() {
+      try {
+        const myPlayer = this.client.myPlayer;
+        const pos = myPlayer && myPlayer.pos && myPlayer.pos.current;
+        if (Settings_default._frostHelmInSnow && pos && pos.y <= Config_default.snowBiomeTop && this.canBuy(0, 60)) {
+          return 60;
+        }
+      } catch (e) {}
+      return 6;
+    }
     plannedHat() {
-      if (this.soldierAnti && this.canBuy(0, 6)) {
-        return 6;
+      const defense = this.defenseHat();
+      if (this.soldierAnti && this.canBuy(0, defense)) {
+        return defense;
       }
       if (this.forceHat !== null) {
-        return this.forceHat;
+        return this.forceHat === 6 ? defense : this.forceHat;
       }
       if (this.useHat !== null) {
-        return this.useHat;
+        return this.useHat === 6 ? defense : this.useHat;
       }
       return this.client.myPlayer.hatID;
     }
@@ -32245,6 +32762,10 @@ window.grbtp = 35;
     _equip(type, id, force = false, toggle = false) {
       const store2 = this.store[type];
       const {myPlayer: myPlayer, PacketManager: PacketManager2, EnemyManager: EnemyManager2, isOwner: isOwner, clients: clients} = this.client;
+      // Automatic equips only: a soldier picked by hand stays a soldier.
+      if (type === 0 && id === 6 && !force) {
+        id = this.defenseHat();
+      }
       if (toggle && store2.last === id && id !== 0) {
         id = 0;
       }
@@ -32393,12 +32914,14 @@ window.grbtp = 35;
       }
       this.updateSentAngle(priority);
       this.client.PacketManager.attack(angle);
+      this.mouseHeld = true;
       if (this.holdingWeapon) {
         this.attacked = true;
       }
     }
     stopAttack(angle = null) {
       this.client.PacketManager.stopAttack(angle);
+      this.mouseHeld = false;
     }
     toggleAutoattack(state = !this.autoattack) {
       this.autoattack = state;
@@ -32653,6 +33176,7 @@ window.grbtp = 35;
       this.useAcc = null;
       this.useAngle = null;
       this.shouldAttack = false;
+      this.grindHold = false;
       this._rynStrikeTarget = null;
       this.prevMoveTo = this.moveTo;
       this.moveTo = "disable";
@@ -33100,6 +33624,116 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 .rl-mark:hover .rl-mark-1 { color: #C6B6F0; }
 .rl-mark:hover .rl-mark-2 { color: var(--rl-tx-2); }
 .rl-mark:active { transform: translateY(1px); }
+
+/* ---------- top row: the mark, and the account across from it ------------
+
+   Clan and Friends are quiet glass pills; Sign in is the one iris-tinted
+   button up here (Play below is the solid one); signed in, a sage chip says
+   so and Sign out is a rose outline beside it. */
+.rl-top {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+.rl-account-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    animation: rl-rise 320ms var(--rl-ease) forwards;
+}
+#rl-account [hidden] { display: none !important; }
+#rl-account.rl-acc-social-only .rl-acc-sep { display: none; }
+.rl-acc-sep { width: 1px; height: 20px; background: var(--rl-line-2); margin: 0 2px; }
+.rl-pill {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 34px;
+    padding: 0 14px 0 12px;
+    border: 1px solid var(--rl-line-2);
+    border-radius: 999px;
+    background: rgba(255,255,255,0.03);
+    color: var(--rl-tx-2);
+    font-family: var(--rl-mono);
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    cursor: pointer;
+    user-select: none;
+    transition: background 160ms var(--rl-ease), border-color 160ms var(--rl-ease), color 160ms var(--rl-ease);
+}
+.rl-pill svg { width: 15px; height: 15px; flex: none; }
+.rl-pill:hover { background: rgba(255,255,255,0.06); border-color: var(--rl-line-3); color: var(--rl-tx-1); }
+.rl-pill:active { transform: translateY(1px); }
+.rl-pill:focus-visible { outline: 2px solid var(--rl-iris-45); outline-offset: 2px; }
+.rl-has-note::after {
+    content: "";
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #ff6b6b;
+    box-shadow: 0 0 0 2px var(--rl-ink-0);
+}
+.rl-pill.rl-acc-in {
+    border-color: var(--rl-iris-45);
+    background: var(--rl-iris-12);
+    color: var(--rl-iris-hi);
+}
+.rl-pill.rl-acc-in:hover { background: var(--rl-iris-18); color: #fff; border-color: var(--rl-iris-hi); }
+.rl-acc-out { display: inline-flex; align-items: center; gap: 8px; }
+.rl-acc-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 34px;
+    max-width: 240px;
+    padding: 0 13px;
+    border: 1px solid rgba(166,215,178,0.24);
+    border-radius: 999px;
+    background: rgba(166,215,178,0.07);
+    color: var(--rl-sage);
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.rl-acc-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--rl-sage); box-shadow: 0 0 0 3px rgba(166,215,178,0.14); flex: none; }
+.rl-pill.rl-acc-signout { border-color: rgba(217,163,171,0.30); background: transparent; color: var(--rl-rose); }
+.rl-pill.rl-acc-signout:hover { background: rgba(217,163,171,0.10); border-color: var(--rl-rose); color: #fff; }
+
+/* the game's menu dialog, lifted so its Friends view can be shown over the
+   lobby as a card, and only that view (buildLobby) */
+.ryn-friends-host { display: none !important; }
+.ryn-friends-host.ryn-friends-open {
+    display: block !important;
+    position: fixed !important;
+    left: 50% !important;
+    top: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    z-index: 100003 !important;
+    width: min(520px, calc(100vw - 32px)) !important;
+    max-height: 86vh !important;
+    overflow: auto !important;
+    margin: 0 !important;
+    padding: 18px 20px !important;
+    border: 1px solid rgba(255,255,255,0.10) !important;
+    border-radius: 14px !important;
+    background: #0C0C11 !important;
+    color: #F3F2F7;
+    box-shadow: 0 24px 60px -20px rgba(0,0,0,0.8) !important;
+}
+.ryn-friends-host > :not(.menuView), .ryn-friends-host #menuNav,
+.ryn-friends-host .menuView:not([data-view="friends"]) { display: none !important; }
 
 /* The middle band. It takes whatever room is left between the mark and the
    status and centres itself in it — but it never shrinks below its own
@@ -34503,7 +35137,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
           }
           let socket;
           try {
-            socket = await createSocket_default(ws.url, tryNo > 0);
+            socket = await createSocket_default(ws.url, tryNo > 0, "Bot: " + botName);
           } catch (e) {
             RynEntry.release(slot);
             this.removeBotConnecting();
@@ -36333,6 +36967,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     _spikeSync: true,
     _spikeSync2: true,
     _safeSoldier: true,
+    _frostHelmInSnow: true,
     _toolSpearInsta: true,
     _trapKB: true,
     _spikeKB: true,
@@ -36463,7 +37098,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     _autoRandomBotNames: false,
     // One name for the whole fleet. Empty means each bot is named per row.
     _botBulkName: "",
-    _storeItems: [ [ 15, 31, 6, 7, 22, 12, 26, 11, 53, 20, 40, 56 ], [ 11, 17, 16, 13, 19, 18, 21 ] ],
+    _storeItems: [ [ 15, 31, 6, 60, 7, 22, 12, 26, 11, 53, 20, 40, 56 ], [ 11, 17, 16, 13, 19, 18, 21 ] ],
     _totalKills: 0,
     _globalKills: 0,
     _deaths: 0,
@@ -36524,6 +37159,14 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     if (!defaultSettings.hasOwnProperty(key)) {
       delete settings[key];
     }
+  }
+  // Frost Helm is new with the snow update: a store list saved before it
+  // existed gets it next to the soldier helmet.
+  if (Array.isArray(settings._storeItems) && Array.isArray(settings._storeItems[0]) && settings._storeItems[0].indexOf(60) < 0) {
+    const hats = settings._storeItems[0].slice();
+    const at = hats.indexOf(6);
+    hats.splice(at < 0 ? hats.length : at + 1, 0, 60);
+    settings._storeItems = [ hats, settings._storeItems[1] ];
   }
   if (!FORMATION_IDS.has(settings._formation)) {
     settings._formation = "none";
@@ -36604,7 +37247,10 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     if (/^dev[a-z0-9-]*\.moomoo\.io$/.test(host)) return "https://api-dev.moomoo.io";
     return "https://api.moomoo.io";
   })();
-  const RYN_SERVER_API = RYN_API_BASE + "/servers?v=1.27";
+  /* The list's version, as the live bundle asks for it (RynWire.learn reads
+   * it out of the bundle). 1.28 is what the live API answered Glotus with;
+   * the fixture build still asked for 1.27. */
+  const rynServerApi = () => RYN_API_BASE + "/servers?v=" + (RynWire.serversVersion || "1.28");
   // The bundle's own server model (see the exposeServers hook): regions,
   // servers, which one Play joins, and choose(region, name) to change it.
   const rynServers = () => {
@@ -36674,7 +37320,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
   const _rynPollServerCount = async () => {
     const here = _rynCurrentServer();
     try {
-      const res = await fetch(RYN_SERVER_API, {
+      const res = await fetch(rynServerApi(), {
         cache: "no-store"
       });
       const list = await res.json();
@@ -38665,7 +39311,60 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       mark.appendChild(el("span", "rl-mark-2", isSandbox ? "Type 2 Sandbox" : "Type 2 Client"));
       mark.title = "Open the client menu (" + this.keyLabel(Settings_default._toggleMenu) + ")";
       mark.addEventListener("click", () => this.openClientMenu());
-      left.appendChild(mark);
+      /* The top row: the mark on the left, the account on the right — Clan and
+       * Friends, then Sign in, or who you are signed in as and Sign out. They
+       * used to sit in the middle of the controls, Sign in as an empty box
+       * beside Play and Sign out as a bare link under the name. Each is RYN's
+       * own button standing in for the game's: a press is the game's own
+       * button pressed, and what shows follows what the game shows (sync
+       * below). */
+      const top = el("div", "rl-top");
+      top.appendChild(mark);
+      const account = el("div", "rl-account-bar");
+      account.id = "rl-account";
+      const ICONS = {
+        clan: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
+        friends: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 20c.6-3.4 3-5.4 6-5.4s5.4 2 6 5.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M15.5 4.9a3 3 0 0 1 0 6M18 14.8c1.6.7 2.7 2.4 3 5.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+        user: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4.5 20.5c.8-4 3.8-6.4 7.5-6.4s6.7 2.4 7.5 6.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+        out: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h5v16h-5M10 8l-4 4 4 4M6 12h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+      };
+      const pressGame = id => {
+        const node = doc.getElementById(id);
+        if (node !== null) node.click();
+      };
+      const pill = (cls, text, icon, onClick) => {
+        const button = el("button", "rl-pill " + cls);
+        button.type = "button";
+        button.innerHTML = icon;
+        button.appendChild(el("span", null, text));
+        button.addEventListener("click", onClick);
+        return button;
+      };
+      const clanButton = pill("rl-clan", "Clan", ICONS.clan, () => pressGame("clanNav"));
+      clanButton.id = "ryn-clan";
+      const friendsButton = pill("rl-friends", "Friends", ICONS.friends, () => pressGame("friendsNav"));
+      friendsButton.id = "ryn-friends";
+      const signInButton = pill("rl-acc-in", "Sign in", ICONS.user, () => pressGame("signInButton"));
+      signInButton.id = "ryn-signin";
+      const signedIn = el("div", "rl-acc-out");
+      const who = el("span", "rl-acc-chip");
+      who.appendChild(el("i", "rl-acc-dot"));
+      const whoName = el("span", "rl-acc-name", "Signed in");
+      who.appendChild(whoName);
+      const signOutButton = pill("rl-acc-signout", "Sign out", ICONS.out, () => {
+        const link = doc.querySelector("#accountRow a");
+        if (link !== null) link.click();
+      });
+      signOutButton.id = "ryn-signout";
+      signedIn.appendChild(who);
+      signedIn.appendChild(signOutButton);
+      account.appendChild(clanButton);
+      account.appendChild(friendsButton);
+      account.appendChild(el("span", "rl-acc-sep"));
+      account.appendChild(signInButton);
+      account.appendChild(signedIn);
+      top.appendChild(account);
+      left.appendChild(top);
 
       const body = el("div", "rl-body");
       left.appendChild(body);
@@ -38712,17 +39411,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
        * put it, in the menu RYN hides, so there was no way to sign in at all,
        * and members-only servers could not be joined. It sits beside Play
        * now; the bundle still decides when it shows. */
-      const signIn = doc.getElementById("signInButton");
-      if (signIn !== null) {
-        row.appendChild(signIn);
-      }
       nameGroup.appendChild(row);
-      const accountLine = el("div", "rl-account");
-      [ "signInHint", "accountRow" ].forEach(id => {
-        const node = doc.getElementById(id);
-        if (node !== null) accountLine.appendChild(node);
-      });
-      if (accountLine.childNodes.length) nameGroup.appendChild(accountLine);
 
       // colour
       this.createSkinColors(group("Skin colour"));
@@ -38810,6 +39499,12 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       if (serverBrowser !== null) {
         stash.appendChild(serverBrowser);
       }
+      // The game's own Sign in button and account line: kept, pressed by
+      // RYN's (the top row), never shown.
+      [ "signInButton", "signInHint", "accountRow" ].forEach(id => {
+        const node = doc.getElementById(id);
+        if (node !== null) stash.appendChild(node);
+      });
 
       lobby.appendChild(left);
       lobby.appendChild(right);
@@ -38835,6 +39530,71 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       };
       lift("verifyBackdrop", true);
       [ "verifyDialog", "accountCard", "profileCard", "clanCard", "confirmCard" ].forEach(id => lift(id, false));
+      /* Friends is one of the game's menu views, not a card: the game shows
+       * it in place of its Play view, inside its menu dialog, under RYN's
+       * lobby. The view cannot leave that dialog — the game finds its views
+       * by looking inside it — so the dialog is lifted instead, kept hidden,
+       * and shown as a card holding nothing but the friends view whenever the
+       * game switches that view on. Its back button switches it off. */
+      const friendsView = doc.querySelector('.menuView[data-view="friends"]');
+      if (friendsView !== null) {
+        const dialog = friendsView.closest("#menuDialog") || friendsView.parentNode;
+        if (dialog !== null && dialog !== doc.body) {
+          if (dialog.parentNode !== host) host.appendChild(dialog);
+          dialog.style.removeProperty("display");
+          dialog.classList.add("ryn-friends-host");
+          const open = () => {
+            let on = false;
+            try {
+              on = friendsView.style.display !== "none" && getComputedStyle(friendsView).display !== "none";
+            } catch (e) {}
+            dialog.classList.toggle("ryn-friends-open", on);
+          };
+          open();
+          new MutationObserver(open).observe(friendsView, {
+            attributes: true,
+            attributeFilter: [ "style", "class" ]
+          });
+        }
+      }
+
+      /* The top row follows the game. Signed in is the game's "Sign out"
+       * link being there; Clan is shown wherever the game shows its own (not
+       * on sandbox); Friends wherever the game shows it, and to a guest too,
+       * whom the game then asks to sign in. A dot on the game's button is a
+       * dot on RYN's. */
+      const shownByGame = node => node !== null && node.style.display !== "none";
+      const syncAccount = () => {
+        const outLink = doc.querySelector("#accountRow a");
+        const isIn = outLink !== null;
+        const gameSignIn = doc.getElementById("signInButton");
+        signInButton.hidden = isIn || gameSignIn === null || !shownByGame(gameSignIn);
+        signedIn.hidden = !isIn;
+        if (isIn) {
+          let name = "";
+          try {
+            name = window.FRVR && FRVR.profile && typeof FRVR.profile.name === "function" ? FRVR.profile.name() || "" : "";
+          } catch (e) {}
+          whoName.textContent = name ? "Signed in · " + name : "Signed in";
+        }
+        const clanNav = doc.getElementById("clanNav"), friendsNav = doc.getElementById("friendsNav");
+        clanButton.hidden = !shownByGame(clanNav);
+        friendsButton.hidden = friendsNav === null || !(shownByGame(friendsNav) || !isIn && shownByGame(clanNav));
+        clanButton.classList.toggle("rl-has-note", !!(clanNav && clanNav.querySelector(".noteDot")));
+        friendsButton.classList.toggle("rl-has-note", !!(friendsNav && friendsNav.querySelector(".noteDot")));
+        account.classList.toggle("rl-acc-social-only", signInButton.hidden && signedIn.hidden);
+      };
+      syncAccount();
+      const accountWatch = new MutationObserver(syncAccount);
+      [ "signInButton", "accountRow", "clanNav", "friendsNav" ].forEach(id => {
+        const node = doc.getElementById(id);
+        if (node !== null) accountWatch.observe(node, {
+          attributes: true,
+          attributeFilter: [ "style", "class" ],
+          childList: true,
+          subtree: true
+        });
+      });
 
       /* ---------------- the list, as a view of the select ---------------- */
 
@@ -38859,7 +39619,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
        * It runs only while the lobby is showing. #menuCardHolder is
        * display:none for the whole of a round, so the moment one starts this
        * stops, and there is nothing of it left running during play. */
-      const SERVER_API = RYN_SERVER_API;
+      const SERVER_API = rynServerApi();
       const LIVE_INTERVAL = 5e3;
       let liveCounts = null;
       let liveTimer = 0;
@@ -40237,7 +40997,10 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     // ...and its tail made idempotent (Renderer._viewport).
     Hook.replace("viewport", /(\w+)\.width=(\w+)\*(\w+),\1\.height=(\w+)\*\3,\1\.style\.width=\2\+"px",\1\.style\.height=\4\+"px",(\w+)\.setTransform\((\w+)\*\3,0,0,\6\*\3,0,0\),\5\.resize\(\6\*\3\)/, "RYN._Renderer._viewport($1,$2,$4,$3,$5,$6)");
     // Name colours (Renderer._nameColor): where the game picks white or clan.
-    Hook.replace("nameColor", /(\w+)=(\w+)!=(\w+)&&\2\.clan&&\2\.clan==\3\.clan&&!\(\2\.team&&\2\.team==\3\.team\),(\w+)=\1\?(\w+):"#fff",(\w+)=\{color:\4,/, "$1=$2!=$3&&$2.clan&&$2.clan==$3.clan&&!($2.team&&$2.team==$3.team),$4=RYN._Renderer._nameColor($2,$3,$1?$5:\"#fff\"),$6={color:$4,");
+    // Loose about == or ===, a white written as a constant, and whatever
+    // follows: those are what another build of the bundle may change. When
+    // it still finds nothing, M.text in _adopt colours the name instead.
+    Hook.replace("nameColor", /((\w+)=(\w+)!==?(\w+)&&\3\.clan&&\3\.clan===?\4\.clan&&!\(\3\.team&&\3\.team===?\4\.team\)),(\w+)=\2\?((?:\w|\.)+):("#fff"|"#ffffff"|(?:\w|\.)+)(?=[,;])/, "$1,$5=RYN._Renderer._nameColor($3,$4,$2?$6:$7)");
     // The renderer the frame is drawn with, the moment it exists.
     Hook.replace("adoptRenderer", /(\w+)=(\w+)\((\w+),(\w+)\?\{pageSize:\+\4\[1\],maxPages:\+\4\[2\]\}:null\);/, "$1=RYN._Renderer._adopt($2($3,$4?{pageSize:+$4[1],maxPages:+$4[2]}:null),$3);");
     Hook.append("mapPreRender", /(\w+)\.lineWidth=NUM{4};/, "RYN._Renderer._mapPreRender($1);");
@@ -40256,6 +41019,11 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     Hook.append("offset", /\W170\W.+?(\w+)=\w+\-\w+\/2.+?(\w+)=\w+\-\w+\/2;/, "RYN._offset._setXY($1,$2);");
     // Guarded: an overlay that throws used to end the game's frame early (see
     // Renderer._frame); now it costs that overlay, not the picture.
+    /* The Crab King (and any boss) like any other animal: its name over it and
+     * RYN's health bar, with the number, under it. The game draws a boss in
+     * none of that loop: it takes the boss out of it and puts one bar across
+     * the top of the screen instead. */
+    Hook.replace("bossLikeAnimal", /(\w+)\.visible&&\1\.isBoss\)/, "$1.visible&&$1.isBoss&&!1)");
     Hook.prepend("renderEntity", /\w+\.health>NUM{0}.+?(\w+)\.fillStyle=(\w+)==(\w+)/, ";RYN._Renderer._guardCall(RYN._hooks._EntityRenderer,\"_render\",$1,$2,$3);false&&");
     /* Every structure and resource drawn this frame, for the overlays drawn on
      * them later. 2025 split the draw in two — Xx() buckets the visible
@@ -40441,7 +41209,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
      * in another function, and deleted all of it, `const Oe=…` included. The
      * render loop then threw "Oe is not defined" on every frame. The grid is
      * now two loops of M.line() after `globalAlpha=.06`; only those go. */
-    Hook.replace("RenderGrid", /(\.globalAlpha=\.06;const (\w+)=\w+\/18;)for\(var (\w+)=[^;]+;\3<\w+;\3\+=\2\)\3>0&&\w+\.line\([^)]*\);for\(let (\w+)=[^;]+;\4<\w+;\4\+=\2\)\4>0&&\w+\.line\([^)]*\);/, "$1");
+    Hook.replace("RenderGrid", /(\.globalAlpha=\.06;const (\w+)=[^;]+;)for\((?:var|let) (\w+)=[^;]+;\3<\w+;\3\+=\2\)\3>0&&\w+\.line\([^)]*\);for\((?:var|let) (\w+)=[^;]+;\4<\w+;\4\+=\2\)\4>0&&\w+\.line\([^)]*\);/, "$1");
     Hook.replace("upgradeItem", /(upgradeItem.+?onclick.+?)\w+\.send\("\w+",(\w+)\)\}/, "$1RYN._Possess.c()._ModuleHandler._upgradeItem($2)}");
     const data = Hook.match("DeathMarker", /99999.+?(\w+)=\{x:(\w+)/);
     Hook.append("playerDied", /NUM{99999};function \w+\(\)\{/, `if(RYN._settings._autospawn){${data[1]}={x:${data[2]}.x,y:${data[2]}.y};return};`);
@@ -40904,6 +41672,63 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       });
       setTimeout(disarm, 6e4);
     }
+    if (loadedFast) {
+      const pageModule = /https?:\/\/[^\s()]+\/assets\/index-[^\/\s()]*\.js/;
+      const docProto = Document.prototype;
+      const nativeCreateElement = docProto.createElement;
+      let verdict = null;
+      let stopped = null;
+      const entryUrl = () => {
+        try {
+          return scriptBundle !== null && scriptBundle.src ? new URL(scriptBundle.src, location.href).href : null;
+        } catch (e) {
+          return null;
+        }
+      };
+      const stopEarlyCopy = function createElement() {
+        if (verdict === "allow") {
+          return nativeCreateElement.apply(this, arguments);
+        }
+        let hit = null;
+        try {
+          hit = pageModule.exec(new Error().stack || "");
+        } catch (e) {}
+        const entry = entryUrl();
+        if (hit === null || entry === null || hit[0] !== entry) {
+          return nativeCreateElement.apply(this, arguments);
+        }
+        if (verdict === null) {
+          if (Injector_lastCode === null) {
+            try {
+              Injector_default.init(scriptBundle);
+            } catch (e) {}
+          }
+          // No copy of our own to run in its place: let the page's run.
+          if (Injector_lastCode === null) {
+            verdict = "allow";
+            return nativeCreateElement.apply(this, arguments);
+          }
+          verdict = "stop";
+          stopped = new Error("[RYN] The page's own copy of the game was stopped at its first line; RYN runs its own.");
+          window.addEventListener("error", event => {
+            if (event.error === stopped) {
+              event.preventDefault();
+            }
+          }, true);
+        }
+        throw stopped;
+      };
+      docProto.createElement = stopEarlyCopy;
+      const disarmEarly = () => {
+        if (docProto.createElement === stopEarlyCopy) {
+          docProto.createElement = nativeCreateElement;
+        }
+      };
+      window.addEventListener("load", disarmEarly, {
+        once: true
+      });
+      setTimeout(disarmEarly, 6e4);
+    }
     const _fetch = window.fetch;
     window.fetch = new Proxy(_fetch, {
       apply(target, _this, args) {
@@ -41035,12 +41860,82 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         "./img/animals/enemy.png": "data:image/webp;base64,UklGRr4uAABXRUJQVlA4WAoAAAAQAAAA8wEA8wEAQUxQSJQUAAAB8If/n+om/v/NnKRJ3Vvc3RZnF/cXurisO7xwd5dSw91euzgs7m7ryyKLu1aQFipA26RJzjz/aJucTM6ZmfMyImIC0Dv//9dJrMu9gy7W5f5rL9bldGisy73z/39aYl2OwbEu92/zWJd7l0Osy/1vd6zLvfP/u95iXU7Pxrrc/8WJdbn/dop1OQGKdbn/gMS63Dv/8y7W5f5bttFs0N3qTt+2Z8OwCD3N2PyEjQAAyZjvo5uZJyZBgY7oAJ0sKBaclZd76WLS6CynwDLCrId1kMHF1/11sBoXweUnVXUvwxFwnRwI07mMQ+wKgHUQ1rcaJIKiSXV1rYCDoKx8tJjaYZFnGGtTCGCZQeWEfpMXoHhGH6xbbQM3ng3Sq9pnuIN8p1MF7SLugD8LMwgWQR1zwa228RJ78DpWFd+z4OYHESqAxVCBgVXrv1+7uJenfZ3tLhjnYV41Px42dtS3Dc1iyKtC1IX7CYmPrv8yrU6w5EGBB8DtF8p4EI7ofeJhNgFiSzrRykcAFZmRBgWT3ydUkjymRa77cod4TpEBV2UoOHuNH1dgTQr9MRectj9eVMXsGYYNQOEVs2fgMsPuWMBpx6oQntBkYzy4nrKggkfUT6QB2npE5Ig74HLuHMHT6rkC4EiaWApTZ4yXqdgTSF/Rb+9YQcG0umJnAygrX+ok0RaZBFSmNqPN2PVXGRSVV3urD+Yo31yFANLjilH2DXGNKELi6TLU3ZpFQOHkGurD0y3AjT91psp0ACh95kOT/5gEUJ60Fzlz3EGs84tT9EEiLY7P6fFqfNEO7hwkcja7A8D+cwN6+tloIcslWqSpieDeVQLHe797ALJmhVFS7AZQ+0dJShqfAXcfEDj+h9wFth1lFDAGVOjwYd1wL5yf5Fdt4mmgNys60lgQNoeVrVAy0IRdM3R5CG4/KnACj7oN4F5bgwuGDuvSAQCy9v+zJEYoqNnEa3agO/WHvuWNeaoNPmcFgNfHBhd3xTT9LYisoGMUwLN+JqfCYlOgQMu5Aa0mn3pqB+rJm+sb+5YoPuJOLuSf+3sjg1MRC3OAwiMCJ/AoDfB2ptmJoPWgknL6C3D6RR/JiWI7gcrDAsf/MBWQPdlcgHFcjlq4nlytoBJ77HTsEjh+B+mAjMFSfpWeg2ofDMuv0DagdLnA8TlACWR2wvlMBfXO7JGP/3IbLXMFjvd+WuBugzwBv6gY/IARQnhILtA6h0ewVpj3UiNfDkMI1XysZo+8EMLtE4HaqTyimV57qAGINiLUKU3NbOEIhf8B9I4WONJ2ih42QIZZdjWD9sgwXqbonwIHbaDIvqpI9yeg6gerN78BFH8hcpZQBI6kbKJuJDWN0NRT5MTTxJpdRM5UdvuHyBnIbi04BqtfL2ZzNOYYDezIbOl1RU4jZntSTeQUYbZbFUSOidkulBQ52M5qx8OFzmtW2xModBJYbYNJ5KArrLYK04FFxWFGk2OQ0F3BaPYRYmcio1k+FDsDGS2rvtj5yMFmr8PETts0Nks3aQPmlqq32ew2EruBZ9hss2uYGTAboTVMJn/rmmj9VFuIWtyrLnoiXmqKWpKVZtFjiLGx16sKSPiWv8lctulIAP8jg7W2h4og0ywLW72sjISwab6NpdJ7IkFc5BhhJ3mBnyhClS4xk32XDxLHXdJZ6Uo1JJCD97FSfySSQ4+w0lCh1CKDlc4XZTDMLN4/AitbRkjsxa6d0pkJHhcSRmGHZXaCyZLQwYHlqxc35/O5BRj6Wvl8AstVK2YULV61x1x4lZGZnnxwQJWA924CS9sXBIY2nfBXakZmWuK2HiVFSrmFT6BA+c7ei3aPIapF3AJZ+46mQYG5fw0JESW+M17JwI2OR40kDcEMJ423Aldeq0Uf9hyW/yQNOPMPE3U87nsTeNPWQ3xIw4E/9wcKj7IXOeRpHeHxUS6HwDeiw7APeHQbFhtFvrFyycuWBnER0HLVnTeES8iL/aPfDxETlddnAs++PdReEg+GTvdl4Nz0ef7CoeIT4OCJBsHgtxt4OKW9YOjwiotgiyQUvJYRPrKG0od5JuQ2cHIH+ri2NjA+oSdKKHzCehRvl0RCHDcdNIuEVdx02EckbOGmEwECodzf3HSlsjDAdY7kcpN1S2lB4Dv8EQF+dlzvYxAB/jMdwNcve0gCYEIucDZ51oH/Cj8D/j7nx3tSlMxhlgG8V+x3UGHCPGSrP+d9kKlGDHy/DOd1kLkssyrn9QIuz6rGeb35LL0K53Xns6TynNfawWWXi3Pe+xlcdjyM8xq/5rKDIZw3HbiQUPfiH1xn/CSdDzzwfkPMcY0TgNPJuaL8FnEBuJ2sM/OaNNLqAuEpSGnlOZLEdsVuAM+vNXtExS93Jlpzbi1q6cduNW3MQTTlabgHmD/52w55ycv1QczWF/i+Mn2B88FJcrQ4q0VzXhPqpAFZzoB9lcRoyzivGXVFksD5jMaMFs93pDJ1I8BFeZmZzfrxXUo4bb6nXIFbpdmsvqxtROt2+NDW4IlL9jZsVu6Vtmm9pR+i/TubSzCXzUrc57nnzWgzHgDXL3ozWa0MnktpTVvQWwVSG7NY+AHgeflUMGVdQEH7BMxe0igL1wH5nLIVSsDOAPYqlwicf7kkVUX/UCS9EntNAN63fktV2wxF4Gvm8vqN+2CfF00TQdnTRtYqfp3/En1p+ikPce1hRdZq8pT/IJSiIFseBbO/Yq2Wz/mP0PSprBBZYmKsmg/5L82PHuMGohAkFmKswAv8d9xET/kroLTcirHQdv6bgunpbFEMVrNWZwvvPWuO6F0Byl+MZCz//by3z5ce0yM3ZHRhLNQlnfO6IXqbZbuBTMKMVfER3zlK02OY7nADHDBrBVaLPq/5jrSkxa/KwARwp6VnmEaopfdawnewEtPg03Di3ps54N6Xp6c0NrJTmQzg/Ed13RTQ/NtNdx1A6ZszU7pXNDBRV+D93H7uMISPOZbiAKqzr69t6sNAg7gPYiXF/FutyASP/KN/CebpzX/zDAoFdD71goCHWi+OCzOwTUUH941Aiho7HCXg0bfHhzJN6AXey/1KkSIxLwl4eO6vfQIZBSOE8GALcxGVsW2tYXDJq9M5B6igY29zNsk35DfmUl3bo+29ijplKLk+DdSRPJtd2AXvUrUa1KlaysQCqMUzzgMAy68tDQV5DbwCKrq/olPvr7xlA/Lm1oIaLCB1TuQ+IBnzC+WD623PATWV73T3K6BUzFMZ8nWkDAvUPoSG8h+A/WB5hJC5711Q27dLQvPgVmfB2ez5LFAlWQCA/LiXb+T8t0R1wHG7rwkFj8omTkFOP0n7KgsBgNSVByygyunR7b5/C67+XVr76lvEABACKi07CLhMBmhfJxDwJ7XvKxGXZNa8LiLueRHNq/1WwL2qo3mFfxFwrztoBlZMmmQTb5b+muHGiHvizTZG+1DPFOEmz2AAry5JsmAjS4zah1C7C5pHOAs2+bIArqN5bEm04OdIFkBSrkjQxFulmABliB9C17OKbPBY/FCeU50Ntgs2aMoGg2XB1pUNKlwTbEPZQJogi7WlbIB8T4m144yAqp8TalcwI6CafxIusr0mTHDXnxVQ8cXJDu6xXBj0lZ0JnpRhBmSotziZcA1JnFYSVbYxwcuW7ICQqcoJnrFvrOyFUA02yPqUJRDqxTNXSyGEUFc7EzjGsUVzwjFb/PIMcThFNAuiJKZoZOeYpV55oolTGj7PyBQ1U/hFnoYQQtJGYMNVZqYofYlf3vTMZxMjrPNhCsN8mVuu+OdBqwkbLDcxBaqZziu2fijfsTITkCiJLdDELD6xrw7Kr5FN20h+r3shxvSf8oZHcveGo/xN17WtwHMBrIHQ53/zR9q0UFRwnxQGSG6D2FMqvuyxnSdyniysb0JOmr5K07zkz40MghCuNvFIiswJj7d+Vw652uVnbZN/bY9YVQoq+/UZOwc8GlnSDykY3u/k3XSiTWk3dn8aipklb/1UDpiBlDaU6zx6T5rmZO+f3KkoYt3iyRzwjWIIIewT0W7lpbdaQV5f+r5DER8JsW+ZpxzwiTvyLdZjc4YmpK7pURQxcsVnHNDabQgZwqMuyyonXxwbZkDMXC+VA1pSgBAuNzGVqBh5PrUURgzd6w0HDKICIRQw5YFqvVoZjNh6vJ0DltKCpPf35KiS43ZHH8TWvhuAA89KtCCEPrkqq0/OosKItUvc4IFbRSgylN2RTVQmaYAPYu72Dh5I/oAihAIHp6rL3VaIZXEBWDIYDAZJwvl6rwYezB5qwtg5XKAiGPutsKrJ4zYS0+SVGnw9KSo2ft7c+NiYOXmnr8rkAni4KCpq1tRJEyZOmT5j+rSpU2fOjpoTFRU1e+bUiePHjBwxcsSIkSNHjhw9fuKUGdMnzTpvV5HsrxHrGtodTsmWwXmZACcSAkBkhywTQmRZJpA/IbLDbivY7pBlItvtoKKODcGs4z8yEzSTaI9m3yqPGFeabwXxfKwQ67SxgIB+u7l7ANNEHiciCmTro5WdyhiZpeFbENZZF1e282aUr0FkEzl1zac1fRgkRmjltd87NKSkSVIMa9Ra4ZXXfm3Jt61LYEW0eqMQAwB7yuXtfcJ8WGGTKMv31c6PC+tvAG+vjC2lvwHA9XaSdmD9gKR8qB3KbxNvADfLa95OEeeYZ9K6PSIO7hXRur1CTm7MXkQAQT/2EsJD9DjSTuv2CLn00lq3W8SRQ0Fat1M8EA140wdp/Y/iQWGiKrmrfDRvKysRrVNV68IgpPlbWIkbScavPQOQ9m9iIsIN8qNFXcyIBdcxESfm3N3YsrgJseEKUfZs5TclMWLGOBFmub2jeyETYslx4itj+xeVJMSYPcWW9caGLqFeiD2b2wSW5chnlSTEpGUuCSpH4rGphRGzGhfIIookzaoXjFg28IqIymyNEeM2/M0mnrK/YB5kGveLTTTBpTLMg6TCTfpNilqwdPmKlUuXLF22bPmqH7bu2LF966b169Zt3r5z50UrXWmXtq6cP3fu3LnxcXGxsXHxcbEx0dEx0dHRc+ZER8fGxcfHxcTGxcyOipo9OyoqKmrWrNmzo+bMiZozJzomNi4uNi4+LjZ+3qJlK1Z9/8OqxQvXnH5soyvn8KLYmJiomTNmzo6Omzt/4eJlK5YvXbJo0fz46BlTxo8ZPnTI4EFDhgwbOXrshEkTxo+fMGna7Nh5C5euXLN63Q1ZReyxXszj/qCdNNlOtDIilS088xlV67yRx5qXWFUEXn/nxXqoXTY19gcjwpD6etVc/5KetA+Rx/oPyQQ1JRkjAlkv8jwl8s2ZZTBSZan9Ristv4d5TPCiN6CyOesiGc8wykKBPfnktxFGpNo+9Rddy6Qh+1PkofiDMzZQXceVHiamQxFH3ZZ1anhjM1L5ot0X3HKbZZ6Ph5g/uQOqnBFTiOlQsbUv81geP3HFkXz74s8H5rQv5ouRBhoDy/ZZcvj3G08yZFde/3bhyfPkm9s7m5BHGurttBB1Asf9vmEsh8ztZ2/dvPCrek3vOpcyo3GVov4S0lQcUqF+xzHpztnnBhdp0KJxJSPyzKLTEgiod/bRjiaGQwhLkoQQ7pvhTGIbjLS69s9OnSuFPNfUdFWODKpO7Df7lWG4AgPXkQLIk95Iwyv8Lhckf4E81eDXf/tzAupvvTS7hIHxUMD31nxyjldAmh44IYnk83SYwSNwoTYDTmSBZlpODmrszXQo7Lubby1Z1z6PRBpvqDfpWkbGkxUNzYh67BvZadVfLwloqiP58ISqAQZ2Q8hYr2sjX8SCOCBYQvRLjcf+agVtJg9ju4WyG9sXm5vsAA3PPN4AC7jql0DrEztIwq3cadB88qShcFsKLHjKLNgKvaGFqFt6J8E2wEGLypNZklDz2kSYALb4CTXf3cCGx4KFWsABRjgdItT89jDCkSCWwPxj2MwIa73zw0zAwysJG8Qa8hOp2KMmy0wgj0OMi1nEs790MEHW56zj4ZhBmtiY4FVrrqEVa0pFNkiuLgC01dfKBPeDBRtKZYLbXqLtDhNcQOqIBcovTLBDJUTqOiaYL9ymM8Eg4dafCbryEmaHLjYWaMRLDNnkBQNYagi3qrcYIKm8cCv2JwOcLyrczAc0iLi0I0C4oe0a5DJZbBBvMWpCPESehcT7YDXxVNtYBbDw+kr7sj9TQHx3077M1gKuFkVErV6UFnCRFKl2sp+A89W+h5KAMyZo3iok4KUtShBC1Mr6krhm7yjiUO9s1zJWNR72UJVyz7XxH3rLFbI/VMhF/OoKSRnkj6SWv9pUh1hjSyBkrHU217m0ukjMN05x4WozjBBC3uOfEpW52EFCef36JzqT1BUJeumrJGesJ+uj/E2NL9vUJGdXNVSgodm+TDkPyTxR36hpmOcQarQvp4C/RhmQk+FTUtQjdaQROWtsFPvjkYObFzUxIpEf3HTu7/fuX/lXr2IG5LSxxWmrOlgvdjAhFyX/0BBfCYl/yYiU9J+ergbPJ0Qg7cSCRWlz0xNZHianrHjPiHTXoAG3iSc5fmiNdFkpctTlHA8hqfua+yCBiVkGIVzku5OyJ2Qsb+uN9FzsXSvuUhZd2RdGFjEi/bdk94UP6Uld3qcYRvow9qofeyrR4bY3Fze198NIT8YhDb47LbuF7OxS2oR06IijxB23wpBOPdDmjqVGvarEazdYPkeqivUE6awb7lZWF31xhBv2SvpVw+fKfYv065BjiuWW1bHQDKLUmUBdCudX06EQmS5pGBZYBeJ7Cr1si3Tt+QrdCNG3eucq8z3St9+7pwhpo3OZ9ipyo4jOhWYqQVaa9a6aSlj+ifRun6cKJFXQvaSFCpzGzISFDfoww7UhSP8ufMGlnDo6GF7q0slwpsCCCjV0JXc0Zgph7bNNdu5WJNLF33vkVNZnSCdvfFsuKGuCifMwP+EaRwtIHmBE+rlXs1UHTxxa/6Uv0texT7AfRv9PKdbldGCsy/3/2FiXe+f/fwvH+hZW6t8rMY9g8fFv/ViXE+pYl3uXTKzL/Vs7FhiYY/6fWcxdWAi8cy9WUDggBBoAABDkAJ0BKvQB9AE+nU6hS6Wkv6Kl1Hlb8BOJZ27hdKEII92g50RfWG0GeyD6fNxq2i7/Td7T+g8fdWzhLt67P3bLiWoTisnoP0MfrJn4PL//vg+f/fgcD8NprfJWnSNGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZl5jMTkz+gnMr4oHs1zMynpE1vkrTpGjMzMzMy8xMT79NpYNqbNvBG59MVp2le8A5MUCmYKYS9BkhjPJrKXwZuDHddr3COkbr358JEDsHgDrLHgheQK06RozMzMzMy8XcYAe2wUMYyFSvryxDB9K2cbO94wbWmax3POOdYlIpv9z3j98FNCAkrA/E//gBWTSFmRDhNTw2eMJaE6RozMzMzMzLzIeOFBE+/mHayXe9iBXoeGa7xzcpw+u5zkFPnDb26amudpM57qCqITKKq4qu2nSNGZmZmZmXhOEI9GSjB0ZuNBaocM6ph5NOKa7UashCA0xcE822EsrWUjqNGngYD8fifMasAVUVzMzMzMzMzMzMw9U54bPbFMjr6FqRhUIOUtE1FaPTKFyNf3DAv6WA/9HGmX9eFEMv96fsvuRDjZkbqrzle72Yef1Kbm+StOkaMzLuH0cEZDFHy7+UgkoyEU3goNb0Fo78ZhU89l5kZ3YR8K/U68P9Yko2Aqi8j5DW+StOkaMvUnFIbS/BiFEpkXp3p72RLtIPmPK588x/7WWxkUWAD+I5sHRNEkp0zhGsO2tXzmEbR98WDEi4SpvHhrqO9U1+jzoFMzHHTet9WfiJwlrMzOqMtqtKXWpKSNZPvfyt9fEs85zy8o1ytV2lDvCJBNgOC2UKvvGUX5SVOVGADmChwjlxUCehXhqmS96braa3yVpyFG8pTPi7MLoMOTEubcrwJgh0xX3tGOvTRxIVt1EIYwSTtYhu5H1sy4EAwZI+mMaotP0GdG7L7XWAM5zDbyb99FzMVKeo6Z0h6XQeoVjeAoR2jMxYwtIqyQcOOLoCtoqNL+Q1vkrSqIR7uN2sRlGqK+ybo3Pc9GnqO77IUNtTzEOVuuaMW41yVGCaiJanEd86o1Z6eNjGTgs+B71IZQApTt5XwNHL/Mx/iNcJ+ueQU0cIn36wOXjsJgKLOSHfoAoxH05nw5U3nxT/9kO8fw136yu08pD7BtxKF4jxsMwHc00HuicZKsawUzMdPupMB6wuXPhzif9RSaK9xb03CKOkYRjekXMJq5uvcu2HMGr9vXiJCwO1ejWq+HP0O5b6SJ1IebERrweu/vRpr8nqyutBrz1I70CbkVyjjFef2MGN1xAhPD9wcVsip6LUEkrIw8Fw33CIqqqmWhXhhdRUQtFnECgwlmU7rxbV5h25c2IuElrSlLrzNc9OuDf1vskLwo23Urt8O/DBH5yrjJPU04ZqLXTJnXns1vFZYPPHuDnHii+U2l/obEEYVUp7h9+fWxR7pnsC0VDCF41uB3d3ZInxvvIMdK7G29l3mgxKjAT5tVZbALaDugWVcek/24O39fvhS+oYkGFotdbQ5qj6tcswBDcJFmmLk6KdqpFMZsrHf6tlrVGU7PYmf6W6LinHz1nLEno0e7Wm06ZnAlXDlLmAK+e5yoQedAo9U70FyJt9kFwGok8HU5vXKBgu9NBIiSO4iq9rFKD0kixZAfLusOcDZSh9UYCZphiE2LGRuMXranEq4PB7DxEYsDIqAWYGxVrDMEw8P7tTBe/WeLstKBHXEK9a7ViG1OqWZ+No11P/aDHVfuQxgec9hs+3WWmaPsNcpcQXukKic+BR66LUDdndaSPoDFV0lZWWqwWxgV7jD2oSsboFd6NbcCR53qkXJ1eS6sG0OqXUnEv+c6IftS7e4NxsB2spN/zgWrcjiPTTUR2+6bbo/wT3d3aCmd1dvGd/ilvI4xrQYm5wnK8MvH7+09WyAi63W6+Yjn/hlBwcC33TkY2F2hOthF/G/dvd0sEDRYWD1TiuRMT9jXyAovNyJXtTJCQUkhgmx2rJIume4tzco2KCmRjA86BTH3QVwPOM8gygx9Z84U9iEiff/0WmE3IsEhqvReI5l9WUCV7u7u7u7u7u7u6weHSNSQvf7KilMsFLdH1wPBWC0J5J7h9+rz85jXkW4AvgJfU8sF7u7u7u7u7u7u7srflerKamiw0+/ATfwSkYOKoIS174FYFVb+thw/+CWdSY16wIKfSFi7u7u7u7u7u7u7pmFlF9WmNcHuob4Yo3xO3dN0Rfiqqqqqqqqqqqqqq+4/MS+eeZZ+LSd5XMzMzMzMzMzMzMzMzMzMUyIjRmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmWwAD+/2qWAAAAAAAAAAAAAAAHvX3vLPIXZRQBFVSroZkYiVn14tyNnezPaP6yGWE9iaIlZR/y0QKgZhaHJhSz4cAf7RLXegz/hSbx99BinVxL4bYwp2ZkM91OIIwdhjHtnAxtwEIFLR36sy31kT2HwtZZq4ODoRhuWEVqUgw+wemJS5z97/YRFVWT1I+SlP9PxVSiUjd38jiwMzXHpfN7QtB7Os2+G9pbDEhYE9iHjZLLrIKKKXKT2cVRDhhmYongt9KrfX1wN1XLmcmhCz+DudJmq2HXLq61NFhjrZ50VaHaNUlTIYFDzOBh6GcGKUM2/Lb1AAM54Zx6k4FcuREHrtFdZB58LGIOfCTcM+k7Ga/W5VJN/or+WL5SE8ohQ4GfnRRMcjoqvllJ6wB18DJYK0Zt1LwSeO9MHoRA0NrcFzLTCxGHkjhSM1gCt3+Va/ifCcKHnVoWLLH28p+PyzfWbFON14eJGtu2/G6ny+kNgosawyRcNQrM4XBNXNz899YLvV6ZyHGgQizpKb0FVj2XwonzNn352DCwk5fLe1gbIbJhGYwR1F3Eb/z1ibrqK16CMZlXNcAjBCM3Q2V8MZGt/6DADdQNrH/UKwU4580lasOBH6nN8tM9mHs+UWpWOSHto/2g7X7qiuKv9ztDXcel0B5xnfDtmXbqlkHGBvR72Bu8ltB2wX3wyXkMDsAahOlc9XUIU0p2REDyDRYRu3vG77zY7NyWABC9C4QEtU1CvwjSHLCgiyAtaDjiNbcwQUv4g8EaybTFCcsTWzcVo1QJTAY9fOw+7q8I98psAz8+rTAWRXa6F9Cnmj2cp89MJcQARO0IolFHUNUW/DrGbY89/whkiEN9QmiWkNBSNDMjGJHmENkxezRRRyJGFHS9iPCQmk603o7iEoodbpL6li+I8HTgKt6usYUr0NACBDMg1pznv+NNEOLVZwx/XJHABSGYslCksXnntG1EvAfsJZ2TUmHkF8qma+DcB/tB8MtoMUYZS5lsYtLxljStyBRO6T2FBE9BCkf9rRuYBqO7GUZuZcWYTuFEUL9CIYjRe0kxtE3n42e6GIyMOlRBTBylbjFvytw5fKPFpKSiDLJaNR7emtgCUfTyvpnS+m/Yq0e2twd/h0ZlI/fRaIR0IidvpfaHX2u9gqWYIJ4XlbqIWz2O0O1sic9Ml24NTv7IOXeFYLypf6XZD59CiBXJp/FLjFrmsVL774EjUvSgBHAuR/qnoxZmhR2/OFNqxDVfiV8BA1IeM6INNvg87HEclJIKBgtrjxaeQvuVVy6zQhvskTBAvIIB9vaVZlZvOj89HzDmzrkqGOdzabFn1PaIUIyN6H8t9Pp/mEmqsl7Q3y/RG2P/X9rU5HccfZMVLFRcQ1L1AA0bz0MFLWpoXVomcKBGcSNmhffxyOtClJwLgIUgiHTHQ7MhJFfK9QmW7qaxLlDVgQrIQev6rYCmSHMj8bgXi5FmO1xA2hnIubCRT+6oPoI90hs2jwi/SzMThLg9EA3YIvAAdCgLdv3mn4B6eEcjY4FjDSycnRmnjIjWRk375Os6pWiP1GWfsBBAWDFbMTOGmpc0vV/A/tWJ9UqpXzOZLaQ/GnwAiyQ8tBGzsOeZal5cpjVBGQBG78NIXtLc+sgR7LZtTpxQZfCXomSVKVJ8j4Zxu4uPTkSqZV8eckLnASXXu3sE5MjTwQgufaDwIrVDh0q0xuDOIhO5vSdoyVQgMhSBi0Qhx5ukfSltdCezEs+7H89jTBF9P5YwdvpP6nZiF1DIJC7ujbgNAKAPDz2kH1Aff8DUtpSMIWkgArn48NJYuDxq5jXeAx4G/Gipd2E9JfxK/WiCj87mPMYdNOBo5r0wOj/2E72F97eUsZ2IAm44BPce5UxC8KkkcTtxWccu8VwBcHFrUhvjxUa0eqRnp4nxJabmV+AHLEa26cD1jJMVeWhHY6kptEwEYfyEjV+Ft3xrwTNQE/8/ySwqvwDSFD3ODUaNigUA6nrGd7RevUdWPi7rjE2QnOBFZNXqCOCN/5BjVAVHKbxT4Ga6VZ6z26m9UruehDy5XaCqUxKlXVTuqfbPv6LMm9uH2irNOzRbNAuFpZraiaHdeXfnxB5QBqPKYIG6jsf0KtMtPoRRq2EebW9shzUPNDHnwhlluVcJHlsC9nfct+jbYt5JJyom53huMxDUHztFIU0/o2bdbhdlz2asTEdXak+5UlDPCWolEDoUVnPNDuwtqtQ7VQbJHFxwpcNegTsGsGjzAmfZTeSXLxgFZnFP0mLHw8T4Ny5bpAZcLgMydr5B+BTM5gnADdrE0E5K6c87KFtRBIa6QBRUUezdjNa5dtR4G6nx+5Qth5CoAsnNFpN0pG/G2PuGCRt97zVTJKegTAVZ44YD3/V5H5CnMg9Nts83FzK1IWzHCGNum94yw1czf+75sIuQizOnNHnUqo9TX0WiZ2crryuwJE7Mtk5FDMgsa9hCRUX/HO33nKafgVJKphmpR+F3/m141wOSBMWNtHYeUdCtGV69txAS5qIVuVQKqUmZ+JI1umBEYbFKuf4jN52JUHq2imZrudROOE/Sebqg7UWy9PNyJwhvevB172PMf0PXj5dTWx78kbYB6o35x3JBpVkVjUC+htz5g1Y1fVTCMOKCRPH/KW1yG8PiT8ldsOiQk7oT3uAoO3Zntaoa6la8BnuHmcUzgedSZeF5SUTPDIOPB64qqri1xsHWcn3jJ553kD8rgmkqCJ2EyaSSuJq0WHOsDHP7ijsD0zyi2C9vqPrHW9hfygbMExe1z8va3nF08rf6BSQB24JOjdnzluXlWTHDC8Yr+XmO/LMD0m2ebVIboz9gZ8T2mY3JRtlIZNzsjmmiAWh1PgUVJmjLS9Rcybjedy9SrCGANNnf7IjYXiBB+mpvOf+ophJSVudVKbVF1nkMx/LosRvqTjByWvGku2flQkuf4rJwf5/eZe5glx5lPnGA98RQXU5HhFt4rn873J5cNse0r/4KHPIXeWAgmFWPrCBbag0h79zmKgBHA6o/Mzay3F31RQ1cOzdpAKcBT/MfTmbWWK8Iig1Y0Oyj4VAft5KFKZbm5HLTeO4tMn3oFTo7GecBtjDUubxe/GDLqJphfos5VQj2AIrBCK5899uFetQ9AJb/6BaO4wg3UH5To+QHVtFXw5BLYFLMk/rTeSoSsN4YraRhHZsyTJ72KPPhzYKQjTr8Qzm0zS6Mcq34BETOIsltg0V3SzUsT8IBMeaJIrzv67NhVIAC2N7pqAYGwPxbrPYUJ8oj2T2m+J6t68c+cY0YXsXdTMQ+nO6c/P1AYJYsP+gXdkL14aewtVNrZcCgUdYWCJBPzSz8xlOF8it91/17+WdBtwZ0yYnAY/Z3Z+pHhFDB7oZ3FSDm8jI/HOk5IhkTesEBHhpMANyrmWXpoxQ5Ef+oLwIo54QzZi5ymDerrWdKQ6NXd0xzcecZahgErDjUxmzfjYkjVx/AoZbwrPtiV3pMJDsxkedjd4+qGdUhDKqj3yGT39qWNgQOZqMRnXijqAwpAUgC/RmvFVBmajOYW9afbyWPb9G3oGeKNL3JSv5gh69rkXGnI1++y+YuDPF5A6fbrpywQzl/j+t1W7wmW5dd7BtkGavouI/PwmNo6K/dHnVeY+CmWDSC8wqATQh/u/ctrviWS+Ir3uc18Loxpu3A8XPvDbHPR9Jh8cg60zI4hMrfbVOF2roL/2zRfk1jYpflY+EiDg3D7EKKa0i2HDh6CXh9YjWGGhSGFN/t0+n/og5ymaUPRhzcuyqP6Wq6KRPhqrY0oCfzff9bIk0FPlbfyvUTCbOs0D9rnKr9OVa/lf5M4L8ctv+ogFpTwInmp+TlHoZDMj3ckr9ss7vVZWbBGE3VCrEpt/YT77/5ndHPvITIDBvr50ViSwvCpINEM2KSn39Vy5n1mKlJwECgESHnhB+YFiM+0yvxD5A3oNa6s4eUUqyGj8EHkZmldmnW2h3F7xD/QBNZKVTSbwb8FlBYDGcDL2UT5OZxGA2cSYjnxMv0zJ7AlELVio7wyi+Tmfsge2JbS2MUr5KQkKpoCBmuk7PbgXzBw8nfP+HJRDnA/+4R+pOp1drk4V6/wPR9d3OhCdRATChJYcOVFLDJm3rUleBCVW+3mkWjFxS/PoB1/C24KRahlxO3jsuXYSFc/qyYXHXWC4Ki4n1HvtLzNVF9KWJdIqPiIMg6Z9++aKVi/mNFZk0GR8ne3lUzUaSDA2VKLmjlamoR/9DpuOtk+7CncAVjqY07GV78P78L0Y5BDQbG4wvJjuSU5bI7lhHJMJVlxpgYjZMYyNW3m0pzh809u5M3OD9HMBhlMQ257nmS5a+icezDDSVKs0Pp45VZ3eSMgwKM+m2SvH36e/WVLZNrPRh1OBo70ruZNrbv8/HsHSbcOAJ/LfaIHwxizT6i5FzFgF5CEp2ZZMtkT0UerzLUgCYE5SkiGCdsg7KbQCwEMX7IV2uMEm8oE1+SalfjAMU3HjQEnR69KHy3aSvyRXQj9XoHyGg+W5aEPb+EYaT+cpByATNyblkvEaKXvZhicynnefkDzmM/EFnCGO4/1KB3y9iFrVxN3FHc/LW4UslMJJJ76zSVRUetfy8RYohCCPPuvTfvqOPY7ieb5B2QRgXzhtrbkVZP9ThoPMc6MNOwcomS5GR4uOeFwNRG+JYYLWVTr5FePs5f+95oguk/c1EFpJ8Qa5gGlv3ENDBGdFtRFoDNAQxwmbvMdOujIw0wlgbPTXXbnnTQG7knZnn+UoeRDOdehQS8VOuISJyaDTqmvf2y3q+U7UpxjT/Z7UD+HGoFbfuhZrLYstfWs2gncKT/UKlyaPUf/eRUoYmH6BFQDYtAoUhN2gr7pEU7oxnFQvvqwvJ6AWGo2dnGyzFj91CTnIPdmQwnBfRkR9KYBnACGjfZzbV4/PNB3JfXlshi8abYIrHlsbbgji78d0Wc3718NB5bcGKEj5zXJaasOmigzuTqVUoOYf+LQxVmuuYBQ+Wz8N6q0RDm+AJA+OBkjnmcv6KnLmm/XPn+9cCiEkW6G+uUGAdIlUSdiO+frQ3UMysMlXRSMq2JwusRxJXJdEuFfhvLTJ/0OwHhXKdF7pPHLLJxScQDWDhPymzoM7EvGhpWUWi+9NWhGgtOHbguaOIsxOV/hfG+DgEv/tODJOe3M0717sw+l3mdcKifl/BPCKffTWFrwWsNOghigXbSVUVeZNXi8g3kzQj2lkXoZcykbKdHwgthpVbpZ3eZ5yOdz5MktOgCLBnkin0FB56cUTTxAWQCEnijZ9uSCoZWku863Y0rJa6eRuryvUFcOu09tIKI5QyonSthS17QKcZ5LllZBzSnLAlidBo5Ch/4pnx+N4/irwmsfjAycNTKDlbCcIKIPkLPuR0P+T0Ph0xpr8D7f+u7Ge9b4vwiIKa+Fbysrwzae3OsuQSZXsqSPUJ84BCJRUACrfEFUrhlb/OlvhkY/hBPc/d5T55eUBeqTAjde6VjNvnl3Pd6MmLDmW6YaVIItNsUx3rUmWUk3iPEEZWvycOMYO8I3gCGcb5aZHugLS8xI/8v2Kd6TEilXYXaSbPhSJk0IJjprRzrn0p/yGtGkHpugnYJeWU44Qis3iyXCzLaPVMKiBPbnXd/UF/NfR2HDcDQ/Arp7QgAh75vgO6Cbl6M2YAo0rRtjwFi1a+CF6aRfEZEswewGLVZOG2fodouJ6JoeIzUWHpn57vATvOCz/b+lAs28giq4Jd/KKZkGHVnjM6FapskMZiU2802vg3sC9yXg2AAAavtS/YJzfwdrbz+DBJvNGCwgEwWCGiKcx4aiuE8mfsShWLr26cjtnn2AV54x6BPyggziMqQ+q1eRAprD4RK1lbvjhiIj0qG55nUEhzLgFfnL8WrlayTXUXP23fpGK90cGCYJAi0f6gAscv2UNBGrNOGe0o4252Q4o89ysMKM6YOfarC3lyet78oQHUUg6q/xhQV6uVHfXZVKa5MXP/5mijyH4v/Iq4UqTIr/ZvK88jEvreE+sOhzPo7Kw7r7rFqHESKMJyUoChm6GhaSysesAhRHHxoz0rOmFvXZEX/4W+yPoyJlw6CwCCxVC5InwyHukTBlXWoQ9V+ksHWeE8QOyq3iNmRLEPhnPQbregWsskrCMGElfk2fMsVYAHGfgH5e6ZyScsAhkOvWJCh+09HEJQopNaIfONM+4FCyNqDoUyztxwzywipS05kN5+uuu33XtO2+nBIVQJgTjjMyW219HRCUH21MDXbNYi5uvfPy78uq53NhDSbJNVmveaGe40yhXzJevlXAAuE8pvZLZIxCHhElqmDO5jy6aBNPtQ+AtXdMZ+Jx+xNkjw2/cKtckhYKF4eDG9j31a+uXr2h1Yz/bWKYAC55X+IjtANzntr+bvw0EXn/D0eyefx/XgFILqfwU+gih7aAAAAAAAAAAAAAA=="
       };
       const _imgDesc = Object.getOwnPropertyDescriptor(Image.prototype, "src");
+      /* The game's own sprites, made to come back. The game sets a sprite's
+       * src once and never again: one that failed to load — a refused
+       * request, a dropped connection, a moment the site was busy — stays
+       * missing for the rest of the page (the hat on a player, the store's
+       * pictures, a weapon). So a sprite that fails is asked for again, three
+       * times, further apart each time, past any cached refusal; and if it
+       * still will not come, RYN says once what the site answered. */
+      const SPRITE_PATH = /(?:^|\/)img\/(?:hats|accessories|weapons|animals|icons|resources)\/[^?#]+\.(?:png|webp|jpe?g|gif)$/i;
+      const SPRITE_RETRY_MS = [ 1500, 5e3, 15e3 ];
+      const spriteTries = new WeakMap;
+      const spriteHeard = new WeakSet;
+      let spriteReported = false;
+      const reportSprite = url => {
+        if (spriteReported) return;
+        spriteReported = true;
+        const say = status => {
+          const msg = "Game pictures are not loading — " + (status ? "the site answered HTTP " + status : "no answer from the site") + " for " +
+            url.replace(/^https?:\/\/[^/]+/, "").replace(/\?.*$/, "") + ". Hats and other sprites may be missing; reload the page, " +
+            "and make sure no other client script runs at the same time.";
+          try {
+            console.warn("[RYN] " + msg);
+          } catch (_) {}
+          try {
+            if (window._rynBotToast) window._rynBotToast(msg, 9e3);
+          } catch (_) {}
+        };
+        try {
+          fetch(url, {
+            cache: "no-store"
+          }).then(r => say(r.status), () => say(0));
+        } catch (_) {
+          say(0);
+        }
+      };
+      const onSpriteError = function() {
+        const state = spriteTries.get(this);
+        if (state === void 0) return;
+        if (state.n >= SPRITE_RETRY_MS.length) {
+          (window.RYN = window.RYN || {})._spriteFailures = (RYN._spriteFailures || 0) + 1;
+          reportSprite(state.url);
+          return;
+        }
+        const wait = SPRITE_RETRY_MS[state.n++];
+        setTimeout(() => {
+          // Only if nothing has given this image another picture since.
+          if (spriteTries.get(this) !== state) return;
+          _imgDesc.set.call(this, state.url + (state.url.indexOf("?") < 0 ? "?" : "&") + "ryn=" + state.n);
+        }, wait);
+      };
       Object.defineProperty(Image.prototype, "src", {
         get() {
           return _imgDesc.get?.call(this);
         },
         set(value) {
-          if (value in _customTextures) value = _customTextures[value];
+          try {
+            this.__rynBad = false;
+          } catch (_) {}
+          if (value in _customTextures) {
+            value = _customTextures[value];
+            spriteTries.delete(this);
+          } else if (typeof value === "string" && SPRITE_PATH.test(value)) {
+            let url = value;
+            try {
+              url = new URL(value, document.baseURI).href;
+            } catch (_) {}
+            if (!spriteHeard.has(this)) {
+              spriteHeard.add(this);
+              this.addEventListener("error", onSpriteError);
+            }
+            spriteTries.set(this, {
+              url: url,
+              n: 0
+            });
+          } else {
+            spriteTries.delete(this);
+          }
           return _imgDesc.set?.call(this, value);
         },
         configurable: true

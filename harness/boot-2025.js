@@ -40,6 +40,22 @@
  *   silentname   the server ignores a bot's spawn under one name, silently
  *   kickname     the server turns a bot away by name, saying why ("B")
  *   tserror      a bot's Cloudflare check fails outright
+ *   hats         I wear a hat (Bull Helmet), and the store is opened: every
+ *                picture in it loads, and the hat is drawn on me
+ *   spritefail   the site answers 503 the first time each hat and weapon is
+ *                asked for (with +hats: they still come)
+ *   restyled     the bundle's grid and name-colour code written another way,
+ *                so RYN's hooks for them find nothing (the live build): the
+ *                grid must still go, and my name must still take my colour
+ *   signedin     I am signed in to an account: my join goes through on it, and
+ *                the game never loads Cloudflare's script (the live build) —
+ *                a bot still needs a check, and RYN has to load it
+ *   oddname      with restyled: the renderer is handed my name in a form RYN
+ *                cannot recognise as mine, so only RYN's own redraw of it,
+ *                from the player, can colour it
+ *   boss         a Crab King (2025 boss) above me: its health bar and number go
+ *                under it, like any animal's, not across the top of the screen
+ *   lag          every frame takes 45 ms each way (a 90 ms ping)
  *   quiet        the server sends no player update on a tick with no change
  *   heartbeat    quiet, but an empty update once a second
  *   members      the join API turns the bot away: a signed-in players' server
@@ -47,8 +63,41 @@
  */
 const fs = require("fs");
 const path = require("path");
+const zlib = require("zlib");
 const { chromium } = require("playwright");
 const server = require("./server");
+
+/* The game's sprites (/img/...): solid 16x16 PNGs in colours nothing else in
+ * the scene is — hats magenta, weapons cyan, accessories orange, the rest
+ * yellow — so a sprite that is drawn can be found on screen, and told from
+ * one that failed. */
+const spritePng = rgb => {
+  const crcTable = Array.from({ length: 256 }, (_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ c >>> 1 : c >>> 1;
+    return c >>> 0;
+  });
+  const crc = buf => {
+    let c = 0xffffffff;
+    for (const b of buf) c = crcTable[(c ^ b) & 255] ^ c >>> 8;
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4), sum = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+    sum.writeUInt32BE(crc(body));
+    return Buffer.concat([len, body, sum]);
+  };
+  const W = 16, H = 16, ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(W, 0);
+  ihdr.writeUInt32BE(H, 4);
+  ihdr[8] = 8; ihdr[9] = 6; // 8-bit RGBA
+  const raw = Buffer.alloc((W * 4 + 1) * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) raw.set([rgb[0], rgb[1], rgb[2], 255], y * (W * 4 + 1) + 1 + x * 4);
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", zlib.deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]);
+};
+const SPRITES = { hats: spritePng([255, 0, 255]), weapons: spritePng([0, 255, 255]), accessories: spritePng([255, 128, 0]), other: spritePng([255, 255, 0]) };
 let wireCache = null;
 const wire = () => wireCache || (wireCache = require("./proto-2025")());
 
@@ -90,8 +139,15 @@ const PARENT = {
   accountPassword: "accountCard", accountStatus: "accountCard", accountSubmit: "accountCard",
   accountLinkA: "accountCard", accountLinkB: "accountCard", accountClose: "accountCard",
   promoImgHolder: "mainMenu", promoImg: "promoImgHolder", menuNotice: "mainMenu",
+  // the menu's own nav links, written out in #menuNav (MENU_DIALOG)
+  clanNav: "menuNav", friendsNav: "menuNav", menuDialog: "mainMenu",
+  clanName: "clanCard", clanStatus: "clanCard", clanBody: "clanCard", clanClose: "clanCard",
 };
 if (!ids.includes("setupCard")) ids.push("setupCard");
+const MENU_DIALOG = `<div id="menuNav"><a data-view="play">Play</a><a id="clanNav" data-view="clan">Clan</a><a id="friendsNav" data-view="friends">Friends</a><a data-view="settings">Settings</a></div>
+<div class="menuView" data-view="play"><div class="viewBack"></div><div class="viewBody"></div></div>
+<div class="menuView" data-view="settings"><div class="viewBack"></div><div class="viewBody"></div></div>
+<div class="menuView" data-view="friends" style="display:none"><div class="viewBack">Back</div><div class="viewBody"><span class="friendsOnline">Friends online</span></div></div>`;
 const tag = id => CANVAS.has(id) ? `<canvas id="${id}" width="1280" height="720"></canvas>`
   : CHECK.has(id) ? `<input id="${id}" type="checkbox">`
   : TEXT.has(id) ? `<input id="${id}" type="text" value="">`
@@ -102,6 +158,9 @@ const tag = id => CANVAS.has(id) ? `<canvas id="${id}" width="1280" height="720"
   // so this page never showed that screen moving the container (and the
   // challenge with it) into a slot the 2025 game never reveals.
   : id === "turnstileWidget" ? `<div id="${id}"></div>`
+  // the game's menu: its nav and its views live in #menuDialog, which is
+  // where the bundle looks for them (zi.querySelectorAll("#menuNav a"))
+  : id === "menuDialog" ? `<div id="${id}"><span></span>${MENU_DIALOG}${ids.filter(c => PARENT[c] === id).map(c => tag(c)).join("")}</div>`
   : `<div id="${id}"><span></span>${ids.filter(c => PARENT[c] === id).map(c => tag(c)).join("")}</div>`;
 
 const FRVR_SDK = `
@@ -122,6 +181,7 @@ window.FRVR = {
     getFRVRID: function () { return this._in ? "frvr-1" : null; },
     getAccessToken: function () { return this._in ? "acc-token" : null; },
     getFreshAccessToken: function () { return Promise.resolve(this.getAccessToken()); },
+    authenticatedFetch: function (url, opts) { return fetch(url, opts); },
     requestEmailLoginCode: function (e) { (window.__frvrCalls = window.__frvrCalls || []).push("requestEmailLoginCode:" + e); return Promise.resolve({}); },
     requestEmailRegisterCode: function (e) { (window.__frvrCalls = window.__frvrCalls || []).push("requestEmailRegisterCode:" + e); return Promise.resolve({}); },
     registerOnFRVR: function (o) { (window.__frvrCalls = window.__frvrCalls || []).push("registerOnFRVR:" + (o && o.email)); return Promise.resolve({}); },
@@ -151,7 +211,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
 #enterGame, #nameInput { position: relative; z-index: 5; display: block; min-height: 30px; }
 #menuContainer, #mainMenu, #menuCardHolder { position: relative; z-index: 10; }
 /* the game's own stylesheet keeps these closed until it opens them */
-#accountCard { display: none; }
+#accountCard, #clanCard, #profileCard, #confirmCard { display: none; }
 #verifyDialog:not(.showing), #verifyBackdrop:not(.showing) { display: none; }
 #accountCard input, #accountSubmit, #accountClose, #signInButton { display: inline-block; min-width: 60px; min-height: 20px; }
 </style>
@@ -159,10 +219,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
 <body>
 <div id="menuContainer">
 ${ids.filter(id => !PARENT[id]).map(tag).join("\n")}
-<div id="menuNav"><a data-view="play">Play</a><a data-view="settings">Settings</a><a data-view="friends">Friends</a></div>
-<div class="menuView" data-view="play"><div class="viewBack"></div><div class="viewBody"></div></div>
-<div class="menuView" data-view="settings"><div class="viewBack"></div><div class="viewBody"></div></div>
-<div class="menuView" data-view="friends"><div class="viewBack"></div><div class="viewBody"><span class="friendsOnline"></span></div></div>
 <div class="staffPanel"></div><span class="noteDot"></span>
 </div>
 ${Array.from({ length: 23 }, (_, i) => `<div id="actionBarItem${i}"></div>`).join("")}
@@ -197,6 +253,25 @@ function reshape(code) {
     .replace(/(\w+)\((\w+\[\w+\(\d+,"[^"]*"\)\+"ay"\]\(\w+\)),(\w+)\((\w+\[)/, "(0,$1)($2,(0,$3)($4")
     .replace(/\+"b=",(\w+)\)/, '+"b"+"=",$1)');
   return out;
+}
+
+/* The bundle's drawing code, written the way another build might write it:
+ * the grid's alpha as 0.06 rather than .06, a name's colour in brackets. Each
+ * changes nothing at run time, and each takes away the shape RYN's RenderGrid
+ * and nameColor hooks look for — as the live build did: its grid stayed and
+ * your name stayed white. */
+/* +signedin: the game loads Cloudflare's script only for a player who needs
+ * a check, and one signed in to an account does not (live build). */
+function signedIn(code) {
+  return code
+    .replace(/\}il\(\);const (\w+)=document\.getElementById\("nameHint"\)/, '}window.__signedIn||il();const $1=document.getElementById("nameHint")')
+    .replace(/(\.value=\w+\|\|"",\w+\(\),)il\(\)\}/, "$1window.__signedIn||il()}");
+}
+
+function restyle(code) {
+  return code
+    .replace(/(\.globalAlpha=)\.06(;const \w+=\w+\/18;for)/, "$10.06$2")
+    .replace(/,(\w+)=(\w+)\?(\w+):"#fff",(\w+)=\{color:\1,/, ',$1=($2?$3:"#fff"),$4={color:$1,');
 }
 
 /* Cloudflare Turnstile, as far as the login depends on it:
@@ -324,14 +399,37 @@ async function run(spec) {
   const tserror = flags.includes("tserror");
   const interactive = flags.includes("interactive") || slowclick;
   const reshaped = flags.includes("reshaped");
+  const restyled = flags.includes("restyled");
+  const signedin = flags.includes("signedin");
+  const oddname = flags.includes("oddname");
+  const boss = flags.includes("boss");
+  // +lag: 45 ms each way, a 90 ms ping (NET_DELAY_MS sets any other)
+  const laggy = flags.includes("lag");
+  const hats = flags.includes("hats");
+  const spritefail = flags.includes("spritefail");
   /* +members / +busy (or JOIN_REFUSE=members|busy): the join API refuses the
    * bot the way the live one can —
    * "members" answers every join after the player's with 403 {error:"auth"}
    * (a server for signed-in players; bots are guests), "busy" answers the
    * bot's first join with 429. */
   const joinRefuse = flags.includes("members") ? "members" : flags.includes("busy") ? "busy" : process.env.JOIN_REFUSE || null;
-  const served = reshaped ? reshape(bundle) : bundle;
+  let served = reshaped ? reshape(bundle) : bundle;
   if (reshaped && served === bundle) throw new Error("reshape changed nothing");
+  if (signedin) {
+    const before = served;
+    served = signedIn(served);
+    if ((served.match(/window\.__signedIn\|\|il\(\)/g) || []).length !== 2) throw new Error("signedIn did not take");
+  }
+  if (restyled) {
+    served = restyle(served);
+    if (!served.includes(".globalAlpha=0.06;const") || !/=\(\w+\?\w+:"#fff"\),\w+=\{color:/.test(served))
+      throw new Error("restyle did not take");
+  }
+  if (oddname) {
+    const before = served;
+    served = served.replace(/M\.text\(p\.name\|\|"",/, 'M.text((p.name||"")+"\u200b",');
+    if (served === before) throw new Error("oddname did not take");
+  }
   // 150% display scaling: the game draws at the device pixel ratio ("native
   // resolution", on by default), so its canvas has more pixels than CSS px.
   const hidpi = flags.includes("hidpi");
@@ -361,7 +459,7 @@ async function run(spec) {
   /* +heal: the server takes my health down to 60 (a hit, "O" for my sid).
    * Auto Heal is on by default; it has to eat. */
   const heal = flags.includes("heal");
-  const out = { mode: spec, base: mode, pinned, interactive, joinRefuse, errors: [], consoleErrors: [], sockets: [], joins: [], frames: [], notes: [], swings: [], simEvents: [] };
+  const out = { mode: spec, base: mode, pinned, interactive, joinRefuse, signedin, errors: [], consoleErrors: [], sockets: [], joins: [], frames: [], notes: [], swings: [], simEvents: [] };
   const browser = await chromium.launch({
     executablePath: "/opt/pw-browsers/chromium",
     args: ["--no-sandbox", "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
@@ -396,9 +494,27 @@ async function run(spec) {
       if (url.pathname === "/assets/" + INDEX) return send(served, "text/javascript");
       if (url.pathname === "/assets/" + VENDOR) return send(vendor, "text/javascript");
       if (url.pathname === "/assets/" + PROTO) return send(PROTOCOL_MODULE, "text/javascript");
+      // the game's own sprites, served as the live site serves them
+      if (/^\/img\/.+\.png$/.test(url.pathname)) {
+        (out.sprites = out.sprites || []).push(url.pathname);
+        /* +spritefail: the first time a hat or a weapon is asked for, the
+         * site answers 503 — a moment it was busy. The game asks once. */
+        if (spritefail && new RegExp("^/img/(" + (process.env.SPRITEFAIL_KINDS || "hats|weapons") + ")/").test(url.pathname)) {
+          out.spriteFirst = out.spriteFirst || new Set();
+          if (!out.spriteFirst.has(url.pathname)) {
+            out.spriteFirst.add(url.pathname);
+            out.spriteFails = (out.spriteFails || 0) + 1;
+            return route.fulfill({ status: 503, contentType: "text/html", body: "<h1>busy</h1>" });
+          }
+        }
+        // debug aid: a slow site rather than a refusing one
+        if (process.env.SPRITE_DELAY && /^\/img\/hats\//.test(url.pathname)) await new Promise(r => setTimeout(r, +process.env.SPRITE_DELAY));
+        const kind = /^\/img\/(hats|weapons|accessories)\//.exec(url.pathname);
+        return route.fulfill({ status: 200, contentType: "image/png", body: SPRITES[kind ? kind[1] : "other"] });
+      }
       return send("", "text/plain", 404);
     }
-    if (url.hostname === "cdn.frvr.com") return send(FRVR_SDK, "text/javascript");
+    if (url.hostname === "cdn.frvr.com") return send(signedin ? FRVR_SDK.replace("_in: false", "_in: true") : FRVR_SDK, "text/javascript");
     if (url.hostname === "challenges.cloudflare.com") {
       await new Promise(r => setTimeout(r, TS_SCRIPT_MS));
       return send(TURNSTILE(interactive, tserror), "text/javascript");
@@ -442,6 +558,7 @@ async function run(spec) {
         return send(JSON.stringify(name === "bot11" ? { reserved: true } : {}), "application/json");
       }
       if (url.pathname === "/top") return send(JSON.stringify({ players: [], clans: [] }), "application/json");
+      if (url.pathname === "/clan/mine") return send(JSON.stringify({ clan: null, role: null, invites: [], requests: [] }), "application/json");
       return send("{}", "application/json");
     }
     if (/\.moomoo\.io$/.test(url.hostname) && url.pathname === "/ping") return send("ok", "text/plain");
@@ -455,12 +572,17 @@ async function run(spec) {
     const conn = { url: ws.url(), letters: [], violations: [] };
     out.conns.push(conn);
     const handlers = { message: [], close: [] };
+    /* NET_DELAY_MS: each way, for every frame — a ping of twice that. The
+     * container's own is near zero, which hides anything that only goes
+     * wrong when a frame takes as long as a real one does. */
+    const lag = +(process.env.NET_DELAY_MS || (laggy ? 45 : 0));
+    const later = fn => lag ? setTimeout(fn, lag) : fn();
     const sock = {
-      send: buf => { try { ws.send(Buffer.from(buf)); } catch (e) {} },
+      send: buf => { const b = Buffer.from(buf); later(() => { try { ws.send(b); } catch (e) {} }); },
       on: (evt, fn) => { (handlers[evt] = handlers[evt] || []).push(fn); },
       close: (code, reason) => { try { ws.close({ code, reason }); } catch (e) {} },
     };
-    ws.onMessage(m => { const b = typeof m === "string" ? Buffer.from(m) : m; handlers.message.forEach(f => f(b)); });
+    ws.onMessage(m => { const b = typeof m === "string" ? Buffer.from(m) : m; later(() => handlers.message.forEach(f => f(b))); });
     ws.onClose(() => handlers.close.forEach(f => f()));
     server.attach(sock, (...a) => {
       out.frames.push(a.join(" ").slice(0, 160));
@@ -491,6 +613,10 @@ async function run(spec) {
       ignoreNames: silentname && out.conns[0] !== conn ? ["bot1101"] : [],
       kickNames: kickname && out.conns[0] !== conn ? { bot1101: "This name belongs to someone else" } : {},
       onSpawned: name => { conn.spawnedAs = name; },
+      // +hats: I wear the Bull Helmet
+      mySkin: hats && out.conns[0] === conn ? 7 : 0,
+      foeAway: hats || boss,
+      boss: boss && out.conns[0] === conn,
       onViolation: (why, detail) => {
         conn.violations.push(why);
         out.notes.push("server rejected a frame: " + why + (detail ? " (" + detail + ")" : ""));
@@ -535,8 +661,33 @@ async function run(spec) {
       document.addEventListener("DOMContentLoaded", () => note("DCL exists=" + !!document.getElementById(id)), true);
     })();` });
   }
-  if (grind || trap || visuals) {
-    const settings = JSON.stringify(grind ? { _autoGrind: true } : trap ? { _trapAnimal: true } : {
+  if (signedin) await page.addInitScript({ content: "window.__signedIn = true;" });
+  /* RYN's loading screen: every line it shows, when Play became pressable,
+   * and when the screen went. */
+  await page.addInitScript({ content: `(function () {
+    if (window.top !== window) return;
+    window.__bootTexts = [];
+    const seen = () => {
+      const t = document.querySelector("#ryn-boot .rb-text");
+      if (t) { const v = t.textContent.replace(/ · \\d+s$/, ""); if (window.__bootTexts[window.__bootTexts.length - 1] !== v) { window.__bootTexts.push(v); if (v === "Ready" && !window.__readyAt) window.__readyAt = performance.now(); } }
+      if (window.__bootSeen && !document.getElementById("ryn-boot") && !window.__bootGoneAt) window.__bootGoneAt = performance.now();
+      if (document.getElementById("ryn-boot")) window.__bootSeen = true;
+      const play = document.getElementById("enterGame");
+      if (play && !play.classList.contains("disabled") && !window.__gateAt && window.__bootSeen) window.__gateAt = performance.now();
+    };
+    new MutationObserver(seen).observe(document, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["class"] });
+  })();` });
+  // +boss: what RYN writes on its overlay (the boss's health number)
+  if (boss) await page.addInitScript({ content: `(function () {
+    const fill = CanvasRenderingContext2D.prototype.fillText;
+    window.__overlayTexts = new Set();
+    CanvasRenderingContext2D.prototype.fillText = function (t) {
+      if (this.canvas && this.canvas.id === "ryn-gl-overlay" && window.__overlayTexts.size < 500) window.__overlayTexts.add(String(t));
+      return fill.apply(this, arguments);
+    };
+  })();` });
+  if (grind || trap || visuals || restyled || oddname) {
+    const settings = JSON.stringify(grind ? { _autoGrind: true } : trap ? { _trapAnimal: true } : restyled || oddname ? { _myNameColor: true } : {
       _myNameColor: true, _markRynPlayers: true, _showPlayerID: true, _weaponReloadRing: true, _renderHP: true,
       _positionPrediction: true, _playerTurretReloadBar: true, _displayPlayerAngle: true, _objectTint: true,
       _weather: true, _deathCorpse: true, _itemHealthBar: true, _itemHealthBarEnemy: true, _structureColors: true,
@@ -632,14 +783,68 @@ async function run(spec) {
     userscriptWarning: !!document.getElementById("userscript-warning"),
   }));
 
+  // debug aid: the lobby as it first shows
+  if (process.env.LOBBY_PNG) fs.writeFileSync(process.env.LOBBY_PNG.replace(/\.png$/, "") + "-" + spec.replace(/\+/g, "-") + ".png", await page.screenshot({ type: "png" }));
+  /* RYN's lobby, top row: Sign in (or who you are and Sign out), Clan and
+   * Friends, up by the mark rather than in the middle of the controls — and
+   * each one doing what the game's own does. */
+  if (isRyn) out.lobbyAccount = await (async () => {
+    const look = () => page.evaluate(() => {
+      const box = id => {
+        const n = document.getElementById(id);
+        if (!n) return null;
+        const r = n.getBoundingClientRect(), cs = getComputedStyle(n);
+        const onScreen = r.right > 0 && r.bottom > 0 && r.left < innerWidth && r.top < innerHeight;
+        return { shown: r.width > 0 && r.height > 0 && onScreen && cs.display !== "none" && cs.visibility !== "hidden", top: Math.round(r.top), text: n.textContent.trim().slice(0, 40) };
+      };
+      const view = document.querySelector('.menuView[data-view="friends"]');
+      const vr = view ? view.getBoundingClientRect() : null;
+      return { signin: box("ryn-signin"), signout: box("ryn-signout"), clan: box("ryn-clan"), friends: box("ryn-friends"), chip: (document.querySelector(".rl-acc-chip") || {}).textContent || "",
+               gameSignIn: box("signInButton"), accountCard: box("accountCard"), clanCard: box("clanCard"),
+               friendsView: vr ? vr.width > 0 && vr.height > 0 && getComputedStyle(view).display !== "none" : null };
+    });
+    const res = { before: await look() };
+    if (process.env.LOBBY_DEBUG) console.log(await require(process.env.LOBBY_DEBUG)(page));
+    try {
+      await page.click("#ryn-clan", { timeout: 3000 });
+      await page.waitForTimeout(400);
+      res.afterClan = await look();
+      // close whatever it opened
+      await page.evaluate(() => { for (const id of ["accountClose", "clanClose"]) { const b = document.getElementById(id); if (b) b.click(); } });
+      await page.waitForTimeout(200);
+      if (!signedin) {
+        await page.click("#ryn-friends", { timeout: 3000 });
+        await page.waitForTimeout(400);
+        res.afterFriends = await look();
+        await page.evaluate(() => { const b = document.getElementById("accountClose"); if (b) b.click(); });
+        await page.waitForTimeout(200);
+      } else {
+        // the friends service is up (the game shows its Friends link then)
+        await page.evaluate(() => { document.getElementById("friendsNav").style.display = ""; });
+        await page.waitForTimeout(150);
+        await page.click("#ryn-friends", { timeout: 3000 });
+        await page.waitForTimeout(400);
+        res.afterFriends = await look();
+        await page.evaluate(() => { const b = document.querySelector('.menuView[data-view="friends"] .viewBack'); if (b) b.click(); });
+        await page.waitForTimeout(200);
+        res.afterBack = await look();
+      }
+    } catch (e) { res.error = e.message.split("\n").filter(l => /intercept|stable|visible|enabled|waiting|retrying/i.test(l)).slice(-3).join(" / ") || e.message.split("\n")[0]; }
+    if (process.env.LOBBY_DEBUG) console.log(JSON.stringify(res));
+    return res;
+  })();
+
   // Sign in: the game's own button opens its account card, and the card
   // reaches FRVR.auth. Done before joining, and closed again afterwards.
   out.signIn = await (async () => {
     try {
-      const btn = await page.$("#signInButton");
-      if (!btn) return { error: "no #signInButton" };
-      if (!(await btn.isVisible())) return { error: "#signInButton is not visible" };
-      await page.click("#signInButton", { timeout: 3000 });
+      // RYN's lobby has its own Sign in button (top row); the game's is kept
+      // out of sight and pressed by it
+      const sel = isRyn ? "#ryn-signin" : "#signInButton";
+      const btn = await page.$(sel);
+      if (!btn) return { error: "no " + sel };
+      if (!(await btn.isVisible())) return { error: sel + " is not visible" };
+      await page.click(sel, { timeout: 3000 });
       await page.waitForTimeout(250);
       const card = await page.evaluate(() => {
         const c = document.getElementById("accountCard");
@@ -704,6 +909,23 @@ async function run(spec) {
     const before = await page.evaluate(() => window.__gameCanvasSizes || 0);
     await page.waitForTimeout(2000);
     out.canvasSizes = (await page.evaluate(() => window.__gameCanvasSizes || 0)) - before;
+  }
+
+  /* +hats: the store, opened the way a player opens it — every picture in it
+   * has to load — and then closed, so the hat I wear can be seen on me. With
+   * +spritefail every hat was refused once first. */
+  if (hats) {
+    await page.evaluate(() => {
+      const b = document.getElementById("storeButton");
+      if (b) b.style.cssText += ";position:fixed;top:330px;left:4px;width:40px;height:40px;z-index:2147483646;display:block";
+    });
+    await page.click("#storeButton", { timeout: 3000, force: true }).catch(e => out.notes.push("store: " + e.message.split("\n")[0]));
+    // long enough for a picture refused once to be asked for again
+    await page.waitForTimeout(spritefail ? 4500 : 1200);
+    out.store = await page.evaluate(() => [...document.querySelectorAll("img.hatPreview")]
+      .map(i => ({ src: (i.getAttribute("src") || "").replace(/^.*\/img\//, ""), w: i.naturalWidth })));
+    await page.click("#storeButton", { timeout: 3000, force: true }).catch(() => {});
+    await page.waitForTimeout(400);
   }
 
   if (kill && out.session) {
@@ -904,10 +1126,11 @@ async function run(spec) {
       while (Date.now() - t2 < 9000 && out.conns[before] && out.conns[before].letters.filter(l => l === "0").length < 2) await page.waitForTimeout(250);
       const c = out.conns[before];
       const toast = await page.evaluate(() => (document.getElementById("rynBotToast") || {}).textContent || "").catch(() => "");
-      const devices = await page.evaluate(() => { try { return { mine: localStorage.getItem("moo_did"), bots: JSON.parse(localStorage.getItem("_ryn_bot_dids") || "[]") }; } catch (e) { return null; } }).catch(() => null);
+      const devices = await page.evaluate(() => { try { return { mine: localStorage.getItem("moo_did") }; } catch (e) { return null; } }).catch(() => null);
+      const card = await page.evaluate(() => !!document.getElementById("ryn-bot-verify")).catch(() => null);
       return c ? { url: c.url, spawned: c.letters.includes("M"), frames: c.letters.length, violations: c.violations, toast,
-                   pings: c.letters.filter(l => l === "0").length, spawnName: c.spawnName, spawnedAs: c.spawnedAs, devices, label,
-                   join: out.joins.length > 1 ? out.joins[out.joins.length - 1] : null } : { error: "no bot socket opened", toast };
+                   pings: c.letters.filter(l => l === "0").length, spawnName: c.spawnName, spawnedAs: c.spawnedAs, devices, label, card,
+                   join: out.joins.length > 1 ? out.joins[out.joins.length - 1] : null } : { error: "no bot socket opened", toast, card };
     })();
   }
 
@@ -1001,6 +1224,7 @@ async function run(spec) {
     enterGame: (() => { const b = document.getElementById("enterGame"); if (!b) return null; const r = b.getBoundingClientRect();
       return { cls: b.className, rect: [r.x, r.y, r.width, r.height].map(Math.round), top: (document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) || {}).id }; })(),
     tsRenders: window.__tsRenders,
+    boot: { texts: window.__bootTexts || [], ready: window.__readyAt || null, gone: window.__bootGoneAt || null },
     tsRefused: window.__tsRefused || 0,
     tsByPage: window.__tsByPage || 0,
     tsLoads: window.__tsLoads || 0,
@@ -1011,6 +1235,7 @@ async function run(spec) {
     gameUI: (() => { const g = document.getElementById("gameUI"); return g ? getComputedStyle(g).display : null; })(),
     menuShown: (() => { const m = document.getElementById("menuCardHolder"); return m ? getComputedStyle(m).display : null; })(),
     renderer: !!window.__renderer, drawCalls: window.__drawCalls,
+    bossNumber: window.__overlayTexts ? [...window.__overlayTexts].find(t => /^\d{5,}$/.test(t)) || null : null,
   }));
 
   if (process.env.OVERLAY_PNG) {
@@ -1054,7 +1279,39 @@ async function run(spec) {
       if (dist > 40) skin++;
     }
     outline = grass.join("/");
-    return { distinctColours: colours.size, skin, outline };
+    /* The ground grid: grass under black at 6% (x0.94), in lines across the
+     * whole screen. A screen with the grid has about one grass pixel in eight
+     * that colour; one without, next to none. */
+    const all = x.getImageData(0, 0, img.width, img.height).data;
+    const want = grass.map(v => v * 0.94);
+    let gridPx = 0, grassPx = 0;
+    for (let i = 0; i < all.length; i += 4) {
+      if (all[i] === grass[0] && all[i + 1] === grass[1] && all[i + 2] === grass[2]) grassPx++;
+      else if (Math.abs(all[i] - want[0]) <= 2.5 && Math.abs(all[i + 1] - want[1]) <= 2.5 && Math.abs(all[i + 2] - want[2]) <= 2.5) gridPx++;
+    }
+    /* the hat on me (hats are served magenta; under the game's night tint
+     * it comes out a darker purple), in the middle 60x60 */
+    const hatBox = x.getImageData(cx - 30, cy - 30, 60, 60).data;
+    let hatPx = 0;
+    for (let i = 0; i < hatBox.length; i += 4) {
+      const [r, g, b] = [hatBox[i], hatBox[i + 1], hatBox[i + 2]];
+      if (g < 40 && r > 110 && b > 120 && Math.abs(r - b) < 60) hatPx++;
+    }
+    // my name, above me, in RYN's default name colour #B388FF
+    const nameBox = x.getImageData(cx - 110, cy - 115, 220, 75).data;
+    let namePx = 0;
+    for (let i = 0; i < nameBox.length; i += 4) {
+      if (Math.abs(nameBox[i] - 179) < 40 && Math.abs(nameBox[i + 1] - 136) < 40 && nameBox[i + 2] > 215) namePx++;
+    }
+    /* +boss: the game's boss bar is a dark rounded tray across the top
+     * centre (#3d3f42); RYN's bar for the King, red, sits between it and me. */
+    const topBand = x.getImageData(cx - 260, 0, 520, 110).data;
+    let topTray = 0;
+    for (let i = 0; i < topBand.length; i += 4) if (topBand[i] === 61 && topBand[i + 1] === 63 && topBand[i + 2] === 66) topTray++;
+    const kingBand = x.getImageData(cx - 60, cy - 200, 120, 140).data;
+    let kingBar = 0;
+    for (let i = 0; i < kingBand.length; i += 4) if (Math.abs(kingBand[i] - 204) < 20 && Math.abs(kingBand[i + 1] - 81) < 20 && Math.abs(kingBand[i + 2] - 81) < 20) kingBar++;
+    return { topTray, kingBar, distinctColours: colours.size, skin, outline, gridRatio: +(gridPx / Math.max(1, grassPx)).toFixed(4), hatPx, namePx };
   }, shot.toString("base64"));
 
   /* The zoom: eight notches of the wheel out, then back. RYN's HP bar under
@@ -1115,13 +1372,40 @@ function report(r) {
     console.log("    lobby: " + r.state.lobbyText.slice(0, 300));
     ok(r.state.ads === 0, "no interstitial ad was requested (" + r.state.ads + ")");
     ok(r.state.frvrHasAuth, "FRVR.auth is intact, so sign-in can work");
-    ok(r.state.lobbyRows === SERVERS.length && r.state.lockedRows === 1,
-       "every server is listed (" + r.state.lobbyRows + "/" + SERVERS.length + "), the members-only one marked locked for a guest (" + r.state.lockedRows + ")");
+    const locked = r.signedin ? 0 : 1;
+    ok(r.state.lobbyRows === SERVERS.length && r.state.lockedRows === locked,
+       "every server is listed (" + r.state.lobbyRows + "/" + SERVERS.length + "), the members-only one marked locked " +
+       (r.signedin ? "for nobody, signed in" : "for a guest") + " (" + r.state.lockedRows + ")");
+  }
+  if (r.base !== "vanilla" && r.after.boot) {
+    /* The loading screen says what it is waiting for — the game, the servers,
+     * then Cloudflare (a guest) or the session (signed in) — and goes when
+     * that is done, not on a clock. */
+    const b = r.after.boot, wait = r.signedin ? "Opening your session" : "Waiting for Cloudflare";
+    const lag = b.ready !== null && b.gone !== null ? Math.round(b.gone - b.ready) : null;
+    ok(b.texts.includes("Loading the game") && b.texts.includes(wait) && lag !== null && lag < 900,
+       "the loading screen names each wait (" + b.texts.join(" → ") + ") and is gone " + lag + " ms after it is ready");
+  }
+  if (r.lobbyAccount) {
+    const a = r.lobbyAccount, b = a.before || {};
+    const up = x => x && x.shown && x.top < 120;
+    if (r.signedin) {
+      ok(up(b.signout) && !(b.signin && b.signin.shown) && /Signed in/.test(b.chip), "signed in, the lobby's top row says so and has Sign out, up by the mark (" +
+        JSON.stringify({ signout: b.signout, chip: b.chip }) + ")");
+      ok(up(b.clan) && a.afterClan && a.afterClan.clanCard && a.afterClan.clanCard.shown, "the lobby's Clan opens the game's clan card" + (a.error ? " — " + a.error : ""));
+      ok(a.afterFriends && up(a.afterFriends.friends) && a.afterFriends.friendsView === true && a.afterBack && a.afterBack.friendsView === false,
+         "the lobby's Friends opens the game's friends list over the lobby, and its back button closes it" + (a.error ? " — " + a.error : ""));
+    } else {
+      ok(up(b.signin) && /Sign in/i.test(b.signin.text) && !(b.gameSignIn && b.gameSignIn.shown) && !(b.signout && b.signout.shown),
+         "a guest gets a labelled Sign in in the lobby's top row, not an empty box beside Play (" + JSON.stringify({ signin: b.signin, game: b.gameSignIn }) + ")");
+      ok(up(b.clan) && up(b.friends) && a.afterClan && a.afterClan.accountCard && a.afterClan.accountCard.shown && a.afterFriends && a.afterFriends.accountCard && a.afterFriends.accountCard.shown,
+         "Clan and Friends are in the top row, and each asks a guest to sign in, as the game does" + (a.error ? " — " + a.error : ""));
+    }
   }
   if (process.env.VERBOSE && r.aborted) console.log("    aborted: " + [...new Set(r.aborted)].join("\n             "));
   ok(!r.oldApi, "nothing asks the retired api.moomoo.io host" + (r.oldApi ? " (" + [...new Set(r.oldApi)].join(", ") + ")" : ""));
   if (process.env.VERBOSE) console.log("    after click: " + JSON.stringify({ enterGame: r.after.enterGame, ts: r.after.tsRenders, texts: r.after.texts }));
-  ok(r.signIn && r.signIn.ok, "Sign in opens the account card and reaches FRVR.auth" +
+  if (!r.signedin) ok(r.signIn && r.signIn.ok, "Sign in opens the account card and reaches FRVR.auth" +
      (r.signIn && !r.signIn.ok ? " — " + (r.signIn.error || JSON.stringify(r.signIn.calls)) : ""));
   ok(!r.after.tsRefused, "no Turnstile render was refused as already rendered (" + r.after.tsRefused + ")");
   if (r.base === "late") ok(!r.after.tsByPage, "only RYN's copy renders Turnstile — the page's own copy is told no (" + r.after.tsByPage + ")");
@@ -1145,7 +1429,9 @@ function report(r) {
   const copies = r.after.copies.join(",");
   ok(copies === (r.base === "vanilla" ? "page" : "ryn"), "one copy of the game runs" +
      (r.base === "vanilla" ? "" : ", RYN's — the page's own module is stopped before it does anything") + " (" + (copies || "none") + ")");
-  ok(r.after.tsLoads === 1, "Turnstile's script is loaded once (" + r.after.tsLoads + ")");
+  // signed in, nothing needs a check until a bot does (and then RYN loads it)
+  const tsWant = r.signedin && !r.bot ? 0 : 1;
+  ok(r.after.tsLoads === tsWant, "Turnstile's script is loaded " + (tsWant ? "once" : "not at all, signed in with no bot") + " (" + r.after.tsLoads + ")");
   ok(!r.after.tsReloads, "no challenge was thrown away by moving its frame — a moved iframe reloads (" + r.after.tsReloads + ")");
   const pings = r.conns.length ? r.conns[0].letters.filter(l => l === "0").length : 0;
   ok(pings >= 1, "the player's connection pings the server (" + pings + ")");
@@ -1181,10 +1467,14 @@ function report(r) {
      * someone, so the bot steps past it to the next free number. */
     ok(!b.error && b.spawnName === "bot1101", "a bot's name carries its number and steps past one that is taken (typed bot1: bot11 is taken, joined as " +
        JSON.stringify(b.spawnName) + ")");
+    /* As Glotus's bots join, and they get in on the live game: as this
+     * browser — your moo_did, the device id the game sends with your own
+     * join — and on the host name alone. */
     const d = b.devices || {};
-    ok(!b.error && b.join && b.join.did !== d.mine && (d.bots || []).length > 0 && d.bots.indexOf(d.mine) < 0,
-       "a bot is a device of its own to the join API: it never sends yours, and keeps the one it was given (" +
-       "yours " + JSON.stringify(d.mine) + ", the bot's " + JSON.stringify(d.bots) + ")");
+    ok(!b.error && b.join && typeof d.mine === "string" && d.mine !== "" && b.join.did === d.mine && b.join.host === new URL(b.url).hostname,
+       "a bot joins as this browser, the way Glotus's do: your device id (moo_did) and the server's host name (" +
+       "yours " + JSON.stringify(d.mine) + ", the bot sent " + JSON.stringify(b.join && b.join.did) + " for " + JSON.stringify(b.join && b.join.host) + ")");
+    ok(b.card === false, "the bot's Cloudflare card is gone once the bot is in (" + (b.card ? "still up" : "gone") + ")");
     // (+kickname sends the bot away on purpose: there is nothing after that to read)
     if (!r.mode.includes("kickname")) ok(!b.error && b.pings >= 2, "the bot reads what the server sends — it answered a pong with its next ping" +
        (r.pinned ? ", through the per-message mask" : "") + " (" + (b.pings || 0) + " pings)");
@@ -1196,6 +1486,11 @@ function report(r) {
     /* The great hammer reloads in 400 ms, which the server counts down in
      * 111 ms ticks: a swing every fifth tick, ~555 ms, at best. Over 8 s that
      * is 14; a client that keeps up gets most of them. */
+    /* With the press held across the end of the reload, a swing every 556 ms
+     * however the updates fall and however long a frame takes: +quiet+lag
+     * used to drop it to one every 668. */
+    if (r.mode.includes("lag")) ok(g.meanGap !== null && g.meanGap <= 600, "Auto Grind swings as fast as the great hammer allows with a 90 ms ping and a quiet server (mean gap " +
+      g.meanGap + " ms; 556 is every fifth tick, 668 one tick late)");
     ok(g.swings >= Math.floor(g.ms / 800) && g.maxGap !== null && g.maxGap <= 1200, "Auto Grind keeps swinging while you stand still: " + g.swings +
        " swings in " + g.ms / 1000 + " s (" + g.hits + " landed), mean gap " + g.meanGap + " ms, longest " + g.maxGap + " ms, weapons " + g.weapons.join("/") +
        " (" + g.all + " swings since spawn" + (g.quiet !== null ? "; the server skipped " + g.quiet + " ticks with nothing in them" : "") + ")");
@@ -1260,6 +1555,23 @@ function report(r) {
   }
   ok(r.canvasSizes === 0, "the game canvas is left alone between frames (" + r.canvasSizes + " size writes in 2 s standing still) — " +
      "resizing it every frame was the frame-rate drop");
+  if (r.base === "vanilla") ok(r.centre.gridRatio > .05, "the ground grid is there without RYN — the measure sees it (" + r.centre.gridRatio + " of the grass)");
+  else ok(r.centre.gridRatio < .03, "the ground grid is gone" + (r.mode.includes("restyled") ? ", though the bundle's grid code is not the shape RYN's hook looks for" : "") +
+    " (" + r.centre.gridRatio + " of the grass is grid line)");
+  if (r.base !== "vanilla" && /visuals|restyled|oddname/.test(r.mode)) ok(r.centre.namePx > 40, "my name is drawn in my colour" +
+    (r.mode.includes("oddname") ? ", from the player itself — the renderer was handed it in a form RYN cannot tell is mine" : r.mode.includes("restyled") ? ", though the nameColor hook found nothing" : "") +
+    " (" + r.centre.namePx + " px of #B388FF above me)");
+  if (r.mode.includes("boss")) {
+    if (r.base === "vanilla") ok(r.centre.kingBar === 0, "the game draws no health bar under a boss (" + r.centre.kingBar + " px) — the control");
+    else ok(r.centre.kingBar > 150 && r.after.bossNumber, "the Crab King has a health bar under it, and its number, like any animal (" +
+      r.centre.kingBar + " px of bar; number " + JSON.stringify(r.after.bossNumber) + ")");
+  }
+  if (r.store) {
+    const broken = r.store.filter(i => !(i.w > 0));
+    ok(r.store.length >= 5 && broken.length === 0, "every picture in the store loads" + (r.mode.includes("spritefail") ? ", each one refused once first" : "") +
+      " (" + (r.store.length - broken.length) + "/" + r.store.length + (broken.length ? "; broken: " + broken.slice(0, 4).map(i => i.src).join(", ") : "") + ")");
+    ok(r.centre.hatPx > 800, "the hat I wear is drawn on me" + (r.mode.includes("spritefail") ? ", though the site refused it once" : "") + " (" + r.centre.hatPx + " of 3600 centre px are the hat)");
+  }
   ok(r.centre.skin > 300, "the player is drawn at the centre of the screen (" + r.centre.skin +
      " of 900 centre px are not grass " + r.centre.outline + ")");
 }
@@ -1269,7 +1581,8 @@ function report(r) {
     "vanilla+interactive", "fast+interactive", "late+interactive", "late+hidpi", "late+grind",
     "late+grind+quiet", "late+grind+heartbeat", "late+trap+quiet", "fast+pinned+reshaped", "late+pinned+reshaped",
     "fast+members", "fast+busy", "late+kill", "late+visuals", "late+heal", "fast+slowclick", "fast+silentname",
-    "fast+kickname", "fast+tserror"] : which.split(",");
+    "fast+kickname", "fast+tserror", "fast+signedin", "late+signedin", "fast+hats", "late+hats+spritefail", "late+restyled",
+    "late+restyled+oddname", "late+boss", "late+grind+quiet+lag"] : which.split(",");
   for (const m of modes) {
     let r;
     try { r = await run(m); } catch (e) { console.log("\n== " + m + "\n  FAIL  harness crashed: " + e.stack); process.exitCode = 1; continue; }

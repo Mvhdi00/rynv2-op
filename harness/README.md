@@ -83,6 +83,26 @@ The flags, each one a way the live game behaves that a plain run would not show:
   check only after 25 s; `+tserror` fails it outright (the bot must say so,
   and never offer a token twice); `+silentname` has the server ignore a spawn
   under one name; `+kickname` has it turn the bot away with a reason.
+- `+signedin` — I am signed in: the join goes through on the account and the
+  game never loads Cloudflare's script, as on the live build. A bot must still
+  get its check (RYN loads the script). Also checks the lobby's account row,
+  Clan card and Friends list for a signed-in player.
+- `+hats` — I wear a hat and the store is opened: every picture must load and
+  the hat must be on me. Sprites are served as real PNGs in colours nothing
+  else uses (hats magenta, weapons cyan). `+spritefail` refuses each hat and
+  weapon once first (`SPRITEFAIL_KINDS`, `SPRITE_DELAY` to vary it).
+- `+restyled` — the bundle's grid and name-colour code written another way, so
+  RYN's hooks for them miss, as on the live build: the grid must still go and
+  my name must still take my colour. `+oddname` also hands the renderer my
+  name in a form RYN cannot recognise, so only its redraw from the player can.
+- `+boss` — a Crab King above me: it must get a health bar and number under it.
+- `+lag` — 45 ms each way on every frame (`NET_DELAY_MS` for any other);
+  `+grind+quiet+lag` is where Auto Grind's tap used to land a tick late.
+
+Every RYN run also measures the grid (one grass pixel in eight is grid line
+without RYN, next to none with it), names the loading screen's waits and how
+long it stays after it is ready, and, for a guest, the lobby's Sign in, Clan
+and Friends. `LOBBY_PNG=<path>` saves the lobby as it first shows.
 
 Every run also checks that only one copy of the game runs (late injection used to
 run the page's own copy beside RYN's), that Turnstile's script loads once and no

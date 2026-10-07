@@ -29,6 +29,98 @@ python3 harness/ryn-boot-mutate.py   # 41 deliberate breakages, browser test: 41
 
 ---
 
+## Round five (v2.6): bots signed in, your name's colour, the grid, hats, the lobby
+
+v2.6 starts from the 2.5.1 file you tested (another fork of v2.5): its Frost
+Helm in the snow, its early stop of the page's own copy in fast injection and
+its sprite fallbacks are all kept, merged with what follows.
+
+### Bots: "turnstile API not available", every time
+
+You are signed in. The game only loads Cloudflare's script for a player who
+needs a check, and a signed-in player's join goes through on the account
+alone. So there was no `window.turnstile` on the page. Every bot stopped at
+"No Cloudflare check for the bot (turnstile API not available)" before it had
+tried anything. A bot is a guest and always needs a check, so RYN now loads the
+same script itself, the way Glotus does, and waits for it.
+
+The harness reproduces this exactly (`+signedin`: an account, and the game's
+own Cloudflare load skipped). With 2.5.1 the bot never opens a socket. With
+v2.6 RYN loads the script, the bot joins and spawns.
+
+What else was taken from Glotus, whose bots get in on the live game:
+
+- **The check is shown.** It is a visible card in the middle of the screen
+  ("Verify bot connection"), not an invisible widget in a corner. It usually
+  ticks itself in a second or two and goes. Two run at once, the rest queue,
+  and each gets three minutes. Cancel or Escape stops them. The card does not
+  block the game.
+- **The device id is yours** (`moo_did`), as the game and Glotus send it.
+  v2.5 gave each bot a new device, which is the one thing a join API has
+  reason to be strict about.
+- **The host is the server's name alone**, and the protocol module is
+  imported from the page's import map if RYN's copy of the game did not
+  capture it. A pinned server cannot be joined without it, and RYN now says so
+  rather than sending frames the server drops.
+
+### Your name stayed white
+
+The game draws names through its renderer's `text` call. RYN's nameColor hook
+found nothing on the live build. 2.5.1's fallback only ran while that hook was
+silent, and only for some styles. Now any name the renderer is given that is
+yours is drawn in your colour, whatever the hook did. It is also drawn again
+on RYN's overlay, the top layer, exactly where the game put it. If the
+renderer is ever handed your name in a form RYN cannot recognise, RYN draws it
+on top from the player itself, laid out the way the game lays out a name and
+its clan tag.
+
+### The grid
+
+Your screenshot measured one grass pixel in nine as grid line: the RenderGrid
+hook had found nothing on the live build either. The grid is now removed at
+the renderer, which drops any long, straight, black line at a few percent,
+whatever code draws it. Your 2.5.1 screenshot already showed it gone; v2.6
+keeps that and widens the hook.
+
+### Hats and the store's pictures
+
+The game asks for each sprite once. A request that fails leaves the store
+broken and the hat missing for the rest of the session. RYN now asks again
+three times (1.5 s, 5 s, 15 s), past any cached refusal. If a sprite still
+will not come, RYN says what the site answered. The harness now serves real
+images (it answered 404 to all of them before): with each hat and weapon
+refused once, the store fills and the hat is on you.
+
+### Breaking felt heavy
+
+When nothing changes, the 2025 server skips the update for that tick. RYN then
+runs its own ticks, a little late on purpose. With a normal ping, Auto Grind's
+tap arrived one tick after the window, so it swung every 668 ms instead of
+every 556. Auto Grind now holds the press from two ticks before the reload
+ends. A held press swings exactly when the reload runs out, so the timing is
+the server's again. It lets go the first tick it is not grinding: switched
+off, an enemy near, or placing. `+grind+quiet+lag` (90 ms ping): 556 ms.
+
+### The Crab King
+
+The game takes bosses out of the name and health loop and puts one bar
+across the top of the screen. The King now goes through the same path as any
+animal: its name over it, and RYN's health bar and number under it.
+
+### The lobby
+
+- **Sign in / Sign out** are in a row at the top, across from the RYN mark,
+  instead of mid-screen. Sign in is an iris pill. Signed in, a sage chip says
+  so, with Sign out in rose beside it.
+- **Clan and Friends** are in the same row. They open the game's own clan card
+  and friends list, over the lobby. For a guest, both ask you to sign in, as
+  the game does. A dot on the game's button shows on RYN's.
+- **The loading screen** says what it is waiting for (the page, the game, the
+  servers, then Cloudflare, or your session when signed in) and stays exactly
+  as long as that takes. It used to hold every load for at least 2.3 s.
+
+---
+
 ## Round four: the sign-in card after a kill, shame 20, bots on the live join
 
 ### A sign-in card every kill, and the kill visuals broken: one hook
@@ -100,7 +192,7 @@ What made bots fail when it did:
 - **A device id.** The 2025 join API gives each browser a device id and the
   game sends it back on every join. Each bot is now a device of its own: an id
   of its own, kept for next time, never yours and never shared by two bots at
-  once.
+  once. (v2.6 reverses this: bots send yours, as Glotus's do. See round five.)
 - **The sitekey** a bot's token is minted for is read from the game, not
   assumed.
 
