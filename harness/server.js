@@ -98,7 +98,17 @@ function attach(ws, log, opts) {
      *
      *   sim.positions: "always" (default) or "delta" — whether a player who
      *   has not moved or turned is still in the tick's position list.
-     *   onSwing(t, weapon, didHit): every swing, for the test to time. */
+     *   sim.quiet: a tick with nothing to say says nothing — no update at all
+     *   when all three of its lists are empty (implies "delta"). Whether the
+     *   2025 server does this is not something a client can see from its
+     *   code; a client has to work either way.
+     *   sim.heartbeat (ms): quiet, but an empty update goes out anyway when
+     *   nothing has been sent for this long.
+     *   onSwing(t, weapon, didHit): every swing, for the test to time.
+     *
+     * Turrets are counted the way the server counts them: two to a player
+     * (group 7), "S" with the new count on every place and every break, and a
+     * place over the limit refused. */
     sim = null,
   } = opts || {};
   {
@@ -210,12 +220,15 @@ function attach(ws, log, opts) {
     const me = sim ? {
       dir: 0, weaponIndex: 0, buildIndex: -1, reloads: { 0: 0, 10: 0 },
       mouseState: 0, gathering: 0, skin: 0, sentLook: "", moved: true,
+      turrets: 0,
     } : null;
+    const SIM_TURRET_GROUP = 7, SIM_TURRET_LIMIT = 2;
     const simObjects = new Map();
     let simSid = 100;
-    if (sim) {
+    if (sim && !sim.trap) {
       // two of my turrets, either side of where I face, inside both weapons' reach
       for (const a of [-.7, .7]) simObjects.set(++simSid, { x: mid + Math.cos(a) * 86, y: midY + Math.sin(a) * 86, hp: 800, type: 17 });
+      me.turrets = 2;
     }
     const simLook = () => [mySid, me.buildIndex, me.weaponIndex, 0, null, 0, me.skin, 0, 0, 0];
     const simPacket = (letter, args) => {
@@ -246,19 +259,30 @@ function attach(ws, log, opts) {
         send("5", [1, id, 0]);
       } else if (letter === "H") {
         // the upgrades a grinder needs: the great hammer (age 6), then the
-        // turret (age 7, item 17 = upgrade 16 + 17)
+        // turret (age 7, item 17 = upgrade 16 + 17); a trapper's: the pit
+        // trap (age 4, item 15 = upgrade 31)
         if (args[0] === 10) send("U", [1, 7]);
         else if (args[0] === 33) send("U", [0, 7]);
+        else if (args[0] === 31) send("U", [0, 4]);
       }
     };
+    // item: [scale, placeOffset] as the game has them
+    const SIM_ITEMS = { 15: [50, -5], 17: [43, 8] };
     const simPlace = (id, dir) => {
       me.buildIndex = -1;
-      if (id !== 17) return;
+      if (!(id in SIM_ITEMS)) return;
+      if (id === 17 && me.turrets >= SIM_TURRET_LIMIT) { if (sim.onEvent) sim.onEvent("place refused (limit)"); return; }
+      const [scale, offset] = SIM_ITEMS[id];
       const sid = ++simSid;
-      const o = { x: mid + Math.cos(dir) * 86, y: midY + Math.sin(dir) * 86, hp: 800, type: 17 };
-      simObjects.set(sid, o);
-      send("H", [[sid, o.x, o.y, 0, 43, null, 17, mySid]]);
-      if (sim.onEvent) sim.onEvent("place");
+      const reach = 35 + scale + offset;
+      const o = { x: mid + Math.cos(dir) * reach, y: midY + Math.sin(dir) * reach, hp: 800, type: id };
+      send("H", [[sid, o.x, o.y, dir, scale, null, id, mySid]]);
+      if (id === 17) {
+        // the turrets are what a grinder hits; anything else is left standing
+        simObjects.set(sid, o);
+        send("S", [SIM_TURRET_GROUP, ++me.turrets]);
+        if (sim.onEvent) sim.onEvent("place");
+      } else if (sim.onEvent) sim.onEvent("place " + id + " at " + dir.toFixed(2));
     };
     const simSwing = () => {
       const w = SIM_WEAPONS[me.weaponIndex];
@@ -273,12 +297,22 @@ function attach(ws, log, opts) {
         hit = 1;
         send("L", [me.dir, sid]);
         o.hp -= w.dmg * (w.sDmg || 1) * (hat.bDmg || 1);
-        if (o.hp <= 0) { simObjects.delete(sid); send("Q", [sid]); if (sim.onEvent) sim.onEvent("destroy"); }
+        if (o.hp <= 0) {
+          simObjects.delete(sid);
+          send("Q", [sid]);
+          send("S", [SIM_TURRET_GROUP, --me.turrets]);
+          if (sim.onEvent) sim.onEvent("destroy");
+        }
       }
       send("K", [mySid, hit, me.weaponIndex, 1]);
       if (sim.onSwing) sim.onSwing(Date.now(), me.weaponIndex, hit);
     };
-    if (sim) sim.state = () => ({ mouseState: me.mouseState, gathering: me.gathering });
+    if (sim) {
+      sim.state = () => ({ mouseState: me.mouseState, gathering: me.gathering });
+      // an animal update, as 2025 sends it: the rows that changed, the sids gone
+      sim.at = { x: mid, y: midY };
+      sim.animals = (rows, gone) => send("I", [rows, gone || []]);
+    }
     const simUpdate = () => {
       if (me.buildIndex >= 0) return;
       const w = me.weaponIndex;
@@ -318,8 +352,12 @@ function attach(ws, log, opts) {
       // loadAI: 7 fields per animal [sid,index,x,y,dir,health,nameIndex]
       // 2025 also brought new animals (9-14); a crab is in view so a client
       // that only knows the old nine has to cope with one.
-      if (proto === 2025) send("I", [[9, 0, mid + 300, midY - 200, 0, 100, 0, 0,
-                                      10, 13, mid - 320, midY + 220, 157, 500, 0, 0], []]);
+      if (sim && sim.trap) {
+        // a boar (2025) a step away, facing me, sent once and never again:
+        // what an animal standing still looks like on the 2025 wire
+        send("I", [[11, 9, mid + 120, midY, 314, 900, 0, 0], []]);
+      } else if (proto === 2025) send("I", [[9, 0, mid + 300, midY - 200, 0, 100, 0, 0,
+                                             10, 13, mid - 320, midY + 220, 157, 500, 0, 0], []]);
       else send("I", [[9, 0, mid + 300, midY - 200, 0, 100, 0]]);
       send("G", [[mySid, "tester", 12, 0, foeSid, "rival", 8, 0]]);
       send("T", [0, 1, 1]);
@@ -332,11 +370,12 @@ function attach(ws, log, opts) {
        * [0,1,2] made slot 2 read as cheese and slot 4 as nothing, so a placement
        * test watched the client try to build food and called the feature broken.
        * The game spawns you with [0, 3, 6, 10]: apple, wood wall, spikes, mill. */
-      send("V", [sim ? [0, 3, 6, 10, 17] : [0, 3, 6, 10], null]);
+      send("V", [sim ? (sim.trap ? [0, 3, 6, 10, 15] : [0, 3, 6, 10, 17]) : [0, 3, 6, 10], null]);
       send("V", [sim ? [0, 10] : [0, 1, 2, 3], true]);
       if (sim) {
         send("H", [[...simObjects].flatMap(([sid, o]) => [sid, o.x, o.y, 0, 43, null, 17, mySid])]);
-        send("U", [1, 6]);
+        send("S", [SIM_TURRET_GROUP, me.turrets]);
+        send("U", sim.trap ? [1, 4] : [1, 6]);
         for (const id of sim.hats || []) send("5", [0, id, 0]);
         for (const r of ["wood", "stone", "food", "points"]) send("N", [r, 5000]);
       }
@@ -361,19 +400,27 @@ function attach(ws, log, opts) {
         // when it changed; the rival far away and still
         const look = simLook();
         const changed = JSON.stringify(look) !== me.sentLook;
-        const pos = (sim.positions !== "delta" || me.moved || full) ? [mySid, mid, midY, Math.round(me.dir * 100)] : [];
+        const delta = sim.positions === "delta" || sim.quiet;
+        const pos = (!delta || me.moved || full) ? [mySid, mid, midY, Math.round(me.dir * 100)] : [];
         me.moved = false;
         // sim.foeNear: the rival walks up to 250 away, inside the 400 at which
         // Auto Grind stands down
         const foeX = sim.foeNear ? mid + 250 : mid + 3000;
         const foeMoved = sim._foeX !== foeX;
         sim._foeX = foeX;
-        send("a", [
+        const lists = [
           full || foeMoved ? pos.concat([foeSid, foeX, midY + 40, 300]) : pos,
           (changed || full ? look : []).concat(full ? [foeSid, -1, 5, 1, null, 0, 6, 11, 1, 0] : []),
           [],
-        ]);
+        ];
         me.sentLook = JSON.stringify(look);
+        const now = Date.now();
+        if (sim.quiet && lists.every(l => l.length === 0)) {
+          // sim.heartbeat: even a quiet server says something every so often
+          if (!(sim.heartbeat && now - (sim._sentAt || 0) >= sim.heartbeat)) { sim.quietTicks = (sim.quietTicks || 0) + 1; return; }
+        }
+        sim._sentAt = now;
+        send("a", lists);
         return;
       }
       if (proto === 2025) {

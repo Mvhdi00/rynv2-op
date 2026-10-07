@@ -167,6 +167,7 @@ const EXPECTED = new Set([
   "postRenderLoop",
   "frameGuard",
   "exposeResize",
+  "zoomOutCap",
   "viewport",
   "nameColor",
   "adoptRenderer",

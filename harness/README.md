@@ -26,11 +26,12 @@ import, a WebGL renderer, pinned (masked) sessions, a `/join` ticket step, FRVR
 sign-in — so it has its own harness, which needs no `build-page.js` step:
 
 ```sh
-node boot-2025.js [vanilla|fast|late][+pinned|+interactive|+hidpi|+grind] [ryn.js]   # or `all`
+node boot-2025.js [vanilla|fast|late][+flag...] [ryn.js]   # or `all` (every combination below that matters)
 node ryn-rewrite-check.js   # RYN's own Regexer + formatCode2 + import conversion, run and inspected
 node ryn-protocol-2025.js   # the wire format, from the bundle and from RYN
 node ryn-hooks-check.js     # each hook: does it match, does what it injects resolve
 node ryn-sign-check.js      # RYN's own frame signature against HMAC-SHA256 and the game's
+node ryn-wire-check.js      # RYN's own 2025 session (bots) against the game's functions
 python3 ryn-2025-mutate.py  # break the fixes on purpose; a static check must go red
 python3 ryn-boot-mutate.py  # same, for what only the browser can show
 ```
@@ -46,10 +47,28 @@ The flags, each one a way the live game behaves that a plain run would not show:
   an overlay sized by pixels alone lands off its players.
 - `+grind` — Auto Grind against `server.js`'s `sim`: the server's side of a
   player who swings, by the game's own shared rules (only the weapon in hand
-  reloads, a press latches `gathering`). `SIM_LATCH=0` runs the stricter rule in
-  which a release takes back a press sent in the same tick; `SIM_POSITIONS=delta`
-  leaves a player who has not moved out of the tick's position list.
-  `GRIND_TRACE=1` prints every swing, hat, weapon, placement and break.
+  reloads, a press latches `gathering`), with turrets counted the server's way
+  (`S` on every place and break, two at most). `SIM_LATCH=0` runs the stricter
+  rule in which a release takes back a press sent in the same tick — every RYN
+  attack is a tap, so nothing of RYN's can swing there; it is not the live
+  server. `SIM_POSITIONS=delta` leaves a player who has not moved out of the
+  tick's position list. `GRIND_TRACE=1` prints every swing, hat, weapon,
+  placement and break.
+- `+quiet` — the server sends no player update at all on a tick where nothing
+  changed. Standing still, the updates stop; everything RYN does once a tick
+  stopped with them, and Auto Grind hit once and waited (0 swings in 8 s here
+  without the tick watchdog). `+heartbeat` is the same with an empty update
+  once a second, which must not talk RYN out of running the missing ticks.
+- `+trap` — Trap Animal on, a pit trap picked from the upgrade bar, and a boar
+  (a 2025 animal) a step away, announced once and never updated, as an animal
+  standing still is on the 2025 wire. It must get a trap; a crab put in the same
+  place afterwards (`noTrap`) must not. `TRAP_DEBUG=1` prints what was placed.
+- `+reshaped` — the bundle's crypto code reshaped the way the obfuscator
+  reshapes it between builds. The hooks that found the game's session functions
+  by shape miss here, as they did on the live build; bots must still join.
+- `+members`, `+busy` (or `JOIN_REFUSE=members|busy`) — the join API turns the
+  bot away as a guest on a server for signed-in players, or answers its first
+  join "too many". The bot must say why, and in the second case get in.
 
 Every run also checks that only one copy of the game runs (late injection used to
 run the page's own copy beside RYN's), that Turnstile's script loads once and no

@@ -24,6 +24,19 @@
  *   late     RYN after <head> was parsed — what the console in the report
  *            shows (win.requestAnimFrame -> Injector.init). The page's own
  *            module has already run by then; RYN's copy takes over its loop.
+ *
+ * Flags, joined with "+" (late+grind+quiet):
+ *   pinned       the server pins the session (mask, mixKey, salted tables)
+ *   interactive  every Turnstile challenge wants a click
+ *   hidpi        150% display scaling
+ *   reshaped     the bundle's crypto code reshaped the way the obfuscator
+ *                reshapes it between builds (bots must still join)
+ *   grind        Auto Grind on, the server playing the swing (server.js sim)
+ *   trap         Trap Animal on, a 2025 boar standing still a step away
+ *   quiet        the server sends no player update on a tick with no change
+ *   heartbeat    quiet, but an empty update once a second
+ *   members      the join API turns the bot away: a signed-in players' server
+ *   busy         the join API answers the bot's first join "too many"
  */
 const fs = require("fs");
 const path = require("path");
@@ -149,9 +162,35 @@ ${Array.from({ length: 23 }, (_, i) => `<div id="actionBarItem${i}"></div>`).joi
 </body>
 </html>`;
 
+/* moomoo-protocol, stubbed — with a mixKey that actually mixes, so a client
+ * that calls it with the wrong key or seed (or not at all) is told so by the
+ * server rather than passing because the stub handed its key straight back. */
+const mixKeyStub = (key, seed) => {
+  const out = new Uint8Array(key.length);
+  for (let i = 0; i < key.length; i++) out[i] = key[i] ^ (seed >>> 8 * (i & 3) & 255) ^ (i * 29 & 255);
+  return out;
+};
 const PROTOCOL_MODULE = `export const BUILD_ID = "test-build";
 export const BUILD_SALT = 7;
-export function mixKey(key, seed) { return key; }`;
+export const mixKey = ${mixKeyStub.toString()};`;
+
+/* The same game, written the way another build of the obfuscator might have
+ * written it. Each rewrite changes nothing at run time — a quoted key, a
+ * call through (0,f), an explicit `()` after `new`, a split string — and
+ * each one takes away the shape one of RYN's crypto hooks recognises. The
+ * live game is a newer build than the fixture, so this is what RYN has to
+ * survive: the player's own connection must still be read, and a bot must
+ * still join, with none of those hooks installed. */
+function reshape(code) {
+  const out = code
+    .replace(/const (\w+)=new (\w+),(\w+)=new (\w+);let (\w+)=null/, "const $1=new $2(),$3=new $4();let $5=null")
+    .replace(/=\{mode:(\w+),key:/, '={"mode":$1,"key":')
+    .replace(/&&(\w+)\((\w+),(\w+)\((\w+)\[(\w+\(\d+,"[^"]*"\))\]\[(\w+\(\d+,"[^"]*"\))\],\+\+\4\[/, "&&(0,$1)($2,(0,$3)($4[$5][$6],++$4[")
+    .replace(/\]\((\w+),(\w+\[\w+\(\d+,"[^"]*"\)\],\w+\),\w+=new Uint8Array\()/, "]($1 ,$2")
+    .replace(/(\w+)\((\w+\[\w+\(\d+,"[^"]*"\)\+"ay"\]\(\w+\)),(\w+)\((\w+\[)/, "(0,$1)($2,(0,$3)($4")
+    .replace(/\+"b=",(\w+)\)/, '+"b"+"=",$1)');
+  return out;
+}
 
 /* Cloudflare Turnstile, as far as the login depends on it:
  *
@@ -261,13 +300,32 @@ async function run(spec) {
   const [mode, ...flags] = spec.split("+");
   const pinned = flags.includes("pinned");
   const interactive = flags.includes("interactive");
+  const reshaped = flags.includes("reshaped");
+  /* +members / +busy (or JOIN_REFUSE=members|busy): the join API refuses the
+   * bot the way the live one can —
+   * "members" answers every join after the player's with 403 {error:"auth"}
+   * (a server for signed-in players; bots are guests), "busy" answers the
+   * bot's first join with 429. */
+  const joinRefuse = flags.includes("members") ? "members" : flags.includes("busy") ? "busy" : process.env.JOIN_REFUSE || null;
+  const served = reshaped ? reshape(bundle) : bundle;
+  if (reshaped && served === bundle) throw new Error("reshape changed nothing");
   // 150% display scaling: the game draws at the device pixel ratio ("native
   // resolution", on by default), so its canvas has more pixels than CSS px.
   const hidpi = flags.includes("hidpi");
   /* Auto Grind on, my own turrets in reach, and the server playing the
-   * swing by the game's rules (server.js `sim`): how often does it hit? */
+   * swing by the game's rules (server.js `sim`): how often does it hit?
+   * +quiet: the server says nothing on a tick where nothing changed (no
+   * player update at all), so standing still grinding, the updates stop. */
   const grind = flags.includes("grind");
-  const out = { mode: spec, base: mode, pinned, interactive, errors: [], consoleErrors: [], sockets: [], joins: [], frames: [], notes: [], swings: [], simEvents: [] };
+  const quiet = flags.includes("quiet") || process.env.SIM_QUIET === "1";
+  // +heartbeat: quiet, except for an empty update once a second
+  const heartbeat = flags.includes("heartbeat") ? 1000 : 0;
+  /* Trap Animal on, a pit trap in the bar, and a boar — one of the 2025
+   * animals — standing a step away: announced once, never updated, the way
+   * the 2025 server leaves an animal that is not moving. Then the boar goes
+   * and a crab takes its place, which no trap can hold. */
+  const trap = flags.includes("trap");
+  const out = { mode: spec, base: mode, pinned, interactive, joinRefuse, errors: [], consoleErrors: [], sockets: [], joins: [], frames: [], notes: [], swings: [], simEvents: [] };
   const browser = await chromium.launch({
     executablePath: "/opt/pw-browsers/chromium",
     args: ["--no-sandbox", "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
@@ -299,7 +357,7 @@ async function run(spec) {
       headers: { "access-control-allow-origin": "*" } });
     if (url.hostname === "moomoo.io") {
       if (url.pathname === "/" ) return send(html, "text/html");
-      if (url.pathname === "/assets/" + INDEX) return send(bundle, "text/javascript");
+      if (url.pathname === "/assets/" + INDEX) return send(served, "text/javascript");
       if (url.pathname === "/assets/" + VENDOR) return send(vendor, "text/javascript");
       if (url.pathname === "/assets/" + PROTO) return send(PROTOCOL_MODULE, "text/javascript");
       return send("", "text/plain", 404);
@@ -324,7 +382,12 @@ async function run(spec) {
         let body = {};
         try { body = JSON.parse(req.postData() || "{}"); } catch (e) {}
         out.joins.push(body);
-        return send(JSON.stringify({ ticket: "T" + out.joins.length, did: "did-1" }), "application/json");
+        const n = out.joins.length;
+        const refuse = (status, body) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body),
+          headers: { "access-control-allow-origin": "*" } });
+        if (n >= 2 && joinRefuse === "members") return refuse(403, { error: "auth" });
+        if (n === 2 && joinRefuse === "busy") return refuse(429, { error: "rate" });
+        return send(JSON.stringify({ ticket: "T" + n, did: "did-1" }), "application/json");
       }
       if (url.pathname === "/name-check") return send("{}", "application/json");
       if (url.pathname === "/top") return send(JSON.stringify({ players: [], clans: [] }), "application/json");
@@ -355,8 +418,11 @@ async function run(spec) {
     }, {
       requireSpawn: true,
       proto: 2025,
-      sim: grind && out.conns.length === 1 ? out.sim = {
+      sim: (grind || trap) && out.conns.length === 1 ? out.sim = {
         positions: process.env.SIM_POSITIONS || "always",
+        quiet: quiet || !!heartbeat,
+        heartbeat,
+        trap,
         // Tank Gear (40) owned: Auto Grind wears it to hit buildings harder
         hats: process.env.SIM_HATS === "none" ? [] : [40],
         latch: process.env.SIM_LATCH !== "0",
@@ -365,6 +431,7 @@ async function run(spec) {
       } : null,
       pinned,
       crypto: pinned ? wire() : null,
+      mixKey: mixKeyStub,
       onViolation: (why, detail) => {
         conn.violations.push(why);
         out.notes.push("server rejected a frame: " + why + (detail ? " (" + detail + ")" : ""));
@@ -388,8 +455,9 @@ async function run(spec) {
       document.addEventListener("DOMContentLoaded", () => note("DCL exists=" + !!document.getElementById(id)), true);
     })();` });
   }
-  if (grind) {
-    await page.addInitScript({ content: `try { if (window.top === window) localStorage.setItem("RYN", JSON.stringify({ _autoGrind: true })); } catch (e) {}` });
+  if (grind || trap) {
+    const settings = JSON.stringify(grind ? { _autoGrind: true } : { _trapAnimal: true });
+    await page.addInitScript({ content: `try { if (window.top === window) localStorage.setItem("RYN", ${JSON.stringify(settings)}); } catch (e) {}` });
   }
   /* How many copies of the game ran, and whose. The bundle sets
    * window.loadedScript early in its top level: from the page's own module
@@ -565,6 +633,7 @@ async function run(spec) {
     }
     // Stand still and let Auto Grind work: count the swings the server made.
     const from = Date.now();
+    const quietFrom = out.sim ? out.sim.quietTicks || 0 : 0;
     const GRIND_MS = +(process.env.GRIND_MS || 8000);
     await page.waitForTimeout(GRIND_MS);
     const swings = out.swings.filter(([t]) => t >= from);
@@ -580,6 +649,7 @@ async function run(spec) {
       all: out.swings.length,
       ms: GRIND_MS,
       events: out.simEvents.filter(([t]) => t >= from).map(([t, w]) => w),
+      quiet: out.sim && out.sim.quiet ? (out.sim.quietTicks || 0) - quietFrom : null,
     };
     /* Switched off in RYN's menu, with nothing else going on: the held attack
      * has to be let go by RYN itself — a press left down keeps swinging at
@@ -622,6 +692,29 @@ async function run(spec) {
     }
   }
 
+  if (trap && out.sim) {
+    // The pit trap, picked from the game's own upgrade bar (age 4).
+    try {
+      await page.waitForSelector("#upgradeItem31", { state: "attached", timeout: 5000 });
+      await page.evaluate(() => document.getElementById("upgradeItem31").click());
+    } catch (e) { out.notes.push("could not pick the pit trap: " + e.message.split("\n")[0]); }
+    const from = Date.now();
+    await page.waitForTimeout(+(process.env.TRAP_MS || 3000));
+    const traps = since => out.simEvents.filter(([t, w]) => t >= since && /^place 15 /.test(w)).map(([t, w]) => +w.split(" at ")[1]);
+    out.trap = { boar: traps(from) };
+    // The boar goes out of view — Trap Animal stands down — and then a crab
+    // walks up to the same spot.
+    const { x, y } = out.sim.at;
+    out.sim.animals([], [11]);
+    await page.waitForTimeout(1000);
+    out.sim.animals([12, 13, x + 120, y, 314, 500, 0, 0], []);
+    const crabFrom = Date.now();
+    await page.waitForTimeout(+(process.env.TRAP_MS || 3000));
+    out.trap.crab = traps(crabFrom);
+    if (process.env.TRAP_DEBUG) console.log(out.simEvents.map(([t, w]) => (t - from) + " " + w).join("\n") + "\n" +
+      out.frames.filter(f => /^c2s (z|F|H)/.test(f)).slice(-30).join("\n"));
+  }
+
   // A bot, through RYN's own menu: its own Turnstile token, its own /join
   // ticket, and RYN's own signing and masking — the path the main client
   // never takes, because the game's bundle does that part for it.
@@ -652,8 +745,9 @@ async function run(spec) {
       const t2 = Date.now();
       while (Date.now() - t2 < 9000 && out.conns[before] && out.conns[before].letters.filter(l => l === "0").length < 2) await page.waitForTimeout(250);
       const c = out.conns[before];
-      return c ? { url: c.url, spawned: c.letters.includes("M"), frames: c.letters.length, violations: c.violations,
-                   pings: c.letters.filter(l => l === "0").length } : { error: "no bot socket opened" };
+      const toast = await page.evaluate(() => (document.getElementById("rynBotToast") || {}).textContent || "").catch(() => "");
+      return c ? { url: c.url, spawned: c.letters.includes("M"), frames: c.letters.length, violations: c.violations, toast,
+                   pings: c.letters.filter(l => l === "0").length } : { error: "no bot socket opened", toast };
     })();
   }
 
@@ -803,6 +897,45 @@ async function run(spec) {
     return { distinctColours: colours.size, skin, outline };
   }, shot.toString("base64"));
 
+  /* The zoom: eight notches of the wheel out, then back. RYN's HP bar under
+   * the player is a fixed size in the world, so its width in the overlay is
+   * the zoom, measured. 1.1 per notch: out by 1.1^8 = 2.14. */
+  if (mode !== "vanilla") {
+    const barWidth = () => page.evaluate(() => {
+      const cv = document.getElementById("ryn-gl-overlay");
+      if (!cv || !cv.width) return null;
+      const k = cv.width / cv.getBoundingClientRect().width;
+      const cx = Math.round(cv.width / 2), cy = Math.round(cv.height / 2);
+      const h = Math.round(140 * k), w = Math.round(160 * k);
+      const d = cv.getContext("2d").getImageData(cx - w, cy, 2 * w, h).data;
+      // the bar's extent in its row: a rain streak drawn across it (the
+      // weather shares this canvas) splits a run but not the extent
+      let best = 0;
+      for (let y = 0; y < h; y++) {
+        let lo = -1, hi = -1;
+        for (let x = 0; x < 2 * w; x++) {
+          const i = (y * 2 * w + x) * 4;
+          if (d[i + 3] > 200 && Math.abs(d[i] - 142) < 30 && Math.abs(d[i + 1] - 204) < 30 && Math.abs(d[i + 2] - 81) < 30) {
+            if (lo < 0) lo = x;
+            hi = x;
+          }
+        }
+        if (lo >= 0 && hi - lo + 1 > best) best = hi - lo + 1;
+      }
+      return best / k;
+    });
+    const vp = page.viewportSize();
+    await page.mouse.move(vp.width / 2, vp.height / 2);
+    const z0 = await barWidth();
+    for (let i = 0; i < 8; i++) { await page.mouse.wheel(0, -100); await page.waitForTimeout(40); }
+    await page.waitForTimeout(1500);
+    const zOut = await barWidth();
+    for (let i = 0; i < 8; i++) { await page.mouse.wheel(0, 100); await page.waitForTimeout(40); }
+    await page.waitForTimeout(1500);
+    const zBack = await barWidth();
+    out.zoom = { before: z0, out: zOut, back: zBack };
+  }
+
   await browser.close();
   return out;
 }
@@ -860,8 +993,15 @@ function report(r) {
   ok(r.notes.filter(n => /server rejected/.test(n)).length === 0, "the server accepted every frame" +
      (r.notes.length ? ":\n        " + r.notes.slice(0, 5).join("\n        ") : ""));
   ok(r.after.gameUI && r.after.gameUI !== "none", "the in-game UI is showing (" + r.after.gameUI + ")");
-  if (r.bot) {
+  if (r.bot && r.joinRefuse === "members") {
+    // refused for good: it says why, and it does not try the server with a raw token
+    ok(r.bot.error === "no bot socket opened" && /signed-in players/.test(r.bot.toast || ""),
+       "a bot the join API refuses as a guest on a members-only server says why and opens no socket (" +
+       (r.bot.error || "it connected") + "; said: " + JSON.stringify(r.bot.toast || "") + ")");
+  } else if (r.bot) {
     const b = r.bot;
+    if (r.joinRefuse === "busy") ok(/Too many joins/.test(b.toast || "") && r.joins.length >= 3,
+       "a bot told \"too many joins\" waits, asks again with a new token, and gets in (" + r.joins.length + " joins)");
     ok(!b.error && /token=tk%3AT\d/.test(b.url) && /[?&]b=test-build/.test(b.url),
        "a bot connects with its own /join ticket and the build id" + (b.error ? " — " + b.error : " (" + String(b.url).replace(/^wss:\/\/[^/]+/, "") + ")"));
     ok(!b.error && b.spawned, "the bot's spawn frame reached the server" + (b.error ? "" : " (" + b.frames + " frames)"));
@@ -877,11 +1017,24 @@ function report(r) {
      * is 14; a client that keeps up gets most of them. */
     ok(g.swings >= Math.floor(g.ms / 800) && g.maxGap !== null && g.maxGap <= 1200, "Auto Grind keeps swinging while you stand still: " + g.swings +
        " swings in " + g.ms / 1000 + " s (" + g.hits + " landed), mean gap " + g.meanGap + " ms, longest " + g.maxGap + " ms, weapons " + g.weapons.join("/") +
-       " (" + g.all + " swings since spawn)");
+       " (" + g.all + " swings since spawn" + (g.quiet !== null ? "; the server skipped " + g.quiet + " ticks with nothing in them" : "") + ")");
+    /* The whole cycle, not just the swing: the turrets it hits break, the
+     * count the server keeps of them comes down, and new ones go up. */
+    const broke = g.events.filter(e => e === "destroy").length;
+    const placedAfter = g.events.slice(g.events.indexOf("destroy") + 1).filter(e => e === "place").length;
+    ok(broke >= 2 && placedAfter >= 2, "Auto Grind breaks its turrets and puts new ones down (" + broke + " broken, " + placedAfter +
+       " placed after the first break" + (g.events.includes("place refused (limit)") ? ", some refused over the limit" : "") + ")");
     if (g.offState) ok(g.offToggled && g.afterOff === 0 && g.offState.mouseState === 0, "switched off in the menu, Auto Grind lets go of the attack (" +
        (g.offToggled ? g.afterOff + " swings after, mouse " + (g.offState.mouseState ? "still down" : "up") : "the menu's Auto Grind switch was not found") + ")");
     if (g.releasedState) ok(g.afterEnemy === 0 && g.releasedState.mouseState === 0, "with an enemy in reach Auto Grind stops and lets go of the attack (" +
        g.afterEnemy + " swings after, mouse " + (g.releasedState.mouseState ? "still down" : "up") + ")");
+  }
+  if (r.trap) {
+    const t = r.trap;
+    // the boar is due east of me: a trap for it goes down at angle ~0
+    ok(t.boar.length >= 1 && t.boar.every(a => Math.abs(a) < .6), "Trap Animal traps a boar (a 2025 animal) standing a step away — " +
+       "sent once, never updated (" + (t.boar.length ? t.boar.length + " trap(s) at " + t.boar.map(a => a.toFixed(2)).join(", ") + " rad" : "no trap placed") + ")");
+    ok(t.crab.length === 0, "Trap Animal leaves a crab alone — the game's traps cannot hold one (" + t.crab.length + " trap(s) placed)");
   }
   if (r.base !== "vanilla") {
     ok(r.after.overlayPx > 50, "RYN's overlay draws over the WebGL canvas (" + r.after.overlayPx + " px)");
@@ -900,6 +1053,12 @@ function report(r) {
     console.log("      canvases: " + r.perf.layers.join(" | "));
     console.log("      " + r.perf.top.slice(0, +(process.env.PERF_TOP || 12)).join("\n      "));
   }
+  if (r.zoom) {
+    const z = r.zoom, ratio = z.before && z.out ? z.before / z.out : 0;
+    ok(ratio > 1.9 && z.back && Math.abs(z.back - z.before) <= 2, "the zoom goes out and comes back: the HP bar " +
+       (z.before || 0).toFixed(0) + " px, " + (z.out || 0).toFixed(0) + " px eight notches out (x" + ratio.toFixed(2) + " of 2.14), " +
+       (z.back || 0).toFixed(0) + " px back in");
+  }
   ok(r.canvasSizes === 0, "the game canvas is left alone between frames (" + r.canvasSizes + " size writes in 2 s standing still) — " +
      "resizing it every frame was the frame-rate drop");
   ok(r.centre.skin > 300, "the player is drawn at the centre of the screen (" + r.centre.skin +
@@ -908,7 +1067,9 @@ function report(r) {
 
 (async () => {
   const modes = which === "all" ? ["vanilla", "fast", "late", "vanilla+pinned", "fast+pinned", "late+pinned",
-    "vanilla+interactive", "fast+interactive", "late+interactive", "late+hidpi", "late+grind"] : which.split(",");
+    "vanilla+interactive", "fast+interactive", "late+interactive", "late+hidpi", "late+grind",
+    "late+grind+quiet", "late+grind+heartbeat", "late+trap+quiet", "fast+pinned+reshaped", "late+pinned+reshaped",
+    "fast+members", "fast+busy"] : which.split(",");
   for (const m of modes) {
     let r;
     try { r = await run(m); } catch (e) { console.log("\n== " + m + "\n  FAIL  harness crashed: " + e.stack); process.exitCode = 1; continue; }

@@ -16,14 +16,144 @@ This pass was verified the other way round: the real 2025 bundle runs in
 Chromium with RYN on top, and the test plays it.
 
 ```
-node harness/boot-2025.js            # the real bundle in a browser: 11 configurations, 324 checks
+node harness/boot-2025.js            # the real bundle in a browser: 18 configurations, 576 checks
 node harness/ryn-rewrite-check.js    # RYN's own rewrite of the bundle, run and inspected
 node harness/ryn-protocol-2025.js    # the wire format, read out of the bundle and RYN
 node harness/ryn-hooks-check.js      # every hook: does it match, does what it injects resolve
 node harness/ryn-sign-check.js       # RYN's frame signature against HMAC-SHA256 and the game's
-python3 harness/ryn-2025-mutate.py   # 37 deliberate breakages, static checks: 37 caught
-python3 harness/ryn-boot-mutate.py   # 24 deliberate breakages, browser test: 24 caught
+node harness/ryn-wire-check.js       # RYN's own session for bots against the game's functions
+python3 harness/ryn-2025-mutate.py   # 45 deliberate breakages, static checks: 45 caught
+python3 harness/ryn-boot-mutate.py   # 32 deliberate breakages, browser test: 32 caught
 ```
+
+---
+
+## Round three: bots, the zoom, Auto Grind, the new animals
+
+### Bots: no bot could join
+
+A bot's connection is RYN's own, so RYN has to build the whole 2025 session for
+it: the opcode tables, the per-message masks, the keystream, the signature, the
+build id. It used to borrow each of those from the game's bundle through a hook
+that recognises the function by the shape of the obfuscated code around it,
+and the obfuscator reshapes that code at random on every build. One call
+becomes `o.xyz(fn, a, b)` in one build and stays `fn(a, b)` in the next. The
+live build is newer than the one this was first tested on, and on a reshaped
+build those hooks miss: the bot's frames went out unsigned, its socket URL had
+no build id, and the server closed it. Your own connection uses the game's
+code directly, so it was fine. That matches what was reported.
+
+The session is now in RYN as well, written out plainly (`RynWire`):
+
+- the opcode alphabets and constants are read out of the bundle's own text as
+  RYN loads it;
+- the build id comes from your own socket's URL, where the game put it;
+- `mixKey`, `BUILD_SALT` and `BUILD_ID` come from the game's `moomoo-protocol`
+  module itself, captured where RYN imports it.
+
+The game's own function is still used wherever a hook finds one.
+`ryn-wire-check.js` holds every piece against the game's functions lifted out
+of the bundle. The browser test runs on a bundle reshaped the way the
+obfuscator reshapes it (`+reshaped`). Before this change no bot joined there;
+now bots join, sign, mask and read their frames.
+
+**Account or guest:** bots join as guests; no account is needed. The one
+exception is a server for signed-in players (the shield in the list), which
+refuses guests. RYN now says so instead of the bot silently vanishing from its
+row. Every other refusal is shown too, on screen and in the console:
+
+- too many joins at once: RYN waits and tries twice more with a new token;
+- a Cloudflare token the API would not take;
+- the server's own close reasons (codes 4001–4004).
+
+### The zoom
+
+The 2025 game caps the zoom-out in a constant it works out once, at load
+(`const Ex = us * 1.15`). RYN's zoom changes the screen size the game reads,
+and that one read froze it. The cap now follows the live value
+(`zoomOutCap`). The test turns the wheel eight notches out and measures the HP
+bar: ×2.20 smaller, then back to the same size coming in. v2.3 got ×1.14.
+
+### Auto Grind: back to the old one, and the stall when breaking
+
+Auto Grind is the old version again, byte for byte. The held attack from v2.3
+is gone.
+
+What made it stall was not Auto Grind. The 2025 server sends the player update
+as a list of changes: who moved or turned, whose look changed, who went out of
+view. On a tick where nothing changed there is nothing to say, and, by every
+sign, it says nothing. Everything RYN does, it does once a tick, and that
+update *was* the tick: the reload count, the hit a swing reports, every module.
+Standing still while grinding, the updates stop. The turret got hit once, and
+RYN then waited for something, anything, to move.
+
+When the updates stop now, RYN runs the ticks itself. After 200 ms of silence
+it runs an update with nothing in it, which is all the server would have said,
+then one every 111 ms until the server speaks again. On a server that does send
+its empty ticks, three of them a tick apart stand this down for the session.
+
+Tested against a server that says nothing on a quiet tick:
+
+| | Before | After |
+|---|---|---|
+| Swings in 8 s | 0 | 14 |
+| Gap between swings | — | 558 ms |
+| Turrets broken / put back | 0 / 0 | 6 / 6 |
+
+558 ms is the most the great hammer's 400 ms reload allows in 111 ms ticks.
+Against a server that also sends an empty update once a second, a version that
+gives up on the first empty one gets 3 swings in 8 s, 3.2 s apart. That is the
+"one hit, then a wait" exactly.
+
+Auto Heal, the anti-insta and the rest of the tick-driven modules were held up
+the same way whenever you stood still with nothing moving near you; they no
+longer are.
+
+New: **Emerald** (the 2025 fifth tier, members only) as a grind target. Ruby
+stays the default.
+
+### Trap Animal and the new animals
+
+Trap Animal had a list: Bull, Bully, Wolf. It now takes the rule that list
+came from: an animal that charges you and that a trap can hold. The game
+decides the second part; its collision code skips the trap for any animal
+marked `noTrap`. On the 2025 animals that adds the **Boar** and the **Yeti**:
+
+| Animal | Trap Animal? | Why |
+|---|---|---|
+| Boar | yes | charges, trappable |
+| Yeti | yes | charges, trappable |
+| Crab King | no | `noTrap`: the game's traps cannot hold it |
+| Crab | no | `noTrap` |
+| Crabling | no | `noTrap` |
+| Sheep | no | harmless, like the cow |
+
+The 2025 server sends animals as changes too, so an animal standing still
+(one held in a trap, above all) stopped being anyone's nearest animal. Trap
+Animal, the anti-animal hat and every swing at an animal lost it the moment it
+stopped. Every animal still in view is now offered again each tick.
+
+Tested with a boar the server announces once and never updates, a step away:
+a trap goes down straight at it (0.00 rad) 64 ms after the trap is picked. A
+crab in the same place gets none. With the old list, or without the per-tick
+offer, the boar got no trap.
+
+### Anything else the update broke
+
+Every packet the 2025 game handles was compared with how RYN reads it, and
+RYN's tables with the game's:
+
+- **Unchanged.** Weapon speeds, damage and ranges, items, hats, accessories,
+  projectiles, the game config, food heals and the shame rules all match 2025.
+- **Nothing to read.** The new packets `F` (account stats) and `W` (a boss's
+  attack telegraph) carry nothing RYN needs. A player's data gained three
+  fields at the end (aura, boss mode, clan), after the ones RYN reads.
+- **Map ping.** RYN sent `["S"]`; the game sends `["S", 1]`.
+- **Chat.** Capped at 30 characters, as the game's chat box sends it. A frame
+  the game itself could never send is one a server checking its frames can
+  refuse.
+- **Buildings.** A row whose item field names no item is a resource, which is
+  how the game reads it. RYN accepted only `null` there.
 
 ---
 
@@ -107,6 +237,9 @@ could only ever recolour a letter everywhere. The colour is now picked where the
 game picks a name's colour (`nameColor`).
 
 ### Auto Grind
+
+*(Undone in round three, at your request: Auto Grind is the old tap again, and
+what made it stall turned out to be the server's quiet ticks. See above.)*
 
 It tapped — pressed and released in one tick — on the tick RYN's own reload count
 said the weapon was ready. A tap that reaches the server while it is still
@@ -254,8 +387,8 @@ as guests.
 
 ## Hook status
 
-67 of 69 hooks install on the 2025 bundle (round two added `exposeResize`,
-`viewport`, `nameColor` and `fastSign`). `gameInit` served an altcha start
+68 of 70 hooks install on the 2025 bundle (round two added `exposeResize`,
+`viewport`, `nameColor` and `fastSign`; round three `zoomOutCap`). `gameInit` served an altcha start
 path the game no longer has; `buildingTint`'s ternary is now an if-statement,
 matched by `buildingTint2025`.
 
@@ -271,10 +404,16 @@ matched by `buildingTint2025`.
   (`T` packet). RYN does not hide from this. If the server acts on those flags,
   RYN cannot prevent it.
 - **Members-only servers** need you signed in; bots cannot join them.
-- **Auto Grind against the live server.** The simulation follows the game's
-  shared player rules, and under those the old tap kept pace too — so whatever
-  made it wait on the live server is something the client code does not show.
-  A held attack does not depend on it either way.
+- **The live build.** moomoo.io cannot be fetched from here, so the hooks are
+  tested against the build this started from (`index-cfaab428`), and the bot
+  session also against a reshaped copy of it. A hook that misses on the live
+  build prints `Failed to find: <name>` in the console; the bots no longer
+  depend on any of them.
+- **The server's quiet ticks.** Whether the live server sends nothing on a
+  quiet tick cannot be read off the client's code. The symptom matches it
+  exactly, and the simulation reproduces it. If the server turns out to send
+  every tick after all, the tick watchdog never fires, and it stands down after
+  three empty updates.
 - **Cloudflare itself.** The Turnstile here is a model of the parts the login
   depends on, not Cloudflare. The loading-screen fault is certain (the page's
   container is moved, and the 2025 game only ever shows the one it owns); how

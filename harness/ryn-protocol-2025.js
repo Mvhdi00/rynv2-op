@@ -102,7 +102,10 @@ say(/bytes\s*=\s*bytes\.slice\(\)/.test(handle) && /\(cryptoIn\.received\s*>>>\s
     "on the main socket RYN unmasks a COPY keyed on the count the bundle is about to use");
 say(!/cryptoIn\._bundle[\s\S]{0,400}cryptoIn\.received\s*=\s*\(/.test(handle.slice(handle.indexOf("if (cryptoIn._bundle)"), handle.indexOf("} else {", handle.indexOf("if (cryptoIn._bundle)")))),
     "and never advances the bundle's own receive count");
-say(/received\s*=\s*\(\s*cryptoIn\.received\s*\|\|\s*0\s*\)\s*\+\s*1/.test(handle),
+// The bot's branch, not the player's: the player's socket has a counter of
+// its own for a build where exposeGameCrypto finds nothing, and the same line
+// there would hide this one going missing.
+say(/\} else \{\s*cryptoIn\.received\s*=\s*\(\s*cryptoIn\.received\s*\|\|\s*0\s*\)\s*\+\s*1;\s*enc\.applyMask\(bytes,\s*enc\.maskIn\(cryptoIn\.mask\.s2c,\s*cryptoIn\.received\)\)/.test(handle),
     "a bot's socket keeps its own per-message counter");
 
 const ioinit = src.slice(src.indexOf('case "io-init":'), src.indexOf('case "io-init":') + 4200);
@@ -112,8 +115,11 @@ say(/enc\.mixKey\(baseKey,\s*seed\)/.test(io), "a pinned key is mixed with the s
 say(/enc\.Po\(seed,\s*enc\.salt\)/.test(io), "and the opcode tables are salted with BUILD_SALT");
 say(/enc\.maskFrom\(key\)/.test(io), "and the mask is derived from the mixed key");
 say(/mask:\s*pinned\s*&&\s*enc\.maskFrom\s*\?/.test(io), "an unpinned connection gets no mask, as the bundle does");
-say(/if \(this\.client\.isOwner\) \{\s*setTimeout\(\(\) => \{[\s\S]{0,80}pingRequest\(\)/.test(io),
-    "the main socket's first ping waits a task — before then the bundle has no session and sends raw");
+/* And RYN's own copy of the session is called ready (`_ready`, which the send
+ * gate below accepts on a build where exposeGameCrypto finds nothing) at the
+ * same moment, not before: one task on, the bundle has built its own. */
+say(/if \(this\.client\.isOwner\) \{\s*const own = this\.client\._gameCrypto;\s*setTimeout\(\(\) => \{\s*if \(own && !own\._bundle\) own\._ready = true;\s*try \{\s*PacketManager2\.pingRequest\(\)/.test(io),
+    "the main socket's first ping waits a task — before then the bundle has no session and sends raw — and RYN's copy of the session is ready no sooner");
 
 const bot = strip(src.slice(src.indexOf("const botCrypto = this.client._gameCrypto;"),
                             src.indexOf("const botCrypto = this.client._gameCrypto;") + 1600));
@@ -123,8 +129,8 @@ say(/maskVal\(botCrypto\.mask\.c2s,\s*o\)/.test(bot),
     "keyed on the c2s mask and the frame's own signature — bf(xe.mask.c2s, signature), as the bundle sends");
 
 const sendPath = strip(slice("    _send(data) {", "PacketManager._send"));
-say(/crypto\._bundle\s*\|\|\s*!this\.client\.isOwner/.test(sendPath),
-    "nothing goes out on the main socket until the bundle's own session exists");
+say(/crypto\._bundle\s*\|\|\s*crypto\._ready\s*\|\|\s*!this\.client\.isOwner/.test(sendPath),
+    "nothing goes out on the main socket until there is a session: the bundle's own, or RYN's copy once the bundle has had its task to build one");
 
 // ── the primitives it binds ───────────────────────────────────────────────
 /* A login hook can keep matching and still stop INSTALLING the call it exists

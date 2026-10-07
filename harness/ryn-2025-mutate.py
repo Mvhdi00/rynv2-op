@@ -19,6 +19,7 @@ CHECKS = [
     ("proto", ["node", "harness/ryn-protocol-2025.js"]),
     ("rewrite", ["node", "harness/ryn-rewrite-check.js"]),
     ("sign", ["node", "harness/ryn-sign-check.js"]),
+    ("wire", ["node", "harness/ryn-wire-check.js"]),
 ]
 
 MUTATIONS = [
@@ -92,7 +93,8 @@ MUTATIONS = [
      "enc.applyMask(bytes, enc.maskIn(cryptoIn.mask.s2c, cryptoIn.received));",
      "enc.applyMask(bytes, enc.maskVal(cryptoIn.mask.s2c, cryptoIn.received));"),
     ("a bot's receive counter stops advancing",
-     "cryptoIn.received = (cryptoIn.received || 0) + 1;", "cryptoIn.received = 1;"),
+     "              cryptoIn.received = (cryptoIn.received || 0) + 1;\n              enc.applyMask(bytes,",
+     "              cryptoIn.received = 1;\n              enc.applyMask(bytes,"),
     ("io-init's fifth field is ignored, so every session is unpinned",
      "const pinned = args[4] === 1;", "const pinned = false;"),
     ("the key is no longer mixed with the seed",
@@ -109,10 +111,31 @@ MUTATIONS = [
      "enc.applyMask(d.subarray(enc.jt), enc.maskVal(botCrypto.mask.c2s, o));",
      "enc.applyMask(d, enc.maskVal(botCrypto.mask.c2s, o));"),
     ("the first ping goes out in the io-init event again (raw, unsigned)",
-     "          setTimeout(() => {\n            try {\n              PacketManager2.pingRequest();\n            } catch (_) {}\n          }, 0);",
-     "          PacketManager2.pingRequest();"),
+     "          setTimeout(() => {\n            // One task on, the bundle has built its session from this io-init.\n            if (own && !own._bundle) own._ready = true;\n            try {\n              PacketManager2.pingRequest();\n            } catch (_) {}\n          }, 0);",
+     "          if (own && !own._bundle) own._ready = true;\n          PacketManager2.pingRequest();"),
     ("RYN sends on the main socket before the game has a session",
-     "(crypto._bundle || !this.client.isOwner)", "true"),
+     "(crypto._bundle || crypto._ready || !this.client.isOwner)", "true"),
+    ("RYN's copy of the session is called ready inside io-init, before the game has one",
+     "          setTimeout(() => {\n            // One task on, the bundle has built its session from this io-init.\n            if (own && !own._bundle) own._ready = true;\n",
+     "          if (own && !own._bundle) own._ready = true;\n          setTimeout(() => {\n"),
+    # ── RynWire: the session for RYN's own sockets ─────────────────────────
+    ("RynWire's c2s mask constant is off by one",
+     "c2s: (this.word(key, 0) ^ 3266489909) >>> 0,", "c2s: (this.word(key, 0) ^ 3266489908) >>> 0,"),
+    ("RynWire keys the incoming mask without the golden-ratio multiply",
+     "return (s2c ^ Math.imul(n, 2654435761)) >>> 0;", "return (s2c ^ n) >>> 0;"),
+    ("RynWire's keystream starts from a zero seed",
+     "      if (s === 0) s = 1831565813;\n", ""),
+    ("RynWire salts the s2c table with the c2s seed",
+     "s2c: this._permute(plain ? this.s2c.slice(0, this.s2cPlain) : this.s2c, (a ^ 2246822507) >>> 0)",
+     "s2c: this._permute(plain ? this.s2c.slice(0, this.s2cPlain) : this.s2c, a)"),
+    ("RynWire no longer reads the bundle's alphabets",
+     "          if (a.length >= 10 && b.length >= 10) {", "          if (false) {"),
+    ("RynWire's fallback alphabet loses the 2025 letters",
+     'c2s = [ "M", "D", "9", "e", "F", "z", "H", "K", "L", "N", "b", "P", "Q", "c", "6", "S", "0", "T", "R", "A", "V" ];',
+     'c2s = [ "M", "D", "9", "e", "F", "z", "H", "K", "L", "N", "b", "P", "Q", "c", "6", "S", "0" ];'),
+    # ── the zoom ──────────────────────────────────────────────────────────
+    ("zoomOutCap no longer finds the game's zoom-out cap",
+     'Hook.replace("zoomOutCap", /const (\w+)=(\w+)\*1\.15;/,', 'Hook.replace("zoomOutCap", /const (\w+)=(\w+)\*1\.25;/,'),
 ]
 
 print(SRC + " — break the 2025 update on purpose, confirm a check goes red\n")

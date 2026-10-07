@@ -106,7 +106,7 @@ code = injected(code, "https://moomoo.io/assets/" + path.basename(BUNDLE), { res
 console.log("  THE HOOKS\n");
 const MUST = [
   // the frame, the renderer, and drawing through it
-  "preRenderLoop", "postRenderLoop", "frameGuard", "exposeResize", "viewport", "nameColor", "adoptRenderer", "renderEntity", "renderItemPush",
+  "preRenderLoop", "postRenderLoop", "frameGuard", "exposeResize", "zoomOutCap", "viewport", "nameColor", "adoptRenderer", "renderEntity", "renderItemPush",
   "renderItem", "preRender", "RenderGrid", "objectAlpha", "resourceTint", "buildingTint2025", "animalTint",
   "meleeWeapon", "meleeBody", "mapSelfColor", "mapTeamColor", "mapDeathMarker", "mapPreRender",
   "offset", "renderPlayer", "totalDamage",
