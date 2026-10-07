@@ -155,6 +155,7 @@ window.turnstile = {
   render: function (el, o) { window.__tsRenders = (window.__tsRenders || 0) + 1;
     if (typeof el === "string") el = document.querySelector(el);
     if (window.__tsSeen.has(el)) { console.warn("[Cloudflare Turnstile] Turnstile has already been rendered in this container."); window.__tsRefused = (window.__tsRefused || 0) + 1; return undefined; }
+    if (/\\/assets\\/index-[^/]*\\.js/.test(new Error().stack || "")) window.__tsByPage = (window.__tsByPage || 0) + 1;
     window.__tsSeen.add(el); el.appendChild(document.createElement("iframe"));
     setTimeout(function () { o && o.callback && o.callback("cf-token-" + Date.now()); }, 60); return "ts" + window.__tsRenders; },
   reset: function () {}, remove: function () {}, getResponse: function () { return null; },
@@ -236,8 +237,11 @@ async function run(spec) {
     return route.abort();
   });
 
+  out.conns = [];
   await context.routeWebSocket(/^wss:\/\/[^/]*moomoo\.io/, ws => {
     out.sockets.push(ws.url());
+    const conn = { url: ws.url(), letters: [], violations: [] };
+    out.conns.push(conn);
     const handlers = { message: [], close: [] };
     const sock = {
       send: buf => { try { ws.send(Buffer.from(buf)); } catch (e) {} },
@@ -246,12 +250,15 @@ async function run(spec) {
     };
     ws.onMessage(m => { const b = typeof m === "string" ? Buffer.from(m) : m; handlers.message.forEach(f => f(b)); });
     ws.onClose(() => handlers.close.forEach(f => f()));
-    server.attach(sock, (...a) => out.frames.push(a.join(" ").slice(0, 160)), {
+    server.attach(sock, (...a) => { out.frames.push(a.join(" ").slice(0, 160)); conn.letters.push(a[1]); }, {
       requireSpawn: true,
       proto: 2025,
       pinned,
       crypto: pinned ? wire() : null,
-      onViolation: (why, detail) => out.notes.push("server rejected a frame: " + why + (detail ? " (" + detail + ")" : "")),
+      onViolation: (why, detail) => {
+        conn.violations.push(why);
+        out.notes.push("server rejected a frame: " + why + (detail ? " (" + detail + ")" : ""));
+      },
     });
   });
 
@@ -374,7 +381,38 @@ async function run(spec) {
   const t0 = Date.now();
   while (Date.now() - t0 < 12000 && !out.frames.some(f => /^c2s M /.test(f))) await page.waitForTimeout(200);
   out.spawnSent = out.frames.some(f => /^c2s M /.test(f));
+  out.mainSockets = out.conns.length;
   await page.waitForTimeout(2500);
+
+  // A bot, through RYN's own menu: its own Turnstile token, its own /join
+  // ticket, and RYN's own signing and masking — the path the main client
+  // never takes, because the game's bundle does that part for it.
+  if (mode !== "vanilla" && !process.env.NO_BOTS) {
+    out.bot = await (async () => {
+      const frame = page.frames().find(f => /^blob:/.test(f.url()));
+      if (!frame) return { error: "RYN's menu frame not found" };
+      const before = out.conns.length;
+      try {
+        await frame.evaluate(() => document.getElementById("add-bot-dynamic").click());
+        await frame.waitForSelector("#dyn-bot-input-1", { state: "attached", timeout: 4000 });
+        await frame.evaluate(() => {
+          document.getElementById("dyn-bot-input-1").value = "bot1";
+          document.getElementById("dyn-bot-btn-1").click();
+        });
+      } catch (e) {
+        return { error: e.message.split("\n")[0] };
+      }
+      const t1 = Date.now();
+      while (Date.now() - t1 < 15000 && !(out.conns.length > before && out.conns[before].letters.includes("M"))) await page.waitForTimeout(250);
+      // RYN's bot pings once at io-init and again only after it has READ the
+      // server's pong — so a second ping is proof it decodes what it is sent.
+      const t2 = Date.now();
+      while (Date.now() - t2 < 9000 && out.conns[before] && out.conns[before].letters.filter(l => l === "0").length < 2) await page.waitForTimeout(250);
+      const c = out.conns[before];
+      return c ? { url: c.url, spawned: c.letters.includes("M"), frames: c.letters.length, violations: c.violations,
+                   pings: c.letters.filter(l => l === "0").length } : { error: "no bot socket opened" };
+    })();
+  }
 
   out.after = await page.evaluate(() => ({
     // what RYN drew this frame on its overlay over the WebGL canvas
@@ -390,6 +428,7 @@ async function run(spec) {
       return { cls: b.className, rect: [r.x, r.y, r.width, r.height].map(Math.round), top: (document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) || {}).id }; })(),
     tsRenders: window.__tsRenders,
     tsRefused: window.__tsRefused || 0,
+    tsByPage: window.__tsByPage || 0,
     texts: ["loadingText", "nameHint", "signInHint", "verifyText", "menuNotice", "serverNote"].map(id => {
       const e = document.getElementById(id); return e && e.textContent.trim() ? id + "=" + e.textContent.trim().slice(0, 80) : null; }).filter(Boolean),
     gameUI: (() => { const g = document.getElementById("gameUI"); return g ? getComputedStyle(g).display : null; })(),
@@ -465,20 +504,32 @@ function report(r) {
   ok(r.signIn && r.signIn.ok, "Sign in opens the account card and reaches FRVR.auth" +
      (r.signIn && !r.signIn.ok ? " — " + (r.signIn.error || JSON.stringify(r.signIn.calls)) : ""));
   ok(!r.after.tsRefused, "no Turnstile render was refused as already rendered (" + r.after.tsRefused + ")");
+  if (r.base === "late") ok(!r.after.tsByPage, "only RYN's copy renders Turnstile — the page's own copy is told no (" + r.after.tsByPage + ")");
   ok(r.clicked, "the Enter Game button could be clicked");
   ok(r.joins.length > 0, "the join went through api /join (" + r.joins.length + ")" +
      (r.joins[0] ? " — " + JSON.stringify(r.joins[0]).slice(0, 120) : ""));
-  ok(r.sockets.length === 1, "exactly one game socket opened (" + r.sockets.length + ")" +
-     (r.sockets.length ? ": " + r.sockets.join(" , ").slice(0, 200) : ""));
-  ok(r.sockets.every(u => /token=tk%3AT\d/.test(u) && /[?&]b=test-build/.test(u)),
+  const mainSockets = r.mainSockets !== undefined ? r.mainSockets : r.sockets.length;
+  ok(mainSockets === 1, "exactly one game socket opened for the player (" + mainSockets + ")" +
+     (r.sockets.length ? ": " + r.sockets[0].slice(0, 120) : ""));
+  ok(r.sockets.length > 0 && /token=tk%3AT\d/.test(r.sockets[0]) && /[?&]b=test-build/.test(r.sockets[0]),
      "the socket carries the /join ticket (tk:) and ?b=<BUILD_ID>");
   ok(r.spawnSent, "the spawn frame reached the server");
-  const pings = r.frames.filter(f => /^c2s 0 /.test(f)).length;
-  ok(pings >= 1, "the client pings the server (" + pings + ")");
+  const pings = r.conns.length ? r.conns[0].letters.filter(l => l === "0").length : 0;
+  ok(pings >= 1, "the player's connection pings the server (" + pings + ")");
   if (r.shortFrames && r.shortFrames.length) console.log("    short frames sent:\n        " + r.shortFrames.slice(0, 3).join("\n        "));
   ok(r.notes.filter(n => /server rejected/.test(n)).length === 0, "the server accepted every frame" +
      (r.notes.length ? ":\n        " + r.notes.slice(0, 5).join("\n        ") : ""));
   ok(r.after.gameUI && r.after.gameUI !== "none", "the in-game UI is showing (" + r.after.gameUI + ")");
+  if (r.bot) {
+    const b = r.bot;
+    ok(!b.error && /token=tk%3AT\d/.test(b.url) && /[?&]b=test-build/.test(b.url),
+       "a bot connects with its own /join ticket and the build id" + (b.error ? " — " + b.error : " (" + String(b.url).replace(/^wss:\/\/[^/]+/, "") + ")"));
+    ok(!b.error && b.spawned, "the bot's spawn frame reached the server" + (b.error ? "" : " (" + b.frames + " frames)"));
+    ok(!b.error && b.pings >= 2, "the bot reads what the server sends — it answered a pong with its next ping" +
+       (r.pinned ? ", through the per-message mask" : "") + " (" + (b.pings || 0) + " pings)");
+    ok(!b.error && b.violations.length === 0, "the server accepted every frame the bot sent — RYN's own signing" +
+       (r.pinned ? " and masking" : "") + (b.violations && b.violations.length ? ": " + b.violations[0] : ""));
+  }
   if (r.base !== "vanilla") {
     ok(r.after.overlayPx > 50, "RYN's overlay draws over the WebGL canvas (" + r.after.overlayPx + " px)");
     ok(!r.renderFaults, "no RYN render hook failed" + (r.renderFaults ? ": " + r.renderFaults[0] : ""));

@@ -43,6 +43,17 @@ MUTATIONS = [
      '      [ "verifyDialog", "accountCard", "profileCard", "clanCard", "confirmCard" ].forEach(id => lift(id, false));', ""),
     ("late", "the page's own copy renders Turnstile too",
      "        if (fromPage) return \"ryn-page-copy\";\n", ""),
+    # ── bots: RYN's own login and its own session ──────────────────────────
+    ("fast", "a bot skips /join and connects with the raw captcha token",
+     "        token = await rynJoinTicket(new URL(href).host, token.slice(3)).then(ticket => ticket || token, () => token);\n", ""),
+    ("fast", "a bot's socket URL leaves out the build id",
+     'url = origin + "/?token=" + encodeURIComponent(token) + (buildId != null ? "&b=" + encodeURIComponent(buildId) : "");',
+     'url = origin + "/?token=" + encodeURIComponent(token);'),
+    ("fast+pinned", "a bot masks its frames keyed on the sequence number",
+     "enc.maskVal(botCrypto.mask.c2s, o)", "enc.maskVal(botCrypto.mask.c2s, n)"),
+    ("fast+pinned", "a bot unmasks incoming frames through bf",
+     "enc.applyMask(bytes, enc.maskIn(cryptoIn.mask.s2c, cryptoIn.received));",
+     "enc.applyMask(bytes, enc.maskVal(cryptoIn.mask.s2c, cryptoIn.received));"),
 ]
 
 print(SRC + " — break it on purpose, confirm the browser test goes red\n")

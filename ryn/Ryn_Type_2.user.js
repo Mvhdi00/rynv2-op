@@ -1410,6 +1410,16 @@ window.grbtp = 35;
   // `fresh` forces an inline mint and skips the pool. Used for the one retry
   // after a socket that closed before `io-init`, which is what a token the
   // server would not take looks like from here.
+  /* True only while createSocket is constructing a bot's socket.
+   *
+   * The trap that hands the game's socket to the main client used to restore
+   * the native WebSocket after the first catch. The 2025 bundle locks
+   * window.WebSocket on load (its anti-tamper code defines it non-writable),
+   * so that restore now fails silently, the trap stays in place, and every
+   * bot socket after it was taken for the game's and re-bound the main
+   * client's socket manager to a bot. A bot's socket is RYN's own; it says
+   * so. */
+  let _rynOwnSocket = false;
   // The 2025 join: a captcha token in, a one-use socket ticket out.
   const rynJoinTicket = (host, captcha) => {
     if (typeof fetch !== "function") return Promise.resolve(null);
@@ -1510,7 +1520,14 @@ window.grbtp = 35;
     try {
       TokenPool.refill();
     } catch (_) {}
-    const ws = new WebSocket(url);
+    // Marked so the WebSocket trap below leaves it alone: see _rynOwnSocket.
+    let ws;
+    _rynOwnSocket = true;
+    try {
+      ws = new WebSocket(url);
+    } finally {
+      _rynOwnSocket = false;
+    }
     ws.binaryType = "arraybuffer";
     ws._rynPooledToken = pooled;
     return ws;
@@ -42453,13 +42470,18 @@ html.ryn-in-lobby .ryn-v2-wrapper {
   window.WebSocket = new window.Proxy(window.WebSocket, {
     construct(target, args) {
       const socket = new target(...args);
+      if (_rynOwnSocket) {
+        return socket;
+      }
       const url = args && args[0] ? String(args[0]) : "";
       const isNonGame = /frvr|analytics|google|doubleclick|sentry|datadog|cloudflareinsights|hotjar|amplitude|segment/i.test(url);
       const isGameSocket = !isNonGame && /^wss?:\/\//i.test(url);
       if (isGameSocket) {
         Logger.test("Found game socket! Socket initialization..");
         client.SocketManager.init(socket);
-        window.WebSocket = target;
+        try {
+          window.WebSocket = target;
+        } catch (e) {}
       }
       return socket;
     }
