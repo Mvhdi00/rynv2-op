@@ -1,0 +1,1 @@
+try { if (!sessionStorage.getItem("seeded")) { localStorage.setItem("RYN", JSON.stringify({ _myNameColor: true, _myNameColorValue: "#ff00ff" })); sessionStorage.setItem("seeded", "1"); } } catch (e) {}

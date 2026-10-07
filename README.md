@@ -1,3 +1,62 @@
+# Ryn Type 2 — fixes for the snow update
+
+**`Ryn_Type_2.user.js`** is Ryn Type 2 2.5 (`src/Ryn_Type_2-2.5.js`) patched
+for the current game build — `src/game_index-cfaab428.js`, protocol build
+`s16nqv`. It is produced by `tools/build-ryn2.js`; every edit there is
+anchored to an exact string in 2.5 and the build fails if one is missing.
+
+```sh
+node tools/build-ryn2.js          # src/Ryn_Type_2-2.5.js -> Ryn_Type_2.user.js
+node tools/check-ryn2-hooks.js    # which bundle hooks bind on the shipped bundle
+node --check Ryn_Type_2.user.js
+```
+
+### What changed
+
+| Problem | Cause | Fix |
+|---|---|---|
+| Hats gone, store previews broken, weapons drawn as dark blocks | Two things, either enough on its own. The game now draws every sprite through a WebGL texture atlas, and at document-start Chrome can still run the page's own copy of the game after RYN removes its `<script type="module">` — two copies on one GL context overwrite each other's textures. Separately, the game requests each sprite once; a request that fails leaves that hat blank for the session. | The page's copy is now stopped at its first line in document-start mode too (it already was for late injection). A hat, accessory, weapon or icon that fails to load is retried once from the page origin, then falls back to its texture-pack image (requested with CORS so the atlas can take it). A sprite the renderer refuses is skipped instead of aborting the frame. |
+| Background grid visible, squares resize with zoom | The grid's spacing is `maxScreenHeight / 18`, and RYN makes that value follow the zoom. Ryn's bundle hook removes the grid, but only from its own copy and only if the loop is written exactly `for(var…)…for(let…)`. | The hook accepts `var`/`let` in either loop, and the grid is also dropped at the draw call: a full-width or full-height line, 4px, black, alpha .06. |
+| "My Name" colour does nothing | The colour is set where the game picks the nameplate colour, keyed on `player === me`. | Also matched by sid, and when the hook has not run for a second the renderer colours a nameplate whose text is your nickname. |
+| Bots refused | `/join` takes a device id. The game and Glotus send the player's own (`moo_did`); RYN gave each bot one from a list of ids earlier bots had been issued, never removed a stale one, and so kept offering the same refused id first. | Bots join with the player's own device id, as the game and Glotus do. |
+| Soldier helmet in the snow | The snow update added Frost Helm (id 60): normal speed in snow, 12% less damage. | In the snow biome every automatic soldier equip becomes Frost Helm when you own it (Combat → "Frost Helm in snow", on by default). A soldier picked by hand stays a soldier. The danger checks, the heal engine's damage model and the spike/poison damage matching use the hat actually worn. Frost Helm is added to the store list and the sandbox auto-buy. |
+
+### Checked and unchanged
+
+- **Protocol.** RYN's own session code (RynWire, used by bots) matches the
+  bundle: opcode alphabets including `T R A V` / `W F`, the unsalted and
+  `BUILD_SALT`-salted tables, the pinned key mix, both per-frame masks and the
+  6-byte HMAC. The bundle functions RYN captures (`yf`, `Ll`, `kf`, `wf`, `bf`,
+  `Nl`, `vf`, `z0`, `K0`, `Q0`) all resolve to the right ones.
+- **Hooks.** 68 of 70 bind on the shipped bundle. The two that do not are
+  `gameInit` (the 2024 altcha start path, never taken now) and `buildingTint`
+  (its 2025 twin `buildingTint2025` binds).
+- **Data.** Hats (49), accessories (21), weapons (16), items (23), item groups,
+  projectiles and animals (15) match the bundle value for value; the only
+  differences are RYN's own key names (`xOffset` for `xOff`, `damage` for
+  `dmg`, `cost` for `req`).
+
+### Offline harness
+
+`tools/harness/` runs the shipped bundle with a userscript injected at
+document-start against a mock game server in the pre-installed Chromium — no
+network. It answers `/`, the bundle, `moomoo-protocol`, sprites, the server
+list, `/join`, Turnstile and the game socket (unpinned or pinned session) itself.
+
+```sh
+npm i --no-save playwright-core
+node tools/harness/run.js scenario=tools/harness/scen_snow.js eval=tools/harness/ev_play.js shot=snow.png
+node tools/harness/run.js scenario=tools/harness/scen_pinned.js eval=tools/harness/ev_bot.js evalTimeout=60000
+node tools/harness/run.js failimg=1 eval=tools/harness/ev_store.js
+```
+
+What it showed for this build: in the snow RYN equips Frost Helm (`c [0,60,0]`),
+outside it the soldier (`c [0,6,0]`); a bot completes `/join` with the player's
+device id and spawns on a pinned session with valid signatures; failed hat
+requests are retried and the store previews load.
+
+---
+
 # ReUp Mix (Luna × Ryn)
 
 A merged moomoo.io userscript: the RYN Client v4 core with the Luna Client

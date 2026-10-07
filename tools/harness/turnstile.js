@@ -1,0 +1,1 @@
+window.turnstile = { render(c, o) { setTimeout(() => o && o.callback && o.callback("faketoken" + Math.random()), 100); return "w" + Math.random(); }, reset() {}, remove() {}, getResponse() { return "faketoken"; }, execute() {}, isExpired() { return false; } };
