@@ -5,3 +5,4 @@ assets/index-*.js
 assets/vendor-*.js
 assets/jquery.js
 *.png
+boot-2025-*.bundle.js

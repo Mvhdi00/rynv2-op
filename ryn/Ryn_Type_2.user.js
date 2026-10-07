@@ -37004,7 +37004,17 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       }
       const enterGame = doc.getElementById("enterGame");
       if (enterGame !== null) {
-        enterGame.textContent = "Enter Game";
+        /* The 2025 bundle keeps a handle on the <span> inside this button and
+         * writes "Enter Game" / "Play as Guest" into it as you sign in or out.
+         * Setting textContent here deleted that span, and the bundle's very
+         * first write to it threw at load — before its menu, its server list
+         * or its socket existed. The label is the span's, set through it. */
+        const label = enterGame.querySelector("span");
+        if (label !== null) {
+          if (!label.textContent.trim()) label.textContent = "Enter Game";
+        } else if (!enterGame.textContent.trim()) {
+          enterGame.textContent = "Enter Game";
+        }
         row.appendChild(enterGame);
       }
       nameGroup.appendChild(row);
@@ -38340,7 +38350,16 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         regex = inputRegex + "";
       }
       regex = this.parseVariables(regex);
-      const expression = RegExp(regex, flags);
+      // One malformed pattern used to throw out of formatCode and take the
+      // whole injection with it — the game never started. A pattern that does
+      // not compile is a hook that did not install, nothing more.
+      let expression;
+      try {
+        expression = RegExp(regex, flags);
+      } catch (e) {
+        Logger.error("Bad pattern for " + name + ": " + e.message);
+        return /(?!)/;
+      }
       if (!expression.test(this.code)) {
         Logger.error("Failed to find: " + name);
       } else {
@@ -38569,15 +38588,71 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     Hook.replace("scaleHeight", /=1080/, "=RYN._ZoomHandler._scale._smooth._h");
     Hook.replace("maskLerp", /Math\.lerpAngle/, "THIS_STORAGE.lerpAngle", "g");
 
+    /* Ads are the one part of FRVR RYN still switches off. Both call sites:
+     * the interstitial before a respawn (a promise the join waits on) and
+     * showPreAd (which passes the "now start" callback). */
+    Hook.replace("noAds", /FRVR\.ads\.show\(/, "RYN._noAd(", "g");
+    /* The server list is only fetched once the FRVR SDK has initialised:
+     *   frvrSdkInitPromise.then(()=>FRVR.bootstrapper.complete()).then(()=>loadServers())
+     * An SDK that never settles (blocked, slow) left the menu on "waiting for
+     * the server list" for good, and one that is missing threw in complete().
+     * Bounded and guarded now; the real SDK still gets its four seconds. */
+    Hook.replace("sdkReady",
+      /window\.frvrSdkInitPromise\.then\(\(\)=>window\.FRVR\.bootstrapper\.complete\(\)\)\.then\(\(\)=>(\w+)\(\)\)/,
+      "RYN._sdkReady().then(()=>{try{window.FRVR&&window.FRVR.bootstrapper&&window.FRVR.bootstrapper.complete()}catch(e){}}).then(()=>$1())");
     Hook.replace("cowName", /this\.aiTypes=\[\{id:0,src:"cow_1",/, 'this.aiTypes=[{id:0,name:"by rap",src:"cow_1",');
     Hook.replace("wolfName", /name:"Wolf",src:"wolf_1"/, 'name:"wolfy",src:"wolf_1"');
     Hook.replace("freezeTurnSpeed", /(\w+\.turnSpeed)(\*[^;,)]+)/, "(RYN._settings._lowQuality?0:$1$2)", "g");
     const addCode = isProd ? "const RYN=window.RYN;delete window.RYN;" : "";
-    Hook.wrap("(async function THIS_STORAGE(){const FRVR=window.FRVR;window.FRVR=FRVR;" + addCode, "})();");
+    /* FRVR is the game's account SDK — sign-in, register, profile, friends.
+     * The bundle's bare `FRVR` used to be pinned to a stand-in RYN built at
+     * load; it now goes through RYN._frvr, which answers with the page's real
+     * SDK whenever there is one (including one that finishes loading after
+     * this runs) and with the stand-in only when there is not. */
+    Hook.wrap("(async function THIS_STORAGE(){const FRVR=(window.RYN&&window.RYN._frvr)||window.FRVR;" + addCode, "})();");
     Logger.test(`Modified bundle, total amount of hooks: ${Hook.hookCount}/${Hook.hookAttempts}`);
     return Hook.code;
   };
   const formatCode_default = formatCode2;
+  /* The page's import map, read from its <script type="importmap"> as it goes
+   * by. Exact keys and "prefix/" keys, resolved against the document — the
+   * part of the spec the bundle actually uses. */
+  const Injector_importMap = {
+    imports: {},
+    add(text) {
+      try {
+        const map = JSON.parse(text);
+        if (map && map.imports && typeof map.imports === "object") {
+          Object.assign(this.imports, map.imports);
+        }
+      } catch (e) {}
+    },
+    scan() {
+      try {
+        document.querySelectorAll('script[type="importmap"]').forEach(node => this.add(node.textContent));
+      } catch (e) {}
+    },
+    resolve(spec) {
+      this.scan();
+      let target = null;
+      if (Object.prototype.hasOwnProperty.call(this.imports, spec)) {
+        target = this.imports[spec];
+      } else {
+        let best = "";
+        for (const key in this.imports) {
+          if (key.endsWith("/") && spec.startsWith(key) && key.length > best.length) best = key;
+        }
+        if (best) target = this.imports[best] + spec.slice(best.length);
+      }
+      if (typeof target !== "string") return null;
+      try {
+        return new URL(target, document.baseURI).href;
+      } catch (e) {
+        return target;
+      }
+    }
+  };
+  let Injector_lastCode = null;
   const Injector = new class {
     init(node) {
       this.loadScript(node.src);
@@ -38600,41 +38675,60 @@ html.ryn-in-lobby .ryn-v2-wrapper {
           return baseUrl + path.replace(/^\.\.?\//, "");
         }
       };
-      let hadStaticImport = false;
-      code = code.replace(/(^|[\n;])\s*import\s*(\{[^}]*\}|\*\s+as\s+[\w$]+|[\w$]+)?\s*(?:,\s*(\{[^}]*\}|[\w$]+))?\s*from\s*(["'])([^"']+)\4\s*;?/g, (full, lead, spec1, spec2, quote, path) => {
-        if (/import\s*\(/.test(full)) return full;
-        hadStaticImport = true;
-        const abs = toAbs(path);
-        const parts = [];
-        const conv = spec => {
-          spec = spec.trim();
-          if (!spec) return null;
-          if (spec.startsWith("{")) {
-            const inner = spec.slice(1, -1).split(",").map(s => {
-              s = s.trim();
-              if (!s) return null;
-              const asM = s.split(/\s+as\s+/);
-              return asM.length === 2 ? asM[0].trim() + ": " + asM[1].trim() : s;
-            }).filter(Boolean).join(", ");
-            return "{" + inner + "}";
-          }
-          if (spec.startsWith("*")) {
-            const ns = spec.replace(/\*\s+as\s+/, "").trim();
-            return ns;
-          }
-          return "{default: " + spec + "}";
-        };
-        const c1 = spec1 ? conv(spec1) : null;
-        const c2 = spec2 ? conv(spec2) : null;
-        if (c1 && c1.startsWith("{") && c1 !== "{}") parts.push(c1); else if (c1 && !c1.startsWith("{")) parts.push(c1);
-        if (c2 && c2.startsWith("{") && c2 !== "{}") parts.push(c2); else if (c2 && !c2.startsWith("{")) parts.push(c2);
-        if (parts.length === 0) {
-          return lead + `await import(${JSON.stringify(abs)});`;
+      /* The 2025 bundle is an ES module with two static imports back to back:
+       *
+       *   import{p as ta,...}from"./vendor-xxxx.js";import{BUILD_ID as Q0,...}from"moomoo-protocol";
+       *
+       * Function() runs classic script, so each becomes an `await import()`
+       * inside the async wrapper. The old pattern ate the `;` between the two,
+       * which was the only thing the second one could anchor on — it was left
+       * as a raw `import` and the whole bundle died with "Cannot use import
+       * statement outside a module" before a single line ran. Nothing is
+       * consumed after the specifier now, so every import keeps its anchor.
+       *
+       * `moomoo-protocol` is a bare specifier: only the page's import map knows
+       * where it lives. The map's own <script type="importmap"> is left in the
+       * page (resetGame no longer removes it) and its entries are applied here
+       * as well, so the import resolves whether or not the browser registered
+       * the map before RYN got to the page. */
+      const resolveSpec = spec => {
+        if (/^\.{0,2}\//.test(spec) || /^[a-z][\w+.-]*:/i.test(spec)) {
+          return toAbs(spec);
         }
-        const stmts = parts.map(p => `const ${p} = await import(${JSON.stringify(abs)});`).join("");
-        return lead + stmts;
+        const mapped = Injector_importMap.resolve(spec);
+        return mapped !== null ? mapped : spec;
+      };
+      const convSpec = spec => {
+        spec = (spec || "").trim();
+        if (!spec) return null;
+        if (spec.startsWith("{")) {
+          const inner = spec.slice(1, -1).split(",").map(s => {
+            s = s.trim();
+            if (!s) return null;
+            const asM = s.split(/\s+as\s+/);
+            return asM.length === 2 ? asM[0].trim() + ": " + asM[1].trim() : s;
+          }).filter(Boolean).join(", ");
+          return inner ? "{" + inner + "}" : null;
+        }
+        if (spec.startsWith("*")) {
+          return spec.replace(/\*\s*as\s+/, "").trim();
+        }
+        return "{default: " + spec + "}";
+      };
+      const importRe = /(^|[\n;{}])(\s*)import\s*(?:(\{[^}]*\}|\*\s*as\s+[\w$]+|[\w$]+)\s*(?:,\s*(\{[^}]*\}|\*\s*as\s+[\w$]+))?\s*from\s*)?(["'])([^"'\n]+)\5/g;
+      code = code.replace(importRe, (full, lead, ws, spec1, spec2, quote, path) => {
+        const abs = JSON.stringify(resolveSpec(path));
+        const parts = [ convSpec(spec1), convSpec(spec2) ].filter(Boolean);
+        if (parts.length === 0) {
+          return lead + ws + "await import(" + abs + ")";
+        }
+        return lead + ws + parts.map(p => "const " + p + " = await import(" + abs + ")").join(";");
       });
       code = code.replace(/(\bimport\s*\(\s*)(["'])(\.\.?\/[^"']+)\2/g, (m, kw, quote, path) => kw + quote + toAbs(path) + quote);
+      // import.meta is module-only syntax too; the bundle passes
+      // import.meta.url to Vite's preload helper for the touch-controls chunk.
+      code = code.replace(/\bimport\.meta\.url\b/g, JSON.stringify(src)).replace(/\bimport\.meta\b/g, "({url:" + JSON.stringify(src) + "})");
+      Injector_lastCode = code;
       this.waitForBody(() => {
         Function(code)();
       });
@@ -38665,14 +38759,46 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       node.remove();
     };
     let scriptBundle = null;
+    /* What the page loads, and what of it RYN takes away.
+     *
+     * This used to remove anything whose src, href OR TEXT matched
+     * /frvr|jquery|howler|assets|cookie|securepubads|google|ads/ — written for
+     * the 2024 page. On the 2025 page that list takes out, in order:
+     *   - the <script type="importmap"> (its JSON names /assets/), the only
+     *     thing that says where `moomoo-protocol` lives;
+     *   - the FRVR SDK and the inline script that initialises it, which is
+     *     the whole of sign-in, profiles and friends — "[FRVR] sdk failed
+     *     init" in the console, and "Sign-in is unavailable" in the menu;
+     *   - any inline script containing "loads" or "reads" ("ads").
+     * Now: the import map, FRVR and Turnstile always stay; the game's own
+     * module and its preloads go (RYN runs its own copy); ad and tracking
+     * scripts go. Stylesheets are never touched. */
+    const keepRegex = /frvr|turnstile|challenges\.cloudflare/i;
+    const adRegex = /securepubads|googletag|googlesyndication|adsbygoogle|doubleclick|google-analytics|googletagmanager|cookielaw|onetrust|cookiebot|adinplay|factorem|venatus|nitropay/i;
     const handleScriptElement = node => {
       const isScript = node instanceof HTMLScriptElement;
       const isLink = node instanceof HTMLLinkElement;
-      const regex = /frvr|jquery|howler|assets|cookie|securepubads|google|ads/i;
-      if (isScript && regex.test(node.src) || isLink && regex.test(node.href) || regex.test(node.innerHTML)) {
-        scriptExecuteHandler(node);
+      if (isScript && node.type === "importmap") {
+        Injector_importMap.add(node.textContent);
+        return;
       }
-      if (isScript && /assets.+\.js$/.test(node.src) && scriptBundle === null) {
+      const where = isScript ? node.src : isLink ? node.href : "";
+      if (keepRegex.test(where) || isScript && !node.src && keepRegex.test(node.textContent)) {
+        return;
+      }
+      if (isScript && adRegex.test(where) || isLink && /preload/i.test(node.rel) && adRegex.test(where)) {
+        scriptExecuteHandler(node);
+        return;
+      }
+      if (isLink && /modulepreload/i.test(node.rel) && /\/assets\/.+\.js(\?|$)/.test(where)) {
+        scriptExecuteHandler(node);
+        return;
+      }
+      if (isScript && /\/assets\/.+\.js(\?|$)/.test(node.src) && scriptBundle !== null) {
+        scriptExecuteHandler(node);
+        return;
+      }
+      if (isScript && /assets.+\.js(\?|$)/.test(node.src) && scriptBundle === null) {
         scriptBundle = node;
         Logger.test("Found script element, resolving..");
         scriptExecuteHandler(node);
@@ -38696,34 +38822,19 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     });
     document.querySelectorAll("script").forEach(handleScriptElement);
     document.querySelectorAll("link").forEach(handleScriptElement);
+    // Ad frames, not the Turnstile one — that is the human check Play waits on.
     document.querySelectorAll("iframe").forEach(iframe => {
-      iframe.remove();
+      if (!/challenges\.cloudflare|turnstile/i.test(iframe.src || "")) {
+        iframe.remove();
+      }
     });
     const resolvePromise = data => new Promise(function(resolve) {
       resolve(data);
     });
     const win = window;
     blockProperty(win, "onbeforeunload");
-    win.frvrSdkInitPromise = resolvePromise();
-    blockProperty(win, "frvrSdkInitPromise");
-    win.FRVR = {
-      bootstrapper: {
-        complete() {}
-      },
-      tracker: {
-        levelStart() {}
-      },
-      ads: {
-        show() {
-          return resolvePromise();
-        }
-      },
-      channelCharacteristics: {
-        allowNavigation: true
-      },
-      setChannel() {}
-    };
-    blockProperty(win, "FRVR");
+    // window.FRVR and window.frvrSdkInitPromise are the page's own now — see
+    // RYN._frvr. Replacing them is what took sign-in away.
     if (!loadedFast) {
       const _define = win.customElements.define;
       win.customElements.define = function() {
@@ -43952,6 +44063,16 @@ html.ryn-in-lobby .ryn-v2-wrapper {
   const Login_default = Login;
 
   const win = window;
+  const RYN_FRVR_STANDIN = {
+    bootstrapper: { complete() {} },
+    tracker: { levelStart() {}, levelEnd() {} },
+    ads: { show() { return Promise.resolve(); } },
+    channelCharacteristics: { allowNavigation: true },
+    setChannel() {},
+    profile: null,
+    auth: null,
+    social: null
+  };
   const RYN = {
     _Login: Login_default,
     _myClient: client,
@@ -43976,6 +44097,30 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     _config: {},
     version: version,
     _offset: new Vector_default,
+    /* The bundle's `FRVR`. Every read goes to the page's real SDK when it has
+     * one, so FRVR.auth (sign-in / register / verified accounts), profile and
+     * social keep working; the stand-in below only answers when there is no
+     * SDK at all (blocked by an extension), so the game still boots. */
+    _frvr: new Proxy({}, {
+      get(_, key) {
+        const real = win.FRVR;
+        if (real && typeof real === "object" && key in real) return real[key];
+        return RYN_FRVR_STANDIN[key];
+      },
+      has(_, key) {
+        const real = win.FRVR;
+        return !!(real && typeof real === "object" && key in real) || key in RYN_FRVR_STANDIN;
+      }
+    }),
+    _noAd(kind, done) {
+      if (typeof done === "function") setTimeout(done, 0);
+      return Promise.resolve();
+    },
+    _sdkReady() {
+      const p = win.frvrSdkInitPromise;
+      const settled = p && typeof p.then === "function" ? Promise.resolve(p).catch(() => {}) : Promise.resolve();
+      return Promise.race([ settled, new Promise(r => setTimeout(r, 4e3)) ]);
+    },
     _gameInit(token) {},
     async startGame() {
       const token = await gameToken();
@@ -48860,7 +49005,16 @@ try {
   }, 80);
   const _targetCanvas = document.createElement("canvas");
   _targetCanvas.style.cssText = "position:fixed;top:0;left:0;pointer-events:none;z-index:9999;";
-  document.body.appendChild(_targetCanvas);
+  // At document-start there is no <body> yet, and this threw — taking the
+  // rest of the targeting overlay with it.
+  const _mountTargetCanvas = () => {
+    if (document.body) {
+      document.body.appendChild(_targetCanvas);
+    } else {
+      document.addEventListener("DOMContentLoaded", _mountTargetCanvas, { once: true });
+    }
+  };
+  _mountTargetCanvas();
   const _resizeTargetCanvas = () => {
     _targetCanvas.width = window.innerWidth;
     _targetCanvas.height = window.innerHeight;

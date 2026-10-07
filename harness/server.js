@@ -46,6 +46,16 @@ function tablesFor(seed) {
 }
 
 function start(port, log, opts) {
+  const { WebSocketServer } = require("ws");
+  const wss = new WebSocketServer({ port });
+  wss.on("connection", (ws) => attach(ws, log, opts));
+  return wss;
+}
+
+/* One connection's worth of server, on anything with send/on/close. Split out
+ * of start() so a test can drive it from Playwright's routeWebSocket, which is
+ * how a page that dials wss://<key>.<region>.moomoo.io gets a server at all. */
+function attach(ws, log, opts) {
   const {
     strict = false, onViolation = null, onClose = null, onSession = null,
     /* The real server puts you in the world when it accepts your "M" frame and
@@ -53,11 +63,15 @@ function start(port, log, opts) {
      * valid spawn look identical to one that does — which is how a spawn sent
      * before the transport was negotiated went unnoticed here. */
     requireSpawn = false,
+    /* 2025 moved three world packets to new layouts:
+     *   a  [sid,x,y,dir*100]x4, [sid,build,weapon,variant,team,leader,skin,tail,icon,z]x10, [hidden sids]
+     *   I  [sid,index,x,y,dir*100,health,nameIndex,state]x8, [hidden sids]
+     *   K  (sid, didHit, weaponIndex, extra)
+     * A client still parsing the 2024 shapes reads every field off by one or
+     * more. Pass proto: 2025 to get the new ones. */
+    proto = 2024,
   } = opts || {};
-  const { WebSocketServer } = require("ws");
-  const wss = new WebSocketServer({ port });
-
-  wss.on("connection", (ws) => {
+  {
     const seed = (Math.random() * 0xffffffff) >>> 0;
     const keyHex = crypto.randomBytes(32).toString("hex");
     const tables = tablesFor(seed);
@@ -158,11 +172,7 @@ function start(port, log, opts) {
       // [id, sid, name, x, y, dir, health, maxHealth, scale, skinColor]
       send("D", [["p1", mySid, "tester", mid, midY, 0, 100, 100, 35, 0], true]);
       send("D", [["p2", foeSid, "rival", mid + 150, midY + 40, 0, 100, 100, 35, 1], false]);
-      // 13 fields per player
-      send("a", [[
-        mySid, mid, midY, 0, -1, 0, 0, null, 0, 0, 0, 0, 0,
-        foeSid, mid + 150, midY + 40, 3, -1, 5, 1, null, 0, 6, 11, 1, 0,
-      ]]);
+      sendPlayers(0, true);
       // loadGameObject: 8 fields per object [sid,x,y,dir,scale,type,itemId,ownerSid]
       send("H", [[
         1, mid + 200, midY + 120, 0, 70, 0, null, null,      // tree
@@ -171,7 +181,8 @@ function start(port, log, opts) {
         4, mid - 60, midY - 120, 0, 35, null, 4, foeSid,     // enemy spike
       ]]);
       // loadAI: 7 fields per animal [sid,index,x,y,dir,health,nameIndex]
-      send("I", [[9, 0, mid + 300, midY - 200, 0, 100, 0]]);
+      if (proto === 2025) send("I", [[9, 0, mid + 300, midY - 200, 0, 100, 0, 0], []]);
+      else send("I", [[9, 0, mid + 300, midY - 200, 0, 100, 0]]);
       send("G", [[mySid, "tester", 12, 0, foeSid, "rival", 8, 0]]);
       send("T", [0, 1, 1]);
       send("U", [1, 0]);
@@ -200,26 +211,38 @@ function start(port, log, opts) {
       send("9", [mid, midY + 100]);
     }
 
+    function sendPlayers(wobble, full) {
+      if (proto === 2025) {
+        send("a", [
+          [mySid, mid, midY, 0, foeSid, mid + 150 + wobble, midY + 40, 300],
+          full ? [mySid, -1, 0, 0, null, 0, 0, 0, 0, 0,
+                  foeSid, -1, 5, 1, null, 0, 6, 11, 1, 0] : [],
+          [],
+        ]);
+        return;
+      }
+      // 13 fields per player
+      send("a", [[
+        mySid, mid, midY, 0, -1, 0, 0, null, 0, 0, 0, 0, 0,
+        foeSid, mid + 150 + wobble, midY + 40, 3, -1, 5, 1, null, 0, 6, 11, 1, 0,
+      ]]);
+    }
+
     // Keep the world ticking so interpolation and the tick loop run.
     let t = 0;
     function tickWorld() {
       t++;
       const wobble = Math.sin(t / 8) * 60;
-      send("a", [[
-        mySid, mid, midY, 0, -1, 0, 0, null, 0, 0, 0, 0, 0,
-        foeSid, mid + 150 + wobble, midY + 40, 3, -1, 5, 1, null, 0, 6, 11, 1, 0,
-      ]]);
+      sendPlayers(wobble, false);
       if (t % 9 === 0) send("O", [foeSid, 60 + (t % 40)]);
       if (t % 15 === 0) send("M", [3, 1]);
     }
 
     if (!requireSpawn) setTimeout(spawn, 250);
     ws.on("close", () => { if (tick) clearInterval(tick); });
-  });
-
-  return wss;
+  }
 }
 
-module.exports = { start };
+module.exports = { start, attach };
 
 if (require.main === module) start(8322, console.log);
