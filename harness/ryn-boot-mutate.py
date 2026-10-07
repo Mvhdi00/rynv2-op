@@ -7,13 +7,43 @@ decodes to garbage, a player that is never drawn.
 
     python3 harness/ryn-boot-mutate.py [ryn.js]
 """
-import subprocess, sys
+import os, subprocess, sys, tempfile
 
 SRC = sys.argv[1] if len(sys.argv) > 1 else "ryn/Ryn_Type_2.user.js"
-MUT = "/tmp/claude-0/-home-user-rynv2-op/84985967-839c-5cb9-84f9-ceebbe0cce70/scratchpad/ryn_boot_mut.js"
+MUT = os.path.join(tempfile.mkdtemp(prefix="ryn-boot-mutate-"), "ryn_boot_mut.js")
 base = open(SRC, encoding="utf-8").read()
 
+# Each entry: (mode, label, old, new) — or, for a mistake that takes more than
+# one edit, (mode, label, [(old, new), ...]); an optional last element is
+# extra environment for the run.
 MUTATIONS = [
+    # ── this round: login, frame rate, the numbers, Auto Grind ────────────
+    ("late", "the page's own copy of the game runs beside RYN's again",
+     "      docProto.createElement = stopPageCopy;\n", ""),
+    ("fast+interactive", "the loading screen borrows the Cloudflare box again",
+     '    if (document.getElementById("verifyDialog") !== null) {\n      return false;\n    }\n    const widget = document.getElementById("turnstileWidget");',
+     '    const widget = document.getElementById("turnstileWidget");'),
+    ("late", "the zoom resizes the game every frame again", [
+        ("      if (w === this._appliedW && h === this._appliedH) {\n        return;\n      }\n", ""),
+        ('Hook.replace("viewport",', 'false && Hook.replace("viewport",'),
+    ]),
+    ("late", "the HP number is drawn from its left edge again",
+     '  const GL2D_PROPS = {\n    font: "30px Hammersmith One",\n    textAlign: "center",',
+     '  const GL2D_PROPS = {\n    font: "30px Hammersmith One",\n    textAlign: "start",'),
+    ("fast+hidpi", "RYN's overlay is sized by its pixels on a scaled screen",
+     "          if (sw && cv.style.width !== sw) cv.style.width = sw;\n          if (sh && cv.style.height !== sh) cv.style.height = sh;\n", ""),
+    ("late+grind", "Auto Grind taps on its own reload count again",
+     "      ModuleHandler.holdAttack = true;",
+     "      if (ModuleHandler.staticModules.reloading.isReloaded(action.weapon)) ModuleHandler.shouldAttack = true;",
+     {"SIM_LATCH": "0", "NO_BOTS": "1"}),
+    ("late+grind", "Auto Grind never lets go of the attack",
+     "        // The hold is over: let go once.\n        this.holding = false;\n        ModuleHandler.stopAttack();",
+     "        // The hold is over: let go once.\n        this.holding = false;",
+     {"NO_BOTS": "1"}),
+    ("fast+pinned", "RynSign signs wrong and never checks itself", [
+        ("_K = new Int32Array([ 1116352408, 1899447441,", "_K = new Int32Array([ 1116352409, 1899447441,"),
+        ("      if (k.checks < this._CHECKS) {", "      if (false) {"),
+    ]),
     ("late", "the injector eats the `;` between the two imports (the reported bug)",
      """([^"'\\n]+)\\5/g;""", """([^"'\\n]+)\\5\\s*;?/g;"""),
     ("fast+pinned", "the main socket unmasks the game's shared buffer in place",
@@ -58,14 +88,25 @@ MUTATIONS = [
 
 print(SRC + " — break it on purpose, confirm the browser test goes red\n")
 missed = 0
-for mode, label, old, new in MUTATIONS:
-    n = base.count(old)
-    if n != 1:
-        print("  %-62s SKIPPED — anchor matched %d times" % (label, n))
+for entry in MUTATIONS:
+    mode, label = entry[0], entry[1]
+    rest = list(entry[2:])
+    env = rest.pop() if rest and isinstance(rest[-1], dict) else {}
+    edits = rest[0] if len(rest) == 1 else [(rest[0], rest[1])]
+    mutant, bad_anchor = base, None
+    for old, new in edits:
+        n = mutant.count(old)
+        if n != 1:
+            bad_anchor = n
+            break
+        mutant = mutant.replace(old, new)
+    if bad_anchor is not None:
+        print("  %-62s SKIPPED — anchor matched %d times" % (label, bad_anchor))
         missed += 1
         continue
-    open(MUT, "w", encoding="utf-8").write(base.replace(old, new))
-    r = subprocess.run(["node", "harness/boot-2025.js", mode, MUT], capture_output=True, text=True, timeout=400)
+    open(MUT, "w", encoding="utf-8").write(mutant)
+    r = subprocess.run(["node", "harness/boot-2025.js", mode, MUT], capture_output=True, text=True, timeout=600,
+                       env=dict(os.environ, **env))
     fails = [l.strip()[4:].strip() for l in r.stdout.splitlines() if l.strip().startswith("FAIL")]
     if fails:
         print("  %-62s caught (%s): %s" % (label, mode, fails[0][:60]))

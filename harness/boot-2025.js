@@ -77,6 +77,11 @@ const tag = id => CANVAS.has(id) ? `<canvas id="${id}" width="1280" height="720"
   : TEXT.has(id) ? `<input id="${id}" type="text" value="">`
   : id === "gameMenuTabs" ? `<div id="${id}"><a data-tab="settings"></a><a data-tab="clan"></a><a data-tab="friends"></a></div>`
   : id === "enterGame" ? `<div id="${id}" class="menuButton"><span>Enter Game</span></div>`
+  // Empty, as Turnstile's container is on any page: the <span> every other
+  // div gets made RYN's loading screen think a challenge was already in it,
+  // so this page never showed that screen moving the container (and the
+  // challenge with it) into a slot the 2025 game never reveals.
+  : id === "turnstileWidget" ? `<div id="${id}"></div>`
   : `<div id="${id}"><span></span>${ids.filter(c => PARENT[c] === id).map(c => tag(c)).join("")}</div>`;
 
 const FRVR_SDK = `
@@ -148,18 +153,101 @@ const PROTOCOL_MODULE = `export const BUILD_ID = "test-build";
 export const BUILD_SALT = 7;
 export function mixKey(key, seed) { return key; }`;
 
-/* Cloudflare's rule, reproduced: a second render into a container that already
- * holds a widget is refused — it warns and returns undefined. */
-const TURNSTILE = `window.__tsSeen = new WeakSet();
-window.turnstile = {
-  render: function (el, o) { window.__tsRenders = (window.__tsRenders || 0) + 1;
-    if (typeof el === "string") el = document.querySelector(el);
-    if (window.__tsSeen.has(el)) { console.warn("[Cloudflare Turnstile] Turnstile has already been rendered in this container."); window.__tsRefused = (window.__tsRefused || 0) + 1; return undefined; }
-    if (/\\/assets\\/index-[^/]*\\.js/.test(new Error().stack || "")) window.__tsByPage = (window.__tsByPage || 0) + 1;
-    window.__tsSeen.add(el); el.appendChild(document.createElement("iframe"));
-    setTimeout(function () { o && o.callback && o.callback("cf-token-" + Date.now()); }, 60); return "ts" + window.__tsRenders; },
-  reset: function () {}, remove: function () {}, getResponse: function () { return null; },
-};`;
+/* Cloudflare Turnstile, as far as the login depends on it:
+ *
+ *   - the script arrives late (TS_SCRIPT_MS), and loaded twice it keeps the
+ *     first copy and warns;
+ *   - a second render into a container that already holds a widget is
+ *     refused — it warns and returns undefined;
+ *   - a challenge takes time to solve (TS_SOLVE_MS) and runs in an iframe,
+ *     and an iframe that changes parent is reloaded from scratch: the
+ *     challenge in it starts over (counted in __tsReloads);
+ *   - `+interactive`: every challenge wants a click. A person can only click
+ *     what they can see, so the harness answers a challenge only when its
+ *     frame is on screen and on top (see answerChallenge). "interaction-only"
+ *     widgets have no size until then, as Cloudflare's do. */
+const TS_SCRIPT_MS = 500;
+const TS_SOLVE_MS = 900;
+const TURNSTILE = interactive => `(function () {
+  window.__tsLoads = (window.__tsLoads || 0) + 1;
+  if (window.turnstile && window.turnstile.__harness) {
+    console.warn("[Cloudflare Turnstile] Turnstile already has been loaded. Was Turnstile imported multiple times?");
+    return;
+  }
+  const INTERACTIVE = ${!!interactive};
+  const seen = new WeakSet(), widgets = new Map();
+  let n = 0;
+  const run = w => {
+    clearTimeout(w.timer);
+    w.token = null;
+    if (INTERACTIVE && !w.clicked) {
+      w.needsClick = true;
+      w.frame.style.width = "300px";
+      w.frame.style.height = "65px";
+      try { w.o["before-interactive-callback"] && w.o["before-interactive-callback"](); } catch (e) {}
+      return;
+    }
+    w.timer = setTimeout(function () {
+      if (!w.frame.isConnected || !widgets.has(w.id)) return;
+      w.token = "cf-token-" + (window.__tsTokens = (window.__tsTokens || 0) + 1);
+      try { w.o.callback && w.o.callback(w.token); } catch (e) { console.error(e); }
+    }, ${TS_SOLVE_MS});
+  };
+  window.turnstile = {
+    __harness: true,
+    render: function (el, o) {
+      window.__tsRenders = (window.__tsRenders || 0) + 1;
+      if (typeof el === "string") el = document.querySelector(el);
+      if (seen.has(el)) {
+        console.warn("[Cloudflare Turnstile] Turnstile has already been rendered in this container.");
+        window.__tsRefused = (window.__tsRefused || 0) + 1;
+        return undefined;
+      }
+      if (/\\/assets\\/index-[^/]*\\.js/.test(new Error().stack || "")) window.__tsByPage = (window.__tsByPage || 0) + 1;
+      seen.add(el);
+      const id = "ts" + (++n);
+      const frame = document.createElement("iframe");
+      frame.className = "cf-turnstile-frame";
+      frame.style.cssText = "border:0;display:block;" + (o && o.appearance === "interaction-only" ? "width:0;height:0;" : "width:300px;height:65px;");
+      const w = { id: id, el: el, o: o || {}, frame: frame, loads: 0, clicked: false, needsClick: false, token: null, timer: 0 };
+      widgets.set(id, w);
+      frame.addEventListener("load", function () {
+        w.loads++;
+        if (w.loads > 1) {
+          // moved: a new document, a new challenge
+          window.__tsReloads = (window.__tsReloads || 0) + 1;
+          w.clicked = false;
+        }
+        try {
+          frame.contentDocument.addEventListener("click", function () {
+            if (!w.needsClick) return;
+            w.needsClick = false;
+            w.clicked = true;
+            window.__tsClicked = (window.__tsClicked || 0) + 1;
+            try { w.o["after-interactive-callback"] && w.o["after-interactive-callback"](); } catch (e) {}
+            run(w);
+          });
+        } catch (e) {}
+        run(w);
+      });
+      el.appendChild(frame);
+      return id;
+    },
+    reset: function (id) { const w = widgets.get(id); if (w) { w.clicked = false; run(w); } },
+    remove: function (id) { const w = widgets.get(id); if (w) { clearTimeout(w.timer); widgets.delete(id); seen.delete(w.el); w.frame.remove(); } },
+    getResponse: function (id) { const w = widgets.get(id); return w ? w.token : undefined; },
+  };
+  // challenges waiting on a click, and whether a person could make it
+  window.__tsPending = function () {
+    return [...widgets.values()].filter(function (w) { return w.needsClick && w.frame.isConnected; }).map(function (w) {
+      const r = w.frame.getBoundingClientRect();
+      const x = r.x + r.width / 2, y = r.y + r.height / 2;
+      return { id: w.id, x: x, y: y, w: Math.round(r.width), h: Math.round(r.height),
+               onTop: r.width > 0 && r.height > 0 && document.elementFromPoint(x, y) === w.frame,
+               where: (w.frame.parentElement && w.frame.parentElement.parentElement || {}).id || "" };
+    });
+  };
+})();`;
 
 const SERVERS = [
   { region: "us-east", name: "1", key: "abc1", playerCount: 12, playerCapacity: 40 },
@@ -172,12 +260,19 @@ const SERVERS = [
 async function run(spec) {
   const [mode, ...flags] = spec.split("+");
   const pinned = flags.includes("pinned");
-  const out = { mode: spec, base: mode, pinned, errors: [], consoleErrors: [], sockets: [], joins: [], frames: [], notes: [] };
+  const interactive = flags.includes("interactive");
+  // 150% display scaling: the game draws at the device pixel ratio ("native
+  // resolution", on by default), so its canvas has more pixels than CSS px.
+  const hidpi = flags.includes("hidpi");
+  /* Auto Grind on, my own turrets in reach, and the server playing the
+   * swing by the game's rules (server.js `sim`): how often does it hit? */
+  const grind = flags.includes("grind");
+  const out = { mode: spec, base: mode, pinned, interactive, errors: [], consoleErrors: [], sockets: [], joins: [], frames: [], notes: [], swings: [], simEvents: [] };
   const browser = await chromium.launch({
     executablePath: "/opt/pw-browsers/chromium",
     args: ["--no-sandbox", "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
   });
-  const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: hidpi ? 1.5 : 1 });
   const page = await context.newPage();
 
   page.on("pageerror", e => out.errors.push(String(e && e.stack || e).split("\n").slice(0, 4).join(" | ")));
@@ -210,7 +305,10 @@ async function run(spec) {
       return send("", "text/plain", 404);
     }
     if (url.hostname === "cdn.frvr.com") return send(FRVR_SDK, "text/javascript");
-    if (url.hostname === "challenges.cloudflare.com") return send(TURNSTILE, "text/javascript");
+    if (url.hostname === "challenges.cloudflare.com") {
+      await new Promise(r => setTimeout(r, TS_SCRIPT_MS));
+      return send(TURNSTILE(interactive), "text/javascript");
+    }
     if (url.hostname === "api.moomoo.io") {
       // the pre-2025 API host. The 2025 bundle on moomoo.io talks to
       // api-prod2 (api-<prod|sandbox>2); anything still asking here is stale.
@@ -250,9 +348,21 @@ async function run(spec) {
     };
     ws.onMessage(m => { const b = typeof m === "string" ? Buffer.from(m) : m; handlers.message.forEach(f => f(b)); });
     ws.onClose(() => handlers.close.forEach(f => f()));
-    server.attach(sock, (...a) => { out.frames.push(a.join(" ").slice(0, 160)); conn.letters.push(a[1]); }, {
+    server.attach(sock, (...a) => {
+      out.frames.push(a.join(" ").slice(0, 160));
+      conn.letters.push(a[1]);
+      if (a[0] === "c2s" && a[1] === "M" && out.conns[0] === conn && !out.spawnAt) out.spawnAt = Date.now();
+    }, {
       requireSpawn: true,
       proto: 2025,
+      sim: grind && out.conns.length === 1 ? out.sim = {
+        positions: process.env.SIM_POSITIONS || "always",
+        // Tank Gear (40) owned: Auto Grind wears it to hit buildings harder
+        hats: process.env.SIM_HATS === "none" ? [] : [40],
+        latch: process.env.SIM_LATCH !== "0",
+        onSwing: (t, weapon, hit) => out.swings.push([t, weapon, hit]),
+        onEvent: what => out.simEvents.push([Date.now(), what]),
+      } : null,
       pinned,
       crypto: pinned ? wire() : null,
       onViolation: (why, detail) => {
@@ -278,6 +388,37 @@ async function run(spec) {
       document.addEventListener("DOMContentLoaded", () => note("DCL exists=" + !!document.getElementById(id)), true);
     })();` });
   }
+  if (grind) {
+    await page.addInitScript({ content: `try { if (window.top === window) localStorage.setItem("RYN", JSON.stringify({ _autoGrind: true })); } catch (e) {}` });
+  }
+  /* How many copies of the game ran, and whose. The bundle sets
+   * window.loadedScript early in its top level: from the page's own module
+   * the stack names /assets/index-*.js, from RYN's copy (Function()) it does
+   * not. Injected late, both used to run — two server pollers, two Turnstile
+   * scripts, two sets of timers — and the page's copy was only stopped at its
+   * first frame. */
+  await page.addInitScript({ content: `(function () {
+    if (window.top !== window) return;
+    let v;
+    Object.defineProperty(window, "loadedScript", { configurable: true, get: function () { return v; }, set: function (x) {
+      (window.__copies = window.__copies || []).push(/\\/assets\\/index-[^/]*\\.js/.test(new Error().stack || "") ? "page" : "ryn");
+      v = x;
+    } });
+  })();` });
+  /* Writes to the game canvas's size. Each one allocates a new drawing buffer,
+   * and on the 2025 renderer it comes with a renderer resize that throws away
+   * every cached glyph and shape: RYN's zoom used to fire one every frame,
+   * zoom moving or not, and that was the frame rate. */
+  await page.addInitScript({ content: `(function () {
+    if (window.top !== window) return;
+    for (const prop of ["width", "height"]) {
+      const d = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, prop);
+      Object.defineProperty(HTMLCanvasElement.prototype, prop, { configurable: true, enumerable: d.enumerable, get: d.get, set: function (v) {
+        if (this.id === "gameCanvas") window.__gameCanvasSizes = (window.__gameCanvasSizes || 0) + 1;
+        return d.set.call(this, v);
+      } });
+    }
+  })();` });
   // Who sends a frame too short to carry a signature: record the stack.
   await page.addInitScript({ content: `(function () {
     const send = WebSocket.prototype.send;
@@ -368,21 +509,118 @@ async function run(spec) {
     }
   })();
 
+  /* The person at the keyboard, as far as the human check goes: they click a
+   * challenge that wants a click if, and only if, they can see it — its frame
+   * has a size and nothing is drawn over it. */
+  out.answered = 0;
+  const answerChallenge = async () => {
+    const pending = await page.evaluate(() => (window.__tsPending ? window.__tsPending() : [])).catch(() => []);
+    for (const p of pending) {
+      if (!p.onTop) continue;
+      await page.mouse.click(p.x, p.y);
+      out.answered++;
+      return true;
+    }
+    return false;
+  };
+
   // join: type a name, press the real button with a real click
   try {
     await page.fill("#nameInput", "tester");
   } catch (e) { out.notes.push("could not type a name: " + e.message.split("\n")[0]); }
+  await answerChallenge();
   try {
+    out.clickAt = Date.now();
     await page.click("#enterGame", { timeout: 5000, force: true });
     out.clicked = true;
   } catch (e) { out.clicked = false; out.notes.push("could not click #enterGame: " + e.message.split("\n")[0]); }
 
   // wait for the spawn frame to reach the server, then for a few world ticks
   const t0 = Date.now();
-  while (Date.now() - t0 < 12000 && !out.frames.some(f => /^c2s M /.test(f))) await page.waitForTimeout(200);
+  while (Date.now() - t0 < 12000 && !out.frames.some(f => /^c2s M /.test(f))) {
+    await answerChallenge();
+    await page.waitForTimeout(200);
+  }
+  out.joinMs = out.spawnAt && out.clickAt ? out.spawnAt - out.clickAt : null;
+  out.unanswerable = out.spawnAt ? [] : await page.evaluate(() => (window.__tsPending ? window.__tsPending() : [])).catch(() => []);
   out.spawnSent = out.frames.some(f => /^c2s M /.test(f));
   out.mainSockets = out.conns.length;
   await page.waitForTimeout(2500);
+  // in the game, standing still, nothing zooming: how often is the canvas resized?
+  {
+    const before = await page.evaluate(() => window.__gameCanvasSizes || 0);
+    await page.waitForTimeout(2000);
+    out.canvasSizes = (await page.evaluate(() => window.__gameCanvasSizes || 0)) - before;
+  }
+
+  if (grind) {
+    // The two upgrades, picked the way a player picks them: the game's own
+    // upgrade buttons (RYN learns its inventory from these clicks).
+    for (const id of ["upgradeItem10", "upgradeItem33"]) {
+      try {
+        await page.waitForSelector("#" + id, { state: "attached", timeout: 5000 });
+        await page.evaluate(i => document.getElementById(i).click(), id);
+        await page.waitForTimeout(300);
+      } catch (e) { out.notes.push("could not pick " + id + ": " + e.message.split("\n")[0]); }
+    }
+    // Stand still and let Auto Grind work: count the swings the server made.
+    const from = Date.now();
+    const GRIND_MS = +(process.env.GRIND_MS || 8000);
+    await page.waitForTimeout(GRIND_MS);
+    const swings = out.swings.filter(([t]) => t >= from);
+    const gaps = [];
+    for (let i = 1; i < swings.length; i++) gaps.push(swings[i][0] - swings[i - 1][0]);
+    out.grind = {
+      swings: swings.length,
+      hits: swings.filter(sw => sw[2]).length,
+      firstAfter: swings.length ? swings[0][0] - from : null,
+      maxGap: gaps.length ? Math.max(...gaps) : null,
+      meanGap: gaps.length ? Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length) : null,
+      weapons: [...new Set(swings.map(sw => sw[1]))],
+      all: out.swings.length,
+      ms: GRIND_MS,
+      events: out.simEvents.filter(([t]) => t >= from).map(([t, w]) => w),
+    };
+    /* Switched off in RYN's menu, with nothing else going on: the held attack
+     * has to be let go by RYN itself — a press left down keeps swinging at
+     * whatever is in front of you. */
+    if (out.sim) {
+      const menu = page.frames().find(f => /^blob:/.test(f.url()));
+      out.grind.offToggled = menu ? await menu.evaluate(() => {
+        const el = document.getElementById("_autoGrind");
+        if (!el) return false;
+        if (el.checked) el.click();
+        return !el.checked;
+      }).catch(() => false) : false;
+      const off = Date.now();
+      await page.waitForTimeout(1500);
+      out.grind.afterOff = out.swings.filter(([t]) => t >= off + 700).length;
+      out.grind.offState = out.sim.state ? out.sim.state() : null;
+      // and back on, for the enemy below
+      if (menu) await menu.evaluate(() => { const el = document.getElementById("_autoGrind"); if (el && !el.checked) el.click(); }).catch(() => {});
+      await page.waitForTimeout(1500);
+    }
+    // An enemy walks up: grinding stands down, and the held attack has to be
+    // let go — a press left down would swing at whatever comes next.
+    if (out.sim) {
+      out.sim.foeNear = true;
+      const near = Date.now();
+      await page.waitForTimeout(2000);
+      out.grind.afterEnemy = out.swings.filter(([t]) => t >= near + 700).length;
+      out.grind.releasedState = out.sim.state ? out.sim.state() : null;
+    }
+    if (process.env.GRIND_TRACE) {
+      const evs = out.swings.map(([t, w, h]) => [t, "swing w" + w + (h ? "" : " (miss)")]).concat(out.simEvents).sort((a, b) => a[0] - b[0]);
+      const t0 = evs.length ? evs[0][0] : 0;
+      console.log(evs.map(([t, w]) => String(t - t0).padStart(6) + "  " + w).join("\n"));
+    }
+    if (process.env.GRIND_DEBUG) {
+      console.log(out.frames.filter(f => /^c2s /.test(f)).slice(-50).join("\n"));
+      console.log(JSON.stringify(await page.evaluate(() => {
+        try { const s = JSON.parse(localStorage.getItem("RYN") || "{}"); return { autoGrind: s._autoGrind }; } catch (e) { return String(e); }
+      })));
+    }
+  }
 
   // A bot, through RYN's own menu: its own Turnstile token, its own /join
   // ticket, and RYN's own signing and masking — the path the main client
@@ -403,7 +641,12 @@ async function run(spec) {
         return { error: e.message.split("\n")[0] };
       }
       const t1 = Date.now();
-      while (Date.now() - t1 < 15000 && !(out.conns.length > before && out.conns[before].letters.includes("M"))) await page.waitForTimeout(250);
+      // a bot's token is a challenge of its own; when it wants a click, the
+      // person clicks it if they can see it
+      while (Date.now() - t1 < 15000 && !(out.conns.length > before && out.conns[before].letters.includes("M"))) {
+        await answerChallenge();
+        await page.waitForTimeout(250);
+      }
       // RYN's bot pings once at io-init and again only after it has READ the
       // server's pong — so a second ping is proof it decodes what it is sent.
       const t2 = Date.now();
@@ -414,8 +657,85 @@ async function run(spec) {
     })();
   }
 
+  if (process.env.PERF) {
+    // Frames per second over a fixed window, the main thread's script time,
+    // and where that time went — for comparing a run with RYN to one without.
+    const cdp = await context.newCDPSession(page);
+    await cdp.send("Performance.enable");
+    await cdp.send("Profiler.enable");
+    await cdp.send("Profiler.setSamplingInterval", { interval: 200 });
+    const m0 = (await cdp.send("Performance.getMetrics")).metrics;
+    await cdp.send("Profiler.start");
+    const frames = await page.evaluate(() => new Promise(done => {
+      let n = 0;
+      const t0 = performance.now();
+      const step = () => { n++; if (performance.now() - t0 < 5000) requestAnimationFrame(step); else done(n); };
+      requestAnimationFrame(step);
+    }));
+    const { profile } = await cdp.send("Profiler.stop");
+    const m1 = (await cdp.send("Performance.getMetrics")).metrics;
+    const metric = (m, k) => (m.find(x => x.name === k) || {}).value || 0;
+    const self = new Map();
+    const dt = profile.timeDeltas || [];
+    const byId = new Map(profile.nodes.map(n => [n.id, n]));
+    const parent = new Map();
+    for (const n of profile.nodes) for (const c of (n.children || [])) parent.set(c, n.id);
+    const label = n => { const cf = n.callFrame; return (cf.functionName || "(anon)") + " " + (cf.url ? cf.url.replace(/^.*\//, "") : "<eval>") + ":" + (cf.lineNumber + 1); };
+    for (let i = 0; i < profile.samples.length; i++) {
+      const n = byId.get(profile.samples[i]);
+      let key = label(n);
+      // A native's time is charged to the script that called it.
+      if (n.callFrame.lineNumber < 0 && !/^\((idle|program|garbage collector|root)\)/.test(n.callFrame.functionName)) {
+        const chain = [];
+        for (let p = parent.get(n.id); p && chain.length < 3; p = parent.get(p)) {
+          const pn = byId.get(p);
+          if (pn.callFrame.lineNumber >= 0) chain.push(label(pn));
+        }
+        key += "  <-  " + chain.join(" <- ");
+      }
+      self.set(key, (self.get(key) || 0) + (dt[i] || 0) / 1000);
+    }
+    const layers = await page.evaluate(() => [...document.querySelectorAll("canvas")].filter(c => c.isConnected && c.width * c.height > 200000)
+      .map(c => (c.id || "(no id)") + " " + c.width + "x" + c.height + " " + getComputedStyle(c).display));
+    out.perf = {
+      layers,
+      fps: +(frames / 5).toFixed(1),
+      scriptMs: Math.round((metric(m1, "ScriptDuration") - metric(m0, "ScriptDuration")) * 1000),
+      taskMs: Math.round((metric(m1, "TaskDuration") - metric(m0, "TaskDuration")) * 1000),
+      top: [...self.entries()].filter(([k]) => !/^\((idle|program|garbage collector)\)/.test(k)).sort((a, b) => b[1] - a[1]).slice(0, 25)
+        .map(([k, v]) => v.toFixed(0).padStart(6) + " ms  " + k),
+      idle: Math.round(self.get("(idle) <eval>:0") || 0),
+      gc: Math.round(self.get("(garbage collector) <eval>:0") || 0),
+    };
+  }
+
   out.after = await page.evaluate(() => ({
     // what RYN drew this frame on its overlay over the WebGL canvas
+    // the overlay's box on screen against the game canvas's: they have to be
+    // the same box, or everything RYN draws is off its player
+    overlayBox: (() => {
+      const cv = document.getElementById("ryn-gl-overlay"), game = document.getElementById("gameCanvas");
+      if (!cv || !game) return null;
+      const a = cv.getBoundingClientRect(), b = game.getBoundingClientRect();
+      return { overlay: [a.x, a.y, a.width, a.height].map(Math.round), game: [b.x, b.y, b.width, b.height].map(Math.round), px: [cv.width, cv.height, game.width, game.height] };
+    })(),
+    /* The HP number under my bar: the white pixels RYN drew in a band below
+     * the player (who stands at the centre), and how far their middle is from
+     * the player's. Drawn left-aligned it sat half its width to the right. */
+    hpText: (() => {
+      const cv = document.getElementById("ryn-gl-overlay");
+      if (!cv || !cv.width) return null;
+      const k = cv.width / cv.getBoundingClientRect().width;
+      const cx = cv.width / 2, cy = cv.height / 2;
+      // just under my own bar: the rival's number, further right, stays out
+      const x0 = Math.round(cx - 45 * k), x1 = Math.round(cx + 45 * k), y0 = Math.round(cy + 60 * k), y1 = Math.round(cy + 90 * k);
+      const w = x1 - x0, d = cv.getContext("2d").getImageData(x0, y0, w, y1 - y0).data;
+      let sx = 0, n = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i] > 200 && d[i + 1] > 200 && d[i + 2] > 200 && d[i + 3] > 200) { sx += (i / 4) % w; n++; }
+      }
+      return { offset: n ? +((x0 + sx / n - cx) / k).toFixed(1) : null, px: n };
+    })(),
     overlayPx: (() => {
       const cv = document.getElementById("ryn-gl-overlay");
       if (!cv || !cv.width) return -1;
@@ -429,6 +749,9 @@ async function run(spec) {
     tsRenders: window.__tsRenders,
     tsRefused: window.__tsRefused || 0,
     tsByPage: window.__tsByPage || 0,
+    tsLoads: window.__tsLoads || 0,
+    tsReloads: window.__tsReloads || 0,
+    copies: window.__copies || [],
     texts: ["loadingText", "nameHint", "signInHint", "verifyText", "menuNotice", "serverNote"].map(id => {
       const e = document.getElementById(id); return e && e.textContent.trim() ? id + "=" + e.textContent.trim().slice(0, 80) : null; }).filter(Boolean),
     gameUI: (() => { const g = document.getElementById("gameUI"); return g ? getComputedStyle(g).display : null; })(),
@@ -436,6 +759,10 @@ async function run(spec) {
     renderer: !!window.__renderer, drawCalls: window.__drawCalls,
   }));
 
+  if (process.env.OVERLAY_PNG) {
+    const url = await page.evaluate(() => { const cv = document.getElementById("ryn-gl-overlay"); return cv ? cv.toDataURL("image/png") : null; });
+    if (url) fs.writeFileSync(process.env.OVERLAY_PNG, Buffer.from(url.split(",")[1], "base64"));
+  }
   out.shortFrames = await page.evaluate(() => window.__shortFrames || []);
   if (process.env.TRACE_ID) console.log((await page.evaluate(() => window.__trace || [])).join("\n"));
   if (mode !== "vanilla") {
@@ -513,7 +840,20 @@ function report(r) {
      (r.sockets.length ? ": " + r.sockets[0].slice(0, 120) : ""));
   ok(r.sockets.length > 0 && /token=tk%3AT\d/.test(r.sockets[0]) && /[?&]b=test-build/.test(r.sockets[0]),
      "the socket carries the /join ticket (tk:) and ?b=<BUILD_ID>");
-  ok(r.spawnSent, "the spawn frame reached the server");
+  ok(r.spawnSent, "the spawn frame reached the server" + (r.joinMs !== null ? " — " + r.joinMs + " ms after Play" : "") +
+     (r.unanswerable && r.unanswerable.length ? " — a challenge wanted a click nobody could make: " + JSON.stringify(r.unanswerable[0]) : ""));
+  /* First try, without waiting: the token is ready before Play (or, when the
+   * check wants a click, the box is in front of the player within the game's
+   * own 1.5 s) and Play goes straight through. */
+  const budget = r.interactive ? 4500 : 2500;
+  ok(r.joinMs !== null && r.joinMs <= budget, "Play gets you in on the first press, inside " + budget + " ms" +
+     (r.joinMs !== null ? " (" + r.joinMs + " ms)" : " (never)"));
+  if (r.interactive) ok(r.answered > 0, "the human check that wants a click is on screen where it can be clicked (" + r.answered + " answered)");
+  const copies = r.after.copies.join(",");
+  ok(copies === (r.base === "vanilla" ? "page" : "ryn"), "one copy of the game runs" +
+     (r.base === "vanilla" ? "" : ", RYN's — the page's own module is stopped before it does anything") + " (" + (copies || "none") + ")");
+  ok(r.after.tsLoads === 1, "Turnstile's script is loaded once (" + r.after.tsLoads + ")");
+  ok(!r.after.tsReloads, "no challenge was thrown away by moving its frame — a moved iframe reloads (" + r.after.tsReloads + ")");
   const pings = r.conns.length ? r.conns[0].letters.filter(l => l === "0").length : 0;
   ok(pings >= 1, "the player's connection pings the server (" + pings + ")");
   if (r.shortFrames && r.shortFrames.length) console.log("    short frames sent:\n        " + r.shortFrames.slice(0, 3).join("\n        "));
@@ -530,16 +870,45 @@ function report(r) {
     ok(!b.error && b.violations.length === 0, "the server accepted every frame the bot sent — RYN's own signing" +
        (r.pinned ? " and masking" : "") + (b.violations && b.violations.length ? ": " + b.violations[0] : ""));
   }
+  if (r.grind) {
+    const g = r.grind;
+    /* The great hammer reloads in 400 ms, which the server counts down in
+     * 111 ms ticks: a swing every fifth tick, ~555 ms, at best. Over 8 s that
+     * is 14; a client that keeps up gets most of them. */
+    ok(g.swings >= Math.floor(g.ms / 800) && g.maxGap !== null && g.maxGap <= 1200, "Auto Grind keeps swinging while you stand still: " + g.swings +
+       " swings in " + g.ms / 1000 + " s (" + g.hits + " landed), mean gap " + g.meanGap + " ms, longest " + g.maxGap + " ms, weapons " + g.weapons.join("/") +
+       " (" + g.all + " swings since spawn)");
+    if (g.offState) ok(g.offToggled && g.afterOff === 0 && g.offState.mouseState === 0, "switched off in the menu, Auto Grind lets go of the attack (" +
+       (g.offToggled ? g.afterOff + " swings after, mouse " + (g.offState.mouseState ? "still down" : "up") : "the menu's Auto Grind switch was not found") + ")");
+    if (g.releasedState) ok(g.afterEnemy === 0 && g.releasedState.mouseState === 0, "with an enemy in reach Auto Grind stops and lets go of the attack (" +
+       g.afterEnemy + " swings after, mouse " + (g.releasedState.mouseState ? "still down" : "up") + ")");
+  }
   if (r.base !== "vanilla") {
     ok(r.after.overlayPx > 50, "RYN's overlay draws over the WebGL canvas (" + r.after.overlayPx + " px)");
+    const hp = r.after.hpText;
+    ok(hp && hp.px > 20 && Math.abs(hp.offset) <= 3, "the HP number sits centred under the player's bar" +
+       (hp ? " (" + (hp.offset === null ? "not found" : "off by " + hp.offset + " px") + ", " + hp.px + " px of text)" : " (no overlay)"));
+    const box = r.after.overlayBox;
+    ok(box && box.overlay.join() === box.game.join() && box.px[0] === box.px[2] && box.px[1] === box.px[3],
+       "RYN's overlay covers exactly the game canvas, at its resolution" + (box ? " (screen " + box.overlay.join(",") + " vs " + box.game.join(",") +
+       "; pixels " + box.px.slice(0, 2).join("x") + " vs " + box.px.slice(2).join("x") + ")" : " (no overlay)"));
     ok(!r.renderFaults, "no RYN render hook failed" + (r.renderFaults ? ": " + r.renderFaults[0] : ""));
   }
+  if (r.perf) {
+    console.log("    PERF: " + r.perf.fps + " fps over 5 s; main thread busy " + r.perf.taskMs + " ms, script " + r.perf.scriptMs +
+      " ms, gc " + r.perf.gc + " ms, idle " + r.perf.idle + " ms");
+    console.log("      canvases: " + r.perf.layers.join(" | "));
+    console.log("      " + r.perf.top.slice(0, +(process.env.PERF_TOP || 12)).join("\n      "));
+  }
+  ok(r.canvasSizes === 0, "the game canvas is left alone between frames (" + r.canvasSizes + " size writes in 2 s standing still) — " +
+     "resizing it every frame was the frame-rate drop");
   ok(r.centre.skin > 300, "the player is drawn at the centre of the screen (" + r.centre.skin +
      " of 900 centre px are not grass " + r.centre.outline + ")");
 }
 
 (async () => {
-  const modes = which === "all" ? ["vanilla", "fast", "late", "vanilla+pinned", "fast+pinned", "late+pinned"] : which.split(",");
+  const modes = which === "all" ? ["vanilla", "fast", "late", "vanilla+pinned", "fast+pinned", "late+pinned",
+    "vanilla+interactive", "fast+interactive", "late+interactive", "late+hidpi", "late+grind"] : which.split(",");
   for (const m of modes) {
     let r;
     try { r = await run(m); } catch (e) { console.log("\n== " + m + "\n  FAIL  harness crashed: " + e.stack); process.exitCode = 1; continue; }

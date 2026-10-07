@@ -106,13 +106,13 @@ code = injected(code, "https://moomoo.io/assets/" + path.basename(BUNDLE), { res
 console.log("  THE HOOKS\n");
 const MUST = [
   // the frame, the renderer, and drawing through it
-  "preRenderLoop", "postRenderLoop", "frameGuard", "adoptRenderer", "renderEntity", "renderItemPush",
+  "preRenderLoop", "postRenderLoop", "frameGuard", "exposeResize", "viewport", "nameColor", "adoptRenderer", "renderEntity", "renderItemPush",
   "renderItem", "preRender", "RenderGrid", "objectAlpha", "resourceTint", "buildingTint2025", "animalTint",
   "meleeWeapon", "meleeBody", "mapSelfColor", "mapTeamColor", "mapDeathMarker", "mapPreRender",
   "offset", "renderPlayer", "totalDamage",
   // the network: the socket, its session, and the primitives bots need
   "exposeGameNet", "exposeGameCrypto", "cryptoSession", "cryptoInbound", "cryptoSign", "cryptoOutbound",
-  "cryptoBuild", "exposeCryptoFns", "RemovePingCall", "RemovePingState",
+  "cryptoBuild", "exposeCryptoFns", "fastSign", "RemovePingCall", "RemovePingState",
   // login: the latch, Turnstile, the server list, FRVR
   "connectLatch", "connectLatchFix", "connectGuardRelease", "disconnectRelease", "spawnLatchRelease",
   "captureTurnstile", "exposeServers", "sdkReady", "noAds", "maskFRVR", "checkTrusted",

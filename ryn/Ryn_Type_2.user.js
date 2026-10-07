@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.2
+// @version         2.3
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -311,6 +311,17 @@ html { background-color: #07070A !important; }
    */
   const adoptGate = () => {
     if (gone) {
+      return false;
+    }
+    /* Not on the 2025 page. There the container lives in the game's own "one
+     * quick check" dialog, which the game opens when — and only when — the
+     * challenge wants a click. Borrowed, the challenge rendered here, and on
+     * the way out it moved to the lobby's slot: an iframe that changes parent
+     * reloads, so the check in progress was thrown away, and the slot it went
+     * to is one the 2025 flow never reveals. Any challenge that asked for a
+     * click after that had nowhere to be clicked, and Play waited on it for
+     * good: the "sometimes I get in, sometimes it takes minutes". */
+    if (document.getElementById("verifyDialog") !== null) {
       return false;
     }
     const widget = document.getElementById("turnstileWidget");
@@ -2776,6 +2787,180 @@ window.grbtp = 35;
     }
     return fixTo(Math.atan2(Math.sin(angle), Math.cos(angle)), 2);
   };
+  /* ==========================================================================
+   * Frame signatures, at the speed of plain JavaScript
+   *
+   * Every frame to the 2025 server carries the first bytes of an
+   * HMAC-SHA256 of its payload, and the game computes it with its own SHA-256
+   * — written in plain JavaScript and then run through the obfuscator, which
+   * turns each rotate into a call through an object of one-line functions with
+   * string-decoded names. A single signature costs a quarter to a third of a
+   * millisecond that way, on the main thread, for every frame the client and
+   * every bot sends: a burst of a dozen in one tick of a fight is a dropped
+   * frame on its own.
+   *
+   * This is the same function — HMAC-SHA256, truncated where the game
+   * truncates — without the obfuscation, and with the key's two padded blocks
+   * hashed once per session instead of once per frame. It is not trusted on
+   * its word: for each key, the first frames are signed both ways and the
+   * game's own result is what is sent; one disagreement and it is never used
+   * again, for anything. Only after it has matched does it sign alone.
+   * ======================================================================== */
+  const RynSign = new class {
+    _K = new Int32Array([ 1116352408, 1899447441, -1245643825, -373957723, 961987163, 1508970993, -1841331548, -1424204075, -670586216, 310598401, 607225278, 1426881987, 1925078388, -2132889090, -1680079193, -1046744716, -459576895, -272742522, 264347078, 604807628, 770255983, 1249150122, 1555081692, 1996064986, -1740746414, -1473132947, -1341970488, -1084653625, -958395405, -710438585, 113926993, 338241895, 666307205, 773529912, 1294757372, 1396182291, 1695183700, 1986661051, -2117940946, -1838011259, -1564481375, -1474664885, -1035236496, -949202525, -778901479, -694614492, -200395387, 275423344, 430227734, 506948616, 659060556, 883997877, 958139571, 1322822218, 1537002063, 1747873779, 1955562222, 2024104815, -2067236844, -1933114872, -1866530822, -1538233109, -1090935817, -965641998 ]);
+    _IV = new Int32Array([ 1779033703, -1150833019, 1013904242, -1521486534, 1359893119, -1694144372, 528734635, 1541459225 ]);
+    _W = new Int32Array(64);
+    _H = new Int32Array(8);
+    _block = new Uint8Array(64);
+    _mid = new Uint8Array(32);
+    _out = new Uint8Array(32);
+    _keys = new WeakMap();
+    _wrapped = new WeakMap();
+    // Frames signed both ways per key before this signs alone.
+    _CHECKS = 3;
+    _bad = false;
+    _compress(H, bytes, off) {
+      const W = this._W, K = this._K;
+      for (let i = 0; i < 16; i++) {
+        const j = off + i * 4;
+        W[i] = bytes[j] << 24 | bytes[j + 1] << 16 | bytes[j + 2] << 8 | bytes[j + 3];
+      }
+      for (let i = 16; i < 64; i++) {
+        const w15 = W[i - 15], w2 = W[i - 2];
+        const s0 = (w15 >>> 7 | w15 << 25) ^ (w15 >>> 18 | w15 << 14) ^ w15 >>> 3;
+        const s1 = (w2 >>> 17 | w2 << 15) ^ (w2 >>> 19 | w2 << 13) ^ w2 >>> 10;
+        W[i] = W[i - 16] + s0 + W[i - 7] + s1 | 0;
+      }
+      let a = H[0], b = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+      for (let i = 0; i < 64; i++) {
+        const S1 = (e >>> 6 | e << 26) ^ (e >>> 11 | e << 21) ^ (e >>> 25 | e << 7);
+        const t1 = h + S1 + (e & f ^ ~e & g) + K[i] + W[i] | 0;
+        const S0 = (a >>> 2 | a << 30) ^ (a >>> 13 | a << 19) ^ (a >>> 22 | a << 10);
+        const t2 = S0 + (a & b ^ a & c ^ b & c) | 0;
+        h = g;
+        g = f;
+        f = e;
+        e = d + t1 | 0;
+        d = c;
+        c = b;
+        b = a;
+        a = t1 + t2 | 0;
+      }
+      H[0] = H[0] + a | 0;
+      H[1] = H[1] + b | 0;
+      H[2] = H[2] + c | 0;
+      H[3] = H[3] + d | 0;
+      H[4] = H[4] + e | 0;
+      H[5] = H[5] + f | 0;
+      H[6] = H[6] + g | 0;
+      H[7] = H[7] + h | 0;
+    }
+    // SHA-256 of `msg`, continuing from `state`, which has already absorbed
+    // `prefix` bytes (a whole number of blocks). Digest into `out`.
+    _digest(state, msg, prefix, out) {
+      const H = this._H, block = this._block;
+      H.set(state);
+      const len = msg.length;
+      let off = 0;
+      for (; len - off >= 64; off += 64) {
+        this._compress(H, msg, off);
+      }
+      const rem = len - off;
+      block.fill(0);
+      for (let i = 0; i < rem; i++) {
+        block[i] = msg[off + i];
+      }
+      block[rem] = 128;
+      if (rem >= 56) {
+        this._compress(H, block, 0);
+        block.fill(0);
+      }
+      const bits = (prefix + len) * 8;
+      const hi = Math.floor(bits / 4294967296), lo = bits >>> 0;
+      block[56] = hi >>> 24;
+      block[57] = hi >>> 16 & 255;
+      block[58] = hi >>> 8 & 255;
+      block[59] = hi & 255;
+      block[60] = lo >>> 24;
+      block[61] = lo >>> 16 & 255;
+      block[62] = lo >>> 8 & 255;
+      block[63] = lo & 255;
+      this._compress(H, block, 0);
+      for (let i = 0; i < 8; i++) {
+        const v = H[i];
+        out[i * 4] = v >>> 24;
+        out[i * 4 + 1] = v >>> 16 & 255;
+        out[i * 4 + 2] = v >>> 8 & 255;
+        out[i * 4 + 3] = v & 255;
+      }
+      return out;
+    }
+    // The key's inner and outer padded blocks, hashed once.
+    _prepare(key) {
+      let k = key;
+      if (k.length > 64) {
+        k = this._digest(this._IV, k, 0, new Uint8Array(32));
+      }
+      const ipad = new Uint8Array(64), opad = new Uint8Array(64);
+      for (let i = 0; i < 64; i++) {
+        const b = i < k.length ? k[i] : 0;
+        ipad[i] = b ^ 54;
+        opad[i] = b ^ 92;
+      }
+      const inner = Int32Array.from(this._IV), outer = Int32Array.from(this._IV);
+      this._compress(inner, ipad, 0);
+      this._compress(outer, opad, 0);
+      return {
+        inner: inner,
+        outer: outer,
+        checks: 0,
+        size: 0
+      };
+    }
+    // HMAC-SHA256(key, data), all 32 bytes, into a shared buffer.
+    hmac(prepared, data) {
+      this._digest(prepared.inner, data, 64, this._mid);
+      return this._digest(prepared.outer, this._mid, 64, this._out);
+    }
+    // Signs exactly as `orig(key, data)` does, faster once it has proven so.
+    sign(orig, key, data) {
+      if (this._bad || !(key instanceof Uint8Array) || !(data instanceof Uint8Array)) {
+        return orig(key, data);
+      }
+      let k = this._keys.get(key);
+      if (k === undefined) {
+        k = this._prepare(key);
+        this._keys.set(key, k);
+      }
+      if (k.checks < this._CHECKS) {
+        const ref = orig(key, data);
+        const mine = this.hmac(k, data);
+        let same = !!ref && typeof ref.length === "number" && ref.length > 0 && ref.length <= 32;
+        for (let i = 0; same && i < ref.length; i++) {
+          if (ref[i] !== mine[i]) same = false;
+        }
+        if (!same) {
+          this._bad = true;
+          return ref;
+        }
+        k.size = ref.length;
+        k.checks++;
+        return ref;
+      }
+      return this.hmac(k, data).slice(0, k.size);
+    }
+    // The game's signing function, wrapped once and reused: called as
+    // RYN._sign(yf) at the bundle's own send.
+    wrap(orig) {
+      if (typeof orig !== "function") return orig;
+      let w = this._wrapped.get(orig);
+      if (w === undefined) {
+        w = (key, data) => this.sign(orig, key, data);
+        this._wrapped.set(orig, w);
+      }
+      return w;
+    }
+  }();
   const findMiddleAngle = (a, b) => {
     const x = Math.cos(a) + Math.cos(b);
     const y = Math.sin(a) + Math.sin(b);
@@ -5603,6 +5788,17 @@ window.grbtp = 35;
       current._h = Default._h * zoom;
     }
     renderStart=Date.now();
+    _appliedW=-1;
+    _appliedH=-1;
+    /* The view follows the zoom by re-running the game's own resize. This used
+     * to fire a window "resize" event on EVERY frame, zoom moving or not, and
+     * on the 2025 game that is ruinous: its resize sets the canvas size (a
+     * fresh WebGL drawing buffer), calls the renderer's resize (which throws
+     * away every cached glyph and shape and re-uploads them), and lays out the
+     * HUD buttons — and every resize listener RYN has ran with it. The cost was
+     * most of the frame. Now it runs only while the zoom is actually moving,
+     * snaps when it arrives, and calls the game's handler directly when the
+     * game has handed it over (see the exposeResize hook). */
     smoothUpdate() {
       const {current: current, _smooth: smooth} = this._scale;
       const now = Math.sign(window.Number.DELTA) * Date.now();
@@ -5610,9 +5806,25 @@ window.grbtp = 35;
       this.renderStart = now;
       const dt = delta / 1e3;
       const blend = .4 * (1 - Math.exp(-10 * dt));
-      smooth._w[0] = lerp(smooth._w[0], current._w, blend);
-      smooth._h[0] = lerp(smooth._h[0], current._h, blend);
-      window.dispatchEvent(resizeEvent);
+      let w = lerp(smooth._w[0], current._w, blend);
+      let h = lerp(smooth._h[0], current._h, blend);
+      if (Math.abs(w - current._w) < .5) w = current._w;
+      if (Math.abs(h - current._h) < .5) h = current._h;
+      smooth._w[0] = w;
+      smooth._h[0] = h;
+      if (w === this._appliedW && h === this._appliedH) {
+        return;
+      }
+      this._appliedW = w;
+      this._appliedH = h;
+      const gameResize = Renderer_default._gameResize;
+      if (typeof gameResize === "function") {
+        try {
+          gameResize();
+        } catch (e) {}
+      } else {
+        window.dispatchEvent(resizeEvent);
+      }
     }
   };
   const ZoomHandler_default = ZoomHandler;
@@ -5925,12 +6137,18 @@ window.grbtp = 35;
    * lands exactly where the game's own sprite did. What the renderer can do
    * itself it still does, in its own layer order. */
   const GL2D_FORWARD = [ "beginPath", "closePath", "moveTo", "lineTo", "arc", "arcTo", "ellipse", "quadraticCurveTo", "bezierCurveTo", "rect", "roundRect", "fill", "stroke", "fillText", "strokeText", "strokeRect", "clearRect", "isPointInPath", "isPointInStroke", "createLinearGradient", "createRadialGradient", "createConicGradient", "createPattern", "getImageData", "putImageData", "createImageData" ];
+  // Defaults: what the 2024 game left its 2D context set to after drawing the
+  // names each frame — "30px Hammersmith One", centred, middle, round joins.
+  // RYN's overlays were written against that context and some of them (the
+  // HP number under the bar, for one) never set the alignment themselves;
+  // with the browser's own defaults ("start", "alphabetic") they drew from
+  // the centre to the right.
   const GL2D_PROPS = {
-    font: "10px sans-serif",
-    textAlign: "start",
-    textBaseline: "alphabetic",
+    font: "30px Hammersmith One",
+    textAlign: "center",
+    textBaseline: "middle",
     lineCap: "butt",
-    lineJoin: "miter",
+    lineJoin: "round",
     miterLimit: 10,
     lineDashOffset: 0,
     shadowBlur: 0,
@@ -5951,6 +6169,51 @@ window.grbtp = 35;
     _gl=null;
     _glFaults=0;
     _glLastFault="";
+    // The game's own resize handler (exposeResize hook), for the zoom.
+    _gameResize=null;
+    _rasterAt=null;
+    /* The tail of the game's resize, made idempotent (viewport hook). The
+     * canvas is resized only when its size really changes — assigning width or
+     * height, even the same value, allocates a new drawing buffer — and the
+     * renderer's own resize, which drops and re-rasterises every cached glyph
+     * and shape at the new scale, only when the scale has moved by more than
+     * 8%. Zooming then costs a transform, not a rebuild of the texture atlas. */
+    _viewport(canvas, cssW, cssH, dpr, M, scale) {
+      const pw = cssW * dpr, ph = cssH * dpr;
+      let changed = false;
+      if (canvas.width !== pw) {
+        canvas.width = pw;
+        changed = true;
+      }
+      if (canvas.height !== ph) {
+        canvas.height = ph;
+        changed = true;
+      }
+      const sw = cssW + "px", sh = cssH + "px";
+      if (canvas.style.width !== sw) canvas.style.width = sw;
+      if (canvas.style.height !== sh) canvas.style.height = sh;
+      const s = scale * dpr;
+      M.setTransform(s, 0, 0, s, 0, 0);
+      if (changed || this._rasterAt === null || Math.abs(s - this._rasterAt) > this._rasterAt * .08) {
+        this._rasterAt = s;
+        M.resize(s);
+      }
+    }
+    /* Your name and RYN players' names, coloured. 2025 draws names as cached
+     * glyphs — one character per fillText, tinted in the shader — so the
+     * fillText patch that matched whole names never matches again. The colour
+     * is decided where the game decides it instead (nameColor hook). */
+    _nameColor(player, me, color) {
+      try {
+        if (player === me && Settings_default._myNameColor && Settings_default._myNameColorValue) {
+          return Settings_default._myNameColorValue;
+        }
+        if (RYN_IS_OWNER_BUILD && Settings_default._markRynPlayers && player && player.name && RYNPresence.hasName(player.name)) {
+          return RYN_RED_NAME;
+        }
+      } catch (e) {}
+      return color;
+    }
     // Adopt the game's renderer: called on the object the bundle builds its
     // frame with, right where it is created. Returns it, extended.
     _adopt(M, canvas) {
@@ -5971,7 +6234,19 @@ window.grbtp = 35;
         propsSynced: 0,
         style: [ null, null, null, null ],
         clips: [],
-        dirty: false
+        dirty: false,
+        /* On screen the overlay is the game canvas's size, not its pixel
+         * count. The game draws at the device pixel ratio ("native
+         * resolution", on by default), so at 125% or 150% display scaling an
+         * overlay sized by its pixels alone came out that much larger than the
+         * picture under it — every number, bar and ring RYN draws slid right
+         * and down off its player. Checked when the overlay is made or
+         * resized, and once a frame (_glFrameStart), not on every call. */
+        fit(cv, game) {
+          const sw = game.style.width, sh = game.style.height;
+          if (sw && cv.style.width !== sw) cv.style.width = sw;
+          if (sh && cv.style.height !== sh) cv.style.height = sh;
+        }
       };
       this._gl = bridge;
       const xf = bridge.xf;
@@ -6005,6 +6280,7 @@ window.grbtp = 35;
           game.parentNode.insertBefore(cv, game.nextSibling);
           bridge.overlay = cv;
           bridge.octx = cv.getContext("2d");
+          bridge.fit(cv, game);
           bridge.synced = bridge.propsSynced = 0;
           bridge.style = [ null, null, null, null ];
           bridge.clips.length = 0;
@@ -6015,6 +6291,7 @@ window.grbtp = 35;
           bridge.synced = bridge.propsSynced = 0;
           bridge.style = [ null, null, null, null ];
           bridge.clips.length = 0;
+          bridge.fit(cv, game);
         }
         return bridge.octx;
       };
@@ -6208,8 +6485,14 @@ window.grbtp = 35;
     // Start of a frame: wipe what RYN drew on the overlay last frame.
     _glFrameStart() {
       const bridge = this._gl;
-      if (bridge === null || !bridge.octx || !bridge.dirty) return;
+      if (bridge === null || !bridge.octx) return;
       const o = bridge.octx;
+      if (bridge.canvas !== null) {
+        try {
+          bridge.fit(o.canvas, bridge.canvas);
+        } catch (e) {}
+      }
+      if (!bridge.dirty) return;
       try {
         while (bridge.clips.length) {
           bridge.clips.pop();
@@ -6331,6 +6614,12 @@ window.grbtp = 35;
       const origFillText = proto.fillText;
       const self = this;
       proto.fillText = function(text, x, y, maxWidth) {
+        // On the 2025 renderer this only ever sees single glyphs being cached
+        // (and RYN's own overlay text); recolouring one would recolour that
+        // letter everywhere. Names are coloured by the nameColor hook there.
+        if (self._gl !== null) {
+          return maxWidth !== undefined ? origFillText.call(this, text, x, y, maxWidth) : origFillText.call(this, text, x, y);
+        }
         // Every string the game draws goes through here — names, chat, damage
         // numbers, the whole HUD, several dozen calls a frame. When neither
         // colouring option is on there is nothing to decide, so the nickname
@@ -6535,6 +6824,11 @@ window.grbtp = 35;
       const now = performance.now();
       const rawDt = now - this._lastFrameTime;
       this._lastFrameTime = now;
+      // The weather, on the 2025 renderer: last into the overlay, over what
+      // RYN drew this frame, where its own canvas used to sit.
+      if (this._gl !== null) {
+        Weather.drawOverlay(this._gl, now);
+      }
       // Ring buffer with a running sum. The old version pushed, shifted and
       // then reduced over the whole window every frame, which allocated a
       // closure per frame to average eight numbers.
@@ -8503,7 +8797,7 @@ window.grbtp = 35;
           if (s === undefined) return;
           const n = ++botCrypto.seq;
           const a = enc.Hi.encode([ s, args, n ]);
-          const o = enc.Eo(botCrypto.key, a);
+          const o = RynSign.sign(enc.Eo, botCrypto.key, a);
           const d = new Uint8Array(enc.jt + a.length);
           d.set(o, 0);
           d.set(a, enc.jt);
@@ -21835,6 +22129,7 @@ window.grbtp = 35;
     moduleName="updateAttack";
     client;
     didReset=false;
+    holding=false;
     constructor(client2) {
       this.client = client2;
     }
@@ -21874,7 +22169,14 @@ window.grbtp = 35;
       if (useItem !== null) {
         ModuleHandler.selectItem(useItem);
       }
-      if (ModuleHandler.shouldAttack) {
+      if (ModuleHandler.holdAttack && !ModuleHandler.shouldAttack) {
+        // Pressed every tick it is wanted, never released here: a release
+        // from anything else (a placement, your own click) then costs one
+        // tick, and each press carries the current aim.
+        ModuleHandler.attack(this.getAttackAngle());
+        this.holding = true;
+      } else if (ModuleHandler.shouldAttack) {
+        this.holding = false;
         const angle = this.getAttackAngle();
         ModuleHandler.attack(angle);
         ModuleHandler.stopAttack();
@@ -21886,6 +22188,10 @@ window.grbtp = 35;
           ModuleHandler._rynFiredTick = ModuleHandler.tickCount;
         }
         reloading.resetByType(weaponType);
+      } else if (this.holding) {
+        // The hold is over: let go once.
+        this.holding = false;
+        ModuleHandler.stopAttack();
       } else if (!attacking && sentAngle !== 0) {
         ModuleHandler.stopAttack();
         this.didReset = true;
@@ -23622,7 +23928,7 @@ window.grbtp = 35;
         this.grindAngle = null;
         return;
       }
-      const {autoMill: autoMill, reloading: reloading} = ModuleHandler.staticModules;
+      const {autoMill: autoMill} = ModuleHandler.staticModules;
       if (autoMill.isActive) return;
       const farmItem = myPlayer.getItemByType(8);
       if (farmItem !== 17 && farmItem !== 22) return;
@@ -23671,13 +23977,21 @@ window.grbtp = 35;
       const middleAngle = Math.atan2(centerY - myPlayer.pos.current.y, centerX - myPlayer.pos.current.x);
       const action = this.getGrindAction(nearestTurret);
       if (action === null) return;
-      if (reloading.isReloaded(action.weapon)) {
-        ModuleHandler.moduleActive = true;
-        ModuleHandler.useAngle = middleAngle;
-        ModuleHandler.forceHat = action.hat;
-        ModuleHandler.forceWeapon = action.weapon;
-        ModuleHandler.shouldAttack = true;
-      }
+      /* Held, not tapped. Grinding used to tap — press and release in one
+       * tick — on the tick RYN's own reload count said the weapon was ready.
+       * That puts every swing at the mercy of that count agreeing with the
+       * server's to the tick: a tap that arrives while the server is still
+       * reloading is simply dropped, and the next one waits for the count
+       * again. "One hit, then a long wait" is what that looks like when they
+       * disagree. A held attack needs no count at all: the server swings on
+       * its own the moment the weapon in hand is ready, the way a player
+       * grinding with the mouse held down does. The hat and weapon are kept
+       * for the whole time, so whenever the swing comes, it is the right one. */
+      ModuleHandler.moduleActive = true;
+      ModuleHandler.useAngle = middleAngle;
+      ModuleHandler.forceHat = action.hat;
+      ModuleHandler.forceWeapon = action.weapon;
+      ModuleHandler.holdAttack = true;
     }
   }
   // ModuleHandler.place() spends selectItem + attack + stopAttack + whichWeapon.
@@ -31082,6 +31396,10 @@ window.grbtp = 35;
     prevMoveTo="disable";
     autoattack=false;
     shouldAttack=false;
+    // Set for a tick by a module that wants the attack HELD rather than tapped
+    // (Auto Grind): pressed and left down, so the server swings each time the
+    // weapon in hand comes off reload. See UpdateAttack.
+    holdAttack=false;
     mouse={
       sentAngle: 0
     };
@@ -31753,6 +32071,7 @@ window.grbtp = 35;
       this.useAcc = null;
       this.useAngle = null;
       this.shouldAttack = false;
+      this.holdAttack = false;
       this._rynStrikeTarget = null;
       this.prevMoveTo = this.moveTo;
       this.moveTo = "disable";
@@ -35740,6 +36059,15 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     }
   };
   const _rynBrowserFallback = () => {
+    // 2025: the game's own list, as of its last refresh (it stops refreshing
+    // once you are in a round, which is why the count is fetched above).
+    try {
+      const servers = rynServers();
+      const picked = servers !== null ? servers.selected() : null;
+      if (picked && typeof picked.playerCount === "number" && typeof picked.playerCapacity === "number") {
+        return Math.min(picked.playerCount, picked.playerCapacity) + "/" + picked.playerCapacity;
+      }
+    } catch (_) {}
     try {
       const sel = document.getElementById("serverBrowser");
       const opt = sel && sel.querySelector("select") ? sel.querySelector("select").selectedOptions[0] : null;
@@ -39303,6 +39631,13 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     Hook.append("postRenderLoop", /\w+\(\),\w+\(\),requestAnimFrame\(\w+\)/, ";RYN._Renderer._postRender();");
     // The frame itself, guarded, so nothing RYN draws can stop the loop.
     Hook.replace("frameGuard", /(\w+)\(\),(\w+)\(\),requestAnimFrame\((\w+)\)/, "RYN._Renderer._frame($1),$2(),requestAnimFrame($3)");
+    // The game's resize handler, so the zoom can call it directly instead of
+    // firing a window resize at every listener on the page.
+    Hook.replace("exposeResize", /window\.addEventListener\("resize",(\w+)\.checkTrusted\((\w+)\)\)/, "window.addEventListener(\"resize\",$1.checkTrusted(RYN._Renderer._gameResize=$2))");
+    // ...and its tail made idempotent (Renderer._viewport).
+    Hook.replace("viewport", /(\w+)\.width=(\w+)\*(\w+),\1\.height=(\w+)\*\3,\1\.style\.width=\2\+"px",\1\.style\.height=\4\+"px",(\w+)\.setTransform\((\w+)\*\3,0,0,\6\*\3,0,0\),\5\.resize\(\6\*\3\)/, "RYN._Renderer._viewport($1,$2,$4,$3,$5,$6)");
+    // Name colours (Renderer._nameColor): where the game picks white or clan.
+    Hook.replace("nameColor", /(\w+)=(\w+)!=(\w+)&&\2\.clan&&\2\.clan==\3\.clan&&!\(\2\.team&&\2\.team==\3\.team\),(\w+)=\1\?(\w+):"#fff",(\w+)=\{color:\4,/, "$1=$2!=$3&&$2.clan&&$2.clan==$3.clan&&!($2.team&&$2.team==$3.team),$4=RYN._Renderer._nameColor($2,$3,$1?$5:\"#fff\"),$6={color:$4,");
     // The renderer the frame is drawn with, the moment it exists.
     Hook.replace("adoptRenderer", /(\w+)=(\w+)\((\w+),(\w+)\?\{pageSize:\+\4\[1\],maxPages:\+\4\[2\]\}:null\);/, "$1=RYN._Renderer._adopt($2($3,$4?{pageSize:+$4[1],maxPages:+$4[2]}:null),$3);");
     Hook.append("mapPreRender", /(\w+)\.lineWidth=NUM{4};/, "RYN._Renderer._mapPreRender($1);");
@@ -39487,6 +39822,10 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         "try{Object.defineProperty(RYN,'_enc',{configurable:true,get:function(){" +
         "try{return{" + encFields.replace("Hi:$1", () => "Hi:" + encoder) + "};}catch(e){return null}}})}catch(e){}" +
         "let " + session + "=null");
+    // The main socket's frame signature through RynSign: the same bytes,
+    // checked against the game's own function first (see RynSign).
+    Hook.replace("fastSign", /\]\((\w+),(\w+\[\w+\(\d+,"[^"]*"\)\],\w+\),\w+=new Uint8Array\(\w+\+\w+\[)/,
+      (whole, signFn, rest) => "](RYN._sign(" + signFn + ")," + rest);
     Hook.replace("handleBuy", /\w+\.send\("\w+",1,(\w+),(\w+)\)/, "RYN._Possess.c()._ModuleHandler._buy($2,$1,true)");
     Hook.prepend("RemovePingCall", /\w+&&clearTimeout/, "return;");
     /* The game's pong handler. RemovePingCall stops the game's own pings —
@@ -39608,7 +39947,14 @@ html.ryn-in-lobby .ryn-v2-wrapper {
   };
   let Injector_lastCode = null;
   const Injector = new class {
+    _started=false;
     init(node) {
+      // One copy. Late injection has two ways in (the page's first line, and
+      // its first frame as the fallback) and only the first may start one.
+      if (this._started) {
+        return;
+      }
+      this._started = true;
       /* Late injection: the page's own copy of the game has already run and
        * rendered ITS Turnstile widget into #turnstileWidget. Turnstile refuses
        * a second render into a container it has seen ("already rendered"),
@@ -39865,6 +40211,77 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         }
       };
       blockProperty(win, "requestAnimFrame");
+      /* Late injection: <head> was already parsed, so the game's own
+       * <script type="module"> has been prepared, and taking it out of the
+       * document no longer stops it — Chrome runs it anyway. It used to run
+       * in full, and RYN's copy only took over at its first frame, by which
+       * time the page's copy had set up everything else a second time: its
+       * own server-list polling, its own Turnstile script (loaded twice), its
+       * own timers and listeners, all live beside RYN's for the rest of the
+       * page. That was the late-injection difference between getting in at
+       * once and not.
+       *
+       * Now the page's copy is stopped at its first line. The bundle opens
+       * with Vite's preload check, `document.createElement("link")`; a call
+       * from the page's own module — its frames name /assets/index-*.js, while
+       * RYN's copy runs from Function() — gets RYN's copy started in its place
+       * and an exception that ends the module's evaluation there. What runs
+       * from then on is exactly what runs with document-start injection.
+       *
+       * Armed until the page has loaded, then the original is put back. */
+      const pageModule = /https?:\/\/[^\s()]+\/assets\/index-[^\/\s()]*\.js/;
+      const docProto = Document.prototype;
+      const nativeCreateElement = docProto.createElement;
+      let stopped = null;
+      // The entry module's own URL, once it has been seen. The game's
+      // touch-controls chunk is an /assets/index-*.js too, imported later by
+      // RYN's copy; only the module that was stopped is refused after that.
+      let pageUrl = null;
+      const stopPageCopy = function createElement() {
+        let hit = null;
+        try {
+          hit = pageModule.exec(new Error().stack || "");
+        } catch (e) {}
+        if (hit === null || pageUrl !== null && hit[0] !== pageUrl) {
+          return nativeCreateElement.apply(this, arguments);
+        }
+        if (stopped === null) {
+          pageUrl = hit[0];
+          stopped = new Error("[RYN] The page's own copy of the game was stopped at its first line; RYN runs its own.");
+          const quiet = event => {
+            if (event.error === stopped) {
+              event.preventDefault();
+            }
+          };
+          window.addEventListener("error", quiet, true);
+          // The fallback and the stub it needed are done with: the first frame
+          // of RYN's own copy must not start a second one.
+          try {
+            delete win.requestAnimFrame;
+          } catch (e) {}
+          win.customElements.define = _define;
+          try {
+            Injector_default.init(scriptBundle !== null ? scriptBundle : {
+              src: hit[0]
+            });
+          } catch (e) {
+            try {
+              console.error("[RYN] could not start the client:", e);
+            } catch (_) {}
+          }
+        }
+        throw stopped;
+      };
+      docProto.createElement = stopPageCopy;
+      const disarm = () => {
+        if (docProto.createElement === stopPageCopy) {
+          docProto.createElement = nativeCreateElement;
+        }
+      };
+      window.addEventListener("load", disarm, {
+        once: true
+      });
+      setTimeout(disarm, 6e4);
     }
     const _fetch = window.fetch;
     window.fetch = new Proxy(_fetch, {
@@ -42541,12 +42958,16 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       return true;
     }
 
-    _destroy() {
+    _destroyCanvas() {
       if (this.canvas) {
         this.canvas.remove();
       }
       this.canvas = null;
       this.ctx = null;
+    }
+
+    _destroy() {
+      this._destroyCanvas();
       this.last = 0;
     }
 
@@ -42592,6 +43013,13 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         this._destroy();
         return;
       }
+      // On the 2025 renderer the weather is drawn into RYN's overlay instead,
+      // at the end of the game's own frame (drawOverlay, from _postRender):
+      // one full-screen layer fewer for the browser to composite every frame.
+      if (Renderer_default._gl !== null) {
+        this._destroyCanvas();
+        return;
+      }
       const game = this._gameCanvas();
       if (!game || !this._ensure(game)) {
         return;
@@ -42609,7 +43037,43 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       if (this.w <= 0 || this.h <= 0) {
         return;
       }
+      this._step(this.ctx, this.w, this.h, now, myPlayer, true);
+    }
 
+    // The 2025 path. The overlay was cleared at the start of the frame and
+    // holds what RYN drew during it; the weather goes on top, as its own layer
+    // did. The bridge caches the overlay's transform and styles, and this
+    // draws behind its back, so those caches are dropped afterwards.
+    drawOverlay(bridge, now) {
+      if (!Settings_default._weather) {
+        return;
+      }
+      const myPlayer = AC() && AC().myPlayer;
+      if (!myPlayer || !myPlayer.inGame) {
+        return;
+      }
+      const o = bridge.octx;
+      if (!o) {
+        return;
+      }
+      const w = o.canvas.width, h = o.canvas.height;
+      if (w <= 0 || h <= 0) {
+        return;
+      }
+      try {
+        o.setTransform(1, 0, 0, 1, 0, 0);
+        this._step(o, w, h, now, myPlayer, false);
+      } catch (e) {}
+      bridge.synced = bridge.propsSynced = 0;
+      bridge.style = [ null, null, null, null ];
+      bridge.dirty = true;
+    }
+
+    // One frame of weather: move the particles and draw them into ctx, a
+    // canvas w x h pixels with an identity transform.
+    _step(ctx, w, h, now, myPlayer, clear) {
+      this.w = w;
+      this.h = h;
       let dt = (now - this.last) / 1e3;
       this.last = now;
       // A backgrounded tab hands back a huge delta; treat it as one frame.
@@ -42621,7 +43085,9 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       const quality = Settings_default._lowQuality ? .45 : 1;
       const want = Math.round(WEATHER_MAX_PARTICLES * (amount / 100) * quality);
       if (want <= 0) {
-        this.ctx.clearRect(0, 0, this.w, this.h);
+        if (clear) {
+          ctx.clearRect(0, 0, w, h);
+        }
         return;
       }
       if (this.particles.length < want) {
@@ -42634,14 +43100,14 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       this.snow += (target - this.snow) * Math.min(1, dt * 1.6);
       const snow = this.snow;
 
-      const ctx = this.ctx;
-      const w = this.w, h = this.h;
       const p = this.particles;
       const n = this.count;
       const fall = 1 - snow * .87;
       const t = now * .001;
 
-      ctx.clearRect(0, 0, w, h);
+      if (clear) {
+        ctx.clearRect(0, 0, w, h);
+      }
 
       for (let i = 0; i < n; i++) {
         const d = p[i];
@@ -45128,6 +45594,8 @@ html.ryn-in-lobby .ryn-v2-wrapper {
   };
   const RYN = {
     _Login: Login_default,
+    // The bundle's own frame signature, through RynSign (fastSign hook).
+    _sign: fn => RynSign.wrap(fn),
     _myClient: client,
     // The bundle's four call-time "who am I" sites go through this: the aim
     // angle it draws and sends, the store's equip and buy, and the upgrade
@@ -50057,7 +50525,7 @@ try {
     });
   }, 80);
   const _targetCanvas = document.createElement("canvas");
-  _targetCanvas.style.cssText = "position:fixed;top:0;left:0;pointer-events:none;z-index:9999;";
+  _targetCanvas.style.cssText = "position:fixed;top:0;left:0;pointer-events:none;z-index:9999;display:none;";
   // At document-start there is no <body> yet, and this threw — taking the
   // rest of the targeting overlay with it.
   const _mountTargetCanvas = () => {
@@ -50092,8 +50560,11 @@ try {
       _targetCanvasDirty = false;
       ctx.clearRect(0, 0, cv.width, cv.height);
       _exclamAnims.clear();
+      // An empty full-window layer still costs the compositor every frame.
+      cv.style.display = "none";
       return;
     }
+    if (!_targetCanvasDirty) cv.style.display = "";
     _targetCanvasDirty = true;
     ctx.clearRect(0, 0, cv.width, cv.height);
     const now = Date.now();

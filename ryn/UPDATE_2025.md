@@ -16,13 +16,111 @@ This pass was verified the other way round: the real 2025 bundle runs in
 Chromium with RYN on top, and the test plays it.
 
 ```
-node harness/boot-2025.js            # the real bundle in a browser: 6 configurations, 130 checks
+node harness/boot-2025.js            # the real bundle in a browser: 11 configurations
 node harness/ryn-rewrite-check.js    # RYN's own rewrite of the bundle, run and inspected
 node harness/ryn-protocol-2025.js    # the wire format, read out of the bundle and RYN
 node harness/ryn-hooks-check.js      # every hook: does it match, does what it injects resolve
-python3 harness/ryn-2025-mutate.py   # 30 deliberate breakages, static checks: 30 caught
-python3 harness/ryn-boot-mutate.py   # 16 deliberate breakages, browser test: 16 caught
+node harness/ryn-sign-check.js       # RYN's frame signature against HMAC-SHA256 and the game's
+python3 harness/ryn-2025-mutate.py   # 37 deliberate breakages, static checks: 37 caught
+python3 harness/ryn-boot-mutate.py   # 24 deliberate breakages, browser test: 24 caught
 ```
+
+---
+
+## Round two: in the game
+
+You got in. Then: the frame rate fell through the floor, getting in took a
+minute or two and not every time, the HP number sat to the right of its bar,
+numbers were missing, and Auto Grind hit once and then waited.
+
+### The frame rate
+
+RYN's zoom fired a window `resize` on **every frame**, zooming or not. On the
+2025 game that runs the game's whole resize: a new WebGL drawing buffer, the
+renderer's own resize — which throws away every cached glyph and shape and
+uploads them again — and every resize listener on the page. That was most of
+each frame. Now the zoom resizes only while it is actually moving, calls the
+game's handler directly (`exposeResize`), and the tail of that handler is made
+idempotent (`viewport`): the canvas is resized only when its size changes, the
+glyph cache rebuilt only when the scale moves by more than 8%. The test counts
+writes to the canvas size while you stand still: 0.
+
+Also: the weather draws into RYN's overlay instead of a canvas of its own (one
+full-screen layer fewer to composite every frame), and the target overlay hides
+when it has nothing to show.
+
+**Frame signatures.** Every frame the 2025 client sends carries an HMAC-SHA256,
+which the game computes with its own SHA-256 run through the obfuscator — every
+rotate a call through an object of one-line functions with string-decoded names.
+0.25–0.37 ms per frame in Chromium, on the main thread, for every frame you and
+every bot send; a burst in a fight is a dropped frame on its own. RYN signs with
+a plain implementation now (1.2 µs), the key's padded blocks hashed once per
+session. It is not trusted on its word: each session's first frames are signed
+both ways and the game's bytes are what is sent; one disagreement and it is
+never used again. RYN's script time in the profile fell by a third.
+
+### Getting in, first time
+
+Two things made it a lottery.
+
+1. **RYN's loading screen borrowed the Cloudflare challenge's container**, and
+   on the way out handed it to a slot in RYN's lobby. On the 2025 page that
+   container lives in the game's "one quick check" dialog — the only thing the
+   game opens when Cloudflare wants a click. Moved, its iframe reloaded and the
+   check in progress was thrown away; and a challenge that then wanted a click
+   sat in a slot the 2025 flow never reveals. The dialog opened empty and Play
+   waited for good. Whether you hit it depended on whether Cloudflare asked for a
+   click that time. The loading screen leaves the container alone now.
+2. **Injected late, the page's own copy of the game ran in full** beside RYN's:
+   two server pollers, two Turnstile scripts, two sets of timers and listeners.
+   It used to be stopped only at its first frame. It is now stopped at its first
+   line: the bundle opens with `document.createElement("link")`, and that call,
+   coming from the page's own module, starts RYN's copy in its place and ends
+   the module there.
+
+Tested against a Turnstile that behaves like Cloudflare's — the script arrives
+late, a challenge takes time, an iframe that is moved reloads, and a mode in
+which every challenge wants a click, answered only when it is on screen and on
+top. Before: with a click wanted, late injection never got in, and neither did
+document-start once the page's container was empty as it is on the real page.
+Now: in under 150 ms after Play, or about 2.6 s when a click is wanted (the game
+itself waits 1.5 s before it opens the dialog).
+
+### The HP number, and the numbers
+
+RYN draws through a bridge to a 2D canvas over the WebGL one. Its defaults were
+the browser's — `start`, `alphabetic`, `10px sans-serif`. The 2024 game left its
+context centred, middle-aligned, in Hammersmith One, and the HP number never set
+its own alignment, so on 2025 it drew from the centre to the right. The defaults
+are the 2024 game's now; the test finds the number's middle within 1 px of the
+player's.
+
+On a scaled display (125%, 150%) the overlay was also the wrong size on screen —
+sized by its pixels rather than the game canvas's CSS size — so every number,
+bar and ring slid right and down off its player, some of them off screen. It
+matches the game canvas now; tested at 150%.
+
+Checked on screen: the HP number, the player IDs, the shame counter, the damage
+numbers. Name colours (your own, RYN players') were done by recolouring
+`fillText` calls; the 2025 game draws names glyph by glyph from a cache, so that
+could only ever recolour a letter everywhere. The colour is now picked where the
+game picks a name's colour (`nameColor`).
+
+### Auto Grind
+
+It tapped — pressed and released in one tick — on the tick RYN's own reload count
+said the weapon was ready. A tap that reaches the server while it is still
+reloading is dropped, so every hit depended on that count agreeing with the
+server's to the tick. It now **holds** the attack while it grinds, the way you
+would with the mouse, and the server swings by itself the moment the weapon is
+ready.
+
+Tested against a server that plays the swing by the game's own shared rules
+(only the weapon in hand reloads; a press latches), and against a stricter one in
+which a release in the same tick takes the press back — where the old tap got no
+hits at all. Either way: a swing every 557 ms, the great hammer's 400 ms reload
+counted in 111 ms ticks; through turrets breaking and being put back; in Tank
+Gear; and let go the moment it is switched off or an enemy comes into reach.
 
 `boot-2025.js` runs vanilla (no RYN, the control), RYN injected at
 document-start, and RYN injected late (what your console showed:
@@ -156,7 +254,8 @@ as guests.
 
 ## Hook status
 
-63 of 65 hooks install on the 2025 bundle. `gameInit` served an altcha start
+67 of 69 hooks install on the 2025 bundle (round two added `exposeResize`,
+`viewport`, `nameColor` and `fastSign`). `gameInit` served an altcha start
 path the game no longer has; `buildingTint`'s ternary is now an if-statement,
 matched by `buildingTint2025`.
 
@@ -172,5 +271,16 @@ matched by `buildingTint2025`.
   (`T` packet). RYN does not hide from this. If the server acts on those flags,
   RYN cannot prevent it.
 - **Members-only servers** need you signed in; bots cannot join them.
+- **Auto Grind against the live server.** The simulation follows the game's
+  shared player rules, and under those the old tap kept pace too — so whatever
+  made it wait on the live server is something the client code does not show.
+  A held attack does not depend on it either way.
+- **Cloudflare itself.** The Turnstile here is a model of the parts the login
+  depends on, not Cloudflare. The loading-screen fault is certain (the page's
+  container is moved, and the 2025 game only ever shows the one it owns); how
+  often the live challenge asks for a click is not something this can measure.
+- **Your injection mode.** RYN works either way, but in Tampermonkey's settings,
+  *Inject Mode: Instant* gets it in before `<head>`, where the page's own copy of
+  the game is never started at all.
 - The map gained a secret area west of x = 0; RYN's map-edge maths assume the
   old bounds there.

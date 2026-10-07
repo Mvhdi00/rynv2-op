@@ -26,13 +26,39 @@ import, a WebGL renderer, pinned (masked) sessions, a `/join` ticket step, FRVR
 sign-in — so it has its own harness, which needs no `build-page.js` step:
 
 ```sh
-node boot-2025.js [vanilla|fast|late|…+pinned|all] [ryn.js]   # the real bundle, in Chromium
+node boot-2025.js [vanilla|fast|late][+pinned|+interactive|+hidpi|+grind] [ryn.js]   # or `all`
 node ryn-rewrite-check.js   # RYN's own Regexer + formatCode2 + import conversion, run and inspected
 node ryn-protocol-2025.js   # the wire format, from the bundle and from RYN
 node ryn-hooks-check.js     # each hook: does it match, does what it injects resolve
+node ryn-sign-check.js      # RYN's own frame signature against HMAC-SHA256 and the game's
 python3 ryn-2025-mutate.py  # break the fixes on purpose; a static check must go red
 python3 ryn-boot-mutate.py  # same, for what only the browser can show
 ```
+
+The flags, each one a way the live game behaves that a plain run would not show:
+
+- `+interactive` — Cloudflare asks for a click. Every challenge wants one, and the
+  harness clicks a challenge only when its frame is on screen and on top, as a
+  person would. RYN's loading screen used to borrow the challenge's container and
+  hand it to a lobby slot the 2025 game never reveals: this mode is how a login
+  that "sometimes takes minutes" became a red line.
+- `+hidpi` — 150% display scaling. The game draws at the device pixel ratio, so
+  an overlay sized by pixels alone lands off its players.
+- `+grind` — Auto Grind against `server.js`'s `sim`: the server's side of a
+  player who swings, by the game's own shared rules (only the weapon in hand
+  reloads, a press latches `gathering`). `SIM_LATCH=0` runs the stricter rule in
+  which a release takes back a press sent in the same tick; `SIM_POSITIONS=delta`
+  leaves a player who has not moved out of the tick's position list.
+  `GRIND_TRACE=1` prints every swing, hat, weapon, placement and break.
+
+Every run also checks that only one copy of the game runs (late injection used to
+run the page's own copy beside RYN's), that Turnstile's script loads once and no
+challenge is thrown away by moving its frame, that Play gets you in on the first
+press, that the game canvas is not resized between frames, and that the HP
+number sits centred under the bar. `PERF=1` adds frames per second, main-thread
+time and the top functions by self time — read the frame rate with care here:
+SwiftShader composites in software, so extra canvas layers cost far more than on
+a real GPU, and main-thread time is the number that carries over.
 
 `boot-2025.js` serves `fixtures/moomoo_index_new.js` and `moomoo_vendor_new.js`
 as modules from `https://moomoo.io/assets/` behind an import map, stubs
@@ -45,8 +71,9 @@ lifted out of the bundle by `proto-2025.js` — so the masking is the bundle's,
 not this harness's idea of it. It then plays: server list, Sign in, Enter Game,
 spawn, the player on screen, RYN's overlay, and a bot through RYN's own menu.
 
-`fast` injects RYN before `<head>` exists; `late` after it, which is how the
-page's own copy of the game ends up running alongside RYN's.
+`fast` injects RYN before `<head>` exists; `late` after it — the module tag has
+then been prepared, and Chrome runs it however it is removed. RYN now stops that
+copy at its first line; the `late` run is what proves it.
 
 ## Setup
 

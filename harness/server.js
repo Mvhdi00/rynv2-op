@@ -80,6 +80,26 @@ function attach(ws, log, opts) {
     crypto: wire = null,
     mixKey = (key) => key,
     salt = 7,
+    /* `sim`: the server's side of a player who swings at things, so a test can
+     * watch a client's hit cadence instead of guessing at it. The rules are
+     * the game's own shared Player update, copied out of the 2025 bundle:
+     *
+     *   if (buildIndex < 0)
+     *     if (reloads[w] > 0) reloads[w] -= dt, gathering = mouseState
+     *     else if (gathering || autoGather) swing, gathering = mouseState,
+     *                                       reloads[w] = weapon.speed * hat.atkSpd
+     *
+     * so only the weapon in hand reloads, and only with no item in hand. A
+     * press ("F" 1) latches `gathering`, which is what lets a press and a
+     * release sent in the same tick still swing once. My own turrets are in
+     * reach from the start; a swing that lands wiggles them ("L") and every
+     * swing is announced ("K": sid, didHit, weapon, speedMult). Appearance
+     * goes out only when it changes, as 2025 sends it.
+     *
+     *   sim.positions: "always" (default) or "delta" — whether a player who
+     *   has not moved or turned is still in the tick's position list.
+     *   onSwing(t, weapon, didHit): every swing, for the test to time. */
+    sim = null,
   } = opts || {};
   {
     const seed = (Math.random() * 0xffffffff) >>> 0;
@@ -142,6 +162,7 @@ function attach(ws, log, opts) {
 
       if (log) log("c2s", letter, "seq=" + seq, JSON.stringify(frame[1]).slice(0, 120));
       if (letter === "M") spawn();
+      if (sim && spawned) simPacket(letter, frame[1]);
       // the real server answers a ping with an empty "0"
       if (letter === "0") send("0", []);
     });
@@ -178,6 +199,99 @@ function attach(ws, log, opts) {
     const midY = 6e3;
     const foeSid = 2;
 
+    // ── sim: my player's swing, by the game's own rules (see `sim` above) ──
+    const SIM_TICK = 111;
+    const SIM_WEAPONS = {
+      0: { speed: 300, dmg: 25, range: 65, gather: 1 },              // tool hammer
+      10: { speed: 400, dmg: 10, sDmg: 7.5, range: 75, gather: 1 },  // great hammer
+    };
+    const SIM_HATS = { 40: { bDmg: 3.3 }, 20: { atkSpd: .78 } };
+    const SIM_GATHER_ANGLE = Math.PI / 2.6;
+    const me = sim ? {
+      dir: 0, weaponIndex: 0, buildIndex: -1, reloads: { 0: 0, 10: 0 },
+      mouseState: 0, gathering: 0, skin: 0, sentLook: "", moved: true,
+    } : null;
+    const simObjects = new Map();
+    let simSid = 100;
+    if (sim) {
+      // two of my turrets, either side of where I face, inside both weapons' reach
+      for (const a of [-.7, .7]) simObjects.set(++simSid, { x: mid + Math.cos(a) * 86, y: midY + Math.sin(a) * 86, hp: 800, type: 17 });
+    }
+    const simLook = () => [mySid, me.buildIndex, me.weaponIndex, 0, null, 0, me.skin, 0, 0, 0];
+    const simPacket = (letter, args) => {
+      if (!me || !Array.isArray(args)) return;
+      if (letter === "F") {
+        me.mouseState = args[0] ? 1 : 0;
+        if (typeof args[1] === "number" && me.dir !== args[1]) { me.dir = args[1]; me.moved = true; }
+        if (args[0]) {
+          if (me.buildIndex >= 0) simPlace(me.buildIndex, me.dir);
+          else me.gathering = 1;
+        } else if (sim.latch === false) {
+          // the stricter rule: a release takes the press back before the
+          // tick that would have swung on it
+          me.gathering = 0;
+        }
+      } else if (letter === "D") {
+        if (typeof args[0] === "number" && me.dir !== args[0]) { me.dir = args[0]; me.moved = true; }
+      } else if (letter === "z") {
+        const id = args[0], weapon = !!args[1];
+        if (weapon) { if (id in SIM_WEAPONS) { if (me.weaponIndex !== id && sim.onEvent) sim.onEvent("weapon " + id); me.weaponIndex = id; me.buildIndex = -1; } }
+        else me.buildIndex = me.buildIndex === id ? -1 : id;
+      } else if (letter === "c" && args[0] === 0 && args[2] === 0) {
+        // equip a hat ("5" 1 = equipped); a hat that is not owned is refused
+        const id = args[1] | 0;
+        if (id !== 0 && !(sim.hats || []).includes(id)) return;
+        if (me.skin !== id && sim.onEvent) sim.onEvent("hat " + id);
+        me.skin = id;
+        send("5", [1, id, 0]);
+      } else if (letter === "H") {
+        // the upgrades a grinder needs: the great hammer (age 6), then the
+        // turret (age 7, item 17 = upgrade 16 + 17)
+        if (args[0] === 10) send("U", [1, 7]);
+        else if (args[0] === 33) send("U", [0, 7]);
+      }
+    };
+    const simPlace = (id, dir) => {
+      me.buildIndex = -1;
+      if (id !== 17) return;
+      const sid = ++simSid;
+      const o = { x: mid + Math.cos(dir) * 86, y: midY + Math.sin(dir) * 86, hp: 800, type: 17 };
+      simObjects.set(sid, o);
+      send("H", [[sid, o.x, o.y, 0, 43, null, 17, mySid]]);
+      if (sim.onEvent) sim.onEvent("place");
+    };
+    const simSwing = () => {
+      const w = SIM_WEAPONS[me.weaponIndex];
+      const hat = SIM_HATS[me.skin] || {};
+      let hit = 0;
+      for (const [sid, o] of simObjects) {
+        const dx = o.x - mid, dy = o.y - midY;
+        if (Math.hypot(dx, dy) - 43 > w.range) continue;
+        let da = Math.abs(Math.atan2(dy, dx) - me.dir) % (Math.PI * 2);
+        if (da > Math.PI) da = Math.PI * 2 - da;
+        if (da > SIM_GATHER_ANGLE) continue;
+        hit = 1;
+        send("L", [me.dir, sid]);
+        o.hp -= w.dmg * (w.sDmg || 1) * (hat.bDmg || 1);
+        if (o.hp <= 0) { simObjects.delete(sid); send("Q", [sid]); if (sim.onEvent) sim.onEvent("destroy"); }
+      }
+      send("K", [mySid, hit, me.weaponIndex, 1]);
+      if (sim.onSwing) sim.onSwing(Date.now(), me.weaponIndex, hit);
+    };
+    if (sim) sim.state = () => ({ mouseState: me.mouseState, gathering: me.gathering });
+    const simUpdate = () => {
+      if (me.buildIndex >= 0) return;
+      const w = me.weaponIndex;
+      if (me.reloads[w] > 0) {
+        me.reloads[w] -= SIM_TICK;
+        me.gathering = me.mouseState;
+      } else if (me.gathering) {
+        simSwing();
+        me.gathering = me.mouseState;
+        me.reloads[w] = SIM_WEAPONS[w].speed * ((SIM_HATS[me.skin] || {}).atkSpd || 1);
+      }
+    };
+
     let spawned = false;
     let tick = null;
     const spawn = () => {
@@ -192,7 +306,7 @@ function attach(ws, log, opts) {
       send("C", [mySid]);
       // [id, sid, name, x, y, dir, health, maxHealth, scale, skinColor]
       send("D", [["p1", mySid, "tester", mid, midY, 0, 100, 100, 35, 0], true]);
-      send("D", [["p2", foeSid, "rival", mid + 150, midY + 40, 0, 100, 100, 35, 1], false]);
+      send("D", [["p2", foeSid, "rival", mid + (sim ? 3000 : 150), midY + 40, 0, 100, 100, 35, 1], false]);
       sendPlayers(0, true);
       // loadGameObject: 8 fields per object [sid,x,y,dir,scale,type,itemId,ownerSid]
       send("H", [[
@@ -218,8 +332,14 @@ function attach(ws, log, opts) {
        * [0,1,2] made slot 2 read as cheese and slot 4 as nothing, so a placement
        * test watched the client try to build food and called the feature broken.
        * The game spawns you with [0, 3, 6, 10]: apple, wood wall, spikes, mill. */
-      send("V", [[0, 3, 6, 10], null]);
-      send("V", [[0, 1, 2, 3], true]);
+      send("V", [sim ? [0, 3, 6, 10, 17] : [0, 3, 6, 10], null]);
+      send("V", [sim ? [0, 10] : [0, 1, 2, 3], true]);
+      if (sim) {
+        send("H", [[...simObjects].flatMap(([sid, o]) => [sid, o.x, o.y, 0, 43, null, 17, mySid])]);
+        send("U", [1, 6]);
+        for (const id of sim.hats || []) send("5", [0, id, 0]);
+        for (const r of ["wood", "stone", "food", "points"]) send("N", [r, 5000]);
+      }
       send("6", [mySid, "hello"]);
       send("8", [mid + 40, midY + 40, 15, 0]);
       send("7", []);
@@ -236,6 +356,26 @@ function attach(ws, log, opts) {
     }
 
     function sendPlayers(wobble, full) {
+      if (sim) {
+        // my position every tick, or only when I moved or turned; my look only
+        // when it changed; the rival far away and still
+        const look = simLook();
+        const changed = JSON.stringify(look) !== me.sentLook;
+        const pos = (sim.positions !== "delta" || me.moved || full) ? [mySid, mid, midY, Math.round(me.dir * 100)] : [];
+        me.moved = false;
+        // sim.foeNear: the rival walks up to 250 away, inside the 400 at which
+        // Auto Grind stands down
+        const foeX = sim.foeNear ? mid + 250 : mid + 3000;
+        const foeMoved = sim._foeX !== foeX;
+        sim._foeX = foeX;
+        send("a", [
+          full || foeMoved ? pos.concat([foeSid, foeX, midY + 40, 300]) : pos,
+          (changed || full ? look : []).concat(full ? [foeSid, -1, 5, 1, null, 0, 6, 11, 1, 0] : []),
+          [],
+        ]);
+        me.sentLook = JSON.stringify(look);
+        return;
+      }
       if (proto === 2025) {
         send("a", [
           [mySid, mid, midY, 0, foeSid, mid + 150 + wobble, midY + 40, 300],
@@ -256,9 +396,17 @@ function attach(ws, log, opts) {
     let t = 0;
     function tickWorld() {
       t++;
+      if (sim) {
+        simUpdate();
+        sendPlayers(0, false);
+        return;
+      }
       const wobble = Math.sin(t / 8) * 60;
       sendPlayers(wobble, false);
       if (t % 9 === 0) send("O", [foeSid, 60 + (t % 40)]);
+      // A hit on the rival every few ticks: the damage number the game floats
+      // up from them ("8": x, y, value, type), so a screenshot has one alive.
+      if (proto === 2025 && t % 3 === 0) send("8", [mid + 150 + wobble, midY + 40, 17, 0]);
       if (t % 15 === 0) send("M", [3, 1]);
     }
 

@@ -8,19 +8,37 @@ were diagnosed from a screenshot because nothing said anything.
 
     python3 ryn-2025-mutate.py [ryn.js]
 """
-import subprocess, sys
+import os, subprocess, sys, tempfile
 
 SRC = sys.argv[1] if len(sys.argv) > 1 else "ryn/Ryn_Type_2.user.js"
-MUT = "/tmp/claude-0/-home-user-rynv2-op/84985967-839c-5cb9-84f9-ceebbe0cce70/scratchpad/ryn2025_mut.js"
+MUT = os.path.join(tempfile.mkdtemp(prefix="ryn-mutate-"), "ryn2025_mut.js")
 base = open(SRC, encoding="utf-8").read()
 
 CHECKS = [
     ("hooks", ["node", "harness/ryn-hooks-check.js"]),
     ("proto", ["node", "harness/ryn-protocol-2025.js"]),
     ("rewrite", ["node", "harness/ryn-rewrite-check.js"]),
+    ("sign", ["node", "harness/ryn-sign-check.js"]),
 ]
 
 MUTATIONS = [
+    # ── the frame rate, the HP number's neighbours, names ─────────────────
+    ("exposeResize no longer finds the game's resize handler",
+     r'/window\.addEventListener\("resize",(\w+)\.checkTrusted\((\w+)\)\)/',
+     r'/window\.addEventListener\("resize",(\w+)\.checkTrusted\((\w+)\),!0\)/'),
+    ("viewport no longer finds the tail of the game's resize",
+     r'\5\.resize\(\6\*\3\)/, "RYN._Renderer._viewport', r'\5\.resize\(\6\)/, "RYN._Renderer._viewport'),
+    ("nameColor no longer finds where the game picks a name's colour",
+     r'(\w+)=\1\?(\w+):"#fff",(\w+)=\{color:\4,/', r'(\w+)=\1\?(\w+):"#fff",(\w+)=\{colour:\4,/'),
+    # ── frame signatures ───────────────────────────────────────────────────
+    ("fastSign no longer finds the game's signing call",
+     r'\],\w+\),\w+=new Uint8Array\(\w+\+\w+\[)/,', r'\],\w+\),\w+=new Uint16Array\(\w+\+\w+\[)/,'),
+    ("RynSign has a wrong SHA-256 round constant",
+     "_K = new Int32Array([ 1116352408, 1899447441,", "_K = new Int32Array([ 1116352409, 1899447441,"),
+    ("RynSign never checks itself against the game",
+     "      if (k.checks < this._CHECKS) {", "      if (false) {"),
+    ("RynSign signs alone from the first frame",
+     "    _CHECKS = 3;", "    _CHECKS = 0;"),
     # ── the injector: the update that never ran ────────────────────────────
     ("the import pattern eats the `;` the next import needs",
      """([^"'\\n]+)\\5/g;""", """([^"'\\n]+)\\5\\s*;?/g;"""),
