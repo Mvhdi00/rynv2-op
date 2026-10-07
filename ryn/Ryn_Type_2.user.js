@@ -8449,10 +8449,11 @@ window.grbtp = 35;
           const d = new Uint8Array(enc.jt + a.length);
           d.set(o, 0);
           d.set(a, enc.jt);
-          // Outgoing is masked the same way, over the payload only — the
-          // bundle does `xe.mask && Nl(r.subarray(So), bf(xe.mask, xe.seq))`.
+          // Outgoing is masked over the payload only, keyed on the c2s mask and
+          // the frame's own signature — the bundle does
+          // `xe.mask && Nl(r.subarray(So), bf(xe.mask.c2s, signature))`.
           if (botCrypto.mask && enc.applyMask && enc.maskVal) {
-            enc.applyMask(d.subarray(enc.jt), enc.maskVal(botCrypto.mask, n));
+            enc.applyMask(d.subarray(enc.jt), enc.maskVal(botCrypto.mask.c2s, o));
           }
           socketSend(d);
           this.packetCount += 1;
@@ -10948,9 +10949,18 @@ window.grbtp = 35;
     get isSandbox() {
       return this.socket !== null && /localhost/.test(this.socket.url);
     }
+    _beforeBundle=true;
     init(socket) {
       this.socket = socket;
       this.socketSend = socket.send.bind(socket);
+      // Whether this listener will see a frame before the bundle's own
+      // onmessage does: true when the socket is caught in the construct trap,
+      // false when the watchdog hands over one the bundle has already wired.
+      try {
+        this._beforeBundle = socket.onmessage == null;
+      } catch (_) {
+        this._beforeBundle = true;
+      }
       // The owner's socket is the one the game bundle itself reads. Possession
       // needs two things from it: a handle on the bundle's own message handler
       // (to feed a bot's world in through it) and the ability to hold the main
@@ -11093,22 +11103,38 @@ window.grbtp = 35;
       const data = event.data;
       let decoded;
       try {
-        const bytes = new Uint8Array(data);
+        let bytes = new Uint8Array(data);
         /* 2025 protocol: on a "pinned" connection every frame is XOR-masked
-         * with a value derived from the session mask and a per-message
+         * with a value derived from the session's s2c mask and a per-message
          * counter. The bundle's own reader does
          *
-         *     xe && xe.mask && Nl(f, wf(xe.mask, ++xe.received));
+         *     xe && xe.mask && Nl(f, wf(xe.mask.s2c, ++xe.received));
          *
-         * before it decodes. Without this a bot's frames decode to garbage and
-         * every one is dropped, which looks exactly like a bot that connects
-         * and then never sees the world. */
+         * IN PLACE, on a view of event.data — the same buffer this listener
+         * is looking at — and with a counter that lives on the session object
+         * the main client shares with the bundle. So on the main socket RYN
+         * must touch neither: it reads a COPY, keyed on the count the bundle
+         * is about to use. It used to unmask the shared buffer itself and bump
+         * the shared counter, and the bundle then unmasked the same frame a
+         * second time with the next count: every frame after io-init decoded
+         * to garbage, in the game as well as here.
+         *
+         * A bot's socket is RYN's alone, so its frames are unmasked in place
+         * with its own counter. */
         const cryptoIn = this.client._gameCrypto;
         if (cryptoIn && cryptoIn.mask) {
           const enc = typeof RYN !== "undefined" && RYN._enc;
-          if (enc && enc.applyMask && enc.maskVal) {
-            cryptoIn.received = (cryptoIn.received || 0) + 1;
-            enc.applyMask(bytes, enc.maskVal(cryptoIn.mask, cryptoIn.received));
+          if (enc && enc.applyMask && enc.maskIn) {
+            if (cryptoIn._bundle) {
+              if (this._beforeBundle) {
+                bytes = bytes.slice();
+                enc.applyMask(bytes, enc.maskIn(cryptoIn.mask.s2c, (cryptoIn.received >>> 0) + 1));
+              }
+              // Otherwise the bundle's handler ran first and the frame is plain.
+            } else {
+              cryptoIn.received = (cryptoIn.received || 0) + 1;
+              enc.applyMask(bytes, enc.maskIn(cryptoIn.mask.s2c, cryptoIn.received));
+            }
           }
         }
         decoded = decoder.decode(bytes);
@@ -32236,6 +32262,49 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     box-shadow: 0 10px 26px -14px rgba(142,118,206,0.95) !important;
 }
 #ryn-lobby #enterGame:active { transform: translateY(2px) !important; background: #8069C4 !important; }
+/* 2025 overlays lifted above the lobby (see buildLobby) */
+.ryn-lift-backdrop { position: fixed !important; inset: 0 !important; z-index: 100002 !important; }
+.ryn-lift-fixed { z-index: 100003 !important; }
+.ryn-lift {
+    position: fixed !important;
+    left: 50% !important;
+    top: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    z-index: 100003 !important;
+    max-height: 90vh;
+    overflow: auto;
+}
+
+/* 2025: "busy" while the name check and the join request are in flight */
+#ryn-lobby #enterGame.busy { opacity: .6 !important; pointer-events: none !important; }
+
+/* Sign in — the game's own button, moved beside Play. The bundle hides it
+   once you are signed in and shows "Sign out" in #accountRow instead. */
+#ryn-lobby #signInButton {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 48px !important;
+    width: auto !important;
+    flex: 0 0 auto !important;
+    margin: 0 !important;
+    padding: 0 18px !important;
+    border: 1px solid var(--rl-iris-45) !important;
+    border-radius: 12px !important;
+    background: transparent !important;
+    color: var(--rl-tx-1) !important;
+    font-family: var(--rl-mono) !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.16em !important;
+    text-transform: uppercase !important;
+    cursor: pointer !important;
+}
+#ryn-lobby #signInButton[style*="display: none"] { display: none !important; }
+#ryn-lobby #signInButton:hover { background: var(--rl-iris-12) !important; }
+#ryn-lobby .rl-account { margin-top: 10px; font-size: 12px; color: var(--rl-tx-3); }
+#ryn-lobby .rl-account a { color: var(--rl-tx-1); cursor: pointer; }
+
 /* the bundle's own gate: the "disabled" class is on the button until
    Turnstile hands over a token, and nothing here decides when that is */
 #ryn-lobby #enterGame.disabled {
@@ -37510,7 +37579,11 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       //   #loadingText, #diedText
       //                     the bundle's own two messages, which stand in for
       //                     the lobby rather than sitting beside it
-      const sacred = [ "turnstileWidget", "gameUI", "actionBar", "gameCanvas", "loadingText", "diedText" ].map(id => doc.getElementById(id)).filter(node => node !== null);
+      //   #verifyDialog, #accountCard and the other 2025 overlays
+      //                     the human check that Play waits on, the sign-in /
+      //                     register card, and the profile, clan, confirm
+      //                     and invite cards the game opens over the menu
+      const sacred = [ "turnstileWidget", "gameUI", "actionBar", "gameCanvas", "loadingText", "diedText", "verifyDialog", "verifyBackdrop", "accountCard", "profileCard", "clanCard", "confirmCard", "friendToast", "inviteBanner", "skinPopover" ].map(id => doc.getElementById(id)).filter(node => node !== null);
       const spare = node => {
         if (node.contains(lobby)) {
           return true;
@@ -37544,7 +37617,10 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         menuCardHolder: true,
         loadingText: true,
         diedText: true,
-        turnstileWidget: true
+        turnstileWidget: true,
+        verifyDialog: true,
+        verifyBackdrop: true,
+        accountCard: true
       };
       const sweep = () => {
         const kids = mainMenu.children;
@@ -37651,7 +37727,23 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         }
         row.appendChild(enterGame);
       }
+      /* 2025 accounts. The game's own Sign in button opens its account card —
+       * email code, password login and registration all go through it, and
+       * through the FRVR SDK behind it. RYN used to leave it where the game
+       * put it, in the menu RYN hides, so there was no way to sign in at all,
+       * and members-only servers could not be joined. It sits beside Play
+       * now; the bundle still decides when it shows. */
+      const signIn = doc.getElementById("signInButton");
+      if (signIn !== null) {
+        row.appendChild(signIn);
+      }
       nameGroup.appendChild(row);
+      const accountLine = el("div", "rl-account");
+      [ "signInHint", "accountRow" ].forEach(id => {
+        const node = doc.getElementById(id);
+        if (node !== null) accountLine.appendChild(node);
+      });
+      if (accountLine.childNodes.length) nameGroup.appendChild(accountLine);
 
       // colour
       this.createSkinColors(group("Skin colour"));
@@ -37687,7 +37779,11 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       // what decides when the slot is on screen.
       const gate = el("div", "rl-gate");
       const turnstile = doc.getElementById("turnstileWidget");
-      if (turnstile !== null) {
+      // On the 2025 page the widget lives in the game's own "one quick check"
+      // dialog, which the game opens when the challenge needs a click. Moved
+      // into this slot it sat in a container the 2025 flow never reveals, and
+      // an interactive challenge could not be answered.
+      if (turnstile !== null && doc.getElementById("verifyDialog") === null) {
         gate.appendChild(turnstile);
       }
       body.appendChild(gate);
@@ -37741,6 +37837,25 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       lobby.appendChild(stash);
       host.appendChild(lobby);
       this.hideDefaultLobby(lobby);
+
+      /* The 2025 overlays — the human check Play waits on, the sign-in /
+       * register card, the profile, clan and confirm cards — open inside the
+       * game's menu layer, and the lobby sits over that layer. They opened
+       * underneath it: there, but impossible to see or click. They are lifted
+       * out to <body>, above the lobby; where the game had not already made
+       * one fixed, it is centred. The game still opens and closes them. */
+      const lift = (id, backdrop) => {
+        const node = doc.getElementById(id);
+        if (node === null || node.parentNode === host) return;
+        let fixed = false;
+        try {
+          fixed = getComputedStyle(node).position === "fixed";
+        } catch (e) {}
+        host.appendChild(node);
+        node.classList.add(backdrop ? "ryn-lift-backdrop" : fixed ? "ryn-lift-fixed" : "ryn-lift");
+      };
+      lift("verifyBackdrop", true);
+      [ "verifyDialog", "accountCard", "profileCard", "clanCard", "confirmCard" ].forEach(id => lift(id, false));
 
       /* ---------------- the list, as a view of the select ---------------- */
 
@@ -39270,15 +39385,50 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       /let (\w+),(\w+),(\w+)=\!1;document\.getElementById\("ad-container"\)/,
       "let $1,$2,$3=!1;RYN._Login._releaseSpawn=function(){$3=!1};document.getElementById(\"ad-container\")");
 
+    /* The session primitives, found by the shape of the code that uses them
+     * rather than by their names. The names are the minifier's and change on
+     * every build — the live game is already a newer build than the one this
+     * was first written against — and a getter that names a function the
+     * build does not have returns null, which left bots with no session.
+     *
+     *   io-init:  D=vf(w[2]),V=b?mixKey(D,O):D;
+     *             xe={mode:Ws,key:V,tables:b?Ll(O,SALT):Ll(O),seq:0,mask:b?kf(V):null,received:0}
+     *   receive:  xe&&xe.mask&&Nl(f,wf(xe.mask.s2c,++xe.received))
+     *   send:     d=yf(xe.key,c),r=new Uint8Array(So+c.length) ... Nl(r.subarray(So),bf(xe.mask.c2s,d))
+     *
+     * Note the two directions are NOT the same function: incoming frames are
+     * keyed on the receive counter through wf(), outgoing ones on the frame's
+     * own signature through bf(). */
+    const cryptoName = (m, i) => m && m.length > i && /^[\w$]+$/.test(m[i]) ? m[i] : null;
+    const cryptoRef = id => id ? "(typeof " + id + "!=='undefined'?" + id + ":null)" : "null";
+    const cryptoSession = Hook.match("cryptoSession", /(\w+)=(\w+)\(\w+\[[^\]]+\]\),(\w+)=(\w+)\?(\w+)\(\1,(\w+)\):\1;(\w+)=(?:RYN\._myClient\._gameCrypto=)?\{(?:_bundle:!0,)?mode:(\w+),key:\3,tables:\4\?(\w+)\(\6,(\w+)\):.*?,seq:0,mask:\4\?(\w+)\(\3\):null,received:0\}/);
+    const cryptoInbound = Hook.match("cryptoInbound", /&&(\w+)\(\w+,(\w+)\((\w+)\[\w+\(\d+,"[^"]*"\)\]\[\w+\(\d+,"[^"]*"\)\],\+\+\3\[/);
+    const cryptoSign = Hook.match("cryptoSign", /\]\((\w+),(\w+)\[\w+\(\d+,"[^"]*"\)\],(\w+)\),\w+=new Uint8Array\((\w+)\+\3\[/);
+    const cryptoOutbound = Hook.match("cryptoOutbound", /(\w+)\(\w+\[\w+\(\d+,"[^"]*"\)\+"ay"\]\(\w+\),(\w+)\(\w+\[/);
+    const cryptoBuild = Hook.match("cryptoBuild", /\+"b=",(\w+)\)/);
+    const encFields = [
+      "Hi:$1",
+      "Eo:" + cryptoRef(cryptoName(cryptoSign, 1)),
+      "jt:" + cryptoRef(cryptoName(cryptoSign, 4)),
+      "Ro:" + cryptoRef(cryptoName(cryptoSession, 2)),
+      "Po:" + cryptoRef(cryptoName(cryptoSession, 9)),
+      "mode:" + cryptoRef(cryptoName(cryptoSession, 8)),
+      "mixKey:" + cryptoRef(cryptoName(cryptoSession, 5)),
+      "salt:" + cryptoRef(cryptoName(cryptoSession, 10)),
+      "buildId:" + cryptoRef(cryptoName(cryptoBuild, 1)),
+      "maskFrom:" + cryptoRef(cryptoName(cryptoSession, 11)),
+      "applyMask:" + cryptoRef(cryptoName(cryptoInbound, 1) || cryptoName(cryptoOutbound, 1)),
+      "maskIn:" + cryptoRef(cryptoName(cryptoInbound, 2)),
+      "maskVal:" + cryptoRef(cryptoName(cryptoOutbound, 2))
+    ].join(",");
+    // A function replacement: minified names may contain `$`, which a string
+    // replacement would read as a group reference.
     Hook.replace("exposeCryptoFns", /const (\w+)=new (\w+),(\w+)=new (\w+);let (\w+)=null/,
-      "const $1=new $2,$3=new $4;" +
-      "try{Object.defineProperty(RYN,'_enc',{configurable:true,get:function(){" +
-      "try{return{Hi:$1,Eo:yf,jt:So,Ro:vf,Po:Ll,mode:Ws," +
-      "mixKey:(typeof z0!=='undefined'?z0:null)," +
-      "salt:(typeof K0!=='undefined'?K0:null)," +
-      "buildId:(typeof Q0!=='undefined'?Q0:null)," +
-      "maskFrom:kf,applyMask:Nl,maskVal:bf};}catch(e){return null}}})}catch(e){}" +
-      "let $5=null");
+      (whole, encoder, encoderClass, decoder, decoderClass, session) =>
+        "const " + encoder + "=new " + encoderClass + "," + decoder + "=new " + decoderClass + ";" +
+        "try{Object.defineProperty(RYN,'_enc',{configurable:true,get:function(){" +
+        "try{return{" + encFields.replace("Hi:$1", () => "Hi:" + encoder) + "};}catch(e){return null}}})}catch(e){}" +
+        "let " + session + "=null");
     Hook.replace("handleBuy", /\w+\.send\("\w+",1,(\w+),(\w+)\)/, "RYN._Possess.c()._ModuleHandler._buy($2,$1,true)");
     Hook.prepend("RemovePingCall", /\w+&&clearTimeout/, "return;");
     /* The game's pong handler. RemovePingCall stops the game's own pings —
@@ -39593,6 +39743,58 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     blockProperty(win, "onbeforeunload");
     // window.FRVR and window.frvrSdkInitPromise are the page's own now — see
     // RYN._frvr. Replacing them is what took sign-in away.
+
+    /* One Turnstile widget, and it is RYN's copy's.
+     *
+     * Injected late, the page's own copy of the game has already run, and both
+     * copies load the Turnstile API and render into #turnstileWidget when it
+     * arrives. Cloudflare refuses the second render into a container it has
+     * seen, and which copy gets refused is a race. The copy that is refused
+     * stores `undefined` as its widget id and can never reset it — so once its
+     * token is spent, Play has nothing to send. The page's own copy is the one
+     * that is told no: its frames come from /assets/index-*.js, RYN's from
+     * evaluated code. */
+    const wrapTurnstile = api => {
+      if (!api || typeof api.render !== "function" || api.__rynWrapped) return api;
+      const render = api.render;
+      api.render = function() {
+        let fromPage = false;
+        try {
+          fromPage = Injector_lastCode !== null && /\/assets\/index-[^/]*\.js/.test(new Error().stack || "");
+        } catch (e) {}
+        if (fromPage) return "ryn-page-copy";
+        return render.apply(this, arguments);
+      };
+      try {
+        Object.defineProperty(api, "__rynWrapped", {
+          value: true
+        });
+      } catch (e) {}
+      return api;
+    };
+    try {
+      let turnstileApi = win.turnstile;
+      Object.defineProperty(win, "turnstile", {
+        configurable: true,
+        enumerable: true,
+        get() {
+          return turnstileApi;
+        },
+        set(api) {
+          turnstileApi = wrapTurnstile(api);
+        }
+      });
+      wrapTurnstile(turnstileApi);
+    } catch (e) {}
+    {
+      // ...and if the API defines itself some other way than by assignment.
+      let tries = 0;
+      const poll = setInterval(() => {
+        tries++;
+        if (win.turnstile && win.turnstile.__rynWrapped || tries > 1200) clearInterval(poll);
+        else if (win.turnstile) wrapTurnstile(win.turnstile);
+      }, 50);
+    }
     if (!loadedFast) {
       const _define = win.customElements.define;
       win.customElements.define = function() {
@@ -42555,6 +42757,13 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       }
       try {
         if (Possess !== null && Possess.holdMain(event)) {
+          // The server counted this frame even though the bundle will not
+          // see it; on a masked session the bundle's count has to move too,
+          // or every frame after it unmasks with the wrong key.
+          try {
+            const xe = client._gameCrypto;
+            if (xe && xe._bundle && xe.mask) xe.received = (xe.received >>> 0) + 1;
+          } catch (_) {}
           return;
         }
       } catch (_) {}
@@ -43181,10 +43390,26 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       }
       try {
         // A string type skips the bundle's opcode permutation, so no key, seed
-        // or sequence number is involved on this path at all.
-        _gameHandler.call(_gameSocket, {
-          data: encoder.encode([ type, args ])
-        });
+        // or sequence number is involved on this path at all — but on a masked
+        // session the bundle XORs whatever it is handed and advances its
+        // receive count. So the frame is pre-masked with the value it is about
+        // to use, and the count put back afterwards: the server never sent
+        // this frame and its own count has not moved.
+        let bytes = encoder.encode([ type, args ]);
+        const xe = this.owner && this.owner._gameCrypto;
+        const enc = typeof RYN !== "undefined" && RYN._enc;
+        const masked = !!(xe && xe._bundle && xe.mask && enc && enc.applyMask && enc.maskIn);
+        if (masked) {
+          bytes = bytes.slice();
+          enc.applyMask(bytes, enc.maskIn(xe.mask.s2c, (xe.received >>> 0) + 1));
+        }
+        try {
+          _gameHandler.call(_gameSocket, {
+            data: bytes
+          });
+        } finally {
+          if (masked) xe.received = Math.max(0, (xe.received >>> 0) - 1);
+        }
       } catch (_) {
         return false;
       }

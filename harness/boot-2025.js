@@ -29,6 +29,8 @@ const fs = require("fs");
 const path = require("path");
 const { chromium } = require("playwright");
 const server = require("./server");
+let wireCache = null;
+const wire = () => wireCache || (wireCache = require("./proto-2025")());
 
 const ROOT = path.resolve(__dirname, "..");
 const FIX = path.join(__dirname, "fixtures");
@@ -52,12 +54,30 @@ for (const a of bundle.matchAll(/(?:const |let |,|function )([\w$]+)(?:=function
 const CANVAS = new Set(["gameCanvas", "mapDisplay"]);
 const CHECK = new Set(["nativeResolution", "showPing", "showFps", "playMusic"]);
 const TEXT = new Set(["nameInput", "chatBox", "allianceInput", "friendName", "accountEmail", "accountCode", "accountPassword"]);
+/* Where things sit. The real 2025 index.html is not available here, so this is
+ * a guess — but a deliberate one: the menu's controls and the 2025 overlays
+ * (account card, human-check dialog) are put INSIDE #mainMenu, which is the
+ * container RYN sweeps and hides. A page that left them loose would let a
+ * client that hides the sign-in card pass the sign-in check. */
+const PARENT = {
+  menuCardHolder: "mainMenu", setupCard: "menuCardHolder",
+  nameInput: "setupCard", enterGame: "setupCard", signInButton: "setupCard", signInHint: "setupCard",
+  accountRow: "setupCard", serverBrowser: "setupCard", regionSelect: "serverPicker", serverSelect: "serverPicker",
+  serverPicker: "setupCard", serverNote: "setupCard", skinColorHolder: "setupCard", nameHint: "setupCard",
+  accountCard: "mainMenu", verifyBackdrop: "mainMenu", verifyDialog: "mainMenu",
+  turnstileWidget: "verifyDialog", verifyText: "verifyDialog", verifyRetry: "verifyDialog", verifyClose: "verifyDialog",
+  accountTitle: "accountCard", accountNote: "accountCard", accountEmail: "accountCard", accountCode: "accountCard",
+  accountPassword: "accountCard", accountStatus: "accountCard", accountSubmit: "accountCard",
+  accountLinkA: "accountCard", accountLinkB: "accountCard", accountClose: "accountCard",
+  promoImgHolder: "mainMenu", promoImg: "promoImgHolder", menuNotice: "mainMenu",
+};
+if (!ids.includes("setupCard")) ids.push("setupCard");
 const tag = id => CANVAS.has(id) ? `<canvas id="${id}" width="1280" height="720"></canvas>`
   : CHECK.has(id) ? `<input id="${id}" type="checkbox">`
   : TEXT.has(id) ? `<input id="${id}" type="text" value="">`
   : id === "gameMenuTabs" ? `<div id="${id}"><a data-tab="settings"></a><a data-tab="clan"></a><a data-tab="friends"></a></div>`
   : id === "enterGame" ? `<div id="${id}" class="menuButton"><span>Enter Game</span></div>`
-  : `<div id="${id}"><span></span></div>`;
+  : `<div id="${id}"><span></span>${ids.filter(c => PARENT[c] === id).map(c => tag(c)).join("")}</div>`;
 
 const FRVR_SDK = `
 /* stand-in for the FRVR SDK: the surface the 2025 bundle calls, and a record
@@ -77,7 +97,10 @@ window.FRVR = {
     getFRVRID: function () { return this._in ? "frvr-1" : null; },
     getAccessToken: function () { return this._in ? "acc-token" : null; },
     getFreshAccessToken: function () { return Promise.resolve(this.getAccessToken()); },
-    requestEmailLoginCode: function () { window.__loginCodeRequested = true; return Promise.resolve({}); },
+    requestEmailLoginCode: function (e) { (window.__frvrCalls = window.__frvrCalls || []).push("requestEmailLoginCode:" + e); return Promise.resolve({}); },
+    requestEmailRegisterCode: function (e) { (window.__frvrCalls = window.__frvrCalls || []).push("requestEmailRegisterCode:" + e); return Promise.resolve({}); },
+    registerOnFRVR: function (o) { (window.__frvrCalls = window.__frvrCalls || []).push("registerOnFRVR:" + (o && o.email)); return Promise.resolve({}); },
+    loginToFRVR: function (o) { (window.__frvrCalls = window.__frvrCalls || []).push("loginToFRVR"); return Promise.resolve({}); },
     addStatusChangeListener: function (f) { this._l.push(f); },
   },
   init: function () { return Promise.resolve(); },
@@ -102,11 +125,15 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
 #touch-controls-fullscreen { position: fixed; inset: 0; z-index: 1; }
 #enterGame, #nameInput { position: relative; z-index: 5; display: block; min-height: 30px; }
 #menuContainer, #mainMenu, #menuCardHolder { position: relative; z-index: 10; }
+/* the game's own stylesheet keeps these closed until it opens them */
+#accountCard { display: none; }
+#verifyDialog:not(.showing), #verifyBackdrop:not(.showing) { display: none; }
+#accountCard input, #accountSubmit, #accountClose, #signInButton { display: inline-block; min-width: 60px; min-height: 20px; }
 </style>
 </head>
 <body>
 <div id="menuContainer">
-${ids.map(tag).join("\n")}
+${ids.filter(id => !PARENT[id]).map(tag).join("\n")}
 <div id="menuNav"><a data-view="play">Play</a><a data-view="settings">Settings</a><a data-view="friends">Friends</a></div>
 <div class="menuView" data-view="play"><div class="viewBack"></div><div class="viewBody"></div></div>
 <div class="menuView" data-view="settings"><div class="viewBack"></div><div class="viewBody"></div></div>
@@ -121,9 +148,15 @@ const PROTOCOL_MODULE = `export const BUILD_ID = "test-build";
 export const BUILD_SALT = 7;
 export function mixKey(key, seed) { return key; }`;
 
-const TURNSTILE = `window.turnstile = {
+/* Cloudflare's rule, reproduced: a second render into a container that already
+ * holds a widget is refused — it warns and returns undefined. */
+const TURNSTILE = `window.__tsSeen = new WeakSet();
+window.turnstile = {
   render: function (el, o) { window.__tsRenders = (window.__tsRenders || 0) + 1;
-    setTimeout(function () { o && o.callback && o.callback("cf-token-" + Date.now()); }, 60); return "ts1"; },
+    if (typeof el === "string") el = document.querySelector(el);
+    if (window.__tsSeen.has(el)) { console.warn("[Cloudflare Turnstile] Turnstile has already been rendered in this container."); window.__tsRefused = (window.__tsRefused || 0) + 1; return undefined; }
+    window.__tsSeen.add(el); el.appendChild(document.createElement("iframe"));
+    setTimeout(function () { o && o.callback && o.callback("cf-token-" + Date.now()); }, 60); return "ts" + window.__tsRenders; },
   reset: function () {}, remove: function () {}, getResponse: function () { return null; },
 };`;
 
@@ -135,8 +168,10 @@ const SERVERS = [
 ];
 
 // ── one run ───────────────────────────────────────────────────────────────
-async function run(mode) {
-  const out = { mode, errors: [], consoleErrors: [], sockets: [], joins: [], frames: [], notes: [] };
+async function run(spec) {
+  const [mode, ...flags] = spec.split("+");
+  const pinned = flags.includes("pinned");
+  const out = { mode: spec, base: mode, pinned, errors: [], consoleErrors: [], sockets: [], joins: [], frames: [], notes: [] };
   const browser = await chromium.launch({
     executablePath: "/opt/pw-browsers/chromium",
     args: ["--no-sandbox", "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
@@ -155,7 +190,9 @@ async function run(mode) {
   if (mode === "late") {
     // A userscript manager that injects once <head> exists: the module tag has
     // already been parsed (and so will run), loadedFast is false.
-    html = html.replace("</head>", "<script>" + ryn.replace(/<\/script/gi, "<\\/script") + "</script>\n</head>");
+    // A function replacement: the client's own text contains `$&` and `$\``,
+    // which a string replacement would expand.
+    html = html.replace("</head>", () => "<script>" + ryn.replace(/<\/script/gi, "<\\/script") + "</script>\n</head>");
   }
 
   await context.route("**/*", async route => {
@@ -211,6 +248,8 @@ async function run(mode) {
     server.attach(sock, (...a) => out.frames.push(a.join(" ").slice(0, 160)), {
       requireSpawn: true,
       proto: 2025,
+      pinned,
+      crypto: pinned ? wire() : null,
       onViolation: (why, detail) => out.notes.push("server rejected a frame: " + why + (detail ? " (" + detail + ")" : "")),
     });
   });
@@ -278,7 +317,8 @@ async function run(mode) {
     headAtStart: window.__headAtStart,
     rynBundleRan: !!(window.RYN_BUNDLE_RAN),
     hasRynLobby: !!document.getElementById("ryn-lobby"),
-    lobbyRows: document.querySelectorAll("#ryn-lobby [data-server], #ryn-lobby .ryn-server-row, #ryn-lobby .row").length,
+    lobbyRows: document.querySelectorAll("#ryn-lobby .rs-row").length,
+    lockedRows: document.querySelectorAll("#ryn-lobby .rs-row.rs-locked").length,
     lobbyText: (document.getElementById("ryn-lobby") || { innerText: "" }).innerText.replace(/\s+/g, " ").slice(0, 400),
     regionDropdown: (document.querySelector("#regionSelect .dropdownList") || { children: [] }).children.length,
     serverDropdown: (document.querySelector("#serverSelect .dropdownList") || { children: [] }).children.length,
@@ -289,6 +329,36 @@ async function run(mode) {
     frvrHasAuth: !!(window.FRVR && window.FRVR.auth),
     userscriptWarning: !!document.getElementById("userscript-warning"),
   }));
+
+  // Sign in: the game's own button opens its account card, and the card
+  // reaches FRVR.auth. Done before joining, and closed again afterwards.
+  out.signIn = await (async () => {
+    try {
+      const btn = await page.$("#signInButton");
+      if (!btn) return { error: "no #signInButton" };
+      if (!(await btn.isVisible())) return { error: "#signInButton is not visible" };
+      await page.click("#signInButton", { timeout: 3000 });
+      await page.waitForTimeout(250);
+      const card = await page.evaluate(() => {
+        const c = document.getElementById("accountCard");
+        if (!c) return null;
+        let hidden = false;
+        for (let n = c; n; n = n.parentElement) if (getComputedStyle(n).display === "none") hidden = true;
+        const r = c.getBoundingClientRect();
+        return { hidden, w: Math.round(r.width), h: Math.round(r.height) };
+      });
+      if (!card || card.hidden || !card.w) return { error: "the account card did not open: " + JSON.stringify(card) };
+      await page.fill("#accountEmail", "player@example.com");
+      await page.click("#accountSubmit", { timeout: 3000 });
+      await page.waitForTimeout(400);
+      const calls = await page.evaluate(() => window.__frvrCalls || []);
+      await page.click("#accountClose", { timeout: 3000 }).catch(() => {});
+      await page.waitForTimeout(150);
+      return { ok: calls.some(c => /^requestEmailLoginCode:player@example\.com$/.test(c)), calls };
+    } catch (e) {
+      return { error: e.message.split("\n")[0] };
+    }
+  })();
 
   // join: type a name, press the real button with a real click
   try {
@@ -309,6 +379,7 @@ async function run(mode) {
     enterGame: (() => { const b = document.getElementById("enterGame"); if (!b) return null; const r = b.getBoundingClientRect();
       return { cls: b.className, rect: [r.x, r.y, r.width, r.height].map(Math.round), top: (document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) || {}).id }; })(),
     tsRenders: window.__tsRenders,
+    tsRefused: window.__tsRefused || 0,
     texts: ["loadingText", "nameHint", "signInHint", "verifyText", "menuNotice", "serverNote"].map(id => {
       const e = document.getElementById(id); return e && e.textContent.trim() ? id + "=" + e.textContent.trim().slice(0, 80) : null; }).filter(Boolean),
     gameUI: (() => { const g = document.getElementById("gameUI"); return g ? getComputedStyle(g).display : null; })(),
@@ -321,13 +392,13 @@ async function run(mode) {
   if (mode !== "vanilla") {
     const code = await page.evaluate(() => window.__rynBundleCode || null);
     out.bundleRan = !!code;
-    if (code) fs.writeFileSync(path.join(__dirname, "boot-2025-" + mode + ".bundle.js"), code);
+    if (code) fs.writeFileSync(path.join(__dirname, "boot-2025-" + spec.replace(/\+/g, "-") + ".bundle.js"), code);
   }
 
   // Is the player on screen? It spawns at the centre of the view; compare the
   // middle of the frame against a ring around it.
   const shot = await page.screenshot({ type: "png" });
-  fs.writeFileSync(path.join(__dirname, "boot-2025-" + mode + ".png"), shot);
+  fs.writeFileSync(path.join(__dirname, "boot-2025-" + spec.replace(/\+/g, "-") + ".png"), shot);
   out.centre = await page.evaluate(async b64 => {
     const img = new Image();
     await new Promise(r => { img.onload = r; img.src = "data:image/png;base64," + b64; });
@@ -362,23 +433,28 @@ async function run(mode) {
 
 function report(r) {
   const ok = (c, s) => console.log("  " + (c ? "ok  " : "FAIL") + "  " + s);
-  console.log("\n== " + r.mode + (r.mode === "vanilla" ? " (control, no RYN)" : " (RYN " + path.basename(RYN_PATH) + ")"));
+  console.log("\n== " + r.mode + (r.base === "vanilla" ? " (control, no RYN)" : " (RYN " + path.basename(RYN_PATH) + ")") +
+    (r.pinned ? " — pinned session: mixed key, salted tables, every frame masked" : ""));
   if (r.state.headAtStart !== undefined) console.log("    document.head at RYN start: " + (r.state.headAtStart ? "null (loadedFast)" : "present"));
   ok(r.errors.length === 0, "no uncaught page errors" + (r.errors.length ? ":\n        " + r.errors.slice(0, 6).join("\n        ") : ""));
   const ce = r.consoleErrors.filter(t => !/Failed to load resource|ERR_FAILED|net::/.test(t));
   if (ce.length) console.log("    console errors:\n        " + ce.slice(0, 8).join("\n        "));
   ok(r.gameServerList, "the game's own server list loaded (" + r.state.regionDropdown + " regions, " + r.state.serverDropdown + " servers)");
-  if (r.mode !== "vanilla") {
+  if (r.base !== "vanilla") {
     ok(r.state.hasRynLobby, "RYN's lobby is built");
     ok(!/WAITING FOR THE SERVER LIST/i.test(r.state.lobbyText), "RYN's server panel is not stuck waiting");
     console.log("    lobby: " + r.state.lobbyText.slice(0, 300));
     ok(r.state.ads === 0, "no interstitial ad was requested (" + r.state.ads + ")");
     ok(r.state.frvrHasAuth, "FRVR.auth is intact, so sign-in can work");
-    ok(!r.state.userscriptWarning, "the game's userscript warning banner is not shown");
+    ok(r.state.lobbyRows === SERVERS.length && r.state.lockedRows === 1,
+       "every server is listed (" + r.state.lobbyRows + "/" + SERVERS.length + "), the members-only one marked locked for a guest (" + r.state.lockedRows + ")");
   }
   if (process.env.VERBOSE && r.aborted) console.log("    aborted: " + [...new Set(r.aborted)].join("\n             "));
   ok(!r.oldApi, "nothing asks the retired api.moomoo.io host" + (r.oldApi ? " (" + [...new Set(r.oldApi)].join(", ") + ")" : ""));
   if (process.env.VERBOSE) console.log("    after click: " + JSON.stringify({ enterGame: r.after.enterGame, ts: r.after.tsRenders, texts: r.after.texts }));
+  ok(r.signIn && r.signIn.ok, "Sign in opens the account card and reaches FRVR.auth" +
+     (r.signIn && !r.signIn.ok ? " — " + (r.signIn.error || JSON.stringify(r.signIn.calls)) : ""));
+  ok(!r.after.tsRefused, "no Turnstile render was refused as already rendered (" + r.after.tsRefused + ")");
   ok(r.clicked, "the Enter Game button could be clicked");
   ok(r.joins.length > 0, "the join went through api /join (" + r.joins.length + ")" +
      (r.joins[0] ? " — " + JSON.stringify(r.joins[0]).slice(0, 120) : ""));
@@ -396,7 +472,7 @@ function report(r) {
 }
 
 (async () => {
-  const modes = which === "all" ? ["vanilla", "fast", "late"] : which.split(",");
+  const modes = which === "all" ? ["vanilla", "fast", "late", "vanilla+pinned", "fast+pinned", "late+pinned"] : which.split(",");
   for (const m of modes) {
     let r;
     try { r = await run(m); } catch (e) { console.log("\n== " + m + "\n  FAIL  harness crashed: " + e.stack); process.exitCode = 1; continue; }

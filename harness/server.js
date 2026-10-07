@@ -70,23 +70,39 @@ function attach(ws, log, opts) {
      * A client still parsing the 2024 shapes reads every field off by one or
      * more. Pass proto: 2025 to get the new ones. */
     proto = 2024,
+    /* A "pinned" 2025 session: io-init's fifth field is 1, the key goes
+     * through mixKey with the seed, the opcode tables are salted, and every
+     * frame both ways is XOR-masked. `crypto` is the game's own primitives
+     * (harness/proto-2025.js), so the masking here is the bundle's, not a
+     * re-implementation that could agree with a wrong client. `mixKey` must
+     * be the one the page's moomoo-protocol module exports. */
+    pinned = false,
+    crypto: wire = null,
+    mixKey = (key) => key,
+    salt = 7,
   } = opts || {};
   {
     const seed = (Math.random() * 0xffffffff) >>> 0;
     const keyHex = crypto.randomBytes(32).toString("hex");
-    const tables = tablesFor(seed);
+    if (pinned && !wire) throw new Error("pinned sessions need the game's crypto primitives");
+    const keyBytes = pinned ? mixKey(wire.vf(keyHex), seed) : Buffer.from(keyHex, "hex");
+    const tables = pinned ? wire.Ll(seed, salt) : tablesFor(seed);
+    const mask = pinned ? wire.kf(keyBytes) : null;
+    let sent = 0;
     const mySid = 1;
 
     const send = (letter, args) => {
       const op = tables.s2c.enc[letter];
-      ws.send(Buffer.from(encode([op, args])));
+      const bytes = new Uint8Array(encode([op, args]));
+      if (mask) wire.Nl(bytes, wire.wf(mask.s2c, ++sent));
+      ws.send(Buffer.from(bytes));
     };
 
     /* The real server drops the connection on a frame it cannot verify, which
      * is what a client shows as "disconnected". Validate the same three things
      * it does — signature, opcode, strictly increasing sequence — and report
      * every violation instead of silently ignoring it. */
-    const key = Buffer.from(keyHex, "hex");
+    const key = Buffer.from(keyBytes);
     let expectedSeq = 0;
     const violations = [];
     const reject = (why, detail) => {
@@ -99,7 +115,10 @@ function attach(ws, log, opts) {
       const bytes = new Uint8Array(raw);
       if (bytes.length <= SIG_BYTES) return reject("frame shorter than its signature", bytes.length + " bytes");
 
-      const payload = bytes.subarray(SIG_BYTES);
+      const payload = bytes.slice(SIG_BYTES);
+      // The client masks the payload with bf(mask.c2s, signature) after
+      // signing the plain payload; undo that before checking the signature.
+      if (mask) wire.Nl(payload, wire.bf(mask.c2s, bytes.subarray(0, SIG_BYTES)));
       const want = crypto.createHmac("sha256", key).update(payload).digest().subarray(0, SIG_BYTES);
       if (!want.equals(Buffer.from(bytes.subarray(0, SIG_BYTES))))
         return reject("bad frame signature");
@@ -142,7 +161,7 @@ function attach(ws, log, opts) {
       mySid,
     });
 
-    ws.send(Buffer.from(encode(["io-init", [7, seed, keyHex, ENCRYPTED_MODE]])));
+    ws.send(Buffer.from(encode(["io-init", pinned ? [7, seed, keyHex, ENCRYPTED_MODE, 1] : [7, seed, keyHex, ENCRYPTED_MODE]])));
 
     /* Put the world on dry land.
      *
