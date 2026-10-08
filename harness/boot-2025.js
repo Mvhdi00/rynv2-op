@@ -217,6 +217,7 @@ const PAGE = `<!doctype html>
 <meta charset="utf-8">
 <title>MooMoo.io</title>
 <script type="importmap">{"imports":{"moomoo-protocol":"/assets/${PROTO}"}}</script>
+${process.env.TS_IN_HTML ? '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"></script>' : ""}
 <script src="https://cdn.frvr.com/sdk/frvr-sdk.min.js"></script>
 <script>
   window.frvrSdkInitPromise = (window.FRVR ? window.FRVR.init({}) : Promise.reject(new Error("no sdk")))
@@ -321,7 +322,13 @@ function restyle(code) {
  *     what they can see, so the harness answers a challenge only when its
  *     frame is on screen and on top (see answerChallenge). "interaction-only"
  *     widgets have no size until then, as Cloudflare's do. */
-const TS_SCRIPT_MS = 500;
+// TS_SCRIPT_MS=0: Cloudflare's script arrives at once, as it can on the live
+// site — before RYN's lobby is built, so the game's check is drawn first.
+const TS_SCRIPT_MS = +(process.env.TS_SCRIPT_MS || 500);
+// A real challenge does not survive its iframe being moved: the reloaded
+// frame never produces a token and never reports an error. TS_RELOAD_KILLS=0
+// keeps the old forgiving fake (a moved frame starts its challenge over).
+const TS_RELOAD_KILLS = process.env.TS_RELOAD_KILLS !== "0";
 const TS_SOLVE_MS = 900;
 const TURNSTILE = (interactive, errorBots) => `(function () {
   window.__tsLoads = (window.__tsLoads || 0) + 1;
@@ -333,6 +340,7 @@ const TURNSTILE = (interactive, errorBots) => `(function () {
   const seen = new WeakSet(), widgets = new Map();
   let n = 0;
   const run = w => {
+    if (w.dead) return;
     clearTimeout(w.timer);
     w.token = null;
     if (INTERACTIVE && !w.clicked) {
@@ -375,9 +383,18 @@ const TURNSTILE = (interactive, errorBots) => `(function () {
       frame.className = "cf-turnstile-frame";
       frame.style.cssText = "border:0;display:block;" + (o && o.appearance === "interaction-only" ? "width:0;height:0;" : "width:300px;height:65px;");
       const w = { id: id, el: el, o: o || {}, frame: frame, loads: 0, clicked: false, needsClick: false, token: null, timer: 0 };
+      // TS_KILL_FIRST: the game's first check never answers — no token, no
+      // error — as a challenge thrown away by its frame reloading does
+      if (${!!process.env.TS_KILL_FIRST} && el && el.id === "turnstileWidget" && !window.__tsKilled) { window.__tsKilled = 1; w.dead = true; }
       widgets.set(id, w);
       frame.addEventListener("load", function () {
         w.loads++;
+        if (w.loads > 1 && ${TS_RELOAD_KILLS}) {
+          window.__tsReloads = (window.__tsReloads || 0) + 1;
+          clearTimeout(w.timer);
+          w.dead = true;
+          return;
+        }
         if (w.loads > 1) {
           // moved: a new document, a new challenge
           window.__tsReloads = (window.__tsReloads || 0) + 1;
@@ -586,7 +603,11 @@ async function run(spec) {
       if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers: {
         "access-control-allow-origin": "*", "access-control-allow-headers": "content-type",
         "access-control-allow-methods": "GET,POST" } });
-      if (url.pathname === "/servers") return send(JSON.stringify(SERVERS), "application/json");
+      // SERVERS_DELAY_MS: the live list takes a moment; RYN's lobby waits on it
+      if (url.pathname === "/servers") {
+        if (process.env.SERVERS_DELAY_MS) await new Promise(r => setTimeout(r, +process.env.SERVERS_DELAY_MS));
+        return send(JSON.stringify(SERVERS), "application/json");
+      }
       if (url.pathname === "/join") {
         let body = {};
         try { body = JSON.parse(req.postData() || "{}"); } catch (e) {}

@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.5
+// @version         2.9.6
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -786,6 +786,18 @@ window.grbtp = 35;
     if (/^2001/.test(c)) return "this computer's clock is wrong — Cloudflare refuses the check (" + c + ")";
     if (/^[36]\d{5}/.test(c)) return "Cloudflare did not pass this browser (" + c + ") — try again in a moment";
     return "Cloudflare error " + (c || "?");
+  };
+  /* The game's own check (the one Play waits on), as RYN sees it through the
+   * render wrapper: when it last produced a token, whether it is asking for a
+   * click, and its last error code. Login watches this to repair the check. */
+  const RYN_GAME_CF = { interactive: false, tokenAt: 0, error: null, errorAt: 0 };
+  // A line in the game's "one quick check" box (#verifyText), which otherwise
+  // says only "Verification failed" with no reason.
+  const rynVerifyNote = text => {
+    try {
+      const t = document.getElementById("verifyText");
+      if (t && text) t.textContent = text;
+    } catch (e) {}
   };
   // Codes no retry can change: the sitekey, the site, the browser, the clock.
   const rynCfFatal = code => /^(1101|1102|1105|2001)/.test(String(code || ""));
@@ -34658,6 +34670,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 /* ---------- the game's own cards, lifted over the lobby (lift() in
    buildLobby): sign-in, profile, clan, confirm. Their colours only — the
    game's own layout inside them is left as it is. */
+.ryn-lift #verifyText, .ryn-lift-fixed #verifyText { color: #F3F2F7 !important; }
 .ryn-lift, .ryn-lift-fixed {
     background: #0C0C11 !important;
     color: #F3F2F7 !important;
@@ -42840,6 +42853,22 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       code = code.replace(/\bimport\.meta\.url\b/g, JSON.stringify(src)).replace(/\bimport\.meta\b/g, "({url:" + JSON.stringify(src) + "})");
       Injector_lastCode = code;
       this.waitForBody(() => {
+        /* The game's check box goes where the lobby puts it (<body>) now,
+         * before RYN's copy can draw Cloudflare into it: the lobby's lift()
+         * used to move it later, and a moved iframe reloads — a challenge
+         * thrown away, no token, no error. */
+        try {
+          for (const id of [ "verifyBackdrop", "verifyDialog" ]) {
+            const node = document.getElementById(id);
+            if (node === null || !document.body || node.parentNode === document.body) continue;
+            let fixed = false;
+            try {
+              fixed = getComputedStyle(node).position === "fixed";
+            } catch (e) {}
+            document.body.appendChild(node);
+            node.classList.add(id === "verifyBackdrop" ? "ryn-lift-backdrop" : fixed ? "ryn-lift-fixed" : "ryn-lift");
+          }
+        } catch (e) {}
         Function(code)();
       });
     }
@@ -42982,6 +43011,37 @@ html.ryn-in-lobby .ryn-v2-wrapper {
           /* "Already rendered" is Cloudflare's own record of the node, and an
            * emptied node is still on it, so RYN's copy always draws the game's
            * check into a node RYN made for it. */
+          if (own && options && typeof options === "object") {
+            const o = Object.assign({}, options);
+            const tap = (key, fn) => {
+              const orig = o[key];
+              o[key] = function() {
+                let out;
+                if (typeof orig === "function") out = orig.apply(this, arguments);
+                try {
+                  fn.apply(this, arguments);
+                } catch (e) {}
+                return out;
+              };
+            };
+            tap("callback", () => {
+              RYN_GAME_CF.tokenAt = Date.now();
+              RYN_GAME_CF.error = null;
+              RYN_GAME_CF.interactive = false;
+            });
+            tap("error-callback", code => {
+              RYN_GAME_CF.error = code;
+              RYN_GAME_CF.errorAt = Date.now();
+              rynVerifyNote("Cloudflare check failed: " + rynCfErrorText(code) + ". RYN is starting a fresh one…");
+            });
+            tap("before-interactive-callback", () => {
+              RYN_GAME_CF.interactive = true;
+            });
+            tap("after-interactive-callback", () => {
+              RYN_GAME_CF.interactive = false;
+            });
+            options = o;
+          }
           const el = own ? (typeof container === "string" ? document.querySelector(container) : container) : null;
           if (el && el.parentNode && !rynWidgetNodes.has(el)) {
             const fresh = el.cloneNode(false);
@@ -43023,10 +43083,10 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       }, 50);
     }
     if (!loadedFast) {
+      // (A one-shot stand-in for customElements.define used to sit here, for
+      // the 2024 game. The 2025 game defines none, so all it did was swallow
+      // the first define of whatever else loaded — Cloudflare's or FRVR's.)
       const _define = win.customElements.define;
-      win.customElements.define = function() {
-        win.customElements.define = _define;
-      };
       // The stand-in for the game's frame scheduler. Only this stand-in may be
       // taken out again: once RYN's copy has started it defines its own
       // window.requestAnimFrame, and deleting THAT ended RYN's frame loop on
@@ -48560,8 +48620,105 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       }, 500);
     }
 
+    /* The 2025 game's check, repaired when it is stuck.
+     *
+     * The game draws an invisible ("interaction-only") Cloudflare widget into
+     * #turnstileWidget, and when you press Play without a token it opens its
+     * "one quick check" box and waits. A widget that is never going to answer
+     * — its frame reloaded by a move, refused as already rendered, or just
+     * broken — left that box empty, then "Try again" after 15 s, and a guest
+     * (the only player who needs the token) never got in. Bots, guests too,
+     * had the same problem.
+     *
+     * So: once the box has been open 5 s with no token and no click being
+     * asked for (or at once on an error), RYN draws a fresh, VISIBLE widget
+     * into it — the game's sitekey, the game's own callbacks — the way Glotus
+     * draws its checks. Its token lands in the game exactly as the game's own
+     * would, and Play carries on by itself. */
+    _watch2025() {
+      if (this._watch25) return;
+      let since = 0;
+      let lastFix = 0;
+      let fixes = 0;
+      this._watch25 = setInterval(() => {
+        try {
+          const dlg = document.getElementById("verifyDialog");
+          if (!dlg || !dlg.classList.contains("showing")) {
+            since = 0;
+            return;
+          }
+          const now = Date.now();
+          if (!since) since = now;
+          if (RYN_GAME_CF.tokenAt > since) {
+            fixes = 0;
+            return;
+          }
+          if (RYN_GAME_CF.interactive) return;
+          const errored = RYN_GAME_CF.errorAt > since;
+          if (!errored && now - since < 5e3) return;
+          if (now - lastFix < 9e3 || fixes >= 6) return;
+          lastFix = now;
+          if (!this._api()) {
+            rynVerifyNote("Cloudflare's check never loaded: challenges.cloudflare.com is being blocked (an ad blocker or tracking protection?). Allow it for this site and reload, or sign in.");
+            return;
+          }
+          fixes++;
+          this._renderVisible();
+        } catch (e) {}
+      }, 500);
+    }
+    _renderVisible() {
+      const ts = this._api();
+      const el = document.getElementById("turnstileWidget");
+      if (!ts || !el) return false;
+      try {
+        if (this._widgetId != null && typeof ts.remove === "function") ts.remove(this._widgetId);
+      } catch (e) {}
+      this._widgetId = null;
+      const box = this._freshContainer(el);
+      rynVerifyNote("Starting a fresh Cloudflare check…");
+      try {
+        const id = ts.render(box, {
+          sitekey: rynSitekey(),
+          theme: "dark",
+          size: "normal",
+          appearance: "always",
+          callback: t => {
+            try {
+              window.onGotTurnstileToken && window.onGotTurnstileToken(t);
+            } catch (e) {}
+          },
+          "error-callback": code => {
+            try {
+              window.onTurnstileError && window.onTurnstileError(code);
+            } catch (e) {}
+            rynVerifyNote("Cloudflare check failed: " + rynCfErrorText(code) + ".");
+            return true;
+          },
+          "expired-callback": () => {
+            try {
+              window.onTurnstileExpired && window.onTurnstileExpired();
+            } catch (e) {}
+          },
+          "before-interactive-callback": () => {
+            RYN_GAME_CF.interactive = true;
+            rynVerifyNote("Tick the Cloudflare box to play.");
+          },
+          "after-interactive-callback": () => {
+            RYN_GAME_CF.interactive = false;
+          }
+        });
+        if (id != null) this._widgetId = id;
+        return id != null;
+      } catch (e) {
+        rynVerifyNote("Cloudflare's check could not start: " + (e && e.message || e));
+        return false;
+      }
+    }
+
     init() {
       this._arm("startup");
+      this._watch2025();
     }
   }();
   const Login_default = Login;
