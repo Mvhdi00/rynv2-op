@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.3
+// @version         2.9.4
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -12345,9 +12345,18 @@ window.grbtp = 35;
       }
       return null;
     }
-    createPlayer({socketID: socketID, id: id, nickname: nickname, health: health, skinID: skinID}) {
+    createPlayer({socketID: socketID, id: id, nickname: nickname, health: health, skinID: skinID, isYou: isYou}) {
       const {myPlayer: myPlayer} = this.client;
-      if (socketID === this.client.clientID && myPlayer.id === -1) {
+      /* The add-player frame says whether it is you, and the game goes by that
+       * alone. A player resumed after a refresh (the 2025 server keeps you on
+       * the server you left) still carries the socket id of the connection it
+       * was made on, not this one's, and may come before setupGame: matched by
+       * socket id alone it was never yours, RYN never put you in the game, and
+       * you stood there unable to move. */
+      if (isYou && myPlayer.id !== id) {
+        if (myPlayer.id !== -1 && this.playerData.get(myPlayer.id) === myPlayer) this.playerData.delete(myPlayer.id);
+        myPlayer.playerInit(id);
+      } else if (socketID === this.client.clientID && myPlayer.id === -1) {
         myPlayer.playerInit(id);
       }
       const player = this.playerData.get(id) || new Player_default(this.client);
@@ -13494,7 +13503,9 @@ window.grbtp = 35;
         break;
 
        case "C":
-        myPlayer.playerInit(temp[1]);
+        // Already put in the game by an add-player frame that said it was you
+        // (a resumed player): that player is you, whatever sid this says.
+        if (!(myPlayer.inGame && myPlayer.id !== -1)) myPlayer.playerInit(temp[1]);
         break;
 
        // The server letting this connection go, and why: "kicked", "server is
@@ -13537,7 +13548,8 @@ window.grbtp = 35;
             id: data2[1],
             nickname: data2[2],
             health: data2[6],
-            skinID: data2[9]
+            skinID: data2[9],
+            isYou: !!temp[2]
           });
           // Kept verbatim so the entity's world can be replayed into the game
           // bundle on a possession switch. It is the server's own payload, so

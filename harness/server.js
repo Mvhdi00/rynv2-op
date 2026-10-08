@@ -122,6 +122,11 @@ function attach(ws, log, opts) {
     foeAway = false,
     // a Crab King (2025 boss, index 11) in view, above me
     boss = false,
+    // a player resumed after a refresh: my add-player frame carries the old
+    // connection's socket id and comes before setupGame
+    resume = false,
+    // every frame this client sends: (letter, args)
+    onC2S = null,
   } = opts || {};
   {
     const seed = (Math.random() * 0xffffffff) >>> 0;
@@ -183,6 +188,7 @@ function attach(ws, log, opts) {
       expectedSeq = seq;
 
       if (log) log("c2s", letter, "seq=" + seq, JSON.stringify(frame[1]).slice(0, 120));
+      if (onC2S) try { onC2S(letter, frame[1]); } catch (e) {}
       if (letter === "M") {
         const name = Array.isArray(frame[1]) && frame[1][0] && frame[1][0].name;
         if (kickNames[name]) {
@@ -373,9 +379,14 @@ function attach(ws, log, opts) {
 
     function sendWorld() {
       send("A", [{ teams: [{ sid: "clan", owner: mySid }] }]);
-      send("C", [mySid]);
       // [id, sid, name, x, y, dir, health, maxHealth, scale, skinColor]
-      send("D", [["p1", mySid, "tester", mid, midY, 0, 100, 100, 35, 0], true]);
+      if (resume) {
+        send("D", [["old-conn", mySid, "tester", mid, midY, 0, 100, 100, 35, 0], true]);
+        send("C", [mySid]);
+      } else {
+        send("C", [mySid]);
+        send("D", [["p1", mySid, "tester", mid, midY, 0, 100, 100, 35, 0], true]);
+      }
       send("D", [["p2", foeSid, "rival", mid + (sim ? 3000 : 150), midY + 40, 0, 100, 100, 35, 1], false]);
       sendPlayers(0, true);
       // loadGameObject: 8 fields per object [sid,x,y,dir,scale,type,itemId,ownerSid]

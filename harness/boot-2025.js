@@ -619,6 +619,8 @@ async function run(spec) {
       mySkin: hats && out.conns[0] === conn ? 7 : 0,
       foeAway: hats || boss,
       boss: boss && out.conns[0] === conn,
+      resume: flags.includes("resume") && out.conns[0] === conn,
+      onC2S: (letter, args) => { if (out.conns[0] === conn) (out.ownC2S = out.ownC2S || []).push([Date.now(), letter, args]); },
       onViolation: (why, detail) => {
         conn.violations.push(why);
         out.notes.push("server rejected a frame: " + why + (detail ? " (" + detail + ")" : ""));
@@ -1207,6 +1209,20 @@ async function run(spec) {
     };
   }
 
+  /* +resume: in the game, W held for half a second has to move you — RYN
+   * owns the keys, and sends a move only for a player it knows is yours. */
+  if (flags.includes("resume")) {
+    const t0 = Date.now();
+    try {
+      await page.mouse.click(640, 360);
+      await page.keyboard.down("w");
+      await page.waitForTimeout(500);
+      await page.keyboard.up("w");
+      await page.waitForTimeout(200);
+    } catch (e) {}
+    out.resumeMoves = (out.ownC2S || []).filter(f => f[0] >= t0 && f[1] === "9" && Array.isArray(f[2]) && f[2][0] != null).length;
+  }
+
   out.after = await page.evaluate(() => ({
     // what RYN drew this frame on its overlay over the WebGL canvas
     // the overlay's box on screen against the game canvas's: they have to be
@@ -1464,6 +1480,8 @@ function report(r) {
   ok(r.notes.filter(n => /server rejected/.test(n)).length === 0, "the server accepted every frame" +
      (r.notes.length ? ":\n        " + r.notes.slice(0, 5).join("\n        ") : ""));
   ok(r.after.gameUI && r.after.gameUI !== "none", "the in-game UI is showing (" + r.after.gameUI + ")");
+  if (r.resumeMoves !== undefined)
+    ok(r.resumeMoves > 0, "a player resumed after a refresh (its add-player frame from the old connection, before setupGame) is yours: W moves it (" + r.resumeMoves + " move frames)");
   if (r.bot && r.joinRefuse === "members") {
     // refused for good: it says why, and it does not try the server with a raw token
     ok(r.bot.error === "no bot socket opened" && /signed-in players/.test(r.bot.toast || ""),
