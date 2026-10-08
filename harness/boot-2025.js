@@ -1178,7 +1178,7 @@ async function run(spec) {
   // A bot, through RYN's own menu: its own Turnstile token, its own /join
   // ticket, and RYN's own signing and masking — the path the main client
   // never takes, because the game's bundle does that part for it.
-  if (mode !== "vanilla" && !process.env.NO_BOTS) {
+  if (isRyn && !process.env.NO_BOTS) {
     out.bot = await (async () => {
       const frame = page.frames().find(f => /^blob:/.test(f.url()));
       if (!frame) return { error: "RYN's menu frame not found" };

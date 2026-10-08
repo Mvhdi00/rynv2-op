@@ -177,6 +177,19 @@ starts):
 A normal refresh followed by Play was also tested (guest and signed in): in on
 the first press.
 
+## 8. Other things the update moved
+
+- **The server list's API version.** RYN asked for `/servers?v=1.27`, which
+  was fixed in its code. It now reads the version out of the game bundle it
+  loads, so a newer build's list is asked for at the newer version. Glotus
+  already asks for 1.28, which suggests the live game has moved past the
+  bundle sent here.
+- Checked again against the bundle: 69 of RYN's 71 bundle hooks match and
+  resolve, and the other 2 are known to be gone in 2025 (the game still
+  runs without them). RYN's rewrite of the bundle compiles. The 2025 wire
+  format, the bot session crypto (opcode tables, masks, keystream) and the
+  frame signatures all match the game's own functions.
+
 ---
 
 ## Verified

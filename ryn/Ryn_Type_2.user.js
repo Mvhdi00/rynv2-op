@@ -631,8 +631,17 @@ html { background-color: #07070A !important; }
   } else {
     onParsed();
   }
-  // The seconds counter and the stall offer, while the screen is up.
-  tickTimer = setInterval(paint, 500);
+  // The seconds counter and the stall offer, while the screen is up. Also
+  // the fallback for "the game is running": RYN's first game frame reports it
+  // (Renderer._frame), and on a build where that hook found nothing, the
+  // game's own "I have started" flag stands in, so the screen never waits on
+  // a hook that is not there.
+  tickTimer = setInterval(() => {
+    try {
+      if (!done.game && window.loadedScript === true) mark("game");
+    } catch (e) {}
+    paint();
+  }, 500);
   // However far it got, the lobby behind this is usable, so it never sits
   // there forever.
   capTimer = setTimeout(dismiss, HARD_CAP);
@@ -789,6 +798,8 @@ window.grbtp = 35;
    * render call (wrapTurnstile) or, before that, from its bundle's text
    * (RynWire.learn); the constant is the 2025 key, for until either is seen. */
   let rynGameSitekey = null;
+  // The server list's API version, from the game's bundle (RynWire.learn).
+  let rynServersVersion = null;
   const rynSitekey = () => rynGameSitekey || RYN_SITEKEY;
   /* ── Cloudflare, for bots ──────────────────────────────────────────────────
    *
@@ -3652,6 +3663,10 @@ window.grbtp = 35;
       try {
         const key = /sitekey:[\w$]+/.test(text) && /"(0x4[\w-]{18,40})"/.exec(text);
         if (key && rynGameSitekey === null) rynGameSitekey = key[1];
+      } catch (e) {}
+      try {
+        const v = /\/servers\?v=([\d.]+)/.exec(text);
+        if (v) rynServersVersion = v[1];
       } catch (e) {}
       try {
         const c2s = /([\w$]+)=\[("M","D","9"(?:,"[^"\\]{1,3}")*)\],([\w$]+)=([-+*\d\s]+)[,;]/.exec(text);
@@ -37521,7 +37536,11 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     if (/^dev[a-z0-9-]*\.moomoo\.io$/.test(host)) return "https://api-dev.moomoo.io";
     return "https://api.moomoo.io";
   })();
-  const RYN_SERVER_API = RYN_API_BASE + "/servers?v=1.27";
+  /* The server list, at the version the game itself asks for. It was a fixed
+   * 1.27; the game's bundle names its own (`/servers?v=…`), and RYN reads it
+   * out of the bundle it loads (RynWire.learn), so a newer build's list is
+   * asked for at the newer version. 1.27 until the bundle has been seen. */
+  const rynServerApi = () => RYN_API_BASE + "/servers?v=" + (rynServersVersion || "1.27");
   // The bundle's own server model (see the exposeServers hook): regions,
   // servers, which one Play joins, and choose(region, name) to change it.
   const rynServers = () => {
@@ -37591,7 +37610,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
   const _rynPollServerCount = async () => {
     const here = _rynCurrentServer();
     try {
-      const res = await fetch(RYN_SERVER_API, {
+      const res = await fetch(rynServerApi(), {
         cache: "no-store"
       });
       const list = await res.json();
@@ -40097,7 +40116,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
        * It runs only while the lobby is showing. #menuCardHolder is
        * display:none for the whole of a round, so the moment one starts this
        * stops, and there is nothing of it left running during play. */
-      const SERVER_API = RYN_SERVER_API;
+      const SERVER_API = () => rynServerApi();
       const LIVE_INTERVAL = 5e3;
       let liveCounts = null;
       let liveTimer = 0;
@@ -40114,7 +40133,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
           return;
         }
         liveBusy = true;
-        fetch(SERVER_API, {
+        fetch(SERVER_API(), {
           cache: "no-store"
         }).then(response => response.json()).then(listing => {
           if (!Array.isArray(listing)) {
