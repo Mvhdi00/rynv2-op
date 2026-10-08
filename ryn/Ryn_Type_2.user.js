@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.4
+// @version         2.9.5
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -9343,6 +9343,10 @@ window.grbtp = 35;
       if (pending.length === 0) {
         return;
       }
+      // Taken off the list before anything is drawn: a number the game's
+      // text manager throws on used to stay queued, and be retried — and
+      // throw — on every frame after.
+      this._pending = [];
       for (let i = 0; i < pending.length; i++) {
         const text = pending[i];
         if (text === null) {
@@ -9369,9 +9373,10 @@ window.grbtp = 35;
         // these are sums of quarters and eighths, and adding them as floats
         // prints 84.99999999999999 without it.
         const total = Math.round(sum * 100) / 100;
-        text.manager.showText(text.x, text.y, TOTAL_DAMAGE_SCALE, TOTAL_DAMAGE_SPEED, TOTAL_DAMAGE_LIFE, Math.abs(total), isDamage ? TOTAL_DAMAGE_COLOR : TOTAL_HEAL_COLOR);
+        try {
+          text.manager.showText(text.x, text.y, TOTAL_DAMAGE_SCALE, TOTAL_DAMAGE_SPEED, TOTAL_DAMAGE_LIFE, Math.abs(total), isDamage ? TOTAL_DAMAGE_COLOR : TOTAL_HEAL_COLOR);
+        } catch (e) {}
       }
-      pending.length = 0;
     }
 
     // The render loop's safety net, for numbers the tick never came back for.
@@ -42322,10 +42327,13 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     // the old anchor was the tail of the preceding IIFE, which the 2025 bundle
     // no longer has in that shape. Anchored on the timestamp prologue instead,
     // which is what actually opens a frame.
-    Hook.append("preRenderLoop", /function \w+\(\)\{\w+=Date\.now\(\),\w+=\w+-\w+,\w+=\w+,/, "RYN._Renderer._preRender();");
+    /* Both guarded like the frame between them: _preRender runs ahead of the
+     * game's frame and its requestAnimFrame, so one throw there ended the loop
+     * for good — the picture froze where it was, the player never drawn. */
+    Hook.append("preRenderLoop", /function \w+\(\)\{\w+=Date\.now\(\),\w+=\w+-\w+,\w+=\w+,/, "RYN._Renderer._guardCall(RYN._Renderer,\"_preRender\");");
     // ...and it ends `qx(),km(),requestAnimFrame(_0)` — two calls, where the
     // old pattern expected a bare identifier then one call.
-    Hook.append("postRenderLoop", /\w+\(\),\w+\(\),requestAnimFrame\(\w+\)/, ";RYN._Renderer._postRender();");
+    Hook.append("postRenderLoop", /\w+\(\),\w+\(\),requestAnimFrame\(\w+\)/, ";RYN._Renderer._guardCall(RYN._Renderer,\"_postRender\");");
     // The frame itself, guarded, so nothing RYN draws can stop the loop.
     Hook.replace("frameGuard", /(\w+)\(\),(\w+)\(\),requestAnimFrame\((\w+)\)/, "RYN._Renderer._frame($1),$2(),requestAnimFrame($3)");
     // The game's resize handler, so the zoom can call it directly instead of
