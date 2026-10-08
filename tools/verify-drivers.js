@@ -2,9 +2,9 @@
 /*
  * verify-drivers.js
  *
- * Diffs the driver tables baked into the client (src/RYN_Client_v4.js by
- * default, or whatever path is passed) against drivers/game-drivers.json —
- * the tables pulled straight out of the shipped game bundle.
+ * Diffs the driver tables baked into the client (ReUp_Mix.user.js by default,
+ * or whatever path is passed) against drivers/game-drivers.json — the tables
+ * pulled straight out of the shipped game bundle.
  *
  * Any drift here means the client and the server disagree about what an id
  * means, which shows up in game as wrong prices, wrong placement limits, or
@@ -20,7 +20,7 @@ const vm = require("vm");
 const ROOT = path.resolve(__dirname, "..");
 const CLIENT_PATH = process.argv[2]
   ? path.resolve(process.argv[2])
-  : path.join(ROOT, "src/RYN_Client_v4.js");
+  : path.join(ROOT, "ReUp_Mix.user.js");
 
 const client = fs.readFileSync(CLIENT_PATH, "utf8");
 const game = JSON.parse(
@@ -168,20 +168,77 @@ checkPositional("weapons", clientTable("Weapons"), game.weapons, [
     if (mine[k] !== v) fail(`config: ${k}=${JSON.stringify(mine[k])} but game has ${JSON.stringify(v)}`);
   }
   note(`config: compared ${compared} scalar keys`);
+  for (const k of game.configUndetermined || []) {
+    note(`config: "${k}" is decided by the page, not the bundle — nothing to compare`);
+  }
 }
 
-/* Protocol: the client must implement the same transport the game speaks. */
+/* Protocol.
+ *
+ * What the client has to agree with the game about, that is visible as text:
+ * both opcode alphabets and the sizes of their pre-2025 prefixes. Whether the
+ * client's transport *behaves* like the game's is not a text question, and is
+ * not asked here — tools/check-wire.js runs the two against each other.
+ */
 {
   const p = game.protocol;
-  const want = [
-    [`signature width ${p.signatureBytes}`, new RegExp("_?jt(?:Sig)?\\s*=\\s*" + p.signatureBytes + "\\b")],
-    [`encrypted mode ${p.encryptedMode}`, new RegExp("_?Ht\\s*=\\s*" + p.encryptedMode + "\\b")],
-    [`table salt ${p.tableSalt}`, new RegExp("_?Io\\s*=\\s*" + p.tableSalt + "\\b")],
-    ["c2s alphabet", new RegExp(p.c2sAlphabet.map((c) => `"${c}"`).join(",\\s*"))],
-    ["s2c alphabet", new RegExp(p.s2cAlphabet.map((c) => `"${c}"`).join(",\\s*"))],
+  const alphabet = (label, letters) => {
+    const re = new RegExp(letters.map((c) => `"${c}"`).join(",\\s*"));
+    if (!re.test(client)) fail(`protocol: client does not carry the ${label} alphabet`);
+  };
+  alphabet("c2s", p.c2sAlphabet);
+  alphabet("s2c", p.s2cAlphabet);
+
+  const counts = [
+    ["c2s legacy count", p.c2sLegacyCount, /c2sPlain\s*=\s*(\d+)/],
+    ["s2c legacy count", p.s2cLegacyCount, /s2cPlain\s*=\s*(\d+)/],
+    ["signature width", p.signatureBytes, /sigBytes\s*=\s*(\d+)/],
+    ["transport mode", p.encryptedMode, /\bmode\s*=\s*(\d+)/],
+    ["legacy table salt", p.legacyTableSalt, /defaultSalt\s*=\s*(\d+)/],
   ];
-  for (const [label, re] of want) {
-    if (!re.test(client)) fail(`protocol: client does not carry ${label}`);
+  for (const [label, want, re] of counts) {
+    const m = client.match(re);
+    if (!m) { note(`protocol: client does not spell out ${label}; it reads it off the bundle`); continue; }
+    if (Number(m[1]) !== want) {
+      fail(`protocol: client carries ${label} ${m[1]} but the game has ${want}`);
+    }
+  }
+}
+
+/* The embedded manifest: what the build says it was verified against has to be
+ * what drivers/game-drivers.json actually holds, or the runtime drift check is
+ * measuring against the wrong thing. */
+{
+  const at = client.indexOf("const ReUpDrivers = ");
+  if (at === -1) {
+    note("manifest: client carries no ReUpDrivers manifest (not a ReUp Mix build)");
+  } else {
+    const manifest = clientTable("ReUpDrivers");
+    const want = {
+      itemGroups: game.itemGroups.length,
+      projectiles: game.projectiles.length,
+      weapons: game.weapons.length,
+      items: game.items.length,
+      hats: game.hats.length,
+      accessories: game.accessories.length,
+    };
+    for (const [k, v] of Object.entries(want)) {
+      if (manifest.tableSizes[k] !== v) {
+        fail(`manifest: says ${k} has ${manifest.tableSizes[k]} entries, drivers have ${v}`);
+      }
+    }
+    for (const k of ["signatureBytes", "encryptedMode", "legacyTableSalt", "c2sLegacyCount", "s2cLegacyCount"]) {
+      if (manifest.protocol[k] !== game.protocol[k]) {
+        fail(`manifest: protocol.${k} is ${manifest.protocol[k]}, drivers have ${game.protocol[k]}`);
+      }
+    }
+    if (manifest.protocol.keyMixer.buildId !== game.protocol.keyMixer.buildId) {
+      fail(
+        `manifest: built against game build "${manifest.protocol.keyMixer.buildId}", ` +
+        `drivers are from "${game.protocol.keyMixer.buildId}"`
+      );
+    }
+    note(`manifest: build ${manifest.protocol.keyMixer.buildId}, extracted ${manifest.extractedAt}`);
   }
 }
 

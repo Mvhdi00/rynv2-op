@@ -1,13 +1,62 @@
 {
-  "extractedAt": "2026-07-31T23:50:43.068Z",
+  "extractedAt": "2026-10-08T14:42:38.054Z",
   "source": {
     "index": "src/game_index.js",
-    "vendor": "src/game_vendor.js"
+    "vendor": "src/game_vendor.js",
+    "protocol": "src/game_protocol.js"
+  },
+  "deobfuscation": {
+    "index": {
+      "decoders": [
+        {
+          "name": "Oe",
+          "array": "os",
+          "entries": 347
+        },
+        {
+          "name": "ne",
+          "array": "ss",
+          "entries": 178
+        },
+        {
+          "name": "ge",
+          "array": "as",
+          "entries": 152
+        }
+      ],
+      "resolved": 643,
+      "inlinedOperators": 177,
+      "inlinedConstants": 11
+    },
+    "protocol": {
+      "decoders": [
+        {
+          "name": "_0x1e29",
+          "array": "_0x5e81",
+          "entries": 75
+        }
+      ],
+      "resolved": 65,
+      "inlinedOperators": 3,
+      "inlinedConstants": 0
+    }
   },
   "protocol": {
-    "signatureBytes": 6,
+    "transport": "opcode-table + truncated HMAC + xorshift mask",
     "encryptedMode": 1,
-    "tableSalt": 1,
+    "signatureBytes": 6,
+    "hmac": "sha256-truncated",
+    "codec": "msgpack",
+    "ioInit": [
+      "socketId",
+      "seed",
+      "keyHex",
+      "mode",
+      "pinned"
+    ],
+    "pinnedWhen": 1,
+    "framesCarrySequence": true,
+    "buildIdQueryParam": "b",
     "c2sAlphabet": [
       "M",
       "D",
@@ -25,8 +74,13 @@
       "c",
       "6",
       "S",
-      "0"
+      "0",
+      "T",
+      "R",
+      "A",
+      "V"
     ],
+    "c2sLegacyCount": 17,
     "s2cAlphabet": [
       "A",
       "B",
@@ -63,10 +117,61 @@
       "7",
       "8",
       "9",
-      "0"
+      "0",
+      "W",
+      "F"
     ],
-    "hmac": "sha256-truncated",
-    "codec": "msgpack"
+    "s2cLegacyCount": 36,
+    "legacyTableSalt": 1,
+    "tableSeedMul": 2654435761,
+    "s2cTableSeedXor": 2246822507,
+    "shuffle": "fisher-yates over splitmix32",
+    "maskC2sXor": 3266489909,
+    "maskS2cXor": 668265263,
+    "maskCounterMul": 2654435761,
+    "keystream": "xorshift32(13,17,5), 4 bytes per round",
+    "keystreamSeedFallback": 1831565813,
+    "keyMixer": {
+      "module": "moomoo-protocol",
+      "source": "src/game_protocol.js",
+      "buildId": "s16nvz",
+      "buildSalt": 1015555175,
+      "apply": "key[i] ^ byte(seed, i)",
+      "wasmBase64": "AGFzbQEAAAABBwFgAn9/AX8DAgEABwUBAW0AAAqfAQGcAQAgAUEBakGx893xeWwgAHMhACAAQY+V86t+bCEAIABBzKKp0ANqIQAgAEHXuuSOfGwhACAAQeffmo9+aiEAIABBuaWR7gdzIQAgAEGwopm4eWohACAAIABBCHZzIQAgACAAQRt0cyEAIABB8eTz2gVqIQAgACAAQRN0cyEAIABB49fIkgdzIQAgACAAQQh2cyEAIABBC3ZB/wFxCw==",
+      "wasmSha256": "c40f694ea015847fc8cff6d8f9248593367e678572a08a2ecdc82e3f7b2d2a58",
+      "byteSteps": [
+        "x = (((i + 1) * 2654435761) ^ seed)",
+        "x = (x * 3850160783)",
+        "x = (x + 973754700)",
+        "x = (x * 3252231511)",
+        "x = (x + 3789991911)",
+        "x = (x ^ 2110018233)",
+        "x = (x + 2533773616)",
+        "x = (x ^ (x >>> 8))",
+        "x = (x ^ (x << 27))",
+        "x = (x + 1532818033)",
+        "x = (x ^ (x << 19))",
+        "x = (x ^ 1917987811)",
+        "x = (x ^ (x >>> 8))",
+        "return ((x >>> 11) & 255)"
+      ],
+      "byteJs": [
+        "x = (Math.imul(((i + 1) | 0), 2654435761) ^ seed)",
+        "x = Math.imul(x, 3850160783)",
+        "x = ((x + 973754700) | 0)",
+        "x = Math.imul(x, 3252231511)",
+        "x = ((x + 3789991911) | 0)",
+        "x = (x ^ 2110018233)",
+        "x = ((x + 2533773616) | 0)",
+        "x = (x ^ (x >>> 8))",
+        "x = (x ^ (x << 27))",
+        "x = ((x + 1532818033) | 0)",
+        "x = (x ^ (x << 19))",
+        "x = (x ^ 1917987811)",
+        "x = (x ^ (x >>> 8))",
+        "return ((x >>> 11) & 255)"
+      ]
+    }
   },
   "config": {
     "maxScreenWidth": 1920,
@@ -87,7 +192,6 @@
     "crownPad": 35,
     "chatCountdown": 3000,
     "chatCooldown": 500,
-    "inSandbox": null,
     "maxAge": 100,
     "gatherAngle": 1.208304866765305,
     "gatherWiggle": 10,
@@ -184,8 +288,17 @@
         "poison": true,
         "xp": 12000,
         "val": 1.18
+      },
+      {
+        "id": 4,
+        "src": "_e",
+        "lifesteal": 0.15,
+        "membersOnly": true,
+        "xp": 20000,
+        "val": 1.18
       }
     ],
+    "fetchVariant": "<function>",
     "resourceTypes": [
       "wood",
       "food",
@@ -222,6 +335,46 @@
     "snowSpeed": 0.75,
     "maxNameLength": 15,
     "mapScale": 14400,
+    "secretPool": {
+      "gorgeX0": -1500,
+      "gorgeHalf": 520,
+      "pool": [
+        [
+          -2500,
+          7200,
+          1150
+        ],
+        [
+          -3300,
+          6750,
+          750
+        ],
+        [
+          -3200,
+          7750,
+          700
+        ],
+        [
+          -1700,
+          6900,
+          600
+        ],
+        [
+          -1800,
+          7550,
+          600
+        ]
+      ],
+      "waterfall": {
+        "x": -3860,
+        "y": 7250,
+        "half": 210
+      },
+      "shallows": {
+        "start": -1500,
+        "length": 320
+      }
+    },
     "mapPingScale": 40,
     "mapPingTime": 2200,
     "MAX_ATTACK": 0.6,
@@ -230,6 +383,9 @@
     "MAX_TURN_SPEED": 0.3,
     "DAY_INTERVAL": 1440000
   },
+  "configUndetermined": [
+    "inSandbox"
+  ],
   "itemGroups": [
     {
       "id": 0,
@@ -1410,6 +1566,15 @@
       "dmgMult": 0.75
     },
     {
+      "id": 59,
+      "name": "Scout Hat",
+      "price": 3500,
+      "scale": 120,
+      "desc": "move faster but take more damage",
+      "spdMult": 1.08,
+      "dmgMult": 1.12
+    },
+    {
       "id": 23,
       "name": "Anti Venom Gear",
       "price": 4000,
@@ -1475,6 +1640,28 @@
       "scale": 120,
       "desc": "knocks back enemies that attack you",
       "dmgK": 0.6
+    },
+    {
+      "id": 60,
+      "name": "Frost Helm",
+      "price": 7000,
+      "scale": 120,
+      "desc": "normal speed in snow and reduces damage taken",
+      "coldM": 1,
+      "spdMult": 0.94,
+      "dmgMult": 0.88
+    },
+    {
+      "id": 61,
+      "name": "Crab Shell",
+      "dontSell": true,
+      "earned": true,
+      "price": 0,
+      "scale": 120,
+      "desc": "dropped by the Crab King. reflects damage and reduces damage taken",
+      "dmg": 0.3,
+      "dmgMult": 0.85,
+      "spdMult": 0.92
     },
     {
       "id": 21,
@@ -1593,35 +1780,35 @@
       "price": 1000,
       "scale": 105,
       "xOff": 18,
-      "desc": "no effect"
+      "desc": "half the snow slowdown"
     },
     {
       "id": 9,
       "name": "Tree Cape",
       "price": 1000,
       "scale": 90,
-      "desc": "no effect"
+      "desc": "1 extra wood per hit on a tree"
     },
     {
       "id": 10,
       "name": "Stone Cape",
       "price": 1000,
       "scale": 90,
-      "desc": "no effect"
+      "desc": "1 extra stone per hit on a rock"
     },
     {
       "id": 3,
       "name": "Cookie Cape",
       "price": 1500,
       "scale": 90,
-      "desc": "no effect"
+      "desc": "1 extra food per hit on a bush or cactus"
     },
     {
       "id": 8,
       "name": "Cow Cape",
       "price": 2000,
       "scale": 90,
-      "desc": "no effect"
+      "desc": "1.5x gold and food from cows"
     },
     {
       "id": 11,
@@ -1647,42 +1834,42 @@
       "name": "Winter Cape",
       "price": 3000,
       "scale": 90,
-      "desc": "no effect"
+      "desc": "no snow slowdown"
     },
     {
       "id": 4,
       "name": "Skull Cape",
       "price": 4000,
       "scale": 90,
-      "desc": "no effect"
+      "desc": "3x gold for killing the kill leader"
     },
     {
       "id": 5,
       "name": "Dash Cape",
       "price": 5000,
       "scale": 90,
-      "desc": "no effect"
+      "desc": "5% faster"
     },
     {
       "id": 2,
       "name": "Dragon Cape",
       "price": 6000,
       "scale": 90,
-      "desc": "no effect"
+      "desc": "5% more damage for 5s after hitting a player"
     },
     {
       "id": 1,
       "name": "Super Cape",
       "price": 8000,
       "scale": 90,
-      "desc": "no effect"
+      "desc": "after a kill: 5% more damage and 15% faster for 10s"
     },
     {
       "id": 7,
       "name": "Troll Cape",
       "price": 8000,
       "scale": 90,
-      "desc": "no effect"
+      "desc": "2x gold for kills by your spikes"
     },
     {
       "id": 14,
@@ -1690,7 +1877,7 @@
       "price": 10000,
       "scale": 115,
       "xOff": 20,
-      "desc": "no effect"
+      "desc": "heals a little when you hit a player"
     },
     {
       "id": 15,
@@ -1698,7 +1885,7 @@
       "price": 10000,
       "scale": 95,
       "xOff": 15,
-      "desc": "no effect"
+      "desc": "25% less damage from projectiles"
     },
     {
       "id": 20,
@@ -1706,7 +1893,7 @@
       "price": 10000,
       "scale": 95,
       "xOff": 20,
-      "desc": "no effect"
+      "desc": "hits make players bleed for 2s"
     },
     {
       "id": 16,
