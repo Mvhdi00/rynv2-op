@@ -516,7 +516,7 @@ async function run(spec) {
   /* +heal: the server takes my health down to 60 (a hit, "O" for my sid).
    * Auto Heal is on by default; it has to eat. */
   const heal = flags.includes("heal");
-  const out = { mode: spec, base: mode === "toolate" ? "vanilla" : mode, pinned, interactive, joinRefuse, signedin, errors: [], consoleErrors: [], sockets: [], joins: [], frames: [], notes: [], swings: [], simEvents: [] };
+  const out = { mode: spec, base: mode === "toolate" ? "late" : mode, pinned, interactive, joinRefuse, signedin, errors: [], consoleErrors: [], sockets: [], joins: [], frames: [], notes: [], swings: [], simEvents: [] };
   const browser = await chromium.launch({
     executablePath: "/opt/pw-browsers/chromium",
     args: ["--no-sandbox", "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
@@ -844,7 +844,7 @@ async function run(spec) {
   }
 
   const has = sel => page.evaluate(s => !!document.querySelector(s), sel);
-  const isRyn = mode !== "vanilla" && mode !== "toolate";
+  const isRyn = mode !== "vanilla";
 
   // the menu, with a server list
   try {
@@ -1564,7 +1564,9 @@ function report(r) {
   if (!r.signedin) ok(r.signIn && r.signIn.ok, "Sign in opens the account card and reaches FRVR.auth" +
      (r.signIn && !r.signIn.ok ? " — " + (r.signIn.error || JSON.stringify(r.signIn.calls)) : ""));
   ok(!r.after.tsRefused, "no Turnstile render was refused as already rendered (" + r.after.tsRefused + ")");
-  if (r.base === "late") ok(!r.after.tsByPage, "only RYN's copy renders Turnstile — the page's own copy is told no (" + r.after.tsByPage + ")");
+  // toolate: the page's copy rendered its one widget before RYN was there
+  if (r.base === "late") ok(r.after.tsByPage <= (r.toolate ? 1 : 0), "only RYN's copy renders Turnstile — the page's own copy is told no" +
+     (r.toolate ? " once RYN is there" : "") + " (" + r.after.tsByPage + ")");
   ok(r.clicked, "the Enter Game button could be clicked");
   ok(r.joins.length > 0, "the join went through api /join (" + r.joins.length + ")" +
      (r.joins[0] ? " — " + JSON.stringify(r.joins[0]).slice(0, 120) : ""));
@@ -1583,8 +1585,9 @@ function report(r) {
      (r.joinMs !== null ? " (" + r.joinMs + " ms)" : " (never)"));
   if (r.interactive) ok(r.answered > 0, "the human check that wants a click is on screen where it can be clicked (" + r.answered + " answered)");
   const copies = r.after.copies.join(",");
-  ok(copies === (r.base === "vanilla" ? "page" : "ryn"), "one copy of the game runs" +
-     (r.base === "vanilla" ? "" : ", RYN's — the page's own module is stopped before it does anything") + " (" + (copies || "none") + ")");
+  // toolate: the page's copy had run before RYN arrived; then only RYN's starts
+  ok(copies === (r.toolate ? "page,ryn" : r.base === "vanilla" ? "page" : "ryn"), "one copy of the game runs" +
+     (r.base === "vanilla" ? "" : r.toolate ? ", RYN's after the page's own, which it stops" : ", RYN's — the page's own module is stopped before it does anything") + " (" + (copies || "none") + ")");
   // Signed in, the game itself never loads it; RYN does, once, as you join
   // (a bot's check then starts at once).
   const tsWant = r.signedin && r.base === "vanilla" ? 0 : 1;
@@ -1679,9 +1682,9 @@ function report(r) {
        g.afterEnemy + " swings after, mouse " + (g.releasedState.mouseState ? "still down" : "up") + ")");
   }
   if (r.toolate) {
-    if (r.mode.includes("lateagain")) ok(!r.toolate.reloaded && /reached the page after the game had started/.test(r.toolate.bar || ""),
-      "late a second time, RYN stands aside and says why instead of reloading again (" + JSON.stringify(r.toolate) + ")");
-    else ok(r.toolate.reloaded, "arriving after the game started, RYN reloads the page once so it can start first (" + JSON.stringify(r.toolate) + ")");
+    // 2.9: arriving after the game started, RYN takes the page over in place —
+    // no reload, no "set Inject Mode" bar, every time (+lateagain too).
+    ok(!r.toolate.reloaded && !r.toolate.bar, "arriving after the game started, RYN takes over in place: no reload, no bar (" + JSON.stringify(r.toolate) + ")");
   }
   if (r.mode.includes("reload")) ok(r.firstLife === true, "in and spawned before the reload — the rest of this run is the page after F5");
   if (r.hold) {

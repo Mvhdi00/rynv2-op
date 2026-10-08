@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.5
+// @version         2.9.4
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -42956,7 +42956,6 @@ html.ryn-in-lobby .ryn-v2-wrapper {
      * token is spent, Play has nothing to send. The page's own copy is the one
      * that is told no: its frames come from /assets/index-*.js, RYN's from
      * evaluated code. */
-    const rynWidgetNodes = new WeakSet();
     const wrapTurnstile = api => {
       if (!api || typeof api.render !== "function" || api.__rynWrapped) return api;
       const render = api.render;
@@ -42967,30 +42966,11 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         } catch (e) {}
         if (fromPage) return "ryn-page-copy";
         // The game's own widget: its sitekey is the one a bot's token needs.
-        let target = container;
         try {
           const own = container === "#turnstileWidget" || container && container.id === "turnstileWidget";
           if (own && options && typeof options.sitekey === "string" && options.sitekey) rynGameSitekey = options.sitekey;
-          /* Reached after the game had started, the page's own copy may have
-           * rendered into #turnstileWidget after RYN started its copy (the
-           * swap in Injector.init only catches a widget that was already
-           * there). Cloudflare then refuses RYN's copy's render as "already
-           * rendered", the game shows "Verification failed", and a guest —
-           * who needs that token to join — cannot get in; a signed-in player
-           * can, without one. The game looks the container up by id on every
-           * render, so a fresh node with the same id takes its place. */
-          /* "Already rendered" is Cloudflare's own record of the node, and an
-           * emptied node is still on it, so RYN's copy always draws the game's
-           * check into a node RYN made for it. */
-          const el = own ? (typeof container === "string" ? document.querySelector(container) : container) : null;
-          if (el && el.parentNode && !rynWidgetNodes.has(el)) {
-            const fresh = el.cloneNode(false);
-            el.parentNode.replaceChild(fresh, el);
-            rynWidgetNodes.add(fresh);
-            target = fresh;
-          }
         } catch (e) {}
-        return render.call(this, target, options, ...Array.prototype.slice.call(arguments, 2));
+        return render.apply(this, arguments);
       };
       try {
         Object.defineProperty(api, "__rynWrapped", {
@@ -43027,20 +43007,12 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       win.customElements.define = function() {
         win.customElements.define = _define;
       };
-      // The stand-in for the game's frame scheduler. Only this stand-in may be
-      // taken out again: once RYN's copy has started it defines its own
-      // window.requestAnimFrame, and deleting THAT ended RYN's frame loop on
-      // its first frame ("requestAnimFrame is not defined") — on a page RYN
-      // reached after the game had started, a black screen and a dead Play.
-      const rafStub = function() {
-        try {
-          if (win.requestAnimFrame === rafStub) delete win.requestAnimFrame;
-        } catch (e) {}
+      win.requestAnimFrame = function() {
+        delete win.requestAnimFrame;
         if (scriptBundle !== null) {
           Injector_default.init(scriptBundle);
         }
       };
-      win.requestAnimFrame = rafStub;
       blockProperty(win, "requestAnimFrame");
       /* Late injection: <head> was already parsed, so the game's own
        * <script type="module"> has been prepared, and taking it out of the
@@ -43088,7 +43060,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
           // The fallback and the stub it needed are done with: the first frame
           // of RYN's own copy must not start a second one.
           try {
-            if (win.requestAnimFrame === rafStub) delete win.requestAnimFrame;
+            delete win.requestAnimFrame;
           } catch (e) {}
           win.customElements.define = _define;
           try {
@@ -45819,48 +45791,6 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     return null;
   }));
   const client = new PlayerClient_default;
-  /* The game's own network object (the exposeGameNet hook hands it over), and
-   * its socket caught the moment the game assigns it. Reached after the game
-   * had started, the page's copy has already locked window.WebSocket (its
-   * anti-tamper defines it non-writable), so the construct trap below cannot
-   * catch the main socket; the 500 ms watchdog then bound it after io-init
-   * had gone past, and RYN had no session on your own connection — no ping,
-   * none of its packets. The assignment happens before any message can
-   * arrive. Bound already by the trap, it is left alone. */
-  try {
-    let gameNet;
-    Object.defineProperty(client, "_gameNet", {
-      configurable: true,
-      enumerable: true,
-      get() {
-        return gameNet;
-      },
-      set(net) {
-        gameNet = net;
-        if (!net || typeof net !== "object") return;
-        let sock = net.socket;
-        try {
-          Object.defineProperty(net, "socket", {
-            configurable: true,
-            enumerable: true,
-            get() {
-              return sock;
-            },
-            set(value) {
-              sock = value;
-              try {
-                const sm = client.SocketManager;
-                if (value && sm && sm.socket !== value && value.readyState <= 1) {
-                  client._sockBound = true;
-                  sm.init(value);
-                }
-              } catch (e) {}
-            }
-          });
-        } catch (e) {}
-      }
-    });
-  } catch (e) {}
   window.WebSocket = new window.Proxy(window.WebSocket, {
     construct(target, args) {
       const socket = new target(...args);
