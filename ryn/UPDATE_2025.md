@@ -51,10 +51,14 @@ v2.6 RYN loads the script, the bot joins and spawns.
 The script is loaded as soon as you are in a game, so a bot's check starts the
 moment you add it, and its token goes straight to `/join`. In the harness a
 bot is in about 0.9 s after Connect, almost all of it Cloudflare's own check.
-The check stays the hidden one in the corner, as before. (v2.6's first build
-put a "Verify bot connection" card in the middle of the screen, and you asked
-for it gone.) If Cloudflare wants a click, the box shows in the bottom-right
-corner with a line over it, and waits two minutes.
+The check is a small box in the bottom-right corner, shown from the start.
+(v2.6's first build put a "Verify bot connection" card in the middle of the
+screen, and you asked for it gone. v2.6.1 hid the box until Cloudflare wanted
+a click; on the live site that hidden check never finished, so Spawn Bot sat
+on "loading" and the token pool stayed empty. v2.6.2 shows it again, in the
+corner only.) It gives up after a minute; if Cloudflare wants a click, a line
+over the box says so and it waits two minutes. The token pool mints through
+the same box.
 
 What else was taken from Glotus, whose bots get in on the live game:
 

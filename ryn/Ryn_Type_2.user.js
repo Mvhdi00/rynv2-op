@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.6.1
+// @version         2.6.2
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -732,10 +732,13 @@ window.grbtp = 35;
    * (RynWire.learn); the constant is the 2025 key, for until either is seen. */
   let rynGameSitekey = null;
   const rynSitekey = () => rynGameSitekey || RYN_SITEKEY;
-  // A bot's check: hidden, in the corner (interaction-only). Cloudflare's
-  // script is loaded first when the game has not loaded it (rynTurnstile,
-  // below) — and it is loaded ahead, as soon as you are in a game, so the
-  // first bot does not wait for the download either.
+  // A bot's check: a small box in the bottom-right corner, shown from the
+  // start. Hidden (interaction-only) it never finished on the live site, so
+  // Spawn Bot sat on "loading"; shown, it runs like the game's own. Nothing
+  // comes to the middle of the screen. Cloudflare's script is loaded first
+  // when the game has not loaded it (rynTurnstile, below) — and it is loaded
+  // ahead, as soon as you are in a game, so the first bot does not wait for
+  // the download either. The token pool mints through here too.
   const generateTurnstileToken = () => rynTurnstile().then(() => _mintHiddenToken(), () => _mintHiddenToken());
   const _mintHiddenToken = () => new Promise((resolve, reject) => {
     try {
@@ -778,10 +781,10 @@ window.grbtp = 35;
         cleanup();
         reject(new Error(why));
       };
-      to = setTimeout(() => fail("turnstile timeout"), 20000);
+      to = setTimeout(() => fail("turnstile timeout"), 6e4);
       widgetId = ts.render(holder, {
         sitekey: rynSitekey(),
-        appearance: "interaction-only",
+        theme: "dark",
         callback: token => {
           if (done) return;
           done = true;
@@ -793,11 +796,9 @@ window.grbtp = 35;
         "expired-callback": () => fail("turnstile expired"),
         "timeout-callback": () => fail("the Cloudflare check timed out"),
         "unsupported-callback": () => fail("this browser is not supported by the Cloudflare check"),
-        /* Cloudflare wants a click. An interaction-only widget shows itself
-         * then, in its corner; nothing comes to the middle of the screen (you
-         * asked for none). A line over the box says what it is for, and it
-         * waits the two minutes a person might take instead of twenty
-         * seconds. */
+        /* Cloudflare wants a click. A line over the corner box says what it
+         * is for, and it waits the two minutes a person might take instead
+         * of one. */
         "before-interactive-callback": () => {
           if (done) return;
           clearTimeout(to);
