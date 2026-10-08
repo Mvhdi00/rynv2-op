@@ -1,5 +1,12 @@
 # ReUp Mix (Luna × Ryn)
 
+> **Ryn Type 2** lives in [`ryn/`](ryn/): `ryn/Ryn_Type_2.user.js` is the
+> script to install, and [`ryn/README.md`](ryn/README.md) says what changed in
+> 2.7.0 (bots and the token pool, breaking speed, name colour, the Crab King,
+> the lobby's Sign in / Clan / Friends, the loading screen, the refresh
+> freeze). The browser harness it was tested with is in [`harness/`](harness/).
+> The rest of this file is about ReUp Mix.
+
 A merged moomoo.io userscript: the RYN Client v4 core with the Luna Client
 features RYN never had, built against the game bundles in `src/` and verified
 against them.
