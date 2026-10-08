@@ -584,7 +584,7 @@ async function run(spec) {
       close: (code, reason) => { try { ws.close({ code, reason }); } catch (e) {} },
     };
     ws.onMessage(m => { const b = typeof m === "string" ? Buffer.from(m) : m; later(() => handlers.message.forEach(f => f(b))); });
-    ws.onClose(() => handlers.close.forEach(f => f()));
+    ws.onClose(() => { conn.closed = true; handlers.close.forEach(f => f()); });
     server.attach(sock, (...a) => {
       out.frames.push(a.join(" ").slice(0, 160));
       conn.letters.push(a[1]);
@@ -1390,6 +1390,23 @@ async function run(spec) {
     out.zoom = { before: z0, out: zOut, back: zBack };
   }
 
+  /* +dropme, last: the server takes my buildings off the map and keeps the
+   * socket open (what a drop looks like from here). RYN has to close it and
+   * come back in on the same server by itself. */
+  if (flags.includes("dropme") && out.session) {
+    const before = out.conns.length;
+    const oldConn = out.conns[0];
+    out.session.send("R", [1]);
+    const t0 = Date.now();
+    let back = null;
+    while (Date.now() - t0 < 12000) {
+      await page.waitForTimeout(250);
+      const fresh = out.conns.slice(before).find(c => c.spawnedAs !== undefined);
+      if (fresh) { back = fresh; break; }
+    }
+    out.drop = { rejoinedMs: back ? Date.now() - t0 : null, url: back ? back.url : null, closed: !!oldConn.closed };
+  }
+
   await browser.close();
   return out;
 }
@@ -1480,6 +1497,10 @@ function report(r) {
   ok(r.notes.filter(n => /server rejected/.test(n)).length === 0, "the server accepted every frame" +
      (r.notes.length ? ":\n        " + r.notes.slice(0, 5).join("\n        ") : ""));
   ok(r.after.gameUI && r.after.gameUI !== "none", "the in-game UI is showing (" + r.after.gameUI + ")");
+  if (r.drop)
+    ok(r.drop.rejoinedMs !== null && r.drop.closed && /token=tk%3AT\d/.test(r.drop.url || ""),
+       "dropped while playing (my buildings taken off, the socket left open), RYN closes it and is back in on the same server by itself (" +
+       (r.drop.rejoinedMs !== null ? r.drop.rejoinedMs + " ms" : "never") + ", old socket closed: " + r.drop.closed + ")");
   if (r.resumeMoves !== undefined)
     ok(r.resumeMoves > 0, "a player resumed after a refresh (its add-player frame from the old connection, before setupGame) is yours: W moves it (" + r.resumeMoves + " move frames)");
   if (r.bot && r.joinRefuse === "members") {

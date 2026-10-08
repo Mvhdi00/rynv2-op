@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.5
+// @version         2.9.6
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -13560,6 +13560,7 @@ window.grbtp = 35;
           // bundle on a possession switch. It is the server's own payload, so
           // the replay is exact rather than reconstructed.
           player._rynSpawnRaw = data2;
+          if (player === myPlayer) myPlayer._rynSpawnAt = Date.now();
           // A sid can be handed to a new player; their appearance is their own.
           this._seenPlayers.delete(data2[1]);
           // A connection's first "D" is an arrival; every later one is that
@@ -13585,6 +13586,11 @@ window.grbtp = 35;
           try {
             ChatLog_default.onRemove(this.client, temp[1]);
           } catch (_) {}
+          // You, listed as gone, while you play.
+          const raw = myPlayer._rynSpawnRaw;
+          if (myPlayer.inGame && Array.isArray(raw) && temp[1] === raw[0]) {
+            RynRejoin.dropped(this, "you were listed as gone");
+          }
         }
         // Gone for good: a scan target stops being searched for there and
         // then, and an assigned player's bots come home.
@@ -13642,6 +13648,10 @@ window.grbtp = 35;
           const player = PlayerManager2.playerData.get(temp[1]);
           if (player !== void 0) {
             ObjectManager2.removePlayerObjects(player);
+          }
+          // Your own buildings taken off while you play: the server dropped you.
+          if (this.client.isOwner && myPlayer.inGame && temp[1] === myPlayer.id) {
+            RynRejoin.dropped(this, "your buildings were removed");
           }
           break;
         }
@@ -30184,6 +30194,54 @@ window.grbtp = 35;
   // Respawns are asked for at most this often per connection. The death path
   // used to send a spawn frame on every tick the bot was dead.
   const RYN_RESPAWN_MIN_MS = 900;
+  /* Dropped while playing. The server sometimes takes your player off the
+   * map — your buildings go ("R" for your sid), or you are listed as gone
+   * ("E" for your connection) — and leaves the socket open: everyone else
+   * keeps moving, you stand still and nothing you press does anything. The
+   * server keeps a player it lost for a while and hands it back to the same
+   * browser coming in again (refresh, Play, carry on), so that is what this
+   * does for you: the dead connection is closed, and Play is pressed on the
+   * same server — the game's own join, its own Cloudflare check if it wants
+   * one — and you come back as you were. Once in twenty seconds at most. */
+  const RynRejoin = {
+    _at: 0,
+    dropped(sm, why) {
+      const now = Date.now();
+      if (now - this._at < 2e4) return;
+      this._at = now;
+      const sock = sm.socket;
+      try {
+        console.warn("[RYN] The server dropped your player (" + why + ") — rejoining the same server.");
+      } catch (_) {}
+      this._toast("The server dropped you — rejoining the same server…");
+      // A moment first: a server handing you over sends you again right away.
+      setTimeout(() => {
+        const me = sm.client.myPlayer;
+        if (sm.socket !== sock || !sock || sock.readyState !== 1) return;
+        if (me && me.inGame && me._rynSpawnAt > now) return;
+        try {
+          sock.close();
+        } catch (_) {}
+        // The game puts its menu back on the close; then its Play button.
+        setTimeout(() => {
+          const play = document.getElementById("enterGame");
+          if (play === null) return;
+          try {
+            play.click();
+          } catch (_) {}
+        }, 1500);
+      }, 1200);
+    },
+    _toast(text) {
+      try {
+        const el = document.createElement("div");
+        el.textContent = text;
+        el.style.cssText = "position:fixed;left:50%;top:44px;transform:translateX(-50%);z-index:2147483600;padding:8px 14px;border-radius:10px;" + "background:rgba(12,12,17,.92);color:#F3F2F7;font:600 12.5px 'Manrope','Segoe UI',system-ui,sans-serif;pointer-events:none;";
+        (document.body || document.documentElement).appendChild(el);
+        setTimeout(() => el.remove(), 5e3);
+      } catch (_) {}
+    }
+  };
   const RynEntry = new class {
     active=0;
     queue=[];
