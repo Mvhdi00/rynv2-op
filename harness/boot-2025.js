@@ -386,6 +386,10 @@ const TURNSTILE = (interactive, errorBots) => `(function () {
       // TS_KILL_FIRST: the game's first check never answers — no token, no
       // error — as a challenge thrown away by its frame reloading does
       if (${!!process.env.TS_KILL_FIRST} && el && el.id === "turnstileWidget" && !window.__tsKilled) { window.__tsKilled = 1; w.dead = true; }
+      // TS_FIRST_ERRORS: and it keeps reporting errors, as a broken widget
+      // left running does (Cloudflare retries it), each one nulling the
+      // game's token
+      if (${!!process.env.TS_FIRST_ERRORS} && w.dead) setInterval(function () { try { w.o["error-callback"] && w.o["error-callback"]("300030"); } catch (e) {} }, 2500);
       widgets.set(id, w);
       frame.addEventListener("load", function () {
         w.loads++;

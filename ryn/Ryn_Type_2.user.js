@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.6
+// @version         2.9.7
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -790,7 +790,7 @@ window.grbtp = 35;
   /* The game's own check (the one Play waits on), as RYN sees it through the
    * render wrapper: when it last produced a token, whether it is asking for a
    * click, and its last error code. Login watches this to repair the check. */
-  const RYN_GAME_CF = { interactive: false, tokenAt: 0, error: null, errorAt: 0 };
+  const RYN_GAME_CF = { interactive: false, tokenAt: 0, error: null, errorAt: 0, gen: 0, current: 0, ids: [] };
   // A line in the game's "one quick check" box (#verifyText), which otherwise
   // says only "Verification failed" with no reason.
   const rynVerifyNote = text => {
@@ -798,6 +798,70 @@ window.grbtp = 35;
       const t = document.getElementById("verifyText");
       if (t && text) t.textContent = text;
     } catch (e) {}
+  };
+  /* Where your own check stands, on screen. The game's box says only
+   * "Verification failed"; this says what happened to the token. */
+  const rynCfStatus = (text, tone) => {
+    try {
+      console.log("[RYN CF] " + text);
+    } catch (e) {}
+    try {
+      RynNotice.show("cf-main", {
+        text: "Cloudflare: " + text,
+        tone: tone || "info",
+        ms: tone === "bad" ? 0 : 8e3
+      });
+    } catch (e) {}
+  };
+  /* A token for YOUR join, handed to the game the way its own widget hands
+   * it over (window.onGotTurnstileToken), with the failure said out loud
+   * instead of swallowed. If the game still has its check box open a moment
+   * later, the box is closed and Play pressed once more: with the token in
+   * hand the game connects instead of waiting again. */
+  let rynTokenNudgeAt = 0;
+  const rynDeliverToken = (token, from) => {
+    RYN_GAME_CF.tokenAt = Date.now();
+    RYN_GAME_CF.error = null;
+    RYN_GAME_CF.interactive = false;
+    let handed = false;
+    let waiting = false;
+    try {
+      const dlg = document.getElementById("verifyDialog");
+      waiting = !!dlg && dlg.classList.contains("showing");
+    } catch (e) {}
+    try {
+      if (typeof window.onGotTurnstileToken === "function") {
+        window.onGotTurnstileToken(token);
+        handed = true;
+      } else {
+        rynCfStatus("passed, but the game has no token handler to give it to", "bad");
+      }
+    } catch (e) {
+      rynCfStatus("passed, but handing the token to the game failed: " + (e && e.message || e), "bad");
+      try {
+        console.error("[RYN CF] onGotTurnstileToken threw", e);
+      } catch (_) {}
+    }
+    // Said only while you are waiting on it: the game's own widget passes
+    // quietly at load, long before Play.
+    if (handed && waiting) rynCfStatus("passed (" + from + ") — joining…", "ok");
+    setTimeout(() => {
+      try {
+        const dlg = document.getElementById("verifyDialog");
+        if (!dlg || !dlg.classList.contains("showing")) return;
+        if (Date.now() - rynTokenNudgeAt < 1e4) return;
+        rynTokenNudgeAt = Date.now();
+        rynCfStatus("the game kept its check open after the token — pressing Play for you", "info");
+        dlg.classList.remove("showing");
+        const backdrop = document.getElementById("verifyBackdrop");
+        if (backdrop) backdrop.classList.remove("showing");
+        const play = document.getElementById("enterGame");
+        if (play) {
+          play.classList.remove("busy");
+          play.click();
+        }
+      } catch (e) {}
+    }, 700);
   };
   // Codes no retry can change: the sitekey, the site, the browser, the clock.
   const rynCfFatal = code => /^(1101|1102|1105|2001)/.test(String(code || ""));
@@ -34670,7 +34734,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 /* ---------- the game's own cards, lifted over the lobby (lift() in
    buildLobby): sign-in, profile, clan, confirm. Their colours only — the
    game's own layout inside them is left as it is. */
-.ryn-lift #verifyText, .ryn-lift-fixed #verifyText { color: #F3F2F7 !important; }
+body #verifyDialog #verifyText, .ryn-lift #verifyText, .ryn-lift-fixed #verifyText { color: #F3F2F7 !important; opacity: 1 !important; visibility: visible !important; }
 .ryn-lift, .ryn-lift-fixed {
     background: #0C0C11 !important;
     color: #F3F2F7 !important;
@@ -43012,34 +43076,65 @@ html.ryn-in-lobby .ryn-v2-wrapper {
            * emptied node is still on it, so RYN's copy always draws the game's
            * check into a node RYN made for it. */
           if (own && options && typeof options === "object") {
+            /* Each render of the game's check is a generation; only the newest
+             * may report an error or an expiry. A widget left behind — the
+             * game's broken first one, once RYN has drawn a fresh one — kept
+             * calling the game's error handler, and each call nulled the
+             * token the fresh one had just produced. */
+            const gen = ++RYN_GAME_CF.gen;
+            RYN_GAME_CF.current = gen;
             const o = Object.assign({}, options);
-            const tap = (key, fn) => {
-              const orig = o[key];
-              o[key] = function() {
-                let out;
-                if (typeof orig === "function") out = orig.apply(this, arguments);
+            const origCb = o.callback;
+            o.callback = function(token) {
+              if (typeof origCb === "function" && origCb !== window.onGotTurnstileToken) {
+                RYN_GAME_CF.tokenAt = Date.now();
                 try {
-                  fn.apply(this, arguments);
-                } catch (e) {}
-                return out;
-              };
+                  return origCb.apply(this, arguments);
+                } catch (e) {
+                  rynCfStatus("passed, but its token handler failed: " + (e && e.message || e), "bad");
+                  return;
+                }
+              }
+              rynDeliverToken(token, gen > 1 ? "a fresh check" : "the game's check");
             };
-            tap("callback", () => {
-              RYN_GAME_CF.tokenAt = Date.now();
-              RYN_GAME_CF.error = null;
-              RYN_GAME_CF.interactive = false;
-            });
-            tap("error-callback", code => {
+            const origErr = o["error-callback"];
+            o["error-callback"] = function(code) {
+              if (gen !== RYN_GAME_CF.current) return true;
               RYN_GAME_CF.error = code;
               RYN_GAME_CF.errorAt = Date.now();
+              let out;
+              try {
+                if (typeof origErr === "function") out = origErr.apply(this, arguments);
+              } catch (e) {}
               rynVerifyNote("Cloudflare check failed: " + rynCfErrorText(code) + ". RYN is starting a fresh one…");
-            });
-            tap("before-interactive-callback", () => {
-              RYN_GAME_CF.interactive = true;
-            });
-            tap("after-interactive-callback", () => {
-              RYN_GAME_CF.interactive = false;
-            });
+              // on screen only while you are waiting on it; before Play the
+              // game's widget fails and recovers quietly
+              let waiting = false;
+              try {
+                const dlg = document.getElementById("verifyDialog");
+                waiting = !!dlg && dlg.classList.contains("showing");
+              } catch (e) {}
+              if (waiting) rynCfStatus("check failed: " + rynCfErrorText(code) + " — starting a fresh one", "info");
+              else try {
+                console.log("[RYN CF] the game's check failed in the background: " + rynCfErrorText(code));
+              } catch (e) {}
+              return out === undefined ? true : out;
+            };
+            const origExp = o["expired-callback"];
+            o["expired-callback"] = function() {
+              if (gen !== RYN_GAME_CF.current) return;
+              if (typeof origExp === "function") return origExp.apply(this, arguments);
+            };
+            const origBefore = o["before-interactive-callback"];
+            o["before-interactive-callback"] = function() {
+              if (gen === RYN_GAME_CF.current) RYN_GAME_CF.interactive = true;
+              if (typeof origBefore === "function") return origBefore.apply(this, arguments);
+            };
+            const origAfter = o["after-interactive-callback"];
+            o["after-interactive-callback"] = function() {
+              if (gen === RYN_GAME_CF.current) RYN_GAME_CF.interactive = false;
+              if (typeof origAfter === "function") return origAfter.apply(this, arguments);
+            };
             options = o;
           }
           const el = own ? (typeof container === "string" ? document.querySelector(container) : container) : null;
@@ -43050,7 +43145,12 @@ html.ryn-in-lobby .ryn-v2-wrapper {
             target = fresh;
           }
         } catch (e) {}
-        return render.call(this, target, options, ...Array.prototype.slice.call(arguments, 2));
+        const widgetId = render.call(this, target, options, ...Array.prototype.slice.call(arguments, 2));
+        try {
+          const own = container === "#turnstileWidget" || container && container.id === "turnstileWidget";
+          if (own && widgetId != null) RYN_GAME_CF.ids.push(widgetId);
+        } catch (e) {}
+        return widgetId;
       };
       try {
         Object.defineProperty(api, "__rynWrapped", {
@@ -48671,23 +48771,24 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       const ts = this._api();
       const el = document.getElementById("turnstileWidget");
       if (!ts || !el) return false;
-      try {
-        if (this._widgetId != null && typeof ts.remove === "function") ts.remove(this._widgetId);
-      } catch (e) {}
+      // Every earlier widget of the game's check goes first — the game's own
+      // broken one included — so nothing left behind can answer for it.
+      for (const id of RYN_GAME_CF.ids.splice(0)) {
+        try {
+          if (typeof ts.remove === "function") ts.remove(id);
+        } catch (e) {}
+      }
       this._widgetId = null;
       const box = this._freshContainer(el);
       rynVerifyNote("Starting a fresh Cloudflare check…");
+      rynCfStatus("the game's check did not answer — showing a fresh one in its box", "info");
       try {
         const id = ts.render(box, {
           sitekey: rynSitekey(),
           theme: "dark",
           size: "normal",
           appearance: "always",
-          callback: t => {
-            try {
-              window.onGotTurnstileToken && window.onGotTurnstileToken(t);
-            } catch (e) {}
-          },
+          callback: t => rynDeliverToken(t, "RYN's visible check"),
           "error-callback": code => {
             try {
               window.onTurnstileError && window.onTurnstileError(code);
