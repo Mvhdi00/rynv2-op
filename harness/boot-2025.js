@@ -187,6 +187,7 @@ window.FRVR = {
     registerOnFRVR: function (o) { (window.__frvrCalls = window.__frvrCalls || []).push("registerOnFRVR:" + (o && o.email)); return Promise.resolve({}); },
     loginToFRVR: function (o) { (window.__frvrCalls = window.__frvrCalls || []).push("loginToFRVR"); return Promise.resolve({}); },
     addStatusChangeListener: function (f) { this._l.push(f); },
+    logout: function () { var a = this; a._in = false; setTimeout(function () { a._l.forEach(function (f) { try { f(); } catch (e) {} }); }, 50); return Promise.resolve(); },
   },
   init: function () { return Promise.resolve(); },
 };`;
@@ -800,7 +801,7 @@ async function run(spec) {
       };
       const view = document.querySelector('.menuView[data-view="friends"]');
       const vr = view ? view.getBoundingClientRect() : null;
-      return { signin: box("ryn-signin"), signout: box("ryn-signout"), clan: box("ryn-clan"), friends: box("ryn-friends"), chip: (document.querySelector(".rl-acc-chip") || {}).textContent || "",
+      return { signin: box("ryn-signin"), signout: box("ryn-signout"), clan: box("ryn-clan"), friends: box("ryn-friends"), chip: (document.querySelector(".rl-acc-chip, #ryn-account") || {}).textContent || "",
                gameSignIn: box("signInButton"), accountCard: box("accountCard"), clanCard: box("clanCard"),
                friendsView: vr ? vr.width > 0 && vr.height > 0 && getComputedStyle(view).display !== "none" : null };
     });
@@ -829,6 +830,15 @@ async function run(spec) {
         await page.evaluate(() => { const b = document.querySelector('.menuView[data-view="friends"] .viewBack'); if (b) b.click(); });
         await page.waitForTimeout(200);
         res.afterBack = await look();
+        // Sign out from the lobby: signed out in place, the page not reloaded
+        await page.evaluate(() => { window.__samePage = 1; });
+        await page.click("#ryn-signout", { timeout: 3000 });
+        await page.waitForTimeout(900);
+        res.afterSignOut = await look();
+        res.samePage = await page.evaluate(() => window.__samePage === 1).catch(() => false);
+        // and back in, so the rest of the run plays signed in
+        await page.evaluate(() => { const a = window.FRVR && window.FRVR.auth; if (a) { a._in = true; a._l.forEach(f => { try { f(); } catch (e) {} }); } });
+        await page.waitForTimeout(300);
       }
     } catch (e) { res.error = e.message.split("\n").filter(l => /intercept|stable|visible|enabled|waiting|retrying/i.test(l)).slice(-3).join(" / ") || e.message.split("\n")[0]; }
     if (process.env.LOBBY_DEBUG) console.log(JSON.stringify(res));
@@ -1406,6 +1416,8 @@ function report(r) {
       ok(up(b.clan) && a.afterClan && a.afterClan.clanCard && a.afterClan.clanCard.shown, "the lobby's Clan opens the game's clan card" + (a.error ? " — " + a.error : ""));
       ok(a.afterFriends && up(a.afterFriends.friends) && a.afterFriends.friendsView === true && a.afterBack && a.afterBack.friendsView === false,
          "the lobby's Friends opens the game's friends list over the lobby, and its back button closes it" + (a.error ? " — " + a.error : ""));
+      ok(a.afterSignOut && up(a.afterSignOut.signin) && !(a.afterSignOut.signout && a.afterSignOut.signout.shown) && a.samePage === true,
+         "the lobby's Sign out signs out in place, without a reload (" + JSON.stringify({ after: a.afterSignOut && { signin: a.afterSignOut.signin, signout: a.afterSignOut.signout }, samePage: a.samePage }) + ")");
     } else {
       ok(up(b.signin) && /Sign in/i.test(b.signin.text) && !(b.gameSignIn && b.gameSignIn.shown) && !(b.signout && b.signout.shown),
          "a guest gets a labelled Sign in in the lobby's top row, not an empty box beside Play (" + JSON.stringify({ signin: b.signin, game: b.gameSignIn }) + ")");

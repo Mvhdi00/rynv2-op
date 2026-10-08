@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.2
+// @version         2.9.3
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -40419,28 +40419,49 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         } catch (e) {}
       });
 
-      /* Sign out: the game's own link, which asks FRVR to log out and then
-       * tells the whole page. If FRVR never answers, the page would sit on
-       * "signed in" for good — the stuck sign-out — so if the game has not
-       * shown it signed out within six seconds, the page is reloaded: FRVR's
-       * session is gone by then, and a fresh page comes up as a guest. */
+      /* Sign out: what the game's own link does — FRVR logs out, and the game
+       * hears it through the status listener it gave FRVR, and shows Sign in.
+       *
+       * The link itself cannot be pressed from here. The game makes it with
+       * generateElement, which wraps its onclick in the trusted-click guard
+       * (the checkTrusted hook only reaches the copy on the utils object), so
+       * a click passed on from this button is ignored: nothing happened, and
+       * six seconds later the page was reloaded still signed in.
+       *
+       * If the game has not shown the sign-out once FRVR is done, the page is
+       * reloaded; FRVR's session is gone by then, so it comes up as a guest. */
       let leaving = 0;
-      signOut.addEventListener("click", () => {
-        if (leaving) return;
-        const link = gameRow !== null ? gameRow.querySelector("a") : null;
-        if (link === null) return;
-        signOut.classList.add("rl-busy");
-        signOut.querySelector(".rl-pill-label").textContent = "Signing out…";
+      const reloadIfStillIn = ms => {
+        clearTimeout(leaving);
         leaving = setTimeout(() => {
           if (shownByGame(gameRow)) {
             try {
               location.reload();
             } catch (e) {}
           }
-        }, 6e3);
+        }, ms);
+      };
+      signOut.addEventListener("click", () => {
+        if (leaving) return;
+        const link = gameRow !== null ? gameRow.querySelector("a") : null;
+        let auth = null;
         try {
-          link.click();
+          auth = window.FRVR && window.FRVR.auth;
         } catch (e) {}
+        const canLogout = !!auth && typeof auth.logout === "function";
+        if (!canLogout && link === null) return;
+        signOut.classList.add("rl-busy");
+        signOut.querySelector(".rl-pill-label").textContent = "Signing out…";
+        reloadIfStillIn(15e3);
+        if (!canLogout) {
+          try {
+            link.click();
+          } catch (e) {}
+          return;
+        }
+        Promise.resolve().then(() => auth.logout()).catch(() => {}).then(() => {
+          if (leaving) reloadIfStillIn(1500);
+        });
       });
 
       const accountName = () => {
