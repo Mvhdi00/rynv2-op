@@ -1,10 +1,15 @@
-# ReUp Mix (Luna × Ryn)
+# Ryn Type 2, repaired — and ReUp Mix (Luna × Ryn)
 
-A merged moomoo.io userscript: the **Ryn Type 2** core with the Luna Client
-features RYN never had, repaired against the game bundle it actually has to run
-on and verified against it.
+Two outputs from one set of repairs against the game bundle the client actually
+has to run on:
 
-Build output: **`ReUp_Mix.user.js`**
+| | What it is |
+|---|---|
+| **`Ryn_Type_2.user.js`** | Ryn Type 2 as it is, with the nine orphaned bundle hooks re-anchored and the transport gaps closed. Same name, same features, same branding — a drop-in replacement. |
+| **`ReUp_Mix.user.js`** | The same repairs, plus the Luna Client features RYN never had. |
+
+The repairs live in `tools/repairs.js` and both outputs apply them, so neither
+can have a fix the other is missing.
 
 ---
 
@@ -196,19 +201,23 @@ says so rather than failing on a missing anchor:
 ## Layout
 
 ```
-ReUp_Mix.user.js           the build output — this is the script to install
+Ryn_Type_2.user.js         output: Ryn Type 2, repaired
+ReUp_Mix.user.js           output: the same repairs plus the Luna features
 drivers/game-drivers.json  protocol + data tables extracted from the game assets
 src/Ryn_Type_2.user.js     base client (input, unmodified)
 src/Luna_Client_1.1.js     Luna client, kept for reference (input)
 src/game_index.js          game bundle, as served: protocol, data tables, engine
 src/game_vendor.js         game bundle, as served: msgpack codec, polyfills
 src/game_protocol.js       the moomoo-protocol module: BUILD_ID, BUILD_SALT, mixKey
+tools/repairs.js           the repairs, shared by both outputs
+tools/edits.js             anchored text edits
 tools/deobfuscate.js       undo the obfuscator: strings, numbers, operator wrappers
 tools/game-wire.js         the game's transport, by name and running
 tools/extract-drivers.js   game assets      -> drivers/game-drivers.json
 tools/verify-drivers.js    client tables    vs drivers/game-drivers.json
 tools/check-wire.js        client transport vs the game's own functions
 tools/check-hooks.js       client hooks     vs the bundle, as served
+tools/fix-ryn.js           src/Ryn_Type_2.user.js -> Ryn_Type_2.user.js
 tools/build-reup.js        src/Ryn_Type_2.user.js -> ReUp_Mix.user.js
 ```
 
@@ -221,16 +230,21 @@ obfuscator's output.
 
 ```sh
 node tools/extract-drivers.js    # refresh drivers from src/game_*.js
-node tools/build-reup.js         # produce ReUp_Mix.user.js
+node tools/fix-ryn.js            # produce Ryn_Type_2.user.js  (repairs only)
+node tools/build-reup.js         # produce ReUp_Mix.user.js    (repairs + Luna)
 ```
 
 ## Verification
 
+Each verifier takes the script to check, and defaults to `ReUp_Mix.user.js`:
+
 ```sh
-node tools/verify-drivers.js     # data tables + the embedded manifest
-node tools/check-wire.js         # the transport, function for function
-node tools/check-hooks.js        # every bundle-rewrite hook
-node --check ReUp_Mix.user.js
+for out in Ryn_Type_2.user.js ReUp_Mix.user.js; do
+  node tools/verify-drivers.js "$out"   # data tables + the embedded manifest
+  node tools/check-wire.js     "$out"   # the transport, function for function
+  node tools/check-hooks.js    "$out"   # every bundle-rewrite hook
+  node --check                 "$out"
+done
 ```
 
 Current state of the build:
@@ -243,7 +257,9 @@ Current state of the build:
   game's own functions, over a spread of keys, seeds and every frame length up
   to two keystream rounds. `learn()` reads every protocol constant off the
   bundle rather than falling back.
-- **Hooks** — 71/71 bind.
+- **Hooks** — 70/70 bind for `Ryn_Type_2.user.js`, 71/71 for
+  `ReUp_Mix.user.js` (the extra one is the object-spin hook the Luna rotation
+  toggles need).
 
 ### Reading the bundle
 
