@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.6
+// @version         2.6.1
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -732,8 +732,10 @@ window.grbtp = 35;
    * (RynWire.learn); the constant is the 2025 key, for until either is seen. */
   let rynGameSitekey = null;
   const rynSitekey = () => rynGameSitekey || RYN_SITEKEY;
-  // The pool's own (hidden) check. Cloudflare's script is loaded first when
-  // the game has not loaded it (rynTurnstile, below).
+  // A bot's check: hidden, in the corner (interaction-only). Cloudflare's
+  // script is loaded first when the game has not loaded it (rynTurnstile,
+  // below) — and it is loaded ahead, as soon as you are in a game, so the
+  // first bot does not wait for the download either.
   const generateTurnstileToken = () => rynTurnstile().then(() => _mintHiddenToken(), () => _mintHiddenToken());
   const _mintHiddenToken = () => new Promise((resolve, reject) => {
     try {
@@ -751,6 +753,7 @@ window.grbtp = 35;
       while (RYN._capSlots[_capSlot]) _capSlot++;
       RYN._capSlots[_capSlot] = true;
       holder.style.cssText = "position:fixed;right:0;bottom:" + (_capSlot * 70) + "px;width:300px;height:65px;z-index:2147483647;";
+      holder.setAttribute("data-ryn-captcha", "");
       (document.body || document.documentElement).appendChild(holder);
       let done = false;
       let widgetId = null;
@@ -791,23 +794,21 @@ window.grbtp = 35;
         "timeout-callback": () => fail("the Cloudflare check timed out"),
         "unsupported-callback": () => fail("this browser is not supported by the Cloudflare check"),
         /* Cloudflare wants a click. An interaction-only widget shows itself
-         * then — in a corner, saying nothing, with twenty seconds on the
-         * clock — and when nobody noticed it, the bot was gone. It comes to
-         * the middle of the screen now with a line saying what it is for, and
-         * waits the two minutes a person might take. */
+         * then, in its corner; nothing comes to the middle of the screen (you
+         * asked for none). A line over the box says what it is for, and it
+         * waits the two minutes a person might take instead of twenty
+         * seconds. */
         "before-interactive-callback": () => {
           if (done) return;
           clearTimeout(to);
           to = setTimeout(() => fail("nobody answered the Cloudflare check"), 12e4);
-          const top = "calc(38% + " + _capSlot * 96 + "px)";
-          holder.style.cssText = "position:fixed;left:50%;top:" + top + ";transform:translateX(-50%);width:300px;height:65px;z-index:2147483647;";
           label = document.createElement("div");
           label.textContent = "Cloudflare wants a click to let your bot in";
-          label.style.cssText = "position:fixed;left:50%;top:calc(" + top + " - 26px);transform:translateX(-50%);z-index:2147483647;" +
-            "background:rgba(0,0,0,.8);color:#fff;font:600 13px sans-serif;padding:4px 10px;border-radius:6px;pointer-events:none;white-space:nowrap;";
+          label.style.cssText = "position:fixed;right:0;bottom:" + (_capSlot * 70 + 71) + "px;z-index:2147483647;" +
+            "background:rgba(0,0,0,.8);color:#fff;font:600 12px sans-serif;padding:3px 9px;border-radius:6px;pointer-events:none;white-space:nowrap;";
           (document.body || document.documentElement).appendChild(label);
           try {
-            rynBotNotice("Cloudflare wants a click for a bot — tick the box in the middle of the screen");
+            rynBotNotice("Cloudflare wants a click for a bot — tick the box in the bottom-right corner");
           } catch (e) {}
         },
         "after-interactive-callback": () => {
@@ -1586,20 +1587,6 @@ window.grbtp = 35;
       status: 0
     }));
   };
-  /* The Cloudflare check for a bot, shown — the way Glotus shows it.
-   *
-   * RYN used to run a bot's check invisibly ("interaction-only", in a corner)
-   * and only bring it forward if Cloudflare asked for a click. Glotus renders
-   * the check as an ordinary, visible widget in a card in the middle of the
-   * screen and leaves it there until it is done, and its bots get in. So a
-   * bot's check is that card now: most of the time it ticks itself in a
-   * second or two and goes; when Cloudflare wants a click, the box is in
-   * front of you, with a line saying what it is for. Two at a time (Glotus
-   * runs two); the rest wait their turn below them. Three minutes each.
-   * Cancel, or Escape, stops every check that is waiting. The card does not
-   * cover the game: you can keep playing while it works. */
-  const RYN_VERIFY_TIMEOUT_MS = 18e4;
-  const RYN_VERIFY_AT_ONCE = 2;
   /* Cloudflare's script, loaded by RYN when the game has not.
    *
    * The game only loads Turnstile for a player who needs it, and a player
@@ -1681,185 +1668,6 @@ window.grbtp = 35;
     });
     return _rynTurnstileLoad;
   };
-  const RynBotVerify = {
-    active: new Set,
-    queue: [],
-    panel: null,
-    // How many checks are open or waiting, for anything that wants to say so.
-    get pending() {
-      return this.active.size + this.queue.length;
-    },
-    request(label) {
-      return new Promise((resolve, reject) => {
-        this.queue.push({
-          label: label || "Bot",
-          resolve: resolve,
-          reject: reject,
-          done: false,
-          card: null,
-          status: null,
-          widgetId: null,
-          api: null,
-          timer: 0
-        });
-        this._pump();
-      });
-    },
-    cancelAll(why) {
-      for (const req of [ ...this.queue, ...this.active ]) this._finish(req, new Error(why || "the check was cancelled"));
-    },
-    _pump() {
-      while (this.active.size < RYN_VERIFY_AT_ONCE && this.queue.length > 0) {
-        const req = this.queue.shift();
-        if (req.done) continue;
-        this.active.add(req);
-        this._start(req);
-      }
-      this._update();
-    },
-    _panel() {
-      if (this.panel !== null && this.panel.root.isConnected) return this.panel;
-      const root = document.createElement("div");
-      root.id = "ryn-bot-verify";
-      root.setAttribute("role", "dialog");
-      root.setAttribute("aria-label", "Verify bot connection");
-      root.style.cssText = "position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2147483647;" +
-        "background:#20242c;color:#fff;border:1px solid #41464d;border-radius:12px;padding:16px 18px;width:340px;" +
-        "max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);overflow:auto;box-sizing:border-box;" +
-        "font:14px 'Noto Sans',sans-serif;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.5);pointer-events:auto;";
-      const title = document.createElement("div");
-      title.style.cssText = "font-weight:800;font-size:16px;margin-bottom:4px;";
-      const note = document.createElement("div");
-      note.style.cssText = "color:#c0c5ca;font-size:12px;margin-bottom:10px;";
-      const list = document.createElement("div");
-      list.style.cssText = "display:flex;flex-direction:column;gap:10px;align-items:center;";
-      const cancel = document.createElement("button");
-      cancel.type = "button";
-      cancel.textContent = "Cancel";
-      cancel.style.cssText = "margin-top:12px;padding:6px 18px;cursor:pointer;background:#30343a;color:#e2e5e8;" +
-        "border:2px solid #41464d;border-radius:5px;font:inherit;font-weight:800;";
-      cancel.onclick = () => this.cancelAll("the check was cancelled");
-      root.append(title, note, list, cancel);
-      const onKey = event => {
-        if (event.key !== "Escape" || this.panel === null) return;
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        this.cancelAll("the check was cancelled");
-      };
-      document.addEventListener("keydown", onKey, true);
-      (document.body || document.documentElement).appendChild(root);
-      this.panel = {
-        root: root,
-        title: title,
-        note: note,
-        list: list,
-        close: () => {
-          document.removeEventListener("keydown", onKey, true);
-          root.remove();
-        }
-      };
-      return this.panel;
-    },
-    _update() {
-      if (this.active.size === 0 && this.queue.length === 0) {
-        if (this.panel !== null) {
-          this.panel.close();
-          this.panel = null;
-        }
-        return;
-      }
-      const panel = this._panel();
-      const many = this.pending > 1;
-      panel.title.textContent = many ? "Verify bot connections" : "Verify bot connection";
-      panel.note.textContent = "Cloudflare checks each bot before the game lets it in." +
-        (this.queue.length ? " " + this.queue.length + " more waiting." : "");
-    },
-    _start(req) {
-      const panel = this._panel();
-      const card = document.createElement("div");
-      card.style.cssText = "width:100%;box-sizing:border-box;padding:8px;border:1px solid #41464d;border-radius:6px;background:#171b21;";
-      const label = document.createElement("div");
-      label.style.cssText = "color:#c0c5ca;font-size:12px;margin-bottom:4px;overflow-wrap:anywhere;";
-      label.textContent = req.label;
-      const status = document.createElement("div");
-      status.style.cssText = "font-size:12px;margin-bottom:6px;";
-      status.textContent = "Checking…";
-      const host = document.createElement("div");
-      host.style.cssText = "min-height:65px;display:flex;justify-content:center;";
-      card.append(label, status, host);
-      panel.list.appendChild(card);
-      req.card = card;
-      req.status = status;
-      req.timer = setTimeout(() => this._finish(req, new Error("nobody answered the Cloudflare check")), RYN_VERIFY_TIMEOUT_MS);
-      if (rynTurnstileApi() === null) status.textContent = "Loading Cloudflare…";
-      rynTurnstile().then(ts => {
-        if (req.done) return;
-        status.textContent = "Checking…";
-        this._render(req, ts, host, status);
-      }, error => this._finish(req, error));
-    },
-    _render(req, ts, host, status) {
-      req.api = ts;
-      try {
-        req.widgetId = ts.render(host, {
-          sitekey: rynSitekey(),
-          theme: "dark",
-          retry: "never",
-          "refresh-expired": "manual",
-          callback: token => {
-            if (typeof token === "string" && token) this._finish(req, null, token);
-            else this._finish(req, new Error("the check gave no token"));
-          },
-          "error-callback": code => this._finish(req, new Error("turnstile error-callback" + (code ? " " + code : ""))),
-          "expired-callback": () => this._finish(req, new Error("turnstile expired")),
-          "timeout-callback": () => this._finish(req, new Error("the Cloudflare check timed out")),
-          "unsupported-callback": () => this._finish(req, new Error("this browser is not supported by the Cloudflare check")),
-          "before-interactive-callback": () => {
-            if (req.done) return;
-            status.textContent = "Cloudflare wants a click to let your bot in — tick the box";
-            status.style.color = "#ffd166";
-            try {
-              rynBotNotice("Cloudflare wants a click for a bot — tick the box in the middle of the screen");
-            } catch (_) {}
-          },
-          "after-interactive-callback": () => {
-            if (req.done) return;
-            status.textContent = "Checking…";
-            status.style.color = "";
-          }
-        });
-        // A callback can run inside render, before it returns the id.
-        if (req.done) {
-          this._remove(req);
-        } else if (req.widgetId === null || req.widgetId === void 0) {
-          this._finish(req, new Error("the Cloudflare check could not be opened"));
-        }
-      } catch (e) {
-        this._finish(req, e instanceof Error ? e : new Error(String(e)));
-      }
-    },
-    _remove(req) {
-      try {
-        if (req.api && req.widgetId !== null && req.widgetId !== void 0) req.api.remove(req.widgetId);
-      } catch (_) {}
-      req.widgetId = null;
-      try {
-        if (req.card) req.card.remove();
-      } catch (_) {}
-    },
-    _finish(req, error, token) {
-      if (req.done) return;
-      req.done = true;
-      clearTimeout(req.timer);
-      this._remove(req);
-      this.active.delete(req);
-      const queued = this.queue.indexOf(req);
-      if (queued >= 0) this.queue.splice(queued, 1);
-      if (error) req.reject(error);
-      else req.resolve(token);
-      this._pump();
-    }
-  };
   /* moomoo-protocol — mixKey, BUILD_SALT, BUILD_ID — for a bot's session.
    * RYN takes it where its copy of the bundle imports it; on a build that
    * reaches it some other way, it is imported here from the page's import
@@ -1893,7 +1701,7 @@ window.grbtp = 35;
     refused: "The join API refused this bot's Cloudflare token. If a check box appeared, it has to be answered.",
     busy: "Too many joins from your address right now — wait a little and add the bot again."
   };
-  const createSocket = async (href, fresh = false, label = "") => {
+  const createSocket = async (href, fresh = false) => {
     let url = href;
     let pooled = false;
     if (/moomoo/.test(href)) {
@@ -1931,15 +1739,9 @@ window.grbtp = 35;
         }
       }
       let why = "";
-      const where = (() => {
-        try {
-          const here = RYN._servers && RYN._servers.selected();
-          return here ? " · " + here.region + " " + here.name : "";
-        } catch (_) {
-          return "";
-        }
-      })();
-      const verify = () => RynBotVerify.request((label || "Bot") + where);
+      // The token goes to /join the moment it arrives: it is good for five
+      // minutes and used once, so nothing stands between the two.
+      const verify = () => generateTurnstileToken();
       if (!token) {
         try {
           const cf = await verify();
@@ -12635,6 +12437,11 @@ window.grbtp = 35;
           PacketManager2.pingRequest();
         }
         if (this.client.isOwner) {
+          // Cloudflare's script ahead of the first bot (signed in, the game
+          // never loads it): a bot's check then starts the moment it is asked.
+          try {
+            rynTurnstile().catch(() => {});
+          } catch (_) {}
           GameUI_default.loadGame();
           Logger.test("Successfully connected to a server..");
         } else {
@@ -35137,7 +34944,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
           }
           let socket;
           try {
-            socket = await createSocket_default(ws.url, tryNo > 0, "Bot: " + botName);
+            socket = await createSocket_default(ws.url, tryNo > 0);
           } catch (e) {
             RynEntry.release(slot);
             this.removeBotConnecting();

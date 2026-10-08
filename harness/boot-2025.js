@@ -592,6 +592,7 @@ async function run(spec) {
         conn.spawnName = m ? m[1] : null;
       }
       if (a[0] === "c2s" && a[1] === "M" && out.conns[0] === conn && !out.spawnAt) out.spawnAt = Date.now();
+      if (a[0] === "c2s" && a[1] === "M" && !conn.spawnAt) conn.spawnAt = Date.now();
     }, {
       requireSpawn: true,
       proto: 2025,
@@ -1100,6 +1101,8 @@ async function run(spec) {
       const frame = page.frames().find(f => /^blob:/.test(f.url()));
       if (!frame) return { error: "RYN's menu frame not found" };
       const before = out.conns.length;
+      // Cloudflare's script, already there before any bot asks for it?
+      const preloaded = await page.evaluate(() => window.__tsLoads || 0).catch(() => null);
       try {
         await frame.evaluate(() => document.getElementById("add-bot-dynamic").click());
         await frame.waitForSelector("#dyn-bot-input-1", { state: "attached", timeout: 4000 });
@@ -1114,10 +1117,17 @@ async function run(spec) {
       // a bot's token is a challenge of its own; when it wants a click, the
       // person clicks it if they can see it (+slowclick: after 25 s)
       let label = null;
+      // whatever the bot's check puts up, it is never in the middle of the
+      // screen (the user's call: v2.6's card there is gone)
+      let middle = null;
       while (Date.now() - t1 < (slowclick ? 40000 : silentname ? 25000 : 15000) &&
              !(out.conns.length > before && out.conns[before].letters.includes("M") && (!silentname || out.conns[before].spawnedAs))) {
         if (slowclick && label === null) label = await page.evaluate(() => [...document.querySelectorAll("div")].some(d => /Cloudflare wants a click to let your bot in/.test(d.textContent) && d.getBoundingClientRect().width > 0)).catch(() => null) || null;
         if (!slowclick || Date.now() - t1 > 25000) await answerChallenge();
+        if (middle === null) middle = await page.evaluate(() => {
+          const at = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+          return at && at.closest("[data-ryn-captcha], #ryn-bot-verify, .cf-turnstile-frame") ? (at.id || at.className || at.tagName) : null;
+        }).catch(() => null);
         await page.waitForTimeout(250);
       }
       // RYN's bot pings once at io-init and again only after it has READ the
@@ -1127,10 +1137,11 @@ async function run(spec) {
       const c = out.conns[before];
       const toast = await page.evaluate(() => (document.getElementById("rynBotToast") || {}).textContent || "").catch(() => "");
       const devices = await page.evaluate(() => { try { return { mine: localStorage.getItem("moo_did") }; } catch (e) { return null; } }).catch(() => null);
-      const card = await page.evaluate(() => !!document.getElementById("ryn-bot-verify")).catch(() => null);
+
       return c ? { url: c.url, spawned: c.letters.includes("M"), frames: c.letters.length, violations: c.violations, toast,
-                   pings: c.letters.filter(l => l === "0").length, spawnName: c.spawnName, spawnedAs: c.spawnedAs, devices, label, card,
-                   join: out.joins.length > 1 ? out.joins[out.joins.length - 1] : null } : { error: "no bot socket opened", toast, card };
+                   pings: c.letters.filter(l => l === "0").length, spawnName: c.spawnName, spawnedAs: c.spawnedAs, devices, label, middle,
+                   ms: c.spawnAt ? c.spawnAt - t1 : null, preloaded,
+                   join: out.joins.length > 1 ? out.joins[out.joins.length - 1] : null } : { error: "no bot socket opened", toast, middle };
     })();
   }
 
@@ -1429,9 +1440,11 @@ function report(r) {
   const copies = r.after.copies.join(",");
   ok(copies === (r.base === "vanilla" ? "page" : "ryn"), "one copy of the game runs" +
      (r.base === "vanilla" ? "" : ", RYN's — the page's own module is stopped before it does anything") + " (" + (copies || "none") + ")");
-  // signed in, nothing needs a check until a bot does (and then RYN loads it)
-  const tsWant = r.signedin && !r.bot ? 0 : 1;
-  ok(r.after.tsLoads === tsWant, "Turnstile's script is loaded " + (tsWant ? "once" : "not at all, signed in with no bot") + " (" + r.after.tsLoads + ")");
+  // Signed in, the game itself never loads it; RYN does, once, as you join
+  // (a bot's check then starts at once).
+  const tsWant = r.signedin && r.base === "vanilla" ? 0 : 1;
+  ok(r.after.tsLoads === tsWant, "Turnstile's script is loaded " + (tsWant ? "once" : "not at all, signed in without RYN") +
+     (r.signedin && tsWant ? ", by RYN, though signed in the game never does" : "") + " (" + r.after.tsLoads + ")");
   ok(!r.after.tsReloads, "no challenge was thrown away by moving its frame — a moved iframe reloads (" + r.after.tsReloads + ")");
   const pings = r.conns.length ? r.conns[0].letters.filter(l => l === "0").length : 0;
   ok(pings >= 1, "the player's connection pings the server (" + pings + ")");
@@ -1456,13 +1469,19 @@ function report(r) {
     ok(!b.error && /token=tk%3AT\d/.test(b.url) && /[?&]b=test-build/.test(b.url),
        "a bot connects with its own /join ticket and the build id" + (b.error ? " — " + b.error : " (" + String(b.url).replace(/^wss:\/\/[^/]+/, "") + ")"));
     ok(!b.error && b.spawned, "the bot's spawn frame reached the server" + (b.error ? "" : " (" + b.frames + " frames)"));
+    /* From Connect to the bot's spawn: Cloudflare's check (0.9 s here), its
+     * token straight to /join, the socket. A check that wants a click, a
+     * busy API or a refused name each add their own wait. */
+    if (r.signedin) ok(b.preloaded === 1, "signed in, Cloudflare's script is already loaded when the first bot is added (" + b.preloaded + " loads before)");
+    if (!/interactive|slowclick|busy|silentname/.test(r.mode)) ok(b.ms !== null && b.ms <= 4000,
+       "a bot is in quickly: " + b.ms + " ms from Connect to its spawn, the token spent the moment it came");
     if (r.mode.includes("kickname")) ok(/turned a bot away: This name belongs to someone else/.test(b.toast || ""),
        "a bot the server turns away says why, in the server's own words (said: " + JSON.stringify(b.toast || "") + ")");
     if (r.mode.includes("silentname")) ok(b.spawnedAs === "bot1201" && /never let it spawn/.test(b.toast || ""),
        "a bot the server silently will not spawn under its name says so and comes back under the next one (spawned as " +
        JSON.stringify(b.spawnedAs) + "; said: " + JSON.stringify(b.toast || "") + ")");
     if (r.mode.includes("slowclick")) ok(b.label === true && !b.error && b.spawned,
-       "a bot's check that wants a click says so in the middle of the screen, and waits 25 s for it (" + (b.label ? "label shown" : "no label") + ")");
+       "a bot's check that wants a click says so over its box in the corner, and waits 25 s for it (" + (b.label ? "label shown" : "no label") + ")");
     /* Typed as "bot1", slot 1: bot11, which the name check says belongs to
      * someone, so the bot steps past it to the next free number. */
     ok(!b.error && b.spawnName === "bot1101", "a bot's name carries its number and steps past one that is taken (typed bot1: bot11 is taken, joined as " +
@@ -1474,7 +1493,7 @@ function report(r) {
     ok(!b.error && b.join && typeof d.mine === "string" && d.mine !== "" && b.join.did === d.mine && b.join.host === new URL(b.url).hostname,
        "a bot joins as this browser, the way Glotus's do: your device id (moo_did) and the server's host name (" +
        "yours " + JSON.stringify(d.mine) + ", the bot sent " + JSON.stringify(b.join && b.join.did) + " for " + JSON.stringify(b.join && b.join.host) + ")");
-    ok(b.card === false, "the bot's Cloudflare card is gone once the bot is in (" + (b.card ? "still up" : "gone") + ")");
+    ok(b.middle === null, "the bot's Cloudflare check never sits in the middle of the screen" + (b.middle ? " (" + b.middle + " was there)" : ""));
     // (+kickname sends the bot away on purpose: there is nothing after that to read)
     if (!r.mode.includes("kickname")) ok(!b.error && b.pings >= 2, "the bot reads what the server sends — it answered a pong with its next ping" +
        (r.pinned ? ", through the per-message mask" : "") + " (" + (b.pings || 0) + " pings)");

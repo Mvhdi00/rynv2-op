@@ -48,13 +48,16 @@ The harness reproduces this exactly (`+signedin`: an account, and the game's
 own Cloudflare load skipped). With 2.5.1 the bot never opens a socket. With
 v2.6 RYN loads the script, the bot joins and spawns.
 
+The script is loaded as soon as you are in a game, so a bot's check starts the
+moment you add it, and its token goes straight to `/join`. In the harness a
+bot is in about 0.9 s after Connect, almost all of it Cloudflare's own check.
+The check stays the hidden one in the corner, as before. (v2.6's first build
+put a "Verify bot connection" card in the middle of the screen, and you asked
+for it gone.) If Cloudflare wants a click, the box shows in the bottom-right
+corner with a line over it, and waits two minutes.
+
 What else was taken from Glotus, whose bots get in on the live game:
 
-- **The check is shown.** It is a visible card in the middle of the screen
-  ("Verify bot connection"), not an invisible widget in a corner. It usually
-  ticks itself in a second or two and goes. Two run at once, the rest queue,
-  and each gets three minutes. Cancel or Escape stops them. The card does not
-  block the game.
 - **The device id is yours** (`moo_did`), as the game and Glotus send it.
   v2.5 gave each bot a new device, which is the one thing a join API has
   reason to be strict about.
