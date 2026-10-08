@@ -1,4 +1,51 @@
-# Ryn Type 2 — 2.7.0
+# Ryn Type 2 — 2.8.0
+
+## 2.8.0: the 3d3599b6 build (protocol module s16nvz)
+
+The live game moved to `index-3d3599b6.js` with a new `moomoo-protocol`
+module, `s16nvz.js`. On that build 2.7.0 could not run at all, and a refresh
+broke it for good:
+
+- **The game never started under RYN.** The new bundle ends in
+  `export{m as U};`, and RYN's copy of it failed to compile. Exports are now
+  converted like the imports.
+- **Refresh, enter again, nothing works.** The game now saves your skin colour
+  itself, as plain text. RYN had set it to `"toString"`, so on the next load
+  reading it threw inside RYN's start-up: no lobby, and Play did nothing.
+  Reproduced on the harness with 2.7.0, and fixed. RYN reads non-JSON values,
+  and only sends real colour numbers.
+- **Bots and packets.** The obfuscator now routes different calls through
+  proxy objects, so the five crypto hooks (session, receive, sign, send,
+  fastSign) found nothing. They now recognise a call written either way, on
+  both builds. A bot loads the protocol module itself if it was not captured.
+  If it still cannot, it leaves with a message, rather than joining with keys
+  the server refuses.
+- **The join API's new VPN refusal** (`403 {error:"vpn"}`) gets its own
+  message.
+- **The server list asks for v=1.28.** The version is now a constant in the
+  bundle, and it is read from there.
+- **Name colour.** The game draws a nameplate as coloured pieces now; only the
+  name piece takes your colour, and your clan tag keeps the game's.
+- **Grid.** The grid loops gained the game's own Show Grid flag; the hook
+  matches either form.
+- **Texture packs** (dev hosts only) import the original game module. RYN
+  does not load that chunk, so it cannot start a second copy of the game.
+
+**Signed in, the game puts you on members-only servers.** When your region has
+one, the game auto-picks only among them (`Uc`). Bots join as guests and
+cannot enter those servers. To use bots, pick a server without the shield.
+
+Verified in the harness on 3d3599b6, with the real s16nvz module (its
+WebAssembly mixKey and BUILD_SALT) on both sides of a pinned session:
+- vanilla, fast and late;
+- pinned, signed in, interactive Cloudflare, refresh, too-late injection, the
+  Crab King, and the token pool: 0 failures;
+- the old build (`BUNDLE=cfaab428`): unchanged;
+- 69 of 71 hooks match on both builds; the rewrite compiles on both; the
+  protocol, wire and signature checks hold on both.
+
+---
+
 
 `Ryn_Type_2.user.js` is the script to install. It is built on the 2.5.1 file
 you sent (`src/Ryn_Type_2-2.5.1.js`, unchanged) against the 2025 game bundle

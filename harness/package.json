@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@msgpack/msgpack": "^3.0.0",
+    "acorn": "^8.19.0",
+    "eslint-scope": "^8.4.0",
     "jquery": "^3.7.1",
     "playwright": "^1.40.0",
     "ws": "^8.0.0"

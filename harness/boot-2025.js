@@ -99,17 +99,28 @@ const spritePng = rgb => {
 };
 const SPRITES = { hats: spritePng([255, 0, 255]), weapons: spritePng([0, 255, 255]), accessories: spritePng([255, 128, 0]), other: spritePng([255, 255, 0]) };
 let wireCache = null;
-const wire = () => wireCache || (wireCache = require("./proto-2025")());
+const wire = () => wireCache || (wireCache = require("./proto-2025")(path.join(FIX, BUILD.file)));
 
 const ROOT = path.resolve(__dirname, "..");
 const FIX = path.join(__dirname, "fixtures");
 const which = process.argv[2] || "all";
 const RYN_PATH = path.resolve(process.argv[3] || path.join(ROOT, "ryn/Ryn_Type_2.user.js"));
 
-const INDEX = "index-cfaab428.js";
+/* Which game build is served. BUNDLE=3d3599b6 (the default, the live build
+ * since its s16nvz protocol module) or BUNDLE=cfaab428 (the build 2.7.0 was
+ * first written against, with a stub protocol module). 3d3599b6 runs with
+ * its REAL moomoo-protocol module: BUILD_ID "s16nvz", its BUILD_SALT and its
+ * WebAssembly mixKey, which the server uses too. */
+const BUILDS = {
+  "3d3599b6": { index: "index-3d3599b6.js", file: "b3d35/index-3d3599b6.js", proto: "b3d35/s16nvz.js" },
+  "cfaab428": { index: "index-cfaab428.js", file: "moomoo_index_new.js", proto: null },
+};
+const BUILD = BUILDS[process.env.BUNDLE || "3d3599b6"];
+if (!BUILD) throw new Error("BUNDLE must be one of " + Object.keys(BUILDS).join(", "));
+const INDEX = BUILD.index;
 const VENDOR = "vendor-a3a301f0.js";
-const PROTO = "protocol-5f1c2b.js";
-const bundle = fs.readFileSync(path.join(FIX, "moomoo_index_new.js"), "utf8");
+const PROTO = BUILD.proto ? path.basename(BUILD.proto) : "protocol-5f1c2b.js";
+const bundle = fs.readFileSync(path.join(FIX, BUILD.file), "utf8");
 const vendor = fs.readFileSync(path.join(FIX, "moomoo_vendor_new.js"), "utf8");
 
 // ── the page ──────────────────────────────────────────────────────────────
@@ -120,8 +131,17 @@ for (const m of bundle.matchAll(/getElementById\("([^"]+)"\)/g)) if (!ids.includ
 for (const a of bundle.matchAll(/(?:const |let |,|function )([\w$]+)(?:=function)?\((\w)\)\{return document\.getElementById\(\2\)\}/g))
   for (const m of bundle.matchAll(new RegExp("[^\\w$.]" + a[1].replace(/\$/g, "\\$") + "\\(\"([^\"]+)\"\\)", "g")))
     if (!ids.includes(m[1])) ids.push(m[1]);
-const CANVAS = new Set(["gameCanvas", "mapDisplay"]);
-const CHECK = new Set(["nativeResolution", "showPing", "showFps", "playMusic"]);
+// textCanvas: 3d3599b6's second WebGL canvas, for text at the device's own
+// resolution; the bundle calls getContext on it at load, so it must be one.
+// and through an id map the bundle walks — 3d3599b6's account preferences:
+// ws={friendNotifs:"prefFriendNotifs",…}; … getElementById(ws[e]).onchange=…
+const MAPPED = new Set();
+for (const u of bundle.matchAll(/getElementById\(([\w$]+)\[[\w$]+\]\)/g)) {
+  const def = new RegExp("[,; ]" + u[1].replace(/\$/g, "\\$") + "=\\{([^}]*)\\}").exec(bundle);
+  if (def) for (const m of def[1].matchAll(/:"([^"]+)"/g)) if (!ids.includes(m[1])) { ids.push(m[1]); MAPPED.add(m[1]); }
+}
+const CANVAS = new Set(["gameCanvas", "mapDisplay", "textCanvas"]);
+const CHECK = new Set(["nativeResolution", "showPing", "showFps", "playMusic", "showGrid", "cameraLock", ...MAPPED]);
 const TEXT = new Set(["nameInput", "chatBox", "allianceInput", "friendName", "accountEmail", "accountCode", "accountPassword"]);
 /* Where things sit. The real 2025 index.html is not available here, so this is
  * a guess — but a deliberate one: the menu's controls and the 2025 overlays
@@ -207,6 +227,7 @@ const PAGE = `<!doctype html>
 <style>
 html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
 #gameCanvas { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; }
+#textCanvas { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; display: none; }
 #touch-controls-fullscreen { position: fixed; inset: 0; z-index: 1; }
 #enterGame, #nameInput { position: relative; z-index: 5; display: block; min-height: 30px; }
 #menuContainer, #mainMenu, #menuCardHolder { position: relative; z-index: 10; }
@@ -233,9 +254,17 @@ const mixKeyStub = (key, seed) => {
   for (let i = 0; i < key.length; i++) out[i] = key[i] ^ (seed >>> 8 * (i & 3) & 255) ^ (i * 29 & 255);
   return out;
 };
-const PROTOCOL_MODULE = `export const BUILD_ID = "test-build";
+const PROTOCOL_MODULE = BUILD.proto ? fs.readFileSync(path.join(FIX, BUILD.proto), "utf8") : `export const BUILD_ID = "test-build";
 export const BUILD_SALT = 7;
 export const mixKey = ${mixKeyStub.toString()};`;
+/* The same module for the server's side of a pinned session, loaded once. */
+let protocolCache = null;
+const protocol = async () => {
+  if (protocolCache) return protocolCache;
+  if (!BUILD.proto) return protocolCache = { BUILD_ID: "test-build", BUILD_SALT: 7, mixKey: mixKeyStub };
+  const m = await import(require("url").pathToFileURL(path.join(FIX, BUILD.proto)).href);
+  return protocolCache = { BUILD_ID: m.BUILD_ID, BUILD_SALT: m.BUILD_SALT, mixKey: m.mixKey };
+};
 
 /* The same game, written the way another build of the obfuscator might have
  * written it. Each rewrite changes nothing at run time — a quoted key, a
@@ -262,10 +291,15 @@ function reshape(code) {
  * your name stayed white. */
 /* +signedin: the game loads Cloudflare's script only for a player who needs
  * a check, and one signed in to an account does not (live build). */
+// The Turnstile loader is il() in cfaab428 and Tr() in 3d3599b6: found by
+// where it is called (right before the name hint, and after the name fill).
 function signedIn(code) {
+  const at = /\}([\w$]+)\(\);const ([\w$]+)=document\.getElementById\("nameHint"\)/.exec(code);
+  if (!at) return code;
+  const fn = at[1].replace(/\$/g, "\\$");
   return code
-    .replace(/\}il\(\);const (\w+)=document\.getElementById\("nameHint"\)/, '}window.__signedIn||il();const $1=document.getElementById("nameHint")')
-    .replace(/(\.value=\w+\|\|"",\w+\(\),)il\(\)\}/, "$1window.__signedIn||il()}");
+    .replace(at[0], () => "}window.__signedIn||" + at[1] + "();const " + at[2] + '=document.getElementById("nameHint")')
+    .replace(new RegExp('(\\.value=[\\w$]+\\|\\|"",[\\w$]+\\(\\),)' + fn + "\\(\\)\\}"), (m, head) => head + "window.__signedIn||" + at[1] + "()}");
 }
 
 function restyle(code) {
@@ -384,12 +418,17 @@ const SERVERS = [
   { region: "us-east", name: "1", key: "abc1", playerCount: 12, playerCapacity: 40 },
   { region: "us-east", name: "2", key: "abc2", playerCount: 30, playerCapacity: 40 },
   { region: "eu-west", name: "1", key: "def1", playerCount: 5, playerCapacity: 40 },
-  { region: "eu-west", name: "9", key: "def9", playerCount: 3, playerCapacity: 40, auth: true },
+  /* Members-only. In a region of its own: 3d3599b6 auto-picks, for a signed-
+   * in player, only among a region's members-only servers when it has any
+   * (Uc), and a bot (a guest) cannot join one — +members covers that refusal.
+   * Here the signed-in runs test the bot itself, on a server it can join. */
+  { region: "ap-south", name: "9", key: "ghi9", playerCount: 3, playerCapacity: 40, auth: true },
 ];
 
 // ── one run ───────────────────────────────────────────────────────────────
 async function run(spec) {
   const [mode, ...flags] = spec.split("+");
+  const proto = await protocol();
   const pinned = flags.includes("pinned");
   /* +slowclick: a bot's challenge wants a click, and the person takes 25
    * seconds to get to it — past the 20 a bot's check used to wait. */
@@ -427,7 +466,7 @@ async function run(spec) {
   if (signedin) {
     const before = served;
     served = signedIn(served);
-    if ((served.match(/window\.__signedIn\|\|il\(\)/g) || []).length !== 2) throw new Error("signedIn did not take");
+    if ((served.match(/window\.__signedIn\|\|[\w$]+\(\)/g) || []).length !== 2) throw new Error("signedIn did not take");
   }
   if (restyled) {
     served = restyle(served);
@@ -627,7 +666,8 @@ async function run(spec) {
       } : null,
       pinned,
       crypto: pinned ? wire() : null,
-      mixKey: mixKeyStub,
+      mixKey: proto.mixKey,
+      salt: proto.BUILD_SALT,
       onSession: session => { if (out.conns[0] === conn) out.session = session; },
       ignoreNames: silentname && out.conns[0] !== conn ? ["bot1101"] : [],
       kickNames: kickname && out.conns[0] !== conn ? { bot1101: "This name belongs to someone else" } : {},
@@ -1531,7 +1571,7 @@ function report(r) {
   const mainSockets = r.mainSockets !== undefined ? r.mainSockets : r.sockets.length;
   ok(mainSockets === 1, "exactly one game socket opened for the player (" + mainSockets + ")" +
      (r.sockets.length ? ": " + r.sockets[0].slice(0, 120) : ""));
-  ok(r.sockets.length > 0 && /token=tk%3AT\d/.test(r.sockets[0]) && /[?&]b=test-build/.test(r.sockets[0]),
+  ok(r.sockets.length > 0 && /token=tk%3AT\d/.test(r.sockets[0]) && new RegExp("[?&]b=" + protocolCache.BUILD_ID + "(&|$)").test(r.sockets[0]),
      "the socket carries the /join ticket (tk:) and ?b=<BUILD_ID>");
   ok(r.spawnSent, "the spawn frame reached the server" + (r.joinMs !== null ? " — " + r.joinMs + " ms after Play" : "") +
      (r.unanswerable && r.unanswerable.length ? " — a challenge wanted a click nobody could make: " + JSON.stringify(r.unanswerable[0]) : ""));
@@ -1571,7 +1611,7 @@ function report(r) {
     const b = r.bot;
     if (r.joinRefuse === "busy") ok(/Too many joins/.test(b.toast || "") && r.joins.length >= 3,
        "a bot told \"too many joins\" waits, asks again with a new token, and gets in (" + r.joins.length + " joins)");
-    ok(!b.error && /token=tk%3AT\d/.test(b.url) && /[?&]b=test-build/.test(b.url),
+    ok(!b.error && /token=tk%3AT\d/.test(b.url) && new RegExp("[?&]b=" + protocolCache.BUILD_ID + "(&|$)").test(b.url),
        "a bot connects with its own /join ticket and the build id" + (b.error ? " — " + b.error : " (" + String(b.url).replace(/^wss:\/\/[^/]+/, "") + ")"));
     ok(!b.error && b.spawned, "the bot's spawn frame reached the server" + (b.error ? "" : " (" + b.frames + " frames)"));
     /* From Connect to the bot's spawn: Cloudflare's check (0.9 s here), its

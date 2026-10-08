@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.7.0
+// @version         2.8.0
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -1974,7 +1974,7 @@ window.grbtp = 35;
       if (response.status === 403 || response.status === 429) {
         return response.json().catch(() => ({})).then(body => ({
           ticket: null,
-          error: response.status === 429 ? "busy" : body && body.error === "auth" ? "members" : "refused"
+          error: response.status === 429 ? "busy" : body && body.error === "auth" ? "members" : body && body.error === "vpn" ? "vpn" : "refused"
         }));
       }
       if (!response.ok) return {
@@ -2037,7 +2037,9 @@ window.grbtp = 35;
   const RYN_JOIN_REFUSED = {
     members: "Bots can't join this server: it is for signed-in players, and bots join as guests. Pick a server without the shield.",
     refused: "The join API refused this bot's Cloudflare token. If a check box appeared, it has to be answered.",
-    busy: "Too many joins from your address right now — wait a little and add the bot again."
+    busy: "Too many joins from your address right now — wait a little and add the bot again.",
+    // 3d3599b6: 403 {error:"vpn"} — "VPNs and proxies can't join as a guest - turn it off or sign in"
+    vpn: "The join API refuses guests from a VPN or proxy, and every bot joins as a guest: turn the VPN/proxy off."
   };
   const createSocket = async (href, fresh = false, label = "Bot") => {
     let url = href;
@@ -2056,6 +2058,12 @@ window.grbtp = 35;
         }
       } catch (e) {
         if (e && e.message === "members-only server") throw e;
+      }
+      // The build's protocol module, before a Cloudflare check is spent: a bot
+      // on a pinned server is keyed with its mixKey and BUILD_SALT, and
+      // without them every frame it sent would be refused (see io-init).
+      if (RynWire.protocol() === null) {
+        await RynWire.ensureProtocol();
       }
       let token = null;
       if (!fresh) {
@@ -3649,7 +3657,7 @@ window.grbtp = 35;
     learned = false;
     // Arithmetic the obfuscator writes constants as ("-14*-489+50*200+-16829").
     _num(expr) {
-      if (typeof expr !== "string" || !/^[-+*\d\s]+$/.test(expr)) return null;
+      if (typeof expr !== "string" || !/^[-+*\d\s()]+$/.test(expr)) return null;
       try {
         const v = Function("return (" + expr + ")")();
         return typeof v === "number" && isFinite(v) ? v : null;
@@ -3665,8 +3673,13 @@ window.grbtp = 35;
         if (key && rynGameSitekey === null) rynGameSitekey = key[1];
       } catch (e) {}
       try {
-        const v = /\/servers\?v=([\d.]+)/.exec(text);
-        if (v) rynServersVersion = v[1];
+        // 1.27: `${Se}/servers?v=1.27`; 3d3599b6: const Kx="1.28",Qx=`${Te}/servers?v=${Kx}`
+        const v = /\/servers\?v=(?:([\d.]+)|\$\x7b([\w$]+)\x7d)/.exec(text);
+        if (v && v[1]) rynServersVersion = v[1];
+        else if (v) {
+          const d = new RegExp("(?:const |let |var |,)" + v[2].replace(/\$/g, "\\$") + '="([\\d.]+)"').exec(text);
+          if (d) rynServersVersion = d[1];
+        }
       } catch (e) {}
       try {
         const c2s = /([\w$]+)=\[("M","D","9"(?:,"[^"\\]{1,3}")*)\],([\w$]+)=([-+*\d\s]+)[,;]/.exec(text);
@@ -3688,9 +3701,43 @@ window.grbtp = 35;
             if (sig !== null && sig > 0 && sig <= 32) this.sigBytes = sig;
             if (mode !== null) this.mode = mode;
           }
+          // 3d3599b6 split that declaration (`const $f=1,Uo=6;function ne…const Qs=1,dl=[…]`),
+          // so the head above finds nothing there. Read each constant from the
+          // code that USES it instead, which any build has to keep.
+          this._learnByUse(text);
         }
       } catch (e) {}
       return this.learned;
+    }
+    // A top-level constant's value, by name: `const X=<arith>` or `,X=<arith>`.
+    _decl(text, name) {
+      const m = new RegExp("(?:const |let |var |,)" + name.replace(/\$/g, "\\$") + "=([-+*\\d\\s()]+)[,;]").exec(text);
+      return m ? this._num(m[1]) : null;
+    }
+    _learnByUse(text) {
+      const OB = '(?:[\\w$]+\\(\\d+,"(?:[^"\\\\]|\\\\.)*"\\)|"(?:[^"\\\\]|\\\\.)*")';
+      const KEY = "(?:\\[" + OB + "(?:\\+" + OB + ")*\\]|\\.[\\w$]+)";
+      try {
+        // the session literal names the mode constant
+        const mode = /[\w$]+=\x7bmode:([\w$]+),key:[\w$]+,tables:/.exec(text);
+        const mv = mode && this._decl(text, mode[1]);
+        if (mv !== null && mv !== undefined) this.mode = mv;
+        // the send sizes its frame as new Uint8Array(W+payload.length), the + maybe proxied
+        const sig = new RegExp("=new Uint8Array\\((?:([\\w$]+)\\+|[\\w$]+" + KEY + "\\(([\\w$]+),)[\\w$]+" + KEY + "\\)\\)?[,;][\\w$]+" + KEY + "\\([\\w$]+,").exec(text);
+        const sv = sig && this._decl(text, sig[1] || sig[2]);
+        if (sv !== null && sv > 0 && sv <= 32) this.sigBytes = sv;
+        // the tables function: s=o?DEFAULT:t, then o?ALPHA[..](0,N):ALPHA for c2s and s2c
+        const fnName = new RegExp("tables:[\\w$]+\\?(?:[\\w$]+" + KEY + "\\(([\\w$]+),|([\\w$]+)\\()").exec(text);
+        const name = fnName && (fnName[1] || fnName[2]);
+        const at = name ? text.indexOf("function " + name + "(") : -1;
+        if (at >= 0) {
+          const head = text.slice(at, at + 1200);
+          const t = /^function [\w$]+\([\w$]+,([\w$]+)\)/.exec(head);
+          const ds = t && new RegExp("=[\\w$]+\\?([\\w$]+):" + t[1].replace(/\$/g, "\\$") + ",").exec(head);
+          const dv = ds && this._decl(text, ds[1]);
+          if (dv !== null && dv !== undefined) this.defaultSalt = dv;
+        }
+      } catch (e) {}
     }
     hex(h) {
       const out = new Uint8Array(h.length / 2);
@@ -3775,6 +3822,32 @@ window.grbtp = 35;
       } catch (e) {
         return null;
       }
+    }
+    /* The same module, fetched by RYN itself when the injector's capture did
+     * not happen (a build whose imports the converter did not recognise, or a
+     * page RYN reached late). mixKey and BUILD_SALT change with every build —
+     * 3d3599b6's module is s16nvz.js — so they are never copied into RYN; a
+     * bot on a pinned server cannot be keyed without them. */
+    _protoLoad=null;
+    ensureProtocol() {
+      const have = this.protocol();
+      if (have !== null) return Promise.resolve(have);
+      if (this._protoLoad !== null) return this._protoLoad;
+      let url = null;
+      try {
+        url = Injector_importMap.resolve("moomoo-protocol");
+      } catch (e) {}
+      if (!url) return Promise.resolve(null);
+      this._protoLoad = import(url).then(m => {
+        try {
+          if (typeof RYN !== "undefined" && RYN._modules && !RYN._modules["moomoo-protocol"]) RYN._modules["moomoo-protocol"] = m;
+        } catch (e) {}
+        return m;
+      }, () => {
+        this._protoLoad = null;
+        return null;
+      });
+      return this._protoLoad;
     }
   }();
   /* What a session needs: the game's own function wherever a hook found it,
@@ -4013,9 +4086,19 @@ window.grbtp = 35;
     };
   };
   class CustomStorage {
+    /* Keys RYN shares with the game are not always JSON. The 3d3599b6 game
+     * saves skin_color itself as String(e), so a value RYN handed it
+     * ("toString") came back on the next load as raw `toString`, JSON.parse
+     * threw inside resetGame, and RYN never started: "refresh, enter again,
+     * and nothing works". A value that is not JSON is returned as it is. */
     static get(key) {
       const value = window.localStorage.getItem(key);
-      return value === null ? null : JSON.parse(value);
+      if (value === null) return null;
+      try {
+        return JSON.parse(value);
+      } catch (e) {
+        return value;
+      }
     }
     static set(key, value, stringify = true) {
       const data = stringify ? JSON.stringify(value) : value;
@@ -12786,6 +12869,18 @@ window.grbtp = 35;
           const seed = args[1] >>> 0;
           const keyHex = args[2];
           const pinned = args[4] === 1;
+          /* A pinned session needs the build's mixKey and BUILD_SALT. Without
+           * them the key and the opcode tables come out wrong, the server
+           * refuses every frame, and the bot just disappeared. A bot says why
+           * and leaves instead. (The main player's own session is the
+           * bundle's; this copy is only RYN's view of it.) */
+          if (pinned && enc && (typeof enc.mixKey !== "function" || enc.salt == null) && !this.client.isOwner) {
+            rynBotNotice("This bot could not load the game's protocol module (moomoo-protocol), so it cannot sign in to a protected server. Reload the page and add it again.");
+            try {
+              this.socket.close();
+            } catch (_) {}
+            return;
+          }
           if (enc && enc.jt !== undefined && keyHex !== undefined && args[1] !== undefined) {
             const baseKey = enc.Ro(keyHex);
             const key = pinned && enc.mixKey ? enc.mixKey(baseKey, seed) : baseKey;
@@ -39360,8 +39455,15 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         mapDisplay: querySelector("#mapDisplay")
       };
     }
+    /* The colour index goes to the game as a number. The old "toString" skin
+     * (index 10) is no longer one the 2025 game knows: it keeps the index for
+     * the spawn packet as it was given and only checks it at load, so a
+     * string went to the server as the skin, and its own save of it broke
+     * RYN's next start (CustomStorage.get). Anything that is not one of the
+     * game's colours is colour 0. */
     selectSkinColor(skin) {
-      const skinValue = skin === 10 ? "toString" : skin;
+      const n = typeof skin === "number" ? skin : Number(skin);
+      const skinValue = Number.isInteger(n) && n >= 0 && n < Config_default.skinColors.length ? n : 0;
       CustomStorage.set("skin_color", skinValue);
       const selectSkin = getTargetValue(window, "selectSkinColor");
       if (selectSkin !== void 0) {
@@ -39370,8 +39472,8 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       return skinValue;
     }
     createSkinColors(host) {
-      const skin_color = CustomStorage.get("skin_color") || 0;
-      const index = typeof skin_color === "number" && skin_color >= 0 && skin_color < Config_default.skinColors.length ? skin_color : 0;
+      const skin_color = Number(CustomStorage.get("skin_color")) || 0;
+      const index = Number.isInteger(skin_color) && skin_color >= 0 && skin_color < Config_default.skinColors.length ? skin_color : 0;
       const skinHolder = document.createElement("div");
       skinHolder.id = "ryn-skin-holder";
       let prevIndex = index;
@@ -41375,6 +41477,10 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     hookCount=0;
     hookAttempts=0;
     ANY_LETTER="(?:[^\\x00-\\x7F-]|\\$|\\w)";
+    // A decoded string i(242,"knGx") or a literal "ay"; a property key is one
+    // or more of them joined by +, in brackets — or a plain .name.
+    OB_STR='(?:\\w+\\(\\d+,"(?:[^"\\\\]|\\\\.)*"\\)|"(?:[^"\\\\]|\\\\.)*")';
+    OB_KEY="(?:\\[" + this.OB_STR + "(?:\\+" + this.OB_STR + ")*\\]|\\.\\w+)";
     NumberSystem=[ {
       radix: 2,
       prefix: "0b0*"
@@ -41403,6 +41509,15 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       regex = regex.replace(/{VAR}/g, "(?:let|var|const)");
       regex = regex.replace(/{QUOTE{(\w+)}}/g, "(?:'$1'|\"$1\"|`$1`)");
       regex = regex.replace(/NUM{(\d+)}/g, (...args) => this.generateNumberSystem(Number(args[1])));
+      /* The obfuscator's own vocabulary, so a hook can say what the code does
+       * instead of how one build happened to spell it:
+       *   {OBKEY}        a property access: [i(242,"knGx")], [i(1,"ab")+"ed"], ["x"], .x
+       *   {OBCALL:name}  a call it may or may not route through a proxy object —
+       *                  fn(…  or  o[i(225,"tU&W")](fn,…  — capturing fn as the
+       *                  named group <nameP> (proxied) or <nameD> (direct).
+       * Expanded before \w is widened, so their \w take `$` too. */
+      regex = regex.replace(/\{OBKEY\}/g, () => this.OB_KEY);
+      regex = regex.replace(/\{OBCALL:(\w+)\}/g, (m, g) => "(?:\\w+" + this.OB_KEY + "\\((?<" + g + "P>\\w+),|(?<" + g + "D>\\w+)\\()");
       regex = regex.replace(/\\w/g, this.ANY_LETTER);
       return regex;
     }
@@ -41493,8 +41608,17 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     Hook.replace("zoomOutCap", /const (\w+)=(\w+)\*1\.15;/, "const $1={valueOf:function(){return $2*1.15}};");
     // ...and its tail made idempotent (Renderer._viewport).
     Hook.replace("viewport", /(\w+)\.width=(\w+)\*(\w+),\1\.height=(\w+)\*\3,\1\.style\.width=\2\+"px",\1\.style\.height=\4\+"px",(\w+)\.setTransform\((\w+)\*\3,0,0,\6\*\3,0,0\),\5\.resize\(\6\*\3\)/, "RYN._Renderer._viewport($1,$2,$4,$3,$5,$6)");
-    // Name colours (Renderer._nameColor): where the game picks white or clan.
-    Hook.replace("nameColor", /(\w+)=(\w+)!=(\w+)&&\2\.clan&&\2\.clan==\3\.clan&&!\(\2\.team&&\2\.team==\3\.team\),(\w+)=\1\?(\w+):"#fff",(\w+)=\{color:\4,/, "$1=$2!=$3&&$2.clan&&$2.clan==$3.clan&&!($2.team&&$2.team==$3.team),$4=RYN._Renderer._nameColor($2,$3,$1?$5:\"#fff\"),$6={color:$4,");
+    /* Name colours (Renderer._nameColor): where the game picks white or the
+     * clan colour. cfaab428 put that one colour on a style object for the
+     * whole nameplate (`S=k?Bx:"#fff",g={color:S,`); 3d3599b6 builds the
+     * plate as coloured pieces for label() — clan tag, gold, name — each
+     * pushed with its own colour (`g=[],b=function(D,V,A){…}`), and the
+     * name goes last as `b(p.name||"",x,S)`. There only the NAME piece takes
+     * your colour; the clan tag keeps the game's. */
+    Hook.replace("nameColor", /(\w+)=(\w+)!=(\w+)&&\2\.clan&&\2\.clan==\3\.clan&&!\(\2\.team&&\2\.team==\3\.team\),(\w+)=\1\?(\w+):"#fff",(?:(\w+)=\{color:\4,|\w+=\[\],(\w+)=function[^]{0,400}?\7\(\2\.name\|\|"",(\w+),\4\))/,
+      (whole, isClan, player, me, color, clanColor, styleVar, add, size) => styleVar
+        ? whole.replace(color + "=" + isClan + "?" + clanColor + ":\"#fff\",", () => color + "=RYN._Renderer._nameColor(" + player + "," + me + "," + isClan + "?" + clanColor + ":\"#fff\"),")
+        : whole.slice(0, whole.length - (add + "(" + player + ".name||\"\"," + size + "," + color + ")").length) + add + "(" + player + ".name||\"\"," + size + ",RYN._Renderer._nameColor(" + player + "," + me + "," + color + "))");
     // The renderer the frame is drawn with, the moment it exists.
     Hook.replace("adoptRenderer", /(\w+)=(\w+)\((\w+),(\w+)\?\{pageSize:\+\4\[1\],maxPages:\+\4\[2\]\}:null\);/, "$1=RYN._Renderer._adopt($2($3,$4?{pageSize:+$4[1],maxPages:+$4[2]}:null),$3);");
     Hook.append("mapPreRender", /(\w+)\.lineWidth=NUM{4};/, "RYN._Renderer._mapPreRender($1);");
@@ -41656,27 +41780,43 @@ html.ryn-in-lobby .ryn-v2-wrapper {
      * Note the two directions are NOT the same function: incoming frames are
      * keyed on the receive counter through wf(), outgoing ones on the frame's
      * own signature through bf(). */
-    const cryptoName = (m, i) => m && m.length > i && /^[\w$]+$/.test(m[i]) ? m[i] : null;
+    /* Each primitive is recognised by what the code around it DOES, and every
+     * call in these patterns may be direct or routed through one of the
+     * obfuscator's proxy objects ({OBCALL:x}); the obfuscator flips that per
+     * call site per build. cfaab428 proxied the unpinned tables call and the
+     * signer; 3d3599b6 proxies the pinned tables call, both receive-side calls,
+     * the outgoing masker and the `So+c.length` addition — which is all it
+     * took for the four 2.7.0 patterns to miss.
+     *   session:  D=hex(k[2]),V=b?mixKey(D,B):D;pe={mode:M,key:V,tables:b?tables(B,SALT):…,seq:0,mask:b?maskFrom(V):null,received:0}
+     *   receive:  pe&&pe.mask&&xor(h,maskIn(pe.mask.s2c,++pe.received))
+     *   send:     d=sign(pe.key,l),f=new Uint8Array(W+l.length) … pe.mask&&xor(f.subarray(W),maskVal(pe.mask.c2s,d))
+     * Note the two directions are NOT the same function: incoming frames are
+     * keyed on the receive counter, outgoing ones on the frame's own
+     * signature. */
+    const cryptoPick = (m, g) => {
+      const v = m && m.groups ? m.groups[g + "P"] || m.groups[g + "D"] || m.groups[g] : null;
+      return typeof v === "string" && /^[\w$]+$/.test(v) ? v : null;
+    };
     const cryptoRef = id => id ? "(typeof " + id + "!=='undefined'?" + id + ":null)" : "null";
-    const cryptoSession = Hook.match("cryptoSession", /(\w+)=(\w+)\(\w+\[[^\]]+\]\),(\w+)=(\w+)\?(\w+)\(\1,(\w+)\):\1;(\w+)=(?:RYN\._myClient\._gameCrypto=)?\{(?:_bundle:!0,)?mode:(\w+),key:\3,tables:\4\?(\w+)\(\6,(\w+)\):.*?,seq:0,mask:\4\?(\w+)\(\3\):null,received:0\}/);
-    const cryptoInbound = Hook.match("cryptoInbound", /&&(\w+)\(\w+,(\w+)\((\w+)\[\w+\(\d+,"[^"]*"\)\]\[\w+\(\d+,"[^"]*"\)\],\+\+\3\[/);
-    const cryptoSign = Hook.match("cryptoSign", /\]\((\w+),(\w+)\[\w+\(\d+,"[^"]*"\)\],(\w+)\),\w+=new Uint8Array\((\w+)\+\3\[/);
-    const cryptoOutbound = Hook.match("cryptoOutbound", /(\w+)\(\w+\[\w+\(\d+,"[^"]*"\)\+"ay"\]\(\w+\),(\w+)\(\w+\[/);
-    const cryptoBuild = Hook.match("cryptoBuild", /\+"b=",(\w+)\)/);
+    const cryptoSession = Hook.match("cryptoSession", /(?<key>\w+)={OBCALL:hex}\w+\[[^\]]+\]\),(?<mixed>\w+)=(?<pinned>\w+)\?{OBCALL:mix}\k<key>,(?<seed>\w+)\):\k<key>;(?<sess>\w+)=(?:RYN\._myClient\._gameCrypto=)?\{(?:_bundle:!0,)?mode:(?<mode>\w+),key:\k<mixed>,tables:\k<pinned>\?{OBCALL:tables}\k<seed>,(?<salt>\w+)\):.*?,seq:0,mask:\k<pinned>\?{OBCALL:maskFrom}\k<mixed>\):null,received:0\}/);
+    const cryptoInbound = Hook.match("cryptoInbound", /(?<sess>\w+)&&\k<sess>{OBKEY}&&{OBCALL:apply}\w+,{OBCALL:maskIn}\k<sess>{OBKEY}{OBKEY},\+\+\k<sess>{OBKEY}\)/);
+    const cryptoSign = Hook.match("cryptoSign", /(?<sig>\w+)={OBCALL:sign}(?<sess>\w+){OBKEY},(?<data>\w+)\),(?<frame>\w+)=new Uint8Array\((?:(?<widthD>\w+)\+|\w+{OBKEY}\((?<widthP>\w+),)\k<data>{OBKEY}\)/);
+    const cryptoOutbound = Hook.match("cryptoOutbound", /(?<sess>\w+){OBKEY}&&{OBCALL:apply}(?<frame>\w+){OBKEY}\((?<width>\w+)\),{OBCALL:maskVal}\k<sess>{OBKEY}{OBKEY},(?<sig>\w+)\)\)/);
+    const cryptoBuild = Hook.match("cryptoBuild", /"b="(?:\+|,)(?<build>\w+)/);
     const encFields = [
       "Hi:$1",
-      "Eo:" + cryptoRef(cryptoName(cryptoSign, 1)),
-      "jt:" + cryptoRef(cryptoName(cryptoSign, 4)),
-      "Ro:" + cryptoRef(cryptoName(cryptoSession, 2)),
-      "Po:" + cryptoRef(cryptoName(cryptoSession, 9)),
-      "mode:" + cryptoRef(cryptoName(cryptoSession, 8)),
-      "mixKey:" + cryptoRef(cryptoName(cryptoSession, 5)),
-      "salt:" + cryptoRef(cryptoName(cryptoSession, 10)),
-      "buildId:" + cryptoRef(cryptoName(cryptoBuild, 1)),
-      "maskFrom:" + cryptoRef(cryptoName(cryptoSession, 11)),
-      "applyMask:" + cryptoRef(cryptoName(cryptoInbound, 1) || cryptoName(cryptoOutbound, 1)),
-      "maskIn:" + cryptoRef(cryptoName(cryptoInbound, 2)),
-      "maskVal:" + cryptoRef(cryptoName(cryptoOutbound, 2))
+      "Eo:" + cryptoRef(cryptoPick(cryptoSign, "sign")),
+      "jt:" + cryptoRef(cryptoPick(cryptoSign, "width")),
+      "Ro:" + cryptoRef(cryptoPick(cryptoSession, "hex")),
+      "Po:" + cryptoRef(cryptoPick(cryptoSession, "tables")),
+      "mode:" + cryptoRef(cryptoPick(cryptoSession, "mode")),
+      "mixKey:" + cryptoRef(cryptoPick(cryptoSession, "mix")),
+      "salt:" + cryptoRef(cryptoPick(cryptoSession, "salt")),
+      "buildId:" + cryptoRef(cryptoPick(cryptoBuild, "build")),
+      "maskFrom:" + cryptoRef(cryptoPick(cryptoSession, "maskFrom")),
+      "applyMask:" + cryptoRef(cryptoPick(cryptoInbound, "apply") || cryptoPick(cryptoOutbound, "apply")),
+      "maskIn:" + cryptoRef(cryptoPick(cryptoInbound, "maskIn")),
+      "maskVal:" + cryptoRef(cryptoPick(cryptoOutbound, "maskVal"))
     ].join(",");
     // A function replacement: minified names may contain `$`, which a string
     // replacement would read as a group reference.
@@ -41687,9 +41827,15 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         "try{return{" + encFields.replace("Hi:$1", () => "Hi:" + encoder) + "};}catch(e){return null}}})}catch(e){}" +
         "let " + session + "=null");
     // The main socket's frame signature through RynSign: the same bytes,
-    // checked against the game's own function first (see RynSign).
-    Hook.replace("fastSign", /\]\((\w+),(\w+\[\w+\(\d+,"[^"]*"\)\],\w+\),\w+=new Uint8Array\(\w+\+\w+\[)/,
-      (whole, signFn, rest) => "](RYN._sign(" + signFn + ")," + rest);
+    // checked against the game's own function first (see RynSign). The sign
+    // call is wrapped where it stands, proxied (o[k](fn,…) -> o[k](RYN._sign(fn),…)
+    // or direct (fn(… -> RYN._sign(fn)(…).
+    Hook.replace("fastSign", /(?<sig>\w+)={OBCALL:sign}(?<sess>\w+){OBKEY},(?<data>\w+)\),(?<frame>\w+)=new Uint8Array\(/,
+      (...a) => {
+        const whole = a[0], g = a[a.length - 1];
+        if (g.signP) return whole.replace("(" + g.signP + ",", () => "(RYN._sign(" + g.signP + "),");
+        return whole.replace("=" + g.signD + "(", () => "=RYN._sign(" + g.signD + ")(");
+      });
     Hook.replace("handleBuy", /\w+\.send\("\w+",1,(\w+),(\w+)\)/, "RYN._Possess.c()._ModuleHandler._buy($2,$1,true)");
     Hook.prepend("RemovePingCall", /\w+&&clearTimeout/, "return;");
     /* The game's pong handler. RemovePingCall stops the game's own pings —
@@ -41705,7 +41851,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
      * in another function, and deleted all of it, `const Oe=…` included. The
      * render loop then threw "Oe is not defined" on every frame. The grid is
      * now two loops of M.line() after `globalAlpha=.06`; only those go. */
-    Hook.replace("RenderGrid", /(\.globalAlpha=\.06;const (\w+)=\w+\/18;)for\((?:var|let) (\w+)=[^;]+;\3<\w+;\3\+=\2\)\3>0&&\w+\.line\([^)]*\);for\((?:var|let) (\w+)=[^;]+;\4<\w+;\4\+=\2\)\4>0&&\w+\.line\([^)]*\);/, "$1");
+    Hook.replace("RenderGrid", /(\.globalAlpha=\.06;const (\w+)=\w+\/18;)for\((?:var|let) (\w+)=[^;]+;(?:\w+&&)?\3<\w+;\3\+=\2\)\3>0&&\w+\.line\([^)]*\);for\((?:var|let) (\w+)=[^;]+;(?:\w+&&)?\4<\w+;\4\+=\2\)\4>0&&\w+\.line\([^)]*\);/, "$1");
     Hook.replace("upgradeItem", /(upgradeItem.+?onclick.+?)\w+\.send\("\w+",(\w+)\)\}/, "$1RYN._Possess.c()._ModuleHandler._upgradeItem($2)}");
     const data = Hook.match("DeathMarker", /99999.+?(\w+)=\{x:(\w+)/);
     Hook.append("playerDied", /NUM{99999};function \w+\(\)\{/, `if(RYN._settings._autospawn){${data[1]}={x:${data[2]}.x,y:${data[2]}.y};return};`);
@@ -41916,6 +42062,8 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         // sockets use (RynWire).
         return lead + ws + parts.map(p => "const " + p + " = (RYN._modules[" + JSON.stringify(path) + "] = await import(" + abs + "))").join(";");
       });
+      // The whole preload-helper call, so no <link rel=modulepreload> for the chunk is made either.
+      code = code.replace(/[\w$]+\(\(\)=>import\(\s*(["'])\.\/texture-pack-[^"']+\1\s*\),\[[^\]]*\],import\.meta\.url\)|\bimport\s*\(\s*(["'])\.\/texture-pack-[^"']+\2\s*\)/g, 'Promise.reject(new Error("[RYN] texture pack chunk not loaded: it imports the original game module"))');
       code = code.replace(/(\bimport\s*\(\s*)(["'])(\.\.?\/[^"']+)\2/g, (m, kw, quote, path) => kw + quote + toAbs(path) + quote);
       /* Exports are module-only syntax as well. The 3d3599b6 build ends with
        *
@@ -42256,8 +42404,13 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       }
     });
     CustomStorage.set("moofoll", 1);
-    if (CustomStorage.get("skin_color") === null) {
-      CustomStorage.set("skin_color", "toString");
+    // A "toString" left by an older RYN is put back to a colour the game has
+    // (see Menu.selectSkinColor); a fresh profile is left to the game.
+    {
+      const saved = CustomStorage.get("skin_color");
+      if (saved !== null && !(Number.isInteger(Number(saved)) && Number(saved) >= 0 && Number(saved) < Config_default.skinColors.length)) {
+        CustomStorage.set("skin_color", 0);
+      }
     }
     window.addEventListener = new Proxy(window.addEventListener, {
       apply(target, _this, args) {

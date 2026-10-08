@@ -42,10 +42,15 @@ const src = fs.readFileSync(RYN, "utf8");
  * expand it to, reporting four healthy hooks as missing. \w also takes `$`
  * and non-ASCII letters, as minified names do. */
 const NUMBER_FORMS = [[2, "0b0*"], [8, "0+"], [10, ""], [16, "0x0*"]];
+const OB_STR = '(?:\\w+\\(\\d+,"(?:[^"\\\\]|\\\\.)*"\\)|"(?:[^"\\\\]|\\\\.)*")';
+const OB_KEY = "(?:\\[" + OB_STR + "(?:\\+" + OB_STR + ")*\\]|\\.\\w+)";
 const expand = s => s
   .replace(/\{VAR\}/g, "(?:let|var|const)")
   .replace(/\{QUOTE\{(\w+)\}\}/g, "(?:'$1'|\"$1\"|`$1`)")
   .replace(/NUM\{(\d+)\}/g, (m, n) => "(?:" + NUMBER_FORMS.map(([r, p]) => p + Number(n).toString(r)).join("|") + ")")
+  // RYN's {OBKEY} / {OBCALL:name} macros: the obfuscator's property access and maybe-proxied call
+  .replace(/\{OBKEY\}/g, () => OB_KEY)
+  .replace(/\{OBCALL:(\w+)\}/g, (m, g) => "(?:\\w+" + OB_KEY + "\\((?<" + g + "P>\\w+),|(?<" + g + "D>\\w+)\\()")
   .replace(/\\w/g, "(?:[^\\x00-\\x7F-]|\\$|\\w)");
 
 /* Pull every Hook.<op>("name", /re/, "replacement") out of the client. The

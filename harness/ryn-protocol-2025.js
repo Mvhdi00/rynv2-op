@@ -33,11 +33,26 @@ console.log(path.basename(RYN) + " vs " + path.basename(NEW) + " — the 2025 pr
 // ── what the bundle itself now does ───────────────────────────────────────
 console.log("  THE BUNDLE — read, not assumed\n");
 
-const consts = /const uf=([^,]+),So=([^,]+),Ws=([^,]+),Bl=(\[[^\]]*\]),hf=([^,]+),Dl=(\[[^\]]*\])/.exec(nb);
-say(!!consts, "the protocol constants and both opcode tables are found");
+/* Read by structure, not by the minifier's names: cfaab428 declared the
+ * constants in one run (`const uf=1,So=6,Ws=1,Bl=[…],hf=17,Dl=[…]`), 3d3599b6
+ * split them (`const $f=1,Uo=6;` … `const Qs=1,dl=[…]`). The two alphabets
+ * are found by their first letters; the signature width by the frame the send
+ * sizes (`new Uint8Array(W+payload.length)`, the + maybe proxied); the mode by
+ * the session literal (`{mode:M,key:`). */
 const ev = x => Function("return (" + x + ")")();
-const sigBytes = ev(consts[2]), mode = ev(consts[3]);
-const c2s = JSON.parse(consts[4]), s2c = JSON.parse(consts[6]);
+const declOf = name => {
+  const m = new RegExp("(?:const |let |var |,)" + name.replace(/\$/g, "\\$") + "=([-+*\\d\\s()]+)[,;]").exec(nb);
+  return m ? ev(m[1]) : null;
+};
+const OB_STR_P = '(?:[\\w$]+\\(\\d+,"(?:[^"\\\\]|\\\\.)*"\\)|"(?:[^"\\\\]|\\\\.)*")';
+const OB_KEY_P = "(?:\\[" + OB_STR_P + "(?:\\+" + OB_STR_P + ")*\\]|\\.[\\w$]+)";
+const c2sM = /[\w$]+=(\["M","D","9"[^\]]*\])/.exec(nb), s2cM = /[\w$]+=(\["A","B","C"[^\]]*\])/.exec(nb);
+const sigM = new RegExp("=new Uint8Array\\((?:([\\w$]+)\\+|[\\w$]+" + OB_KEY_P + "\\(([\\w$]+),)[\\w$]+" + OB_KEY_P + "\\)\\)?[,;][\\w$]+" + OB_KEY_P + "\\([\\w$]+,").exec(nb);
+const modeM = /=\{mode:([\w$]+),key:[\w$]+,tables:/.exec(nb);
+const consts = c2sM && s2cM && sigM && modeM;
+say(!!consts, "the protocol constants and both opcode tables are found");
+const sigBytes = sigM ? declOf(sigM[1] || sigM[2]) : null, mode = modeM ? declOf(modeM[1]) : null;
+const c2s = c2sM ? JSON.parse(c2sM[1]) : [], s2c = s2cM ? JSON.parse(s2cM[1]) : [];
 
 const oldT = /bo=(\[[^\]]*\])\s*,\s*To=(\[[^\]]*\])/.exec(ob);
 const oc2s = JSON.parse(oldT[1]), os2c = JSON.parse(oldT[2]);
@@ -64,7 +79,7 @@ say(/import\{BUILD_ID as \w+,mixKey as \w+,BUILD_SALT as \w+\}from"moomoo-protoc
     "BUILD_ID, mixKey and BUILD_SALT come from a new `moomoo-protocol` module");
 say(/\?"\?":"&"\)\+"b=",\w+\)/.test(nb) || /\+"b=",Q0\)/.test(nb),
     "the socket URL now carries ?b=<BUILD_ID> as well as ?token=");
-say(/\w+&&\w+\[[^\]]*\]&&Nl\(/.test(nb) || /Nl\(\w+,\w+\(/.test(nb),
+say(/mask:[\w$]+\?[^:]{1,80}:null,received:0\}/.test(nb),
     "frames are XOR-masked per message on a pinned connection");
 
 // ── what RYN now does ─────────────────────────────────────────────────────
@@ -185,7 +200,7 @@ console.log("\n  THE LOGIN HOOKS — matching is not enough, they must install\n
 
 console.log("\n  THE BINDING — lazy, found by shape, and it cannot take the game down\n");
 const hookStart = src.indexOf('Hook.replace("exposeCryptoFns"');
-const hook = src.slice(src.indexOf("const cryptoName = "), src.indexOf("let \" + session + \"=null\");", hookStart) + 30);
+const hook = src.slice(src.indexOf("const cryptoPick = "), src.indexOf("let \" + session + \"=null\");", hookStart) + 30);
 say(/Object\.defineProperty\(RYN,'_enc'/.test(hook),
     "_enc is a lazy getter, so the names resolve after every declaration has run");
 say(/try\{/.test(hook) && /catch\(e\)\{return null\}/.test(hook),
@@ -198,21 +213,40 @@ for (const [label, re] of [
   ["cryptoBuild", /Hook\.match\("cryptoBuild"/]]) {
   say(re.test(src), label + " is captured by pattern");
 }
-// ...and the patterns really do find the bundle's primitives: run them here.
+// ...and the patterns really do find the bundle's primitives: run them here,
+// with RYN's own macros ({OBKEY}, {OBCALL:x}) expanded the way its Regexer does.
 {
+  const OB_STR = '(?:\\w+\\(\\d+,"(?:[^"\\\\]|\\\\.)*"\\)|"(?:[^"\\\\]|\\\\.)*")';
+  const OB_KEY = "(?:\\[" + OB_STR + "(?:\\+" + OB_STR + ")*\\]|\\.\\w+)";
+  const expand = x => x.replace(/\{OBKEY\}/g, () => OB_KEY)
+    .replace(/\{OBCALL:(\w+)\}/g, (m, g) => "(?:\\w+" + OB_KEY + "\\((?<" + g + "P>\\w+),|(?<" + g + "D>\\w+)\\()")
+    .replace(/\\w/g, "(?:[^\\x00-\\x7F-]|\\$|\\w)");
   const pat = name => {
     const at = src.indexOf('Hook.match("' + name + '", ');
     const lit = src.slice(at).match(/, (\/(?:[^\/\\\n]|\\.)+\/)\);/)[1];
-    return new RegExp(eval(lit).source.replace(/\\w/g, "(?:[^\\x00-\\x7F-]|\\$|\\w)"));
+    return new RegExp(expand(eval(lit).source));
   };
+  const pick = (m, g) => m && m.groups ? (m.groups[g + "P"] || m.groups[g + "D"] || m.groups[g] || null) : null;
   const session = pat("cryptoSession").exec(nb), inbound = pat("cryptoInbound").exec(nb);
   const signing = pat("cryptoSign").exec(nb), outbound = pat("cryptoOutbound").exec(nb), build = pat("cryptoBuild").exec(nb);
-  say(!!session && session[2] === "vf" && session[5] === "z0" && session[9] === "Ll" && session[10] === "K0" && session[11] === "kf",
-      "on the fixture they find vf, mixKey (z0), Ll, BUILD_SALT (K0) and kf");
-  say(!!inbound && inbound[1] === "Nl" && inbound[2] === "wf", "the receive side's Nl and wf");
-  say(!!signing && signing[1] === "yf" && signing[4] === "So", "the signer yf and the signature width So");
-  say(!!outbound && outbound[2] === "bf", "the send side's bf");
-  say(!!build && build[1] === "Q0", "and BUILD_ID (Q0) from the socket URL");
+  // What each build calls them, read off its own code by hand.
+  const EXPECT = /mixKey as z0/.test(nb)
+    ? { hex: "vf", mix: "z0", tables: "Ll", salt: "K0", maskFrom: "kf", apply: "Nl", maskIn: "wf", sign: "yf", width: "So", maskVal: "bf", build: "Q0" }
+    : /mixKey as Pd/.test(nb)
+    ? { hex: "cu", mix: "Pd", tables: "hl", salt: "Ad", maskFrom: "au", apply: "xl", maskIn: "ru", sign: "su", width: "Uo", maskVal: "lu", build: "Rd" }
+    : null;
+  if (EXPECT === null) console.log("    (a build this check has no expected names for: only that each pattern matches is checked)");
+  const is = (got, k) => EXPECT === null ? !!got : got === EXPECT[k];
+  say(!!session && is(pick(session, "hex"), "hex") && is(pick(session, "mix"), "mix") && is(pick(session, "tables"), "tables") &&
+      is(pick(session, "salt"), "salt") && is(pick(session, "maskFrom"), "maskFrom"),
+      "they find the key parser, mixKey, the table builder, BUILD_SALT and the mask maker (" +
+      ["hex", "mix", "tables", "salt", "maskFrom"].map(k => pick(session, k)).join(", ") + ")");
+  say(!!inbound && is(pick(inbound, "apply"), "apply") && is(pick(inbound, "maskIn"), "maskIn"),
+      "the receive side's keystream and mask (" + pick(inbound, "apply") + ", " + pick(inbound, "maskIn") + ")");
+  say(!!signing && is(pick(signing, "sign"), "sign") && is(pick(signing, "width"), "width"),
+      "the signer and the signature width (" + pick(signing, "sign") + ", " + pick(signing, "width") + ")");
+  say(!!outbound && is(pick(outbound, "maskVal"), "maskVal"), "the send side's mask (" + pick(outbound, "maskVal") + ")");
+  say(!!build && is(pick(build, "build"), "build"), "and BUILD_ID from the socket URL (" + pick(build, "build") + ")");
 }
 
 console.log("\n  Not covered: the live server accepting any of this, and the moomoo-protocol");
