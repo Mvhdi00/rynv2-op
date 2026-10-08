@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.1
+// @version         2.9.2
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -61,98 +61,11 @@ if (!_watchRynBranding()) {
   document.addEventListener("readystatechange", _rynBrandHandover);
 }
 
-/* ======================================================================
-   TOO LATE TO TAKE OVER
-   ======================================================================
-
-   RYN runs its own copy of the game, and to do that it has to be on the page
-   before the game's own copy starts. A userscript manager usually puts it
-   there at document-start; a cached reload can get it there after the game
-   has already started instead. 2.5.1 went ahead regardless: it started its
-   own copy beside the running one — two games in one page, Cloudflare
-   refusing the second one's check, and a Play button that did nothing. That
-   is the "I refresh, go back in, and it is stuck".
-
-   The game's module marks itself running (window.loadedScript) as it starts,
-   so RYN can tell. Then it reloads the page so it can start first, up to
-   three times in a row. Late on all of them, it does not start at all — the
-   game itself keeps working, with nothing of RYN's in its way — and a small
-   bar says what happened and how to stop it happening (Tampermonkey: Inject
-   Mode, Instant).
-
-   A load RYN is first on clears the count. 2.9.0 kept the time of its one
-   reload for a minute whether that reload worked or not, so going over to
-   sandbox, back to normal, or signing in or out (each a new page) within the
-   minute after one late load found the reload spent and showed the bar.
-   ====================================================================== */
-const RYN_LATE = (function rynTooLate() {
-  const KEY = "_ryn_late_reload";
-  let running = false;
-  try {
-    running = window.loadedScript === true;
-  } catch (e) {}
-  if (!running) {
-    try {
-      sessionStorage.removeItem(KEY);
-    } catch (e) {}
-    return null;
-  }
-  // "time:tries" of the reloads in a row; 2.9.0 stored the time alone.
-  let last = 0, tries = 0;
-  try {
-    const saved = String(sessionStorage.getItem(KEY) || "").split(":");
-    last = +saved[0] || 0;
-    tries = +saved[1] || 1;
-  } catch (e) {}
-  // Not one of ours just now: this late load starts its own count.
-  if (Date.now() - last > 2e4) tries = 0;
-  if (tries < 3) {
-    try {
-      sessionStorage.setItem(KEY, Date.now() + ":" + (tries + 1));
-    } catch (e) {}
-    try {
-      console.warn("[RYN] The game started before RYN did — reloading so RYN can start first (" + (tries + 1) + " of 3).");
-    } catch (e) {}
-    try {
-      location.reload();
-    } catch (e) {}
-    return "reloading";
-  }
-  // Given up on this page; the next one (a reload, a move) tries afresh.
-  try {
-    sessionStorage.removeItem(KEY);
-  } catch (e) {}
-  const show = () => {
-    if (!document.body || document.getElementById("ryn-late-bar")) return;
-    const bar = document.createElement("div");
-    bar.id = "ryn-late-bar";
-    bar.style.cssText = "position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:2147483600;display:flex;align-items:center;gap:12px;" + "max-width:calc(100vw - 24px);padding:9px 10px 9px 14px;border-radius:12px;background:rgba(12,12,17,0.96);" + "border:1px solid rgba(217,163,171,0.45);color:#F3F2F7;font:600 12.5px 'Manrope','Segoe UI',system-ui,sans-serif;" + "box-shadow:0 14px 34px -18px rgba(0,0,0,0.9);";
-    const text = document.createElement("span");
-    text.textContent = "Ryn Type 2 reached the page after the game had started, so it is off for this page. In Tampermonkey set Inject Mode to Instant, then reload.";
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = "Reload";
-    button.style.cssText = "flex:0 0 auto;height:28px;padding:0 12px;border:0;border-radius:999px;background:#8E76CE;color:#fff;" + "font:700 10px 'Space Grotesk','Manrope',system-ui,sans-serif;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;";
-    button.addEventListener("click", () => {
-      try {
-        sessionStorage.removeItem("_ryn_late_reload");
-      } catch (e) {}
-      location.reload();
-    });
-    const close = document.createElement("button");
-    close.type = "button";
-    close.textContent = "×";
-    close.title = "Dismiss";
-    close.style.cssText = "flex:0 0 auto;width:24px;height:24px;border:0;border-radius:6px;background:rgba(255,255,255,0.06);color:#ACA9BA;cursor:pointer;";
-    close.addEventListener("click", () => bar.remove());
-    bar.append(text, button, close);
-    document.body.appendChild(bar);
-  };
-  if (document.body) show(); else document.addEventListener("DOMContentLoaded", show, {
-    once: true
-  });
-  return "off";
-})();
+/* RYN starts whenever it reaches the page, as it did before 2.9.0: arriving
+   after the game had started, it takes over at the game's next frame (see
+   the Injector's late path). 2.9.0 reloaded the page instead, and the second
+   time stood aside with a "set Inject Mode to Instant, then reload" bar. */
+const RYN_LATE = null;
 
 /* ======================================================================
    RYN TYPE 2 — BOOT SCREEN
