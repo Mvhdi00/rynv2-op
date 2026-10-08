@@ -12119,6 +12119,20 @@ window.grbtp = 35;
     _sendsEmptyTicks=false;
     _emptyRun=0;
     _emptyAt=0;
+    // Whether the tick RYN ran last was one of its own (_quietTick) rather than
+    // the server's update. Set where each kind of tick is run, and read by the
+    // modules that tick runs, which run a moment after it.
+    _synthetic=false;
+    /* How far behind the server's own tick the tick RYN is running now is
+     * being decided. A real update is acted on as it arrives, so nothing. A
+     * synthetic tick stands in for the server's tick k + 1 and lands 89 ms
+     * after that tick's update would have (the 200 ms grace above, less the
+     * tick it stands in for), so a frame sent from it reaches the server 89 ms
+     * later than one sent from a real tick would. Anything that sends a tick
+     * early to cover the round trip has to cover this as well. */
+    get tickLag() {
+      return this._synthetic ? 200 - this.TICK : 0;
+    }
     _watchTicks(args) {
       clearTimeout(this._tickWatch);
       this._tickWatch = null;
@@ -12144,6 +12158,7 @@ window.grbtp = 35;
       if (socket === null || socket.readyState !== 1 || this.proto2025 !== true || !client.myPlayer || !client.myPlayer.inGame) return;
       // Re-armed whatever the tick does: one that throws must not leave the
       // rest of a quiet spell without ticks, which is the stall all over again.
+      this._synthetic = true;
       try {
         this._tick([ [], [], [] ]);
       } finally {
@@ -12437,6 +12452,7 @@ window.grbtp = 35;
         }
 
        case "a":
+        this._synthetic = false;
         this._tick(decoded[1]);
         this._watchTicks(decoded[1]);
         break;
@@ -22762,7 +22778,14 @@ window.grbtp = 35;
       const reload = this.getReload(type);
       const id = myPlayer.getItemByType(type);
       const store2 = ModuleHandler.getHatStore();
-      const pingAccount = Math.floor(SocketManager2.pong / SocketManager2.TICK);
+      // Ticks to send ahead by: the round trip, plus, on a tick RYN ran itself
+      // because the server had nothing to say, the time that tick already runs
+      // behind the server's (SocketManager.tickLag). Without the second term a
+      // swing decided on a quiet tick reached the server just after the tick
+      // it was meant for whenever the round trip ran more than 22 ms past a
+      // whole number of ticks (22-110 ms, 133-220 ms), and every swing of a
+      // break, a grind or a farm then stood one tick longer than its reload.
+      const pingAccount = Math.floor((SocketManager2.pong + SocketManager2.tickLag) / SocketManager2.TICK);
       const speed = myPlayer.getWeaponSpeed(id, store2.last) - pingAccount;
       reload.current = speed;
       reload.max = speed;

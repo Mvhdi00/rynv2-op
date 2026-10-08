@@ -714,7 +714,7 @@ edit(
  *    { label, find, replace } edits applied in order on top of the above.
  * ------------------------------------------------------------------ */
 
-const MODULES = ["crab-king"];
+const MODULES = ["crab-king", "breaking"];
 for (const name of MODULES) {
   for (const e of require(path.join(__dirname, "ryn2-edits", name + ".js"))) {
     edit(name + ": " + e.label, e.find, e.replace);
