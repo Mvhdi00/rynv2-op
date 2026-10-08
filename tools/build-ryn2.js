@@ -709,6 +709,18 @@ edit(
   `buyList=[ [ 0, 40 ], [ 0, 6 ], [ 0, 60 ], [ 0, 53 ],`
 );
 
+/* ------------------------------------------------------------------ *
+ * 6. Edit modules (tools/ryn2-edits/), each a list of anchored
+ *    { label, find, replace } edits applied in order on top of the above.
+ * ------------------------------------------------------------------ */
+
+const MODULES = ["crab-king"];
+for (const name of MODULES) {
+  for (const e of require(path.join(__dirname, "ryn2-edits", name + ".js"))) {
+    edit(name + ": " + e.label, e.find, e.replace);
+  }
+}
+
 /* ------------------------------------------------------------------ */
 
 fs.writeFileSync(OUT, code);

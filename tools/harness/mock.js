@@ -74,6 +74,12 @@ function attach(ws, log, scenario = {}) {
         for (const o of others) pos.push(o.sid, o.x, o.y + Math.round(Math.sin(tick / 5) * 20), 314);
         if (pendingLook) { look[6] = me.hat; look[7] = me.tail; }
         send("a", [pos, first || pendingLook ? look : [], []]); first = false; pendingLook = false;
+        // Animals, in the 2025 "I" layout: (sid,index,x,y,dir*100,health,nameIdx,state) rows, then hidden sids.
+        if (scenario.animals && (tick === 1 || tick % 9 === 0)) {
+          const rows = [];
+          for (const a of scenario.animals) rows.push(a.sid, a.index, a.x, a.y, Math.round((a.dir || 0) * 100), a.health, a.nameIdx || 0, a.state || 0);
+          send("I", [rows, []]);
+        }
       }, 111);
       if (timer.unref) timer.unref();
     }
