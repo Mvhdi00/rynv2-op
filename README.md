@@ -209,3 +209,10 @@ syncs the loadout (ignoring answers to upgrades RYN has already moved past), the
 UI boots once, and the late-injection stand-in for `requestAnimFrame` is only
 removed while it is still the stand-in (the frame loop also falls back to the
 browser's `requestAnimationFrame`).
+
+The server sends each building/resource to a player once, remembered under the id
+of the connection the player was created on; a resumed player keeps that id, so
+nothing it saw before is resent (solid but invisible). The script now keeps what it
+knew (in memory across a reconnect, in `sessionStorage` across a refresh) and puts
+it back when the server re-attaches the same player on the same server
+(`PlayerClient._ownSpawn`); `Possess._topUp` draws it as you move.

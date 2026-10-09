@@ -10029,7 +10029,7 @@ window.grbtp = 35;
         const owner = PlayerManager.playerData.get(object.ownerID) || PlayerManager.createPlayer({
           id: object.ownerID
         });
-        object.seenPlacement = this.inPlacementRange(object);
+        object.seenPlacement = object._rynRestored !== true && this.inPlacementRange(object);
         owner.handleObjectPlacement(object);
         // Something an assigned player just built, for their escort to build
         // with. Deduplicated there: every bot near them receives the same H.
@@ -10056,6 +10056,11 @@ window.grbtp = 35;
         const isResource = buffer[i + 6] == null || Items[buffer[i + 6]] === void 0;
         const data = [ buffer[i + 0], buffer[i + 1], buffer[i + 2], buffer[i + 3], buffer[i + 4] ];
         const object = isResource ? new Resource(...data, buffer[i + 5]) : new PlayerObject(...data, buffer[i + 6], buffer[i + 7]);
+        // Put back from a resume snapshot, not placed now: nothing that reacts
+        // to a fresh placement next to you should fire for it.
+        if (this._restoring) {
+          object._rynRestored = true;
+        }
         // Seven of the server's eight fields are already on the object — id,
         // position, angle, scale, type and owner — and none of them change
         // after creation. The sixth is the only one this client has no use for
@@ -10068,6 +10073,14 @@ window.grbtp = 35;
         this.insertObject(object);
       }
     }
+    // The server's own 8-field "H" row for an object, rebuilt from the object
+    // (createObjects keeps the one field the object does not: _rynType5).
+    static row(object, out) {
+      const pos = object.pos.current;
+      const isPlayerObject = object._rynType5 !== void 0;
+      out.push(object.id, pos.x, pos.y, object.angle, object.scale, isPlayerObject ? object._rynType5 : object.type, isPlayerObject ? object.type : null, isPlayerObject ? object.ownerID : -1);
+    }
+    _restoring=false;
     deletedObjects=new Set;
     isDestroyedObject() {
       return this.deletedObjects.size !== 0;
@@ -10782,6 +10795,8 @@ window.grbtp = 35;
   // How long an upgrade RYN sent waits for the server's "V" before it is
   // taken to have been refused (ClientPlayer.syncLoadout).
   const RYN_LOADOUT_PENDING_MS = 1500;
+  // How old a resume snapshot may be (PlayerClient._ownSpawn).
+  const RYN_RESUME_MAX_AGE_MS = 18e4;
   class ClientPlayer extends Player_default {
     inventory={};
     weaponXP=[ {}, {} ];
@@ -13691,6 +13706,9 @@ window.grbtp = 35;
           // bundle on a possession switch. It is the server's own payload, so
           // the replay is exact rather than reconstructed.
           player._rynSpawnRaw = data2;
+          if (temp[2] && this.client.isOwner) {
+            this.client._ownSpawn(data2[0], data2[1]);
+          }
           // A sid can be handed to a new player; their appearance is their own.
           this._seenPlayers.delete(data2[1]);
           // A connection's first "D" is an arrival; every later one is that
@@ -34361,6 +34379,10 @@ window.grbtp = 35;
       if (!this.isOwner) {
         return;
       }
+      // What this connection knew, in case the next one is the server
+      // re-attaching the same player (see _ownSpawn).
+      this._rynPrevWorld = this._worldSnapshot();
+      this._rynSelfSock = null;
       // The screen first: whatever it was showing is about to be cleared.
       try {
         if (Possess !== null && Possess.owner === this) {
@@ -34399,6 +34421,74 @@ window.grbtp = 35;
         GameUI_default.reset();
       } catch (_) {}
       delete this._rynMirror;
+    }
+    /* Buildings and resources after a resume.
+     *
+     * The server sends each object to a player once and remembers it under
+     * the id of the connection that player was created on. A player it
+     * re-attaches after a refresh or a drop keeps that id, so nothing it was
+     * sent before is sent again: everything that was around you came back
+     * solid but undrawn. So the objects this client knew are kept — in memory
+     * across a reconnect, in sessionStorage across a refresh — and put back
+     * when the server is seen re-attaching that same player. Possess._topUp
+     * then puts the ones around you on screen, as it does for anything known
+     * but not drawn. */
+    _rynSelfSock=null;
+    _rynPrevWorld=null;
+    _worldSnapshot() {
+      const socket = this.SocketManager.socket;
+      if (!this.myPlayer.inGame || this.myPlayer.id === -1 || this._rynSelfSock === null || socket === null) {
+        return null;
+      }
+      let host = "";
+      try {
+        host = new URL(socket.url).host;
+      } catch (_) {}
+      const rows = [];
+      for (const object of this.ObjectManager.objects.values()) {
+        ObjectManager_default.row(object, rows);
+      }
+      return {
+        host: host,
+        sid: this.myPlayer.id,
+        sock: this._rynSelfSock,
+        at: Date.now(),
+        rows: rows
+      };
+    }
+    // Your own add-player frame on this connection.
+    _ownSpawn(socketID, sid) {
+      const prev = this._rynPrevWorld;
+      this._rynPrevWorld = null;
+      this._rynSelfSock = socketID;
+      if (prev === null || typeof prev !== "object" || !Array.isArray(prev.rows)) {
+        return;
+      }
+      // The same player, re-attached under the id it was created on: a new
+      // or respawned player is created on this connection and carries its id.
+      if (prev.sid !== sid || prev.sock !== socketID || socketID === this.clientID || Date.now() - prev.at > RYN_RESUME_MAX_AGE_MS) {
+        return;
+      }
+      try {
+        if (prev.host && new URL(this.SocketManager.socket.url).host !== prev.host) {
+          return;
+        }
+      } catch (_) {}
+      const om = this.ObjectManager;
+      const rows = [];
+      for (let i = 0; i + 7 < prev.rows.length; i += 8) {
+        if (!om.objects.has(prev.rows[i])) {
+          for (let k = 0; k < 8; k++) {
+            rows.push(prev.rows[i + k]);
+          }
+        }
+      }
+      om._restoring = true;
+      try {
+        om.createObjects(rows);
+      } catch (_) {} finally {
+        om._restoring = false;
+      }
     }
   }
   const PlayerClient_default = PlayerClient;
@@ -46029,6 +46119,33 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     return null;
   }));
   const client = new PlayerClient_default;
+  // The resume snapshot across a refresh: per tab, kept until the next page
+  // reads it (PlayerClient._ownSpawn).
+  const RYN_RESUME_KEY = "_ryn_resume_world";
+  try {
+    const saved = sessionStorage.getItem(RYN_RESUME_KEY);
+    if (saved !== null) {
+      sessionStorage.removeItem(RYN_RESUME_KEY);
+      const prev = JSON.parse(saved);
+      if (prev && Array.isArray(prev.rows)) {
+        client._rynPrevWorld = prev;
+      }
+    }
+  } catch (_) {}
+  const saveResumeWorld = () => {
+    try {
+      const snap = client._worldSnapshot();
+      if (snap !== null) {
+        sessionStorage.setItem(RYN_RESUME_KEY, JSON.stringify(snap));
+      }
+    } catch (_) {}
+  };
+  window.addEventListener("pagehide", saveResumeWorld);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      saveResumeWorld();
+    }
+  });
   window.WebSocket = new window.Proxy(window.WebSocket, {
     construct(target, args) {
       const socket = new target(...args);
@@ -47145,12 +47262,10 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         if (held !== void 0 && (held[3] === true || missingOnly)) {
           continue;
         }
-        const pos = object.pos.current;
-        const isPlayerObject = object._rynType5 !== void 0;
         if (batch === null) {
           batch = [];
         }
-        batch.push(object.id, pos.x, pos.y, object.angle, object.scale, isPlayerObject ? object._rynType5 : object.type, isPlayerObject ? object.type : null, isPlayerObject ? object.ownerID : -1);
+        ObjectManager_default.row(object, batch);
         if (batch.length >= POSSESS_OBJECT_BATCH * 8) {
           this._emit("H", [ batch ]);
           batch = null;
