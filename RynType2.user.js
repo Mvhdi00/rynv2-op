@@ -45271,6 +45271,39 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         const hit = scriptBundle !== null && scriptBundle.src ? pageModule.exec(scriptBundle.src) : null;
         return hit !== null ? hit[0] : null;
       };
+      /* The page's own copy, once RYN's has taken over. When it ran before RYN
+       * arrived (refresh, then Play straight away) it stays alive beside RYN's,
+       * and its server list — requested before RYN was there — comes back
+       * later: it then runs its menu setup over the game being played. The
+       * menu went up over the HUD, the item bar was emptied and rebuilt with
+       * slots wired to the copy that is not connected (clicking a weapon or an
+       * upgrade did nothing), and Play was pointed back at it. Its requests and
+       * the bodies of the ones already out are left unanswered, so it never
+       * gets that far; its DOM building is refused by the trap below. */
+      const fromPageCopy = () => {
+        if (Injector_lastCode === null) {
+          return false;
+        }
+        let hit = null;
+        try {
+          hit = pageModule.exec(new Error().stack || "");
+        } catch (e) {}
+        const entry = hit === null ? null : entryUrl();
+        return hit !== null && entry !== null && hit[0] === entry;
+      };
+      const never = () => new Promise(() => {});
+      {
+        const nativeFetch = win.fetch;
+        win.fetch = function fetch() {
+          return fromPageCopy() ? never() : nativeFetch.apply(this, arguments);
+        };
+        for (const name of [ "json", "text" ]) {
+          const nativeBody = Response.prototype[name];
+          Response.prototype[name] = function() {
+            return fromPageCopy() ? never() : nativeBody.apply(this, arguments);
+          };
+        }
+      }
       const stopPageCopy = function createElement() {
         let hit = null;
         try {
@@ -45307,8 +45340,12 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         throw stopped;
       };
       docProto.createElement = stopPageCopy;
+      // Put back once the page has loaded — unless RYN's copy is the one
+      // running, in which case the page copy is alive beside it for the rest of
+      // the page and is refused for as long (the trap only ever matches the
+      // page's own entry module, never RYN's copy).
       const disarm = () => {
-        if (docProto.createElement === stopPageCopy) {
+        if (docProto.createElement === stopPageCopy && Injector_lastCode === null) {
           docProto.createElement = nativeCreateElement;
         }
       };
@@ -50880,13 +50917,14 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         try {
           const ui = document.getElementById("gameUI");
           const live = c.myPlayer && c.myPlayer.inGame && sm && sm.socket !== null && sm.socket.readyState === 1;
-          if (live && ui !== null && document.body !== null && (!document.body.classList.contains("hud") || ui.style.display === "none")) {
+          const menu = document.getElementById("mainMenu");
+          const menuUp = menu !== null && menu.style.display !== "none";
+          if (live && ui !== null && document.body !== null && (!document.body.classList.contains("hud") || ui.style.display === "none" || menuUp)) {
             c._hudLostTicks = (c._hudLostTicks || 0) + 1;
             if (c._hudLostTicks >= 2) {
               c._hudLostTicks = 0;
               ui.style.display = "block";
               document.body.classList.add("hud");
-              const menu = document.getElementById("mainMenu");
               if (menu !== null) menu.style.display = "none";
               const loading = document.getElementById("loadingText");
               if (loading !== null) loading.style.display = "none";
