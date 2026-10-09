@@ -2699,7 +2699,7 @@ window.grbtp = 35;
         const timer = setTimeout(() => {
           close();
           reject(new Error("FRVR's sign-in did not load in time."));
-        }, 15e3);
+        }, 12e3);
         const script = w.document.createElement("script");
         script.src = this._sdkUrl();
         script.onerror = () => {
@@ -2726,8 +2726,8 @@ window.grbtp = 35;
               started = sdk.init(arg);
             } catch (_) {}
           }
-          // The page goes on if init fails; so does this, and gives it at most 8 s.
-          rynWithin(started, 8e3, "init").catch(() => {}).then(() => {
+          // The page goes on if init fails; so does this, and gives it at most 6 s.
+          rynWithin(started, 6e3, "init").catch(() => {}).then(() => {
             clearTimeout(timer);
             resolve({
               auth: sdk.auth,
@@ -2805,7 +2805,7 @@ window.grbtp = 35;
                     email: acct.email,
                     password: pw
                   }
-                }), 2e4, "Signing in");
+                }), 8e3, "Signing in");
                 if (inst.auth.isLoggedIn()) {
                   signed = true;
                   acct.password = pw;
