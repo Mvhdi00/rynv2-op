@@ -42431,14 +42431,27 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       handleClick(0);
       handleClick(1);
     }
+    // The game's own "you are playing" state: its HUD is up and its menu is
+    // put away. RYN's inGame can trail it by a frame or two around a spawn
+    // and a resume.
+    gameShowsHud() {
+      const menu = document.getElementById("mainMenu");
+      return document.body !== null && document.body.classList.contains("hud") || menu !== null && menu.style.display === "none";
+    }
     clientSpawn() {
+      // Play pressed while the game is running does not spawn anything: the
+      // game puts up its "Connecting..." screen, which hides the HUD, and as
+      // you are already in the game nothing ever brings it back.
+      if (this.gameShowsHud()) {
+        return;
+      }
       const {enterGame: enterGame} = this.getElements();
       enterGame.click();
     }
     handleEnter(event) {
       const {allianceInput: allianceInput, allianceButton: allianceButton} = this.getElements();
       const active = document.activeElement;
-      if (AC().myPlayer.inGame) {
+      if (AC().myPlayer.inGame || this.gameShowsHud()) {
         if (active === allianceInput) {
           allianceButton.click();
         } else {
@@ -48971,6 +48984,26 @@ html.ryn-in-lobby .ryn-v2-wrapper {
           }
           sm.init(net.socket);
         }
+        // The HUD back if the game hid it while you are alive and connected
+        // (two checks in a row, so a real death or reconnect is never fought).
+        try {
+          const ui = document.getElementById("gameUI");
+          const live = c.myPlayer && c.myPlayer.inGame && sm && sm.socket !== null && sm.socket.readyState === 1;
+          if (live && ui !== null && document.body !== null && (!document.body.classList.contains("hud") || ui.style.display === "none")) {
+            c._hudLostTicks = (c._hudLostTicks || 0) + 1;
+            if (c._hudLostTicks >= 2) {
+              c._hudLostTicks = 0;
+              ui.style.display = "block";
+              document.body.classList.add("hud");
+              const menu = document.getElementById("mainMenu");
+              if (menu !== null) menu.style.display = "none";
+              const loading = document.getElementById("loadingText");
+              if (loading !== null) loading.style.display = "none";
+            }
+          } else {
+            c._hudLostTicks = 0;
+          }
+        } catch (_) {}
         const pt = win.pingTime;
         if (typeof pt === "number" && pt >= 0) {
           if (sm) {
