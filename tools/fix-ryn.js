@@ -33,7 +33,11 @@ const DRIVERS = JSON.parse(
 
 const editor = new Editor(fs.readFileSync(BASE, "utf8"));
 
-repairs.apply(editor, DRIVERS);
+/* The groups this base still needs. 2.9.4 absorbed the hook and transport
+ * repairs upstream (tools/check-hooks.js, tools/check-wire.js); what it still
+ * gets wrong on the bot path is the device each bot joins as. */
+const GROUPS = ["bots"];
+repairs.apply(editor, DRIVERS, GROUPS);
 
 /* The version, so an installed copy can be told from the one it replaced.
  * Everything else in the header is the client's own. */

@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.7.0-fix1
+// @version         2.9.4-fix1
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -61,77 +61,11 @@ if (!_watchRynBranding()) {
   document.addEventListener("readystatechange", _rynBrandHandover);
 }
 
-/* ======================================================================
-   TOO LATE TO TAKE OVER
-   ======================================================================
-
-   RYN runs its own copy of the game, and to do that it has to be on the page
-   before the game's own copy starts. A userscript manager usually puts it
-   there at document-start; a cached reload can get it there after the game
-   has already started instead. 2.5.1 went ahead regardless: it started its
-   own copy beside the running one — two games in one page, Cloudflare
-   refusing the second one's check, and a Play button that did nothing. That
-   is the "I refresh, go back in, and it is stuck".
-
-   The game's module marks itself running (window.loadedScript) as it starts,
-   so RYN can tell. Then it reloads the page, once, so it can start first.
-   Late again within a minute, it does not start at all — the game itself
-   keeps working, with nothing of RYN's in its way — and a small bar says what
-   happened and how to stop it happening (Tampermonkey: Inject Mode, Instant).
-   ====================================================================== */
-const RYN_LATE = (function rynTooLate() {
-  let running = false;
-  try {
-    running = window.loadedScript === true;
-  } catch (e) {}
-  if (!running) return null;
-  let last = 0;
-  try {
-    last = +sessionStorage.getItem("_ryn_late_reload") || 0;
-  } catch (e) {}
-  if (Date.now() - last > 6e4) {
-    try {
-      sessionStorage.setItem("_ryn_late_reload", String(Date.now()));
-    } catch (e) {}
-    try {
-      console.warn("[RYN] The game started before RYN did — reloading once so RYN can start first.");
-    } catch (e) {}
-    try {
-      location.reload();
-    } catch (e) {}
-    return "reloading";
-  }
-  const show = () => {
-    if (!document.body || document.getElementById("ryn-late-bar")) return;
-    const bar = document.createElement("div");
-    bar.id = "ryn-late-bar";
-    bar.style.cssText = "position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:2147483600;display:flex;align-items:center;gap:12px;" + "max-width:calc(100vw - 24px);padding:9px 10px 9px 14px;border-radius:12px;background:rgba(12,12,17,0.96);" + "border:1px solid rgba(217,163,171,0.45);color:#F3F2F7;font:600 12.5px 'Manrope','Segoe UI',system-ui,sans-serif;" + "box-shadow:0 14px 34px -18px rgba(0,0,0,0.9);";
-    const text = document.createElement("span");
-    text.textContent = "Ryn Type 2 reached the page after the game had started, so it is off for this page. In Tampermonkey set Inject Mode to Instant, then reload.";
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = "Reload";
-    button.style.cssText = "flex:0 0 auto;height:28px;padding:0 12px;border:0;border-radius:999px;background:#8E76CE;color:#fff;" + "font:700 10px 'Space Grotesk','Manrope',system-ui,sans-serif;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;";
-    button.addEventListener("click", () => {
-      try {
-        sessionStorage.removeItem("_ryn_late_reload");
-      } catch (e) {}
-      location.reload();
-    });
-    const close = document.createElement("button");
-    close.type = "button";
-    close.textContent = "×";
-    close.title = "Dismiss";
-    close.style.cssText = "flex:0 0 auto;width:24px;height:24px;border:0;border-radius:6px;background:rgba(255,255,255,0.06);color:#ACA9BA;cursor:pointer;";
-    close.addEventListener("click", () => bar.remove());
-    bar.append(text, button, close);
-    document.body.appendChild(bar);
-  };
-  if (document.body) show(); else document.addEventListener("DOMContentLoaded", show, {
-    once: true
-  });
-  return "off";
-})();
+/* RYN starts whenever it reaches the page, as it did before 2.9.0: arriving
+   after the game had started, it takes over at the game's next frame (see
+   the Injector's late path). 2.9.0 reloaded the page instead, and the second
+   time stood aside with a "set Inject Mode to Instant, then reload" bar. */
+const RYN_LATE = null;
 
 /* ======================================================================
    RYN TYPE 2 — BOOT SCREEN
@@ -830,9 +764,11 @@ window.grbtp = 35;
    * fleet does not put a column of boxes up the side of the screen. */
   const RYN_TS_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js";
   const RYN_CF_SHOWN = 2;
-  // How long a check may run without asking for anything, and how long one
-  // that asked for a click waits for a person.
-  const RYN_CF_PASSIVE_MS = 75e3;
+  // How long a check may run, and how long one that asked for a click waits
+  // for a person: 180 s each, the window the game's own guest check and
+  // Glotus's bot checks use. A check now runs once (retry "never") and says
+  // why it stopped, instead of re-rendering itself behind the card.
+  const RYN_CF_PASSIVE_MS = 18e4;
   const RYN_CF_CLICK_MS = 18e4;
   // How long Cloudflare's script gets to arrive, and how long the game's own
   // copy gets before RYN puts its own beside it.
@@ -848,8 +784,8 @@ window.grbtp = 35;
     if (/^1106/.test(c)) return "the check timed out — try again (" + c + ")";
     if (/^2005/.test(c)) return "Cloudflare's check frame was blocked — allow challenges.cloudflare.com (" + c + ")";
     if (/^2001/.test(c)) return "this computer's clock is wrong — Cloudflare refuses the check (" + c + ")";
-    if (/^[36]\d{5}/.test(c)) return "Cloudflare did not pass this browser — retrying (" + c + ")";
-    return "Cloudflare error " + (c || "?") + " — retrying";
+    if (/^[36]\d{5}/.test(c)) return "Cloudflare did not pass this browser (" + c + ") — try again in a moment";
+    return "Cloudflare error " + (c || "?");
   };
   // Codes no retry can change: the sitekey, the site, the browser, the clock.
   const rynCfFatal = code => /^(1101|1102|1105|2001)/.test(String(code || ""));
@@ -1011,6 +947,12 @@ window.grbtp = 35;
 #ryn-cf-dock .ryn-cf-ask .ryn-cf-line { color: #F3F2F7; }
 #ryn-cf-dock .ryn-cf-bad .ryn-cf-line { color: #D9A3AB; }
 #ryn-cf-dock .ryn-cf-ok .ryn-cf-line { color: #A6D7B2; }
+#ryn-cf-dock .ryn-cf-retry {
+    margin: 7px 2px 0; height: 24px; padding: 0 11px; border: 1px solid rgba(142,118,206,0.55);
+    border-radius: 999px; background: rgba(142,118,206,0.14); color: #F3F2F7; cursor: pointer;
+    font: 700 9.5px 'Space Grotesk', 'Manrope', system-ui, sans-serif; letter-spacing: 0.16em; text-transform: uppercase;
+}
+#ryn-cf-dock .ryn-cf-retry:hover { background: rgba(142,118,206,0.26); }
 @keyframes ryn-cf-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 `;
       (document.head || document.documentElement).appendChild(style);
@@ -1032,9 +974,12 @@ window.grbtp = 35;
       const dock = this._dock;
       if (!dock) return;
       const more = dock.querySelector(".ryn-cf-more");
+      // A bot's attempt has its card on screen while it waits, so only the
+      // pool's queued checks are counted here.
+      const hidden = this._queue.filter(job => !job.att).length;
       if (more) {
-        more.textContent = this._queue.length + " more waiting";
-        more.style.display = this._queue.length ? "" : "none";
+        more.textContent = hidden + " more waiting";
+        more.style.display = hidden ? "" : "none";
       }
       if (this._queue.length === 0 && this._live.length === 0 && !dock.querySelector(".ryn-cf-card")) {
         dock.remove();
@@ -1042,6 +987,14 @@ window.grbtp = 35;
       }
     },
     _card(job) {
+      // A bot's own attempt card: the check is drawn inside it.
+      if (job.att && !job.att.closed) {
+        job.card = job.att.card;
+        job.host = job.att.host;
+        job.line = job.att.line;
+        job.host.style.display = "";
+        return;
+      }
       const dock = this._dockEl();
       const card = document.createElement("div");
       card.className = "ryn-cf-card";
@@ -1079,10 +1032,17 @@ window.grbtp = 35;
       job.card.classList.toggle("ryn-cf-bad", tone === "bad");
     },
     // A token, from a check of its own. `label` names what it is for on the
-    // card; `kind` is the card's tag ("Bot check", "Token pool").
+    // card; `kind` is the card's tag ("Bot check", "Token pool"). With
+    // `attempt` (see attempt() below) the check is drawn inside that bot's
+    // own card instead of a card of its own.
     mint(opts) {
       const o = opts || {};
       return new Promise((resolve, reject) => {
+        const att = o.attempt && !o.attempt.closed ? o.attempt : null;
+        if (att && att.cancelled) {
+          reject(new Error("cancelled"));
+          return;
+        }
         const job = {
           id: "c" + ++this._seq,
           label: o.label || "Bot",
@@ -1093,12 +1053,131 @@ window.grbtp = 35;
           errors: 0,
           widget: null,
           api: null,
-          timer: 0
+          timer: 0,
+          att: att
         };
+        if (att) {
+          att.job = job;
+          att.say(this._live.length >= RYN_CF_SHOWN ? "Waiting for a free Cloudflare slot…" : "Starting the Cloudflare check…");
+        }
         this._queue.push(job);
         this._dockEl();
         this._pump();
       });
+    },
+    /* One card per bot attempt, from the press to the bot being in or not.
+     *
+     * It is on screen before anything is spent: it says what the attempt is
+     * waiting on (a token from the pool, a free check slot, Cloudflare, the
+     * join API, the server), the check itself is drawn inside it when one is
+     * needed, its × cancels the whole attempt, and a failure stays on it with
+     * the reason until it is dismissed. 2.8.0 drew a card only for the check,
+     * so an attempt that failed before or after the check — a members-only
+     * server, a refused join — had nothing on screen at all. */
+    attempt(label, opts) {
+      const o = opts || {};
+      const dock = this._dockEl();
+      const att = {
+        id: "a" + ++this._seq,
+        label: label || "Bot",
+        cancelled: false,
+        closed: false,
+        job: null,
+        card: null,
+        host: null,
+        line: null,
+        _cancel: [],
+        _timer: 0,
+        _retry: null,
+        say: (text, tone) => {
+          if (att.closed || !att.card) return;
+          att.line.textContent = text;
+          att.card.classList.toggle("ryn-cf-ask", tone === "ask");
+          att.card.classList.toggle("ryn-cf-ok", tone === "ok");
+          att.card.classList.toggle("ryn-cf-bad", tone === "bad");
+        },
+        onCancel: fn => {
+          if (typeof fn === "function") att._cancel.push(fn);
+        },
+        cancel: () => {
+          if (att.closed) return;
+          att.cancelled = true;
+          if (att.job && !att.job.done) this._finish(att.job, new Error("cancelled"));
+          const fns = att._cancel.splice(0);
+          for (const fn of fns) {
+            try {
+              fn();
+            } catch (_) {}
+          }
+          att.close();
+        },
+        ok: text => {
+          if (att.closed) return;
+          att.host.style.display = "none";
+          att.say(text || "In", "ok");
+          clearTimeout(att._timer);
+          att._timer = setTimeout(() => att.close(), 1600);
+        },
+        // A failure stays until it is dismissed (or a minute has passed), with
+        // the reason on it and, where one can help, a way to try again.
+        fail: (text, retry) => {
+          if (att.closed) return;
+          att.host.style.display = "none";
+          att.say(text, "bad");
+          att._retry.style.display = typeof retry === "function" ? "" : "none";
+          att._retry.onclick = typeof retry === "function" ? () => {
+            att.close();
+            retry();
+          } : null;
+          clearTimeout(att._timer);
+          att._timer = setTimeout(() => att.close(), 6e4);
+        },
+        close: () => {
+          if (att.closed) return;
+          att.closed = true;
+          clearTimeout(att._timer);
+          try {
+            att.card.remove();
+          } catch (_) {}
+          this._paintDock();
+        }
+      };
+      const card = document.createElement("div");
+      card.className = "ryn-cf-card";
+      card.setAttribute("data-ryn-attempt", att.id);
+      const head = document.createElement("div");
+      head.className = "ryn-cf-head";
+      const kind = document.createElement("span");
+      kind.className = "ryn-cf-kind";
+      kind.textContent = o.kind || "Bot";
+      const who = document.createElement("span");
+      who.className = "ryn-cf-who";
+      who.textContent = att.label;
+      const x = document.createElement("button");
+      x.className = "ryn-cf-x";
+      x.type = "button";
+      x.title = "Cancel this bot";
+      x.textContent = "×";
+      x.addEventListener("click", () => att.cancel());
+      head.append(kind, who, x);
+      const host = document.createElement("div");
+      host.className = "ryn-cf-host";
+      host.style.display = "none";
+      const line = document.createElement("div");
+      line.className = "ryn-cf-line";
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "ryn-cf-retry";
+      retry.textContent = "Try again";
+      retry.style.display = "none";
+      card.append(head, host, line, retry);
+      dock.appendChild(card);
+      att.card = card;
+      att.host = host;
+      att.line = line;
+      att._retry = retry;
+      att.say(o.text || "Starting…");
+      return att;
     },
     // Everything not yet finished, given up: the pool's switch, a bot row
     // removed, the page leaving a server.
@@ -1139,23 +1218,19 @@ window.grbtp = 35;
           theme: "dark",
           size: "normal",
           appearance: "always",
-          retry: "auto",
-          "retry-interval": 2500,
+          // One run per check, the way Glotus draws its bot checks: an error
+          // ends this check with its reason on the card (a bot's card offers
+          // Try again; the pool tries again on its own, with a back-off),
+          // and an expired token is not quietly re-minted behind the card.
+          retry: "never",
+          "refresh-expired": "manual",
+          "refresh-timeout": "manual",
           callback: token => {
             if (typeof token === "string" && token) this._finish(job, null, token);
           },
           "error-callback": code => {
             job.errors += 1;
-            const text = rynCfErrorText(code);
-            this._say(job, text, "bad");
-            if (rynCfFatal(code) || job.errors >= 5) {
-              this._finish(job, new Error(text));
-            } else {
-              // Cloudflare retries on its own, two and a half seconds after
-              // an error; one that has not come good ten seconds after it is
-              // not going to.
-              this._arm(job, 1e4, text);
-            }
+            this._finish(job, new Error(rynCfErrorText(code)));
             return true;
           },
           "expired-callback": () => this._finish(job, new Error("the check expired before the bot used it")),
@@ -1201,7 +1276,13 @@ window.grbtp = 35;
       i = this._live.indexOf(job);
       if (i >= 0) this._live.splice(i, 1);
       const card = job.card;
-      if (card) {
+      if (job.att) {
+        // The card is the attempt's: it carries on (joining, connecting) or
+        // shows the failure, and goes when the attempt is over.
+        if (job.att.job === job) job.att.job = null;
+        if (job.host) job.host.style.display = "none";
+        if (!error) this._say(job, "Cloudflare: verified", "ok");
+      } else if (card) {
         if (error && error.message !== "cancelled") {
           this._say(job, error.message, "bad");
           setTimeout(() => {
@@ -1410,6 +1491,10 @@ window.grbtp = 35;
     if (!addBtn) {
       return 0;
     }
+    // Checked once for the whole press rather than once per row it would add.
+    if (!rynBotPreflight()) {
+      return 0;
+    }
     let ready = 0;
     try {
       ready = TokenPool.size;
@@ -1492,14 +1577,14 @@ window.grbtp = 35;
   const TURNSTILE_STILL_MS = 4e3;
   const TURNSTILE_KEEPER_MS = 2500;
   // A challenge that has been running this long is written off. Every check
-  // ends on its own (RynCF: 75 s, or 3 minutes while it waits for a click), so
+  // ends on its own (RynCF: 3 minutes, and 3 more once it asks for a click), so
   // this is set past that and only fires for one that never settled at all —
   // the failure it exists for. In-flight mints are subtracted from what the
   // pool is allowed to start, so a mint that neither resolves nor rejects
   // would hold a concurrency slot for good, and with every slot held the pool
   // never mints again. Writing one off any sooner would start a second check
   // beside one that is only waiting for its click.
-  const TURNSTILE_MINT_TIMEOUT_MS = 2e5;
+  const TURNSTILE_MINT_TIMEOUT_MS = 3.7e5;
   // How long a caller that needs a token now will wait for one the pool is
   // already producing before giving up and minting its own.
   const TURNSTILE_WAIT_MS = 5e3;
@@ -1852,11 +1937,28 @@ window.grbtp = 35;
     // Top the pool up. Counts what is already in flight, so a burst of spawns
     // does not start a widget per press on top of the ones already rendering,
     // and never starts more than `concurrency` allows at a time.
+    // A check that failed is not tried again on the next keeper tick: with
+    // retry "never" (RynCF) a failure ends that check, and starting another
+    // every 2.5 s is the run of checks Cloudflare reads as a bot farm. The
+    // pool waits 5 s after one failure, doubling to a minute; a good token
+    // clears it.
+    _fails=0;
+    _holdUntil=0;
+    get holding() {
+      return Date.now() < this._holdUntil;
+    }
+    _failed() {
+      const now = Date.now();
+      // Two checks that fail together are one bad round, not two.
+      if (now < this._holdUntil) return;
+      this._fails += 1;
+      this._holdUntil = now + Math.min(6e4, 5e3 * Math.pow(2, this._fails - 1));
+    }
     refill() {
       const now = Date.now();
       this._prune(now);
       this._reap(now);
-      if (!this.enabled || !this._ready() || !this._inGame() || !this._framesOk()) {
+      if (!this.enabled || now < this._holdUntil || !this._ready() || !this._inGame() || !this._framesOk()) {
         return;
       }
       // Anyone waiting is demand on top of the shelf, so the pool keeps
@@ -1882,14 +1984,17 @@ window.grbtp = 35;
           // arrives late is still a token, and throwing it away would waste a
           // solve that has already been paid for.
           if (token) {
+            this._fails = 0;
+            this._holdUntil = 0;
             this._deliver(token);
           }
           this._wakeIfDry();
-        }, () => {
+        }, error => {
           // A failed mint is not fatal and not worth a retry storm: the keeper
-          // comes back for it, and createSocket still mints inline if the pool
-          // is empty when a bot is actually asked for.
+          // comes back for it after the back-off, and createSocket still mints
+          // inline if the pool is empty when a bot is actually asked for.
           this._release(slot);
+          if (!error || error.message !== "cancelled") this._failed();
           this._wakeIfDry();
         }));
       }
@@ -1961,6 +2066,9 @@ window.grbtp = 35;
     const signal = typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(8e3) : void 0;
     return fetch(RYN_API_BASE + "/join", {
       method: "POST",
+      // The API is another origin, so no cookie goes with this anyway; said
+      // here so a bot's join can never carry your session.
+      credentials: "omit",
       headers: {
         "Content-Type": "application/json"
       },
@@ -1974,7 +2082,7 @@ window.grbtp = 35;
       if (response.status === 403 || response.status === 429) {
         return response.json().catch(() => ({})).then(body => ({
           ticket: null,
-          error: response.status === 429 ? "busy" : body && body.error === "auth" ? "members" : "refused"
+          error: response.status === 429 ? "busy" : body && body.error === "auth" ? "members" : body && body.error === "vpn" ? "vpn" : "refused"
         }));
       }
       if (!response.ok) return {
@@ -2006,56 +2114,510 @@ window.grbtp = 35;
    * the next bot. Two bots never share one at the same time, and none of
    * them is ever yours. */
   const RYN_BOT_DIDS_KEY = "_ryn_bot_dids";
+  // Ids remembered for bots. A fleet is at most RYN_FLEET_CAP (40); the rest
+  // is room for ids the API has replaced.
+  const RYN_BOT_DIDS_MAX = 64;
   const RynBotDevices = {
+    // Ids a bot is joining or connected with right now. Two bots never hold
+    // the same one.
     inUse: new Set,
+    // Yours: read so it can be kept out, never sent and never written.
+    _own() {
+      try {
+        const own = localStorage.getItem("moo_did");
+        return typeof own === "string" && own ? own : null;
+      } catch (_) {
+        return null;
+      }
+    },
     _load() {
+      const own = this._own();
       try {
         const list = JSON.parse(localStorage.getItem(RYN_BOT_DIDS_KEY) || "[]");
-        return Array.isArray(list) ? list.filter(d => typeof d === "string" && d) : [];
+        return Array.isArray(list) ? list.filter(d => typeof d === "string" && d && d !== own) : [];
       } catch (_) {
         return [];
       }
     },
-    // The id the game itself joins with (moo_did), as the game and Glotus
-    // send it. Null before the first join of this browser: the API then
-    // issues one, and keep() stores it where the game keeps its own.
-    take() {
+    _save(list) {
       try {
-        const own = localStorage.getItem("moo_did");
-        if (typeof own === "string" && own) return own;
+        localStorage.setItem(RYN_BOT_DIDS_KEY, JSON.stringify(list.slice(-RYN_BOT_DIDS_MAX)));
       } catch (_) {}
+    },
+    // An id a bot had before and nobody is using now, or null: the API then
+    // issues this bot a device of its own, and keep() remembers it.
+    take() {
+      for (const did of this._load()) {
+        if (!this.inUse.has(did)) {
+          this.inUse.add(did);
+          return did;
+        }
+      }
       return null;
     },
+    // The id the API gave this bot: remembered for bots, and held by this one.
     keep(did) {
-      if (typeof did !== "string" || !did) return;
-      try {
-        if (!localStorage.getItem("moo_did")) localStorage.setItem("moo_did", did);
-      } catch (_) {}
+      if (typeof did !== "string" || !did || did === this._own()) return;
+      const list = this._load().filter(d => d !== did);
+      list.push(did);
+      this._save(list);
+      this.inUse.add(did);
     },
-    release(did) {}
+    // The API answered with a different id: the old one will not be taken
+    // again, so it is forgotten rather than handed to the next bot.
+    retire(did) {
+      if (typeof did !== "string" || !did) return;
+      this.inUse.delete(did);
+      this._save(this._load().filter(d => d !== did));
+    },
+    release(did) {
+      if (did) this.inUse.delete(did);
+    }
   };
   const RYN_JOIN_REFUSED = {
-    members: "Bots can't join this server: it is for signed-in players, and bots join as guests. Pick a server without the shield.",
+    members: "This server is members-only, and bots join as guests — switch to a server bots can join.",
     refused: "The join API refused this bot's Cloudflare token. If a check box appeared, it has to be answered.",
-    busy: "Too many joins from your address right now — wait a little and add the bot again."
+    busy: "Too many joins from your address right now — wait a little and add the bot again.",
+    // 3d3599b6: 403 {error:"vpn"} — "VPNs and proxies can't join as a guest - turn it off or sign in"
+    vpn: "The join API refuses guests from a VPN or proxy, and every bot joins as a guest: turn the VPN/proxy off."
   };
-  const createSocket = async (href, fresh = false, label = "Bot") => {
+  /* A message that stays until it is dismissed, with buttons. A toast is gone
+   * in a few seconds, and "bots can't join this server" read as a toast was
+   * "the bots button does nothing" — this is for the things you have to act
+   * on. One per id: showing an id again updates it in place. */
+  const RynNotice = {
+    _box: null,
+    _items: new Map(),
+    _css() {
+      if (document.getElementById("ryn-notice-style")) return;
+      const style = document.createElement("style");
+      style.id = "ryn-notice-style";
+      style.textContent = `
+#ryn-notice-box {
+    position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 2147483601;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    width: min(560px, calc(100vw - 24px)); pointer-events: none;
+    font-family: 'Manrope', 'Segoe UI', system-ui, sans-serif;
+}
+#ryn-notice-box .ryn-nt {
+    pointer-events: auto; box-sizing: border-box; width: 100%;
+    display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 14px;
+    border-radius: 12px; background: rgba(12,12,17,0.97);
+    border: 1px solid rgba(255,255,255,0.12); color: #F3F2F7;
+    box-shadow: 0 16px 38px -18px rgba(0,0,0,0.95);
+    font-size: 12.5px; font-weight: 600; line-height: 1.4;
+    animation: ryn-nt-in 220ms cubic-bezier(.2,.8,.3,1) forwards;
+}
+#ryn-notice-box .ryn-nt[data-tone="bad"] { border-color: rgba(217,163,171,0.6); }
+#ryn-notice-box .ryn-nt[data-tone="ok"] { border-color: rgba(166,215,178,0.6); }
+#ryn-notice-box .ryn-nt[data-tone="info"] { border-color: rgba(168,148,224,0.6); }
+#ryn-notice-box .ryn-nt-text { flex: 1 1 auto; min-width: 0; }
+#ryn-notice-box .ryn-nt-btn {
+    flex: 0 0 auto; height: 28px; padding: 0 12px; border-radius: 999px; cursor: pointer;
+    border: 1px solid rgba(142,118,206,0.55); background: transparent; color: #F3F2F7;
+    font: 700 10px 'Space Grotesk', 'Manrope', system-ui, sans-serif; letter-spacing: 0.14em; text-transform: uppercase;
+}
+#ryn-notice-box .ryn-nt-btn.ryn-nt-primary { background: #8E76CE; border-color: #8E76CE; color: #fff; }
+#ryn-notice-box .ryn-nt-btn:hover { filter: brightness(1.12); }
+#ryn-notice-box .ryn-nt-x {
+    flex: 0 0 auto; width: 26px; height: 26px; border: 0; border-radius: 7px; cursor: pointer;
+    background: rgba(255,255,255,0.06); color: #ACA9BA; font-size: 15px; line-height: 26px;
+}
+#ryn-notice-box .ryn-nt-x:hover { background: rgba(217,163,171,0.18); color: #F3F2F7; }
+@keyframes ryn-nt-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+`;
+      (document.head || document.documentElement).appendChild(style);
+    },
+    _boxEl() {
+      if (this._box && this._box.isConnected) return this._box;
+      this._css();
+      const box = document.createElement("div");
+      box.id = "ryn-notice-box";
+      (document.body || document.documentElement).appendChild(box);
+      this._box = box;
+      return box;
+    },
+    // opts: { text, tone: "bad" | "ok" | "info", actions: [{ label, primary, run }], ms }
+    // With no `ms` it stays until its × (or one of its buttons) is pressed.
+    show(id, opts) {
+      try {
+        const o = opts || {};
+        let item = this._items.get(id);
+        if (!item || !item.el.isConnected) {
+          const el = document.createElement("div");
+          el.className = "ryn-nt";
+          el.setAttribute("data-ryn-notice", id);
+          item = {
+            el: el,
+            timer: 0
+          };
+          this._items.set(id, item);
+          this._boxEl().appendChild(el);
+        }
+        clearTimeout(item.timer);
+        const el = item.el;
+        el.textContent = "";
+        el.setAttribute("data-tone", o.tone || "bad");
+        const text = document.createElement("span");
+        text.className = "ryn-nt-text";
+        text.textContent = o.text || "";
+        el.appendChild(text);
+        for (const action of o.actions || []) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "ryn-nt-btn" + (action.primary ? " ryn-nt-primary" : "");
+          button.textContent = action.label;
+          button.addEventListener("click", () => {
+            if (action.keep !== true) this.hide(id);
+            try {
+              action.run();
+            } catch (e) {
+              try {
+                console.error("[RYN] notice action:", e);
+              } catch (_) {}
+            }
+          });
+          el.appendChild(button);
+        }
+        const x = document.createElement("button");
+        x.type = "button";
+        x.className = "ryn-nt-x";
+        x.title = "Dismiss";
+        x.textContent = "×";
+        x.addEventListener("click", () => this.hide(id));
+        el.appendChild(x);
+        if (o.ms > 0) item.timer = setTimeout(() => this.hide(id), o.ms);
+        try {
+          console.warn("[RYN] " + (o.text || ""));
+        } catch (_) {}
+      } catch (_) {}
+    },
+    hide(id) {
+      const item = this._items.get(id);
+      if (!item) return;
+      this._items.delete(id);
+      clearTimeout(item.timer);
+      try {
+        item.el.remove();
+      } catch (_) {}
+      if (this._items.size === 0 && this._box) {
+        try {
+          this._box.remove();
+        } catch (_) {}
+        this._box = null;
+      }
+    }
+  };
+  /* ── Which servers bots can join ───────────────────────────────────────
+   *
+   * Bots join as guests (the join API sees no account on them), and since
+   * 3d3599b6 a guest is refused by a members-only server: 403 {error:"auth"}
+   * at /join, close 4003 on the socket. Signed in, the game puts you on one
+   * whenever your region has one — Uc() keeps only `auth` servers for a
+   * member, and moveOff() sorts them first — so a signed-in player was always
+   * on a server no bot could join, and 2.8.0's Spawn Bot gave up on a
+   * four-second toast before any check was drawn. That was all of "the bots
+   * do nothing while I am signed in".
+   *
+   * The server a bot goes to is the one your socket is on, so that is the one
+   * looked up here, by its address — not the lobby's selection, which can
+   * already point somewhere else while you are still playing. */
+  const rynSignedIn = () => {
+    try {
+      const account = RYN._account;
+      return !!(account && typeof account.verified === "function" && account.verified());
+    } catch (_) {
+      return false;
+    }
+  };
+  const rynMainSocket = () => {
+    try {
+      const socket = client.SocketManager.socket;
+      return socket && socket.readyState === 1 ? socket : null;
+    } catch (_) {
+      return null;
+    }
+  };
+  const rynServerOfHost = host => {
+    const servers = rynServers();
+    if (servers === null || !host) return null;
+    let regions = [];
+    try {
+      regions = servers.regions();
+    } catch (_) {}
+    for (const region of regions) {
+      let list = [];
+      try {
+        list = servers.serversIn(region.id);
+      } catch (_) {}
+      for (const server of list) {
+        let address = null;
+        try {
+          address = servers.address(server);
+        } catch (_) {}
+        if (address === host) return server;
+      }
+    }
+    return null;
+  };
+  // A server a bot can join: not members-only, joinable, with room left. In
+  // `near` first, then the other regions by ping; inside a region the one
+  // with room for a couple of bots and then the busiest, as the game picks.
+  const RYN_BOT_ROOM = 2;
+  const rynBotServerPick = near => {
+    const servers = rynServers();
+    if (servers === null) return null;
+    let regions = [];
+    try {
+      regions = servers.regions().slice();
+    } catch (_) {}
+    regions.sort((a, b) => (String(a.id) === String(near) ? -1 : 0) - (String(b.id) === String(near) ? -1 : 0) || (a.ping == null ? 1e9 : a.ping) - (b.ping == null ? 1e9 : b.ping));
+    for (const region of regions) {
+      let list = [];
+      try {
+        list = servers.serversIn(region.id);
+      } catch (_) {}
+      const open = list.filter(server => {
+        if (!server || server.auth) return false;
+        try {
+          if (!servers.joinable(server) || servers.isFull(server)) return false;
+        } catch (_) {}
+        return Number(server.playerCapacity) - Number(server.playerCount) >= 1;
+      });
+      open.sort((a, b) => (b.playerCapacity - b.playerCount >= RYN_BOT_ROOM) - (a.playerCapacity - a.playerCount >= RYN_BOT_ROOM) || b.playerCount - a.playerCount);
+      if (open.length) return open[0];
+    }
+    return null;
+  };
+  /* Your server, swapped for one bots can join, in one press. In the lobby
+   * that is the bundle's own choose() — the same as picking it from the list,
+   * so it is your choice and the game will not move you back. In a game it
+   * is that, then leaving the game, then pressing Play for you once the menu
+   * is back: signed in, Play needs no human check. */
+  let _rynSwitching = 0;
+  const rynSwitchToBotServer = () => {
+    const servers = rynServers();
+    if (servers === null) {
+      RynNotice.show("bot-server", {
+        text: "The server list has not loaded yet — try again in a moment.",
+        tone: "bad",
+        ms: 6e3
+      });
+      return;
+    }
+    const main = rynMainSocket();
+    let here = null;
+    try {
+      here = main ? rynServerOfHost(new URL(main.url).host) : servers.selected();
+    } catch (_) {}
+    let near = null;
+    try {
+      near = here ? here.region : servers.selectedRegion();
+    } catch (_) {}
+    const pick = rynBotServerPick(near);
+    if (!pick) {
+      RynNotice.show("bot-server", {
+        text: "Every server bots can join is full or offline right now. Try again in a minute, or pick one from the list.",
+        tone: "bad"
+      });
+      return;
+    }
+    try {
+      servers.choose(pick.region, pick.name);
+    } catch (_) {}
+    if (main === null) {
+      RynNotice.show("bot-server", {
+        text: "Switched to " + pick.name + " (" + servers.regionName(pick.region) + ") — bots can join it. Press Play, then add your bots.",
+        tone: "ok",
+        ms: 9e3
+      });
+      return;
+    }
+    // Leave this game and press Play once the menu is back. The game's own
+    // disconnect path takes you to the menu (the socket is closed the way a
+    // dropped one is), and Play then goes where choose() pointed it.
+    const ticket = ++_rynSwitching;
+    RynNotice.show("bot-server", {
+      text: "Moving you to " + pick.name + " (" + servers.regionName(pick.region) + "), a server bots can join…",
+      tone: "info"
+    });
+    try {
+      main.close();
+    } catch (_) {}
+    const started = Date.now();
+    let pressed = false;
+    const target = (() => {
+      try {
+        return servers.address(pick);
+      } catch (_) {
+        return null;
+      }
+    })();
+    const step = () => {
+      if (ticket !== _rynSwitching) return;
+      const waited = Date.now() - started;
+      if (!pressed) {
+        const play = document.getElementById("enterGame");
+        const inMenu = !document.body.classList.contains("hud");
+        if (play && inMenu && !play.classList.contains("busy") && waited > 500) {
+          pressed = true;
+          try {
+            play.click();
+          } catch (_) {}
+        } else if (waited > 8e3) {
+          RynNotice.show("bot-server", {
+            text: "Switched to " + pick.name + ". Press Play to join it, then add your bots.",
+            tone: "ok"
+          });
+          return;
+        }
+        setTimeout(step, 150);
+        return;
+      }
+      const now = rynMainSocket();
+      let on = false;
+      try {
+        on = !!now && now !== main && (!target || new URL(now.url).host === target);
+      } catch (_) {}
+      if (on) {
+        RynNotice.show("bot-server", {
+          text: "You are on " + pick.name + " — bots can join this server. Add them now.",
+          tone: "ok",
+          ms: 7e3
+        });
+        return;
+      }
+      if (waited > 2e4) {
+        RynNotice.show("bot-server", {
+          text: "Switched to " + pick.name + ", but joining it is taking long. If the menu is showing, press Play.",
+          tone: "bad"
+        });
+        return;
+      }
+      setTimeout(step, 250);
+    };
+    setTimeout(step, 150);
+  };
+  /* The setting, changed (Bots → Fleet, or the lobby's server list). On: a
+   * members-only server you are about to join is swapped for one bots can
+   * join, now, while you are in the lobby. Off: the game's own pick again on
+   * its next refresh. Never while you are in a game — it applies to the next
+   * Play — and a server you picked yourself stays picked. */
+  const rynApplyBotServerPref = on => {
+    try {
+      const doc = UI_default.frame && UI_default.frame.document;
+      const box = doc && doc.getElementById("_preferBotServers");
+      if (box && box.checked !== !!on) box.checked = !!on;
+    } catch (_) {}
+    try {
+      const lobby = document.getElementById("ryn-prefer-bots");
+      if (lobby && lobby.checked !== !!on) lobby.checked = !!on;
+    } catch (_) {}
+    const servers = rynServers();
+    if (servers === null || rynMainSocket() !== null || !rynSignedIn()) return;
+    const here = servers.selected();
+    if (on && here && here.auth) {
+      const pick = rynBotServerPick(here.region);
+      if (pick) {
+        try {
+          servers.choose(pick.region, pick.name);
+        } catch (_) {}
+      }
+    } else if (!on) {
+      try {
+        servers.refresh();
+      } catch (_) {}
+    }
+  };
+  const rynMembersNotice = server => {
+    const name = server && server.name ? server.name : "This server";
+    RynNotice.show("bot-server", {
+      text: name + " is members-only. Bots join as guests, so the server turns them away" + (rynSignedIn() ? " — your account is not lent to them." : ".") + " Switch to a server bots can join?",
+      tone: "bad",
+      actions: [ {
+        label: "Switch server",
+        primary: true,
+        run: () => rynSwitchToBotServer()
+      } ]
+    });
+  };
+  /* Before a bot is asked for: is there anything it could join. Each answer
+   * that is not "yes" is said on screen — the button used to return silently
+   * for all of them. */
+  const rynBotPreflight = () => {
+    const main = rynMainSocket();
+    if (main === null) {
+      RynNotice.show("bot-server", {
+        text: "Bots join the server you are playing on — press Play first, then add them.",
+        tone: "bad",
+        ms: 8e3
+      });
+      return false;
+    }
+    let host = null;
+    try {
+      host = new URL(main.url).host;
+    } catch (_) {}
+    const server = rynServerOfHost(host);
+    if (server && server.auth) {
+      rynMembersNotice(server);
+      return false;
+    }
+    // The build the bots would be keyed for, against the one your socket is on.
+    try {
+      const proto = RynWire.protocol();
+      const b = new URL(main.url).searchParams.get("b");
+      if (proto && proto.BUILD_ID != null && b && String(proto.BUILD_ID) !== b) {
+        RynNotice.show("bot-server", {
+          text: "The game has a new build (" + proto.BUILD_ID + ", your connection is on " + b + "). Reload the page before adding bots.",
+          tone: "bad",
+          actions: [ {
+            label: "Reload",
+            primary: true,
+            run: () => location.reload()
+          } ]
+        });
+        return false;
+      }
+    } catch (_) {}
+    return true;
+  };
+  const createSocketWith = async (lease, href, fresh = false, label = "Bot", att = null) => {
+    // `att` is the bot's card (RynCF.attempt): every wait is said on it, and
+    // its × ends the attempt between any two of them.
+    const say = (text, tone) => {
+      if (att) att.say(text, tone);
+    };
+    const stop = () => {
+      if (att && att.cancelled) throw new Error("cancelled");
+    };
+    const refuse = (reason, final) => {
+      const error = new Error(reason);
+      error.rynReason = reason;
+      error.rynFinal = !!final;
+      return error;
+    };
     let url = href;
     let pooled = false;
     let did = null;
     if (/moomoo/.test(href)) {
       const origin = new URL(href).origin;
-      // A server for signed-in players takes no guests, and every bot is one:
-      // say so before spending a Cloudflare challenge on it.
-      try {
-        const servers = typeof RYN !== "undefined" && RYN._servers;
-        const here = servers && typeof servers.selected === "function" ? servers.selected() : null;
-        if (here && here.auth) {
-          rynBotNotice(RYN_JOIN_REFUSED.members);
-          throw new Error("members-only server");
-        }
-      } catch (e) {
-        if (e && e.message === "members-only server") throw e;
+      const host = new URL(href).host;
+      // A members-only server takes no guests, and every bot is one: say so,
+      // with the way out, before a Cloudflare check is spent on it. The server
+      // is the one this socket goes to, found by its address.
+      const server = rynServerOfHost(host);
+      if (server && server.auth) {
+        rynMembersNotice(server);
+        throw refuse("This server is members-only, and bots join as guests.", true);
+      }
+      // The build's protocol module, before a Cloudflare check is spent: a bot
+      // on a pinned server is keyed with its mixKey and BUILD_SALT, and
+      // without them every frame it sent would be refused (see io-init).
+      if (RynWire.protocol() === null) {
+        say("Loading the game's protocol module…");
+        await RynWire.ensureProtocol();
+        stop();
       }
       let token = null;
       if (!fresh) {
@@ -2067,11 +2629,14 @@ window.grbtp = 35;
         // work already in progress instead — waiters are served ahead of the
         // pool's own shelf, so the spawn gets the first token out.
         if (ready === null && TokenPool.minting > 0) {
+          say("Waiting for the token pool's check to finish…");
           ready = await TokenPool.waitFor(TURNSTILE_WAIT_MS);
+          stop();
         }
         if (ready !== null) {
           token = "cf:" + ready;
           pooled = true;
+          say("Using a Cloudflare token checked earlier");
           try {
             console.log("[RYN BOT] using pre-minted turnstile token");
           } catch (e) {}
@@ -2081,7 +2646,8 @@ window.grbtp = 35;
       if (!token) {
         try {
           const cf = await generateTurnstileToken({
-            label: label
+            label: label,
+            attempt: att
           });
           if (cf) {
             token = "cf:" + cf;
@@ -2095,6 +2661,7 @@ window.grbtp = 35;
             console.log("[RYN BOT] token generation failed:", why);
           } catch (_) {}
         }
+        stop();
       }
       /* No Cloudflare token, no bot. There used to be two fallbacks here, and
        * on 2025 neither could work: your own captured token, which your join
@@ -2103,10 +2670,10 @@ window.grbtp = 35;
        * not take. Both ended the same way — the API refused the bot and its
        * row vanished — only later, with a challenge spent and nothing said. */
       if (!token) {
-        if (why !== "cancelled") {
-          rynBotNotice("No Cloudflare check for the bot (" + label + "): " + (why || "nothing came back") + ".");
-        }
-        throw new Error("no captcha token: " + why);
+        if (why === "cancelled") throw new Error("cancelled");
+        const reason = "No Cloudflare token: " + (why || "nothing came back") + ".";
+        if (!att) rynBotNotice("No Cloudflare check for the bot (" + label + "): " + (why || "nothing came back") + ".");
+        throw refuse(reason, false);
       }
       /* 2025: the game no longer connects with the Turnstile token itself.
        * It trades it at <api>/join for a one-use ticket and connects with
@@ -2114,38 +2681,54 @@ window.grbtp = 35;
        * was made for as `b=` — a socket without it is a client from before
        * the update. The ticket is the bundle's own flow, line for line; like
        * the bundle, a /join that is down falls back to the raw token. Bots
-       * join as guests: they do not carry the account you are signed in to. */
+       * join as guests: they do not carry the account you are signed in to.
+       *
+       * The API host is the one the server list came from. RYN lists only the
+       * page's own list (the bundle's `${Te}/servers`), so for every server it
+       * shows that is RYN_API_BASE: api-prod2 on moomoo.io, api-sandbox2 on
+       * sandbox.moomoo.io — the same host the game's own /join goes to. */
       if (typeof token === "string" && token.indexOf("cf:") === 0) {
-        const host = new URL(href).host;
-        did = RynBotDevices.take();
+        say("Joining " + (server && server.name ? server.name : host) + "…");
+        did = lease.did = RynBotDevices.take();
         let joined = await rynJoinTicket(host, token.slice(3), did);
+        stop();
         // Too many joins at once: wait, and offer a new token (one that has
         // been offered is spent, whatever the answer was).
         for (let retry = 1; joined.error === "busy" && retry <= 2; retry++) {
-          rynBotNotice("Too many joins from your address — trying again in " + 3 * retry + " s");
+          say("Too many joins from your address — trying again in " + 3 * retry + " s…");
+          if (!att) rynBotNotice("Too many joins from your address — trying again in " + 3 * retry + " s");
           await new Promise(resolve => setTimeout(resolve, 3e3 * retry));
+          stop();
           let again = null;
           try {
             again = await generateTurnstileToken({
-              label: label
+              label: label,
+              attempt: att
             });
           } catch (_) {}
+          stop();
           if (!again) break;
+          say("Joining " + (server && server.name ? server.name : host) + "…");
           joined = await rynJoinTicket(host, again, did);
+          stop();
         }
         if (joined.did && joined.did !== did) {
-          RynBotDevices.release(did);
-          did = joined.did;
+          RynBotDevices.retire(did);
+          did = lease.did = joined.did;
           RynBotDevices.keep(did);
         }
         if (joined.ticket) {
           token = joined.ticket;
         } else if (joined.error !== "network") {
           RynBotDevices.release(did);
-          rynBotNotice(RYN_JOIN_REFUSED[joined.error] || "The join API refused this bot (" + joined.error + ").");
-          throw new Error("join refused: " + joined.error);
+          const reason = RYN_JOIN_REFUSED[joined.error] || "The join API refused this bot (" + joined.error + ").";
+          if (joined.error === "members") rynMembersNotice(server);
+          else if (!att) rynBotNotice(reason);
+          throw refuse(reason, joined.error === "members" || joined.error === "vpn");
+        } else {
+          // "network": like the bundle, connect with the raw token
+          say("The join API did not answer — connecting with the token itself…");
         }
-        // "network": like the bundle, connect with the raw token
       }
       // The build the server wants is on the player's own socket URL — the
       // game put it there — so it is read from there first.
@@ -2175,12 +2758,33 @@ window.grbtp = 35;
     }
     ws.binaryType = "arraybuffer";
     ws._rynPooledToken = pooled;
+    say("Connecting to the server…");
+    if (att) {
+      att.onCancel(() => {
+        try {
+          ws.close();
+        } catch (_) {}
+      });
+    }
     // The bot's device id is its own until this socket closes.
     if (did) {
       ws._rynDid = did;
       ws.addEventListener("close", () => RynBotDevices.release(did));
     }
+    lease.held = true;
     return ws;
+  };
+  const createSocket = async (href, fresh = false, label = "Bot", att = null) => {
+    const lease = {
+      did: null,
+      held: false
+    };
+    try {
+      return await createSocketWith(lease, href, fresh, label, att);
+    } catch (e) {
+      if (!lease.held) RynBotDevices.release(lease.did);
+      throw e;
+    }
   };
   const createSocket_default = createSocket;
   const Hooker = new class {
@@ -3649,7 +4253,7 @@ window.grbtp = 35;
     learned = false;
     // Arithmetic the obfuscator writes constants as ("-14*-489+50*200+-16829").
     _num(expr) {
-      if (typeof expr !== "string" || !new RegExp("^" + this._NUMEXPR + "$").test(expr)) return null;
+      if (typeof expr !== "string" || !/^[-+*\d\s()]+$/.test(expr)) return null;
       try {
         const v = Function("return (" + expr + ")")();
         return typeof v === "number" && isFinite(v) ? v : null;
@@ -3657,27 +4261,21 @@ window.grbtp = 35;
         return null;
       }
     }
-    // Arithmetic the obfuscator writes constants as, exponents included
-    // ("-1061+-5e3*1+-19*-319").
-    _NUMEXPR="[-+*\\d\\s.eE]+";
-    // `<name> = <number>` wherever the bundle declares it.
-    _bind(text, name) {
-      const m = new RegExp(
-        "(?:const |let |var |[,;({])" + name.replace(/\$/g, "\\$") + "=(" + this._NUMEXPR + ")[,;)}]"
-      ).exec(text);
-      return m ? this._num(m[1]) : null;
-    }
-    // The bundle's protocol constants, each from the code that uses it: the
-    // single anchor this used to have expects them declared in one run ahead
-    // of the c2s alphabet, and the shipped bundle splits them in two.
+    // The bundle's protocol constants, from its own text:
+    //   const uf=<salt>,So=<sig bytes>,Ws=<mode>,Bl=["M","D","9",…],hf=<n>,Dl=["A","B","C",…],xf=<n>
     learn(text) {
       try {
         const key = /sitekey:[\w$]+/.test(text) && /"(0x4[\w-]{18,40})"/.exec(text);
         if (key && rynGameSitekey === null) rynGameSitekey = key[1];
       } catch (e) {}
       try {
-        const v = /\/servers\?v=([\d.]+)/.exec(text);
-        if (v) rynServersVersion = v[1];
+        // 1.27: `${Se}/servers?v=1.27`; 3d3599b6: const Kx="1.28",Qx=`${Te}/servers?v=${Kx}`
+        const v = /\/servers\?v=(?:([\d.]+)|\$\x7b([\w$]+)\x7d)/.exec(text);
+        if (v && v[1]) rynServersVersion = v[1];
+        else if (v) {
+          const d = new RegExp("(?:const |let |var |,)" + v[2].replace(/\$/g, "\\$") + '="([\\d.]+)"').exec(text);
+          if (d) rynServersVersion = d[1];
+        }
       } catch (e) {}
       try {
         const c2s = /([\w$]+)=\[("M","D","9"(?:,"[^"\\]{1,3}")*)\],([\w$]+)=([-+*\d\s]+)[,;]/.exec(text);
@@ -3692,49 +4290,50 @@ window.grbtp = 35;
             if (nb !== null && nb > 0 && nb <= b.length) this.s2cPlain = nb;
             this.learned = true;
           }
-          const name = c2s[1].replace(/\$/g, "\\$");
-          const missed = [];
-
-          /* mode: `const <mode>=1,<c2s>=["M",…]` — the alphabet run opens
-           * with it. */
-          const mode = new RegExp("const ([\\w$]+)=(" + this._NUMEXPR + ")," + name + "=\\[").exec(text);
-          const modeValue = mode ? this._num(mode[2]) : null;
-          if (modeValue !== null) this.mode = modeValue; else missed.push("transport mode");
-
-          /* signature width: the frame is the signature written at 0 and the
-           * payload written at the width —
-           *   f[.set](sig,0), f[.set](payload,<width>)
-           * so the second offset is the binding, and the first has to be 0. */
-          const sig = new RegExp(
-            "([\\w$]+)\\[[^\\]]*\\]\\([\\w$]+,(" + this._NUMEXPR + ")\\),\\1\\[[^\\]]*\\]\\([\\w$]+,([\\w$]+)\\),"
-          ).exec(text);
-          const sigValue = sig && this._num(sig[2]) === 0 ? this._bind(text, sig[3]) : null;
-          if (sigValue !== null && sigValue > 0 && sigValue <= 32) this.sigBytes = sigValue;
-          else missed.push("frame signature width");
-
-          /* legacy salt: the table builder picks it when no salt was passed,
-           *   s = o ? <salt> : t,  …  c2s: ul(o ? <c2s>.slice(0, n) : <c2s>, a)
-           * and the same `o` gates the alphabet slice, which is what ties this
-           * to the right branch rather than to any other ternary. */
-          const salt = new RegExp(
-            ",([\\w$]+)=([\\w$]+)\\?([\\w$]+):[\\w$]+,[\\s\\S]{0,240}?\\2\\?" + name + "\\["
-          ).exec(text);
-          const saltValue = salt ? this._bind(text, salt[3]) : null;
-          if (saltValue !== null) this.defaultSalt = saltValue; else missed.push("legacy table salt");
-
-          if (missed.length) {
-            // Not Logger: every Logger method returns early in a release
-            // build, and this is a message about the transport.
-            try {
-              console.warn(
-                "[RYN] could not read " + missed.join(", ") + " off the game bundle; " +
-                "using the values this build was verified against"
-              );
-            } catch (_) {}
+          const head = new RegExp("const [\\w$]+=([-+*\\d\\s]+),[\\w$]+=([-+*\\d\\s]+),[\\w$]+=([-+*\\d\\s]+)," + c2s[1].replace(/\$/g, "\\$") + "=\\[").exec(text);
+          if (head) {
+            const salt = this._num(head[1]), sig = this._num(head[2]), mode = this._num(head[3]);
+            if (salt !== null) this.defaultSalt = salt;
+            if (sig !== null && sig > 0 && sig <= 32) this.sigBytes = sig;
+            if (mode !== null) this.mode = mode;
           }
+          // 3d3599b6 split that declaration (`const $f=1,Uo=6;function ne…const Qs=1,dl=[…]`),
+          // so the head above finds nothing there. Read each constant from the
+          // code that USES it instead, which any build has to keep.
+          this._learnByUse(text);
         }
       } catch (e) {}
       return this.learned;
+    }
+    // A top-level constant's value, by name: `const X=<arith>` or `,X=<arith>`.
+    _decl(text, name) {
+      const m = new RegExp("(?:const |let |var |,)" + name.replace(/\$/g, "\\$") + "=([-+*\\d\\s()]+)[,;]").exec(text);
+      return m ? this._num(m[1]) : null;
+    }
+    _learnByUse(text) {
+      const OB = '(?:[\\w$]+\\(\\d+,"(?:[^"\\\\]|\\\\.)*"\\)|"(?:[^"\\\\]|\\\\.)*")';
+      const KEY = "(?:\\[" + OB + "(?:\\+" + OB + ")*\\]|\\.[\\w$]+)";
+      try {
+        // the session literal names the mode constant
+        const mode = /[\w$]+=\x7bmode:([\w$]+),key:[\w$]+,tables:/.exec(text);
+        const mv = mode && this._decl(text, mode[1]);
+        if (mv !== null && mv !== undefined) this.mode = mv;
+        // the send sizes its frame as new Uint8Array(W+payload.length), the + maybe proxied
+        const sig = new RegExp("=new Uint8Array\\((?:([\\w$]+)\\+|[\\w$]+" + KEY + "\\(([\\w$]+),)[\\w$]+" + KEY + "\\)\\)?[,;][\\w$]+" + KEY + "\\([\\w$]+,").exec(text);
+        const sv = sig && this._decl(text, sig[1] || sig[2]);
+        if (sv !== null && sv > 0 && sv <= 32) this.sigBytes = sv;
+        // the tables function: s=o?DEFAULT:t, then o?ALPHA[..](0,N):ALPHA for c2s and s2c
+        const fnName = new RegExp("tables:[\\w$]+\\?(?:[\\w$]+" + KEY + "\\(([\\w$]+),|([\\w$]+)\\()").exec(text);
+        const name = fnName && (fnName[1] || fnName[2]);
+        const at = name ? text.indexOf("function " + name + "(") : -1;
+        if (at >= 0) {
+          const head = text.slice(at, at + 1200);
+          const t = /^function [\w$]+\([\w$]+,([\w$]+)\)/.exec(head);
+          const ds = t && new RegExp("=[\\w$]+\\?([\\w$]+):" + t[1].replace(/\$/g, "\\$") + ",").exec(head);
+          const dv = ds && this._decl(text, ds[1]);
+          if (dv !== null && dv !== undefined) this.defaultSalt = dv;
+        }
+      } catch (e) {}
     }
     hex(h) {
       const out = new Uint8Array(h.length / 2);
@@ -3811,35 +4410,6 @@ window.grbtp = 35;
     sign(key, data) {
       return RynSign.signAlone(key, data, this.sigBytes);
     }
-    /* The build the mixer below was taken from. A server running a different
-     * one mixes differently, so the fallback is only good for this one. */
-    mixerBuildId="s16nvz";
-    /* One byte of the mixer's stream, as the module's WebAssembly computes it
-     * (see drivers/game-drivers.json). 32-bit wrapping throughout. */
-    _mixByte(seed, i) {
-      let x;
-      x = (Math.imul(((i + 1) | 0), 2654435761) ^ seed);
-      x = Math.imul(x, 3850160783);
-      x = ((x + 973754700) | 0);
-      x = Math.imul(x, 3252231511);
-      x = ((x + 3789991911) | 0);
-      x = (x ^ 2110018233);
-      x = ((x + 2533773616) | 0);
-      x = (x ^ (x >>> 8));
-      x = (x ^ (x << 27));
-      x = ((x + 1532818033) | 0);
-      x = (x ^ (x << 19));
-      x = (x ^ 1917987811);
-      x = (x ^ (x >>> 8));
-      return ((x >>> 11) & 255);
-    }
-    /* mixKey(key, seed), for a session that could not get hold of the
-     * protocol module's own export. */
-    mixKey(key, seed) {
-      const out = new Uint8Array(key.length);
-      for (let i = 0; i < key.length; i++) out[i] = key[i] ^ this._mixByte(seed | 0, i);
-      return out;
-    }
     // moomoo-protocol's own exports, captured by the injector's import.
     protocol() {
       try {
@@ -3848,6 +4418,32 @@ window.grbtp = 35;
       } catch (e) {
         return null;
       }
+    }
+    /* The same module, fetched by RYN itself when the injector's capture did
+     * not happen (a build whose imports the converter did not recognise, or a
+     * page RYN reached late). mixKey and BUILD_SALT change with every build —
+     * 3d3599b6's module is s16nvz.js — so they are never copied into RYN; a
+     * bot on a pinned server cannot be keyed without them. */
+    _protoLoad=null;
+    ensureProtocol() {
+      const have = this.protocol();
+      if (have !== null) return Promise.resolve(have);
+      if (this._protoLoad !== null) return this._protoLoad;
+      let url = null;
+      try {
+        url = Injector_importMap.resolve("moomoo-protocol");
+      } catch (e) {}
+      if (!url) return Promise.resolve(null);
+      this._protoLoad = import(url).then(m => {
+        try {
+          if (typeof RYN !== "undefined" && RYN._modules && !RYN._modules["moomoo-protocol"]) RYN._modules["moomoo-protocol"] = m;
+        } catch (e) {}
+        return m;
+      }, () => {
+        this._protoLoad = null;
+        return null;
+      });
+      return this._protoLoad;
     }
   }();
   /* What a session needs: the game's own function wherever a hook found it,
@@ -3872,32 +4468,9 @@ window.grbtp = 35;
       Ro: fn(g.Ro, h => RynWire.hex(h)),
       Po: fn(g.Po, (seed, salt) => RynWire.tables(seed, salt)),
       mode: g.mode != null ? g.mode : RynWire.mode,
-      /* The module's own export first, then whatever a hook found in the
-       * bundle, then RynWire's copy. A session with none of the three cannot
-       * sign a frame a pinned server will accept. */
-      mixKey: proto && typeof proto.mixKey === "function"
-        ? proto.mixKey
-        : fn(g.mixKey, (key, seed) => {
-            /* RynWire's mixer is pinned to one build. If the bundle says it is
-             * serving another, say so: the frames will be rejected and the
-             * reason is worth knowing. */
-            if (g.buildId != null && g.buildId !== RynWire.mixerBuildId) {
-              try {
-                console.warn(
-                  '[RYN] the game is build "' + g.buildId + '", not the "' + RynWire.mixerBuildId +
-                  '" the built-in key mixer is for, and the game\'s own moomoo-protocol ' +
-                  "module could not be reached — bot connections will be refused"
-                );
-              } catch (_) {}
-            }
-            return RynWire.mixKey(key, seed);
-          }),
-      salt: proto && proto.BUILD_SALT != null
-        ? proto.BUILD_SALT
-        : g.salt != null ? g.salt : 1015555175,
-      buildId: proto && proto.BUILD_ID != null
-        ? proto.BUILD_ID
-        : g.buildId != null ? g.buildId : "s16nvz",
+      mixKey: proto && typeof proto.mixKey === "function" ? proto.mixKey : fn(g.mixKey, null),
+      salt: proto && proto.BUILD_SALT != null ? proto.BUILD_SALT : g.salt != null ? g.salt : null,
+      buildId: proto && proto.BUILD_ID != null ? proto.BUILD_ID : g.buildId != null ? g.buildId : null,
       maskFrom: fn(g.maskFrom, key => RynWire.mask(key)),
       applyMask: fn(g.applyMask, (bytes, seed) => RynWire.xor(bytes, seed)),
       maskIn: fn(g.maskIn, (s2c, n) => RynWire.maskIn(s2c, n)),
@@ -4109,9 +4682,19 @@ window.grbtp = 35;
     };
   };
   class CustomStorage {
+    /* Keys RYN shares with the game are not always JSON. The 3d3599b6 game
+     * saves skin_color itself as String(e), so a value RYN handed it
+     * ("toString") came back on the next load as raw `toString`, JSON.parse
+     * threw inside resetGame, and RYN never started: "refresh, enter again,
+     * and nothing works". A value that is not JSON is returned as it is. */
     static get(key) {
       const value = window.localStorage.getItem(key);
-      return value === null ? null : JSON.parse(value);
+      if (value === null) return null;
+      try {
+        return JSON.parse(value);
+      } catch (e) {
+        return value;
+      }
     }
     static set(key, value, stringify = true) {
       const data = stringify ? JSON.stringify(value) : value;
@@ -4175,7 +4758,7 @@ window.grbtp = 35;
 
   const Visuals_default = "<div class=\"menu-page\" data-id=\"3\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Visual</h1>\n        <p class=\"page-description\">Everything the client draws over the game. Turn off what you do not read during a fight — the fewer overlays are on, the less there is between you and the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Names<span class=\"sec-sub\">How players are labelled on the field.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">My Name</span>\n                    <span class=\"opt-desc\">Draws your own nickname in a colour of your choosing.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_myNameColorValue\" type=\"color\" title=\"Select Color\">\n                    <label class=\"switch-checkbox\"><input id=\"_myNameColor\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Mark RYN Players</span>\n                    <span class=\"opt-desc\">Flags other players running this client.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_markRynPlayers\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Player ID</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_showPlayerID\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Player HUD<span class=\"sec-sub\">Readouts drawn on and around players.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Weapon Reload Ring</span>\n                    <span class=\"opt-desc\">Draws what is left of each weapon's cooldown as a white edge inside its own tile, with a second edge under it filling towards the weapon's next upgrade.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_weaponReloadRing\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Render HP</span>\n                    <span class=\"opt-desc\">Draws a health value on players instead of a bar alone.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_renderHP\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Boss Health Under It</span>\n                    <span class=\"opt-desc\">The Crab King gets its name over it and its health bar and number under it, like any animal, instead of the game\u2019s bar across the top of the screen.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_bossHealthUnder\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Position Prediction</span>\n                    <span class=\"opt-desc\">Marks where a moving player is expected to be on the next tick.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_positionPrediction\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">My Turret Reload Bar</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_playerTurretReloadBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Display player angle</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_displayPlayerAngle\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">World<span class=\"sec-sub\">Tint and weather drawn over the map itself.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Purple Tint</span>\n                    <span class=\"opt-desc\">Recolours world objects so structures read faster.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_objectTint\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Tint Transparency</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_objectTintOpacity\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_weather\">Rain &amp; Snow</label>\n                    <span class=\"opt-desc\">Rain across the map, turning to snow inside the snow biome.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_weather\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Intensity</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_weatherAmount\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_deathCorpse\">Death Corpses</label>\n                    <span class=\"opt-desc\">Leaves a body where a player you killed died, wearing a halo and angel wings &mdash; or a cowboy hat and a devil tail if they were the one carrying the skull. It holds on the spot, then floats up and fades away. Local and visual only.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_deathCorpse\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_killAnimation\">Kill Animation</label>\n                        <span class=\"opt-desc\">Which animation the body goes out on. The choice holds until you change it; Random draws a new one for every kill.</span>\n                    </div>\n                    <select id=\"_killAnimation\" class=\"ryn-select\">" + KILL_STYLE_OPTIONS + "</select>\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Structures<span class=\"sec-sub\">Who owns a building, and how much of it is left.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Structure Readout (Mine/Clan)</span>\n                    <span class=\"opt-desc\">Owner name and a health bar over your own and your clan's structures, within 500 units.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_itemHealthBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Structure Readout (Enemy)</span>\n                    <span class=\"opt-desc\">The same over everything that is not yours.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_itemHealthBarEnemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Health Bar Colour</span>\n                    <span class=\"opt-desc\">The fill inside the bar, for every structure.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_itemHealthBarColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Structure Colours<span class=\"sec-sub\">Spikes and traps recoloured by who placed them.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_structureColors\">Structure Colours</label>\n                    <span class=\"opt-desc\">Tints every spike and trap by its owner, so an enemy build reads at a glance. Ownership is the client's own team detection. Purely visual.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_structureColors\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Colour Strength</span>\n                    <span class=\"opt-desc\">How much of the original sprite the tint covers.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_structureColorStrength\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Own Spike</span>\n                    <span class=\"opt-desc\">Spikes you placed.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_ownSpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Ally Spike</span>\n                    <span class=\"opt-desc\">Spikes placed by your clan.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_allySpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enemy Spike</span>\n                    <span class=\"opt-desc\">Everyone else's spikes.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_enemySpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Own Trap</span>\n                    <span class=\"opt-desc\">Traps you placed.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_ownTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Ally Trap</span>\n                    <span class=\"opt-desc\">Traps placed by your clan.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_allyTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enemy Trap</span>\n                    <span class=\"opt-desc\">Everyone else's traps.</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_enemyTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Hitboxes<span class=\"sec-sub\">Debug outlines. Useful while learning a range, noisy otherwise.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Weapon hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_weaponHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Collision hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_collisionHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Placement hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_placementHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Possible placement</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_possiblePlacement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Interface<span class=\"sec-sub\">The game's own interface and how much it draws.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Hide game HUD</span>\n                    <span class=\"opt-desc\">Removes moomoo's own interface and leaves the map alone.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_hideHUD\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Melee Animation</span>\n                    <span class=\"opt-desc\">Grip-based swing, thrust and chop animations for melee weapons. Off restores moomoo's own spin. Shields, every bow and the musket are never touched either way.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_meleeAnimation\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_visualSmoothing\">Visual Smoothing</label>\n                    <span class=\"opt-desc\">Keeps motion even rather than dropping frames to keep up. Off lets Low Quality Mode skip every second frame when the rate collapses.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_visualSmoothing\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_renderOptimization\">Rendering Optimization</label>\n                    <span class=\"opt-desc\">Caches the canvas contexts and skips canvas state writes that would not change anything.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_renderOptimization\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_performanceOptimization\">Performance Optimization</label>\n                    <span class=\"opt-desc\">Skips per-object overlay work for overlays that are switched off. Never touches anything the modules act on.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_performanceOptimization\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Low Quality Mode</span>\n                    <span class=\"opt-desc\">Cuts rendering detail. Turn this on if the game drops frames.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_lowQuality\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
   const Misc_default = "<div class=\"menu-page\" data-id=\"4\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Misc</h1>\n        <p class=\"page-description\">Everything around the fight: what happens on a kill, what gets typed into chat for you and for the bots, how this menu behaves, and the counters the client has kept since you installed it.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Match<span class=\"sec-sub\">What the client does when a round starts or ends.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Kill Message</span>\n                    <span class=\"opt-desc\">Sends this line in chat every time you get a kill.</span>\n                </div>\n                <div class=\"option-content\">\n                    <input id=\"_killMessageText\" class=\"input\" type=\"text\" maxlength=\"30\" placeholder=\"Message\">\n                    <label class=\"switch-checkbox\"><input id=\"_killMessage\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Provoke on Kill</span>\n                    <span class=\"opt-desc\">Reacts in chat when someone kills you instead.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_deathProvoke\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autospawn</span>\n                    <span class=\"opt-desc\">Respawns you as soon as the death screen appears.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autospawn\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoaccept</span>\n                    <span class=\"opt-desc\">Accepts incoming clan requests without asking.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoaccept\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Auto Chat<span class=\"sec-sub\">Lines you post on a timer. They cycle in the order listed.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enable</span>\n                    <span class=\"opt-desc\">Starts posting your messages while you are in game.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoChat\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Interval</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoChatInterval\" type=\"range\" step=\"1\" min=\"1\" max=\"60\" data-suffix=\"s\">\n                </label>\n            </div>\n            <div id=\"autoChatMsgList\"></div>\n            <div class=\"content-option centered\">\n                <button id=\"addAutoChatMsg\" class=\"option-button\">Add message</button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Auto Chat<span class=\"sec-sub\">The same thing, typed by every connected bot.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enable Player Chat</span>\n                    <span class=\"opt-desc\">Lets the bots post their own list of lines.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoBotChat\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div id=\"autoBotChatMsgList\"></div>\n            <div class=\"content-option centered\">\n                <button id=\"addAutoBotChatMsg\" class=\"option-button\">Add player message</button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Chat Log<span class=\"sec-sub\">The log in the corner: what was said, who arrived, who left, who died, and who formed or joined a clan. Size, opacity, font, filters and mutes live behind the gear on the panel itself.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Show Chat Log</span>\n                    <span class=\"opt-desc\">Closing it only puts the panel away. It keeps recording, and everything from the last fifteen minutes is still there when you open it again.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_chatLogOpen\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot messages</span>\n                    <span class=\"opt-desc\">Whether chat from your own bots is listed. Off by default &mdash; forty bots fill a log quickly.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_chatLogBotMsg\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot events</span>\n                    <span class=\"opt-desc\">Whether your bots joining, leaving and dying is listed.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_chatLogBotEvents\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Lock position</span>\n                    <span class=\"opt-desc\">Stops the panel being dragged by accident. Resizing still works.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_chatLogLock\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Menu<span class=\"sec-sub\">How this interface itself behaves.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">See through the menu</span>\n                    <span class=\"opt-desc\">Lets the game show faintly behind this panel while it is open.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_menuTransparency\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Session<span class=\"sec-sub\">Counters kept by the client. They persist between games.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Total kills</span></div>\n                <span id=\"_totalKills\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Global kills with bots</span></div>\n                <span id=\"_globalKills\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Deaths</span></div>\n                <span id=\"_deaths\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Autosync</span></div>\n                <span id=\"_autoSyncTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike sync hammer</span></div>\n                <span id=\"_spikeSyncHammerTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike sync</span></div>\n                <span id=\"_spikeSyncTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Velocity tick</span></div>\n                <span id=\"_velocityTickTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Client</span></div>\n                <span id=\"author\" class=\"text-value\">Ryn Type 2</span>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Reset<span class=\"sec-sub\">Puts every setting on every page back to its shipped value.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Reset all settings</span>\n                    <span class=\"opt-desc\">Keybinds, combat, visual, misc and bot options all return to defaults. Your music library is not touched.</span>\n                </div>\n                <button id=\"resetSettings\" class=\"option-button red\">Reset settings</button>\n            </div>\n        </div>\n    </div>\n</div>";
-  const Bots_default = "<div class=\"menu-page\" data-id=\"5\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Bots</h1>\n        <p class=\"page-description\">Connect alternate clients, name them, and decide how they follow, fight, build and farm. Everything below applies to every bot you have connected.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Fleet<span class=\"sec-sub\">Add a bot, give it a name, connect it. Connected bots appear underneath.</span></div>\n        <div class=\"section-content\">\n            <div id=\"bot-container\"></div>\n            <div id=\"dynamic-bot-list\"></div>\n            <div class=\"content-option stacked\" id=\"_botBulkRow\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Name every bot</span>\n                    <span class=\"opt-desc\">One name for the whole fleet. Every new row is pre-filled with it, so bots you add from here on join under it. <b>Apply to all</b> also gives it to the rows and bots you already have &mdash; a bot that is alive keeps the name it spawned with until it next respawns.</span>\n                </div>\n                <div class=\"inline\">\n                    <input id=\"_botBulkName\" class=\"input\" type=\"text\" maxlength=\"15\" placeholder=\"Enter name\" autocomplete=\"off\" spellcheck=\"false\">\n                    <button id=\"_botBulkNameApply\" class=\"option-button\">Apply to all</button>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Fleet numbers</span>\n                    <span class=\"opt-desc\">Always on. Every bot joins as its name plus its slot number &mdash; base <b>yytt</b> becomes yytt1, yytt2, yytt3 and so on. Since the 2025 update a name can be taken: a registered player&#39;s name is theirs alone, and a bot under it is turned away. A name the game says is taken is skipped for the next free number.</span>\n                </div>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">First number</span></div>\n                <div class=\"inline\"><input id=\"_botNameNumberStart\" class=\"input\" type=\"number\" min=\"0\" max=\"99\" step=\"1\" value=\"1\"></div>\n            </div>\n            <div class=\"content-option centered\">\n                <button id=\"add-bot-dynamic\" class=\"option-button primary tall\">Add bot</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Clan joins</span>\n                    <span class=\"opt-desc\">Checks actual clan membership, then retries only bots still outside your clan. Each bot gets one turn at a time.</span>\n                </div>\n                <button id=\"_clanRecheck\" class=\"option-button\">Re-check clan joins</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto random bot names</span>\n                    <span class=\"opt-desc\">Pre-fills each new row with a random 1&ndash;7 character name.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoRandomBotNames\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bots own clan</span>\n                    <span class=\"opt-desc\">Each bot creates its own tribe instead of joining yours, named from the fleet name plus its slot &mdash; base <b>GG1</b> over five bots gives GG11, GG12, GG13, GG14, GG15. Tribe names are capped at seven characters by the game, so the stem is trimmed and the number kept. Bots still never attack each other or you: that is decided by ownership, not by the tribe.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botIndividualClans\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Clan name stem</span>\n                    <span class=\"opt-desc\">Optional. Leave empty to use the fleet name. The slot number is always appended, so every bot gets its own tribe either way.</span>\n                </div>\n                <input id=\"_botClanPrefix\" class=\"input\" type=\"text\" maxlength=\"6\" placeholder=\"GG1\" autocomplete=\"off\" spellcheck=\"false\">\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\" id=\"_tokenPoolSection\" style=\"display:none;\">\n        <div class=\"section-title\">Spawn<span class=\"sec-sub\">Verification solved ahead of the press, so Spawn Bot buys sockets rather than challenges. One press connects as many bots as there are tokens ready.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\" id=\"_tokenPoolRow\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Tokens ready</span>\n                    <span class=\"opt-desc\" id=\"_tokenPoolStatus\">&mdash;</span>\n                </div>\n                <div class=\"inline\">\n                    <button id=\"_tokenPoolToggle\" class=\"option-button primary\">Stop</button>\n                    <button id=\"_tokenPoolFill\" class=\"option-button\">Fill now</button>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Pool size</span>\n                    <span class=\"opt-desc\">How many tokens are kept ready. Each one is a Cloudflare check of its own, shown in the bottom-right corner, and it lasts four minutes &mdash; so keep it to the number of bots you spawn in one press.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_tokenPoolTarget\" type=\"range\" step=\"1\" min=\"1\" max=\"24\">\n                </label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Target Scan<span class=\"sec-sub\">Everyone this tab has seen, from any of its connections. <b>SCAN</b> sends the fleet looking for them; <b>EXCLUDE</b> takes them off the target list for every bot, everywhere. The two are independent &mdash; a player can be scanned and excluded at once, which tracks them without ever attacking them.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Scan <span id=\"_scanCount\" class=\"scan-count\">none picked</span></span>\n                    <span class=\"opt-desc\" id=\"_scanStatus\">Pick one or more players below.</span>\n                </div>\n                <button id=\"_scanToggle\" class=\"option-button primary\">SCAN ON</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Scan mode</span>\n                    <span class=\"opt-desc\"><b>Attack</b> &mdash; the fleet takes coordinated positions around a found target and strikes together. <b>Track</b> &mdash; one bot keeps the target in view and reports it while the rest come back to you; switching to Attack sends them all in.</span>\n                </div>\n                <div class=\"seg\">\n                    <button id=\"_scanModeAttack\" class=\"seg-btn\">Attack</button>\n                    <button id=\"_scanModeTrack\" class=\"seg-btn\">Track</button>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bots given <span id=\"_escortCount\" class=\"scan-count\">none</span></span>\n                    <span class=\"opt-desc\" id=\"_escortStatus\">Use <b>&minus; BOTS +</b> on a clan mate below to hand them bots. Those bots follow, guard, fight and build for that player until you take them back or the player leaves your clan.</span>\n                </div>\n            </div>\n            <div class=\"content-option stacked\">\n                <div class=\"scan-bar\">\n                    <input id=\"_scanFilter\" class=\"input scan-filter\" type=\"search\" placeholder=\"Filter by name or id\" autocomplete=\"off\" spellcheck=\"false\">\n                    <button id=\"_scanClearTargets\" class=\"option-button\">Clear picks</button>\n                    <button id=\"_scanClearExcluded\" class=\"option-button\">Clear excluded</button>\n                    <button id=\"_scanClearDex\" class=\"option-button\">Clear list</button>\n                </div>\n                <div id=\"_scanList\"></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Behaviour<span class=\"sec-sub\">What the bots do while they are following you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Follow cursor</span>\n                    <span class=\"opt-desc\">Bots move toward where you are pointing rather than to you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_followCursor\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Stop movement radius</span>\n                    <span class=\"opt-desc\">How close a bot gets to its target point before it stops.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_movementRadius\" type=\"range\" step=\"25\" min=\"25\" max=\"250\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Auto Break</span>\n                    <span class=\"opt-desc\">Bots break structures standing in their way.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAutoBreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Ranged Kiting</span>\n                    <span class=\"opt-desc\">Bots holding a ranged weapon back off instead of closing.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botRangedKite\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Kite distance</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botKiteDistance\" type=\"range\" step=\"25\" min=\"150\" max=\"1200\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Volley Fire</span>\n                    <span class=\"opt-desc\">Bots fire in waves rather than all at once.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botVolley\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">First wave size</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botVolleyWave\" type=\"range\" step=\"1\" min=\"1\" max=\"20\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Avoid Shield Bots</span>\n                    <span class=\"opt-desc\">Bots steer away from a target that is holding a shield up.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAvoidShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Be Angel</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_botBeAngel\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Protection<span class=\"sec-sub\">Puts part of the fleet in front of the rest as a screen. This covers your <b>bots</b> &mdash; it is not a bodyguard for you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Protection <span id=\"_protectState\" class=\"scan-count\">off</span></span>\n                    <span class=\"opt-desc\" id=\"_protectStatus\">Off. The whole fleet keeps its normal jobs.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botProtection\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Guards</span>\n                    <span class=\"opt-desc\">How many bots take the screen. They are the first bots of the fleet, so a guard keeps its slot; every bot past this count carries on with whatever it was doing.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botProtectionGuards\" type=\"range\" step=\"1\" min=\"1\" max=\"40\">\n                </label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Advance</span>\n                    <span class=\"opt-desc\">How far ahead of the bots it covers the screen sits, and how deep it spreads. 0% is a huddle on top of them; 60% is a picket line well out in front.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botProtectionAdvance\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Screen shape</span>\n                    <span class=\"opt-desc\">The formation the guards hold. It turns to face the threat and the guards keep their slots as it turns.</span>\n                </div>\n                <div class=\"option-content\"><select id=\"_botProtectionFormation\" class=\"ryn-select\"></select></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Formation<span class=\"sec-sub\">The shape the fleet holds around you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Shape</span>\n                    <span class=\"opt-desc\">Pick a formation, and bind a key to any of them from inside the picker.</span>\n                </div>\n                <div id=\"_formationGrid\"></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Circle rotation</span>\n                    <span class=\"opt-desc\">Rotates the formation around you instead of holding it still.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_circleRotation\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Circle radius</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_circleRadius\" type=\"range\" step=\"25\" min=\"50\" max=\"600\">\n                </label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Loadout<span class=\"sec-sub\">What each bot carries. &ldquo;Copy from me&rdquo; mirrors your own weapon.</span></div>\n        <div class=\"section-content\">\n            <div class=\"stack\">\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Primary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-weapon-selector\">\n                        <div class=\"bot-weapon-btn\" data-wid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"0\" title=\"Tool Hammer\">Tool Hammer</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"1\" title=\"Hand Axe\">Hand Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"2\" title=\"Great Axe\">Great Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"3\" title=\"Short Sword\">Short Sword</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"4\" title=\"Katana\">Katana</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"5\" title=\"Polearm\">Polearm</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"6\" title=\"Bat\">Bat</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"7\" title=\"Daggers\">Daggers</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"8\" title=\"Stick\">Stick</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Secondary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-sec-weapon-selector\">\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"9\" title=\"Hunting Bow\">Hunting Bow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"10\" title=\"Great Hammer\">Great Hammer</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"11\" title=\"Wooden Shield\">Wooden Shield</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"12\" title=\"Crossbow\">Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"13\" title=\"Repeater Crossbow\">Repeater Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"14\" title=\"Mc Grabby\">Mc Grabby</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"15\" title=\"Musket\">Musket</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-sec-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Age 4 building</div>\n                    <div class=\"wpn-grid\" id=\"bot-age4-selector\">\n                        <div class=\"bot-weapon-btn\" data-age4id=\"0\" title=\"Trap\">Trap</div>\n                        <div class=\"bot-weapon-btn\" data-age4id=\"1\" title=\"Boost Pad\">Boost Pad</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-age4-label\">Trap (default)</span></div>\n                </div>\n            </div>\n\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Platform w/ Musket</span>\n                    <span class=\"opt-desc\">Bots carrying a musket build a platform to shoot from.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_platformMusket\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section ryn-farm-section\">\n        <div class=\"section-title\">Auto Farm<span class=\"sec-sub\">A clear control panel for resource selection, quotas, and fleet gathering.</span></div>\n        <div class=\"section-content ryn-farm-content\">\n            <div class=\"ryn-farm-hero\">\n                <div class=\"ryn-farm-emblem\" aria-hidden=\"true\">AF</div>\n                <div class=\"ryn-farm-hero-copy\">\n                    <div class=\"ryn-farm-kicker\">FLEET AUTOMATION / RESOURCE CONTROL</div>\n                    <div class=\"ryn-farm-hero-title\">Gather with a plan.</div>\n                    <p>Choose how the fleet gathers, set a target, or build an ordered resource route. Your existing Auto Farm toggle and keybind still control activation.</p>\n                </div>\n            </div>\n            <div class=\"ryn-farm-card\">\n                <div class=\"ryn-farm-card-head\"><span class=\"ryn-farm-step\">01</span><div><h3>Gathering mode</h3><p>Pick how bots choose their next resource.</p></div></div>\n                <div class=\"ryn-farm-control\"><label for=\"_botFarmMode\">Mode</label><select id=\"_botFarmMode\" class=\"ryn-select\"><option value=\"nearest\">Nearest available · any resource</option><option value=\"single\">Selected resource · shared fleet target</option><option value=\"sequence\">Ordered resource route · quotas</option></select></div>\n                <div class=\"ryn-farm-mode-hints\"><div><b>Nearest</b><span>Choose the closest available node.</span></div><div><b>Selected</b><span>All eligible bots gather one resource type.</span></div><div><b>Sequence</b><span>Complete each step before moving on.</span></div></div>\n            </div>\n            <div class=\"ryn-farm-card\">\n                <div class=\"ryn-farm-card-head\"><span class=\"ryn-farm-step\">02</span><div><h3>Single resource target</h3><p>Used when Gathering mode is set to Selected resource.</p></div></div>\n                <div class=\"ryn-farm-target-grid\">\n                    <div class=\"ryn-farm-control\"><label for=\"_botFarmType\">Resource</label><select id=\"_botFarmType\" class=\"ryn-select\"><option value=\"wood\">Wood</option><option value=\"stone\">Stone</option><option value=\"food\">Food</option><option value=\"gold\">Gold</option></select></div>\n                    <div class=\"ryn-farm-control\"><label for=\"_botFarmSingleGoal\">Gathering goal</label><div class=\"ryn-farm-number-wrap\"><input id=\"_botFarmSingleGoal\" class=\"input\" type=\"number\" min=\"0\" max=\"999999\" step=\"50\" placeholder=\"0 = unlimited\" aria-label=\"Selected resource target amount\"><span>units</span></div></div>\n                </div>\n                <div class=\"ryn-farm-footnote\"><span class=\"ryn-farm-info\">i</span> Set the goal to <b>0</b> to keep gathering until Auto Farm is turned off.</div>\n            </div>\n            <div class=\"ryn-farm-card\">\n                <div class=\"ryn-farm-card-head\"><span class=\"ryn-farm-step\">03</span><div><h3>Resource route</h3><p>Set up to four ordered steps. All eligible bots contribute to the current step's quota.</p></div></div>\n                <div class=\"farm-sequence-grid ryn-farm-route\">\n                    <div class=\"ryn-farm-route-step\"><div class=\"ryn-farm-route-index\">01</div><div class=\"ryn-farm-route-fields\"><label for=\"_botFarmSeq1\">Resource</label><select id=\"_botFarmSeq1\" class=\"ryn-select\"><option value=\"none\">Skip step</option><option value=\"wood\">Wood</option><option value=\"stone\">Stone</option><option value=\"food\">Food</option><option value=\"gold\">Gold</option></select><label for=\"_botFarmSeqAmount1\">Quota</label><div class=\"ryn-farm-number-wrap\"><input id=\"_botFarmSeqAmount1\" class=\"input\" type=\"number\" min=\"0\" max=\"999999\" step=\"50\" placeholder=\"Amount\" aria-label=\"Step 1 target amount\"><span>units</span></div></div></div>\n                    <div class=\"ryn-farm-route-step\"><div class=\"ryn-farm-route-index\">02</div><div class=\"ryn-farm-route-fields\"><label for=\"_botFarmSeq2\">Resource</label><select id=\"_botFarmSeq2\" class=\"ryn-select\"><option value=\"none\">Skip step</option><option value=\"wood\">Wood</option><option value=\"stone\">Stone</option><option value=\"food\">Food</option><option value=\"gold\">Gold</option></select><label for=\"_botFarmSeqAmount2\">Quota</label><div class=\"ryn-farm-number-wrap\"><input id=\"_botFarmSeqAmount2\" class=\"input\" type=\"number\" min=\"0\" max=\"999999\" step=\"50\" placeholder=\"Amount\" aria-label=\"Step 2 target amount\"><span>units</span></div></div></div>\n                    <div class=\"ryn-farm-route-step\"><div class=\"ryn-farm-route-index\">03</div><div class=\"ryn-farm-route-fields\"><label for=\"_botFarmSeq3\">Resource</label><select id=\"_botFarmSeq3\" class=\"ryn-select\"><option value=\"none\">Skip step</option><option value=\"wood\">Wood</option><option value=\"stone\">Stone</option><option value=\"food\">Food</option><option value=\"gold\">Gold</option></select><label for=\"_botFarmSeqAmount3\">Quota</label><div class=\"ryn-farm-number-wrap\"><input id=\"_botFarmSeqAmount3\" class=\"input\" type=\"number\" min=\"0\" max=\"999999\" step=\"50\" placeholder=\"Amount\" aria-label=\"Step 3 target amount\"><span>units</span></div></div></div>\n                    <div class=\"ryn-farm-route-step\"><div class=\"ryn-farm-route-index\">04</div><div class=\"ryn-farm-route-fields\"><label for=\"_botFarmSeq4\">Resource</label><select id=\"_botFarmSeq4\" class=\"ryn-select\"><option value=\"none\">Skip step</option><option value=\"wood\">Wood</option><option value=\"stone\">Stone</option><option value=\"food\">Food</option><option value=\"gold\">Gold</option></select><label for=\"_botFarmSeqAmount4\">Quota</label><div class=\"ryn-farm-number-wrap\"><input id=\"_botFarmSeqAmount4\" class=\"input\" type=\"number\" min=\"0\" max=\"999999\" step=\"50\" placeholder=\"Amount\" aria-label=\"Step 4 target amount\"><span>units</span></div></div></div>\n                </div>\n                <div class=\"ryn-farm-footnote\"><span class=\"ryn-farm-info\">i</span> The quota is the <b>additional amount gathered by the fleet</b> during that step. Choose Skip step or enter 0 to skip it.</div>\n            </div>\n            <div class=\"ryn-farm-capacity\"><div class=\"ryn-farm-capacity-icon\" aria-hidden=\"true\">⌁</div><div><b>Smart node assignment</b><p>Maximum 4 bots per individual resource node. Bots prefer nearby available resources, and attacks use the existing reload and attack state machine.</p></div><span class=\"ryn-farm-capacity-tag\">4 / NODE</span></div>\n        </div>\n    </div>\n    <div class=\"section\">\n        <div class=\"section-title\">Possession<span class=\"sec-sub\">Switch control into a bot and it becomes your character: its camera, its world, its HUD, its resources, its age, its inventory, its chat. Not a spectator view &mdash; you are that character until you switch back.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Who you are controlling</span>\n                    <span class=\"opt-desc\">Click a character to take it over. The game's own HUD, camera and minimap follow whoever is selected, and the rest of the fleet follows that character too.</span>\n                </div>\n                <div id=\"_possessList\"></div>\n            </div>\n        </div>\n    </div>\n\n</div>";
+  const Bots_default = "<div class=\"menu-page\" data-id=\"5\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Bots</h1>\n        <p class=\"page-description\">Connect alternate clients, name them, and decide how they follow, fight, build and farm. Everything below applies to every bot you have connected.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Fleet<span class=\"sec-sub\">Add a bot, give it a name, connect it. Connected bots appear underneath.</span></div>\n        <div class=\"section-content\">\n            <div id=\"bot-container\"></div>\n            <div id=\"dynamic-bot-list\"></div>\n            <div class=\"content-option stacked\" id=\"_botBulkRow\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Name every bot</span>\n                    <span class=\"opt-desc\">One name for the whole fleet. Every new row is pre-filled with it, so bots you add from here on join under it. <b>Apply to all</b> also gives it to the rows and bots you already have &mdash; a bot that is alive keeps the name it spawned with until it next respawns.</span>\n                </div>\n                <div class=\"inline\">\n                    <input id=\"_botBulkName\" class=\"input\" type=\"text\" maxlength=\"15\" placeholder=\"Enter name\" autocomplete=\"off\" spellcheck=\"false\">\n                    <button id=\"_botBulkNameApply\" class=\"option-button\">Apply to all</button>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Fleet numbers</span>\n                    <span class=\"opt-desc\">Always on. Every bot joins as its name plus its slot number &mdash; base <b>yytt</b> becomes yytt1, yytt2, yytt3 and so on. Since the 2025 update a name can be taken: a registered player&#39;s name is theirs alone, and a bot under it is turned away. A name the game says is taken is skipped for the next free number.</span>\n                </div>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">First number</span></div>\n                <div class=\"inline\"><input id=\"_botNameNumberStart\" class=\"input\" type=\"number\" min=\"0\" max=\"99\" step=\"1\" value=\"1\"></div>\n            </div>\n            <div class=\"content-option centered\">\n                <button id=\"add-bot-dynamic\" class=\"option-button primary tall\">Add bot</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Prefer servers bots can join</span>\n                    <span class=\"opt-desc\">Bots join as guests, and a <b>members-only</b> server turns guests away. Signed in, the game puts you on a members-only server whenever your region has one; with this on it picks the best server that is not members-only instead, so your bots can follow you. A server you pick yourself is still yours. Your account is never lent to the bots.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_preferBotServers\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Clan joins</span>\n                    <span class=\"opt-desc\">Checks actual clan membership, then retries only bots still outside your clan. Each bot gets one turn at a time.</span>\n                </div>\n                <button id=\"_clanRecheck\" class=\"option-button\">Re-check clan joins</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto random bot names</span>\n                    <span class=\"opt-desc\">Pre-fills each new row with a random 1&ndash;7 character name.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoRandomBotNames\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bots own clan</span>\n                    <span class=\"opt-desc\">Each bot creates its own tribe instead of joining yours, named from the fleet name plus its slot &mdash; base <b>GG1</b> over five bots gives GG11, GG12, GG13, GG14, GG15. Tribe names are capped at seven characters by the game, so the stem is trimmed and the number kept. Bots still never attack each other or you: that is decided by ownership, not by the tribe.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botIndividualClans\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Clan name stem</span>\n                    <span class=\"opt-desc\">Optional. Leave empty to use the fleet name. The slot number is always appended, so every bot gets its own tribe either way.</span>\n                </div>\n                <input id=\"_botClanPrefix\" class=\"input\" type=\"text\" maxlength=\"6\" placeholder=\"GG1\" autocomplete=\"off\" spellcheck=\"false\">\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\" id=\"_tokenPoolSection\" style=\"display:none;\">\n        <div class=\"section-title\">Spawn<span class=\"sec-sub\">Verification solved ahead of the press, so Spawn Bot buys sockets rather than challenges. One press connects as many bots as there are tokens ready.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\" id=\"_tokenPoolRow\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Tokens ready</span>\n                    <span class=\"opt-desc\" id=\"_tokenPoolStatus\">&mdash;</span>\n                </div>\n                <div class=\"inline\">\n                    <button id=\"_tokenPoolToggle\" class=\"option-button primary\">Stop</button>\n                    <button id=\"_tokenPoolFill\" class=\"option-button\">Fill now</button>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Pool size</span>\n                    <span class=\"opt-desc\">How many tokens are kept ready. Each one is a Cloudflare check of its own, shown in the bottom-right corner, and it lasts four minutes &mdash; so keep it to the number of bots you spawn in one press.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_tokenPoolTarget\" type=\"range\" step=\"1\" min=\"1\" max=\"24\">\n                </label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Target Scan<span class=\"sec-sub\">Everyone this tab has seen, from any of its connections. <b>SCAN</b> sends the fleet looking for them; <b>EXCLUDE</b> takes them off the target list for every bot, everywhere. The two are independent &mdash; a player can be scanned and excluded at once, which tracks them without ever attacking them.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Scan <span id=\"_scanCount\" class=\"scan-count\">none picked</span></span>\n                    <span class=\"opt-desc\" id=\"_scanStatus\">Pick one or more players below.</span>\n                </div>\n                <button id=\"_scanToggle\" class=\"option-button primary\">SCAN ON</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Scan mode</span>\n                    <span class=\"opt-desc\"><b>Attack</b> &mdash; the fleet takes coordinated positions around a found target and strikes together. <b>Track</b> &mdash; one bot keeps the target in view and reports it while the rest come back to you; switching to Attack sends them all in.</span>\n                </div>\n                <div class=\"seg\">\n                    <button id=\"_scanModeAttack\" class=\"seg-btn\">Attack</button>\n                    <button id=\"_scanModeTrack\" class=\"seg-btn\">Track</button>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bots given <span id=\"_escortCount\" class=\"scan-count\">none</span></span>\n                    <span class=\"opt-desc\" id=\"_escortStatus\">Use <b>&minus; BOTS +</b> on a clan mate below to hand them bots. Those bots follow, guard, fight and build for that player until you take them back or the player leaves your clan.</span>\n                </div>\n            </div>\n            <div class=\"content-option stacked\">\n                <div class=\"scan-bar\">\n                    <input id=\"_scanFilter\" class=\"input scan-filter\" type=\"search\" placeholder=\"Filter by name or id\" autocomplete=\"off\" spellcheck=\"false\">\n                    <button id=\"_scanClearTargets\" class=\"option-button\">Clear picks</button>\n                    <button id=\"_scanClearExcluded\" class=\"option-button\">Clear excluded</button>\n                    <button id=\"_scanClearDex\" class=\"option-button\">Clear list</button>\n                </div>\n                <div id=\"_scanList\"></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Behaviour<span class=\"sec-sub\">What the bots do while they are following you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Follow cursor</span>\n                    <span class=\"opt-desc\">Bots move toward where you are pointing rather than to you.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_followCursor\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Stop movement radius</span>\n                    <span class=\"opt-desc\">How close a bot gets to its target point before it stops.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_movementRadius\" type=\"range\" step=\"25\" min=\"25\" max=\"250\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Auto Break</span>\n                    <span class=\"opt-desc\">Bots break structures standing in their way.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAutoBreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Ranged Kiting</span>\n                    <span class=\"opt-desc\">Bots holding a ranged weapon back off instead of closing.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botRangedKite\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Kite distance</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botKiteDistance\" type=\"range\" step=\"25\" min=\"150\" max=\"1200\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Volley Fire</span>\n                    <span class=\"opt-desc\">Bots fire in waves rather than all at once.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botVolley\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">First wave size</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botVolleyWave\" type=\"range\" step=\"1\" min=\"1\" max=\"20\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Avoid Shield Bots</span>\n                    <span class=\"opt-desc\">Bots steer away from a target that is holding a shield up.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAvoidShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Be Angel</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_botBeAngel\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Protection<span class=\"sec-sub\">Puts part of the fleet in front of the rest as a screen. This covers your <b>bots</b> &mdash; it is not a bodyguard for you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Protection <span id=\"_protectState\" class=\"scan-count\">off</span></span>\n                    <span class=\"opt-desc\" id=\"_protectStatus\">Off. The whole fleet keeps its normal jobs.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botProtection\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Guards</span>\n                    <span class=\"opt-desc\">How many bots take the screen. They are the first bots of the fleet, so a guard keeps its slot; every bot past this count carries on with whatever it was doing.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botProtectionGuards\" type=\"range\" step=\"1\" min=\"1\" max=\"40\">\n                </label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Advance</span>\n                    <span class=\"opt-desc\">How far ahead of the bots it covers the screen sits, and how deep it spreads. 0% is a huddle on top of them; 60% is a picket line well out in front.</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botProtectionAdvance\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Screen shape</span>\n                    <span class=\"opt-desc\">The formation the guards hold. It turns to face the threat and the guards keep their slots as it turns.</span>\n                </div>\n                <div class=\"option-content\"><select id=\"_botProtectionFormation\" class=\"ryn-select\"></select></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Formation<span class=\"sec-sub\">The shape the fleet holds around you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Shape</span>\n                    <span class=\"opt-desc\">Pick a formation, and bind a key to any of them from inside the picker.</span>\n                </div>\n                <div id=\"_formationGrid\"></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Circle rotation</span>\n                    <span class=\"opt-desc\">Rotates the formation around you instead of holding it still.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_circleRotation\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Circle radius</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_circleRadius\" type=\"range\" step=\"25\" min=\"50\" max=\"600\">\n                </label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Loadout<span class=\"sec-sub\">What each bot carries. &ldquo;Copy from me&rdquo; mirrors your own weapon.</span></div>\n        <div class=\"section-content\">\n            <div class=\"stack\">\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Primary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-weapon-selector\">\n                        <div class=\"bot-weapon-btn\" data-wid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"0\" title=\"Tool Hammer\">Tool Hammer</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"1\" title=\"Hand Axe\">Hand Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"2\" title=\"Great Axe\">Great Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"3\" title=\"Short Sword\">Short Sword</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"4\" title=\"Katana\">Katana</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"5\" title=\"Polearm\">Polearm</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"6\" title=\"Bat\">Bat</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"7\" title=\"Daggers\">Daggers</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"8\" title=\"Stick\">Stick</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Secondary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-sec-weapon-selector\">\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"9\" title=\"Hunting Bow\">Hunting Bow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"10\" title=\"Great Hammer\">Great Hammer</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"11\" title=\"Wooden Shield\">Wooden Shield</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"12\" title=\"Crossbow\">Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"13\" title=\"Repeater Crossbow\">Repeater Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"14\" title=\"Mc Grabby\">Mc Grabby</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"15\" title=\"Musket\">Musket</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-sec-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Age 4 building</div>\n                    <div class=\"wpn-grid\" id=\"bot-age4-selector\">\n                        <div class=\"bot-weapon-btn\" data-age4id=\"0\" title=\"Trap\">Trap</div>\n                        <div class=\"bot-weapon-btn\" data-age4id=\"1\" title=\"Boost Pad\">Boost Pad</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-age4-label\">Trap (default)</span></div>\n                </div>\n            </div>\n\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Platform w/ Musket</span>\n                    <span class=\"opt-desc\">Bots carrying a musket build a platform to shoot from.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_platformMusket\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section ryn-farm-section\">\n        <div class=\"section-title\">Auto Farm<span class=\"sec-sub\">A clear control panel for resource selection, quotas, and fleet gathering.</span></div>\n        <div class=\"section-content ryn-farm-content\">\n            <div class=\"ryn-farm-hero\">\n                <div class=\"ryn-farm-emblem\" aria-hidden=\"true\">AF</div>\n                <div class=\"ryn-farm-hero-copy\">\n                    <div class=\"ryn-farm-kicker\">FLEET AUTOMATION / RESOURCE CONTROL</div>\n                    <div class=\"ryn-farm-hero-title\">Gather with a plan.</div>\n                    <p>Choose how the fleet gathers, set a target, or build an ordered resource route. Your existing Auto Farm toggle and keybind still control activation.</p>\n                </div>\n            </div>\n            <div class=\"ryn-farm-card\">\n                <div class=\"ryn-farm-card-head\"><span class=\"ryn-farm-step\">01</span><div><h3>Gathering mode</h3><p>Pick how bots choose their next resource.</p></div></div>\n                <div class=\"ryn-farm-control\"><label for=\"_botFarmMode\">Mode</label><select id=\"_botFarmMode\" class=\"ryn-select\"><option value=\"nearest\">Nearest available · any resource</option><option value=\"single\">Selected resource · shared fleet target</option><option value=\"sequence\">Ordered resource route · quotas</option></select></div>\n                <div class=\"ryn-farm-mode-hints\"><div><b>Nearest</b><span>Choose the closest available node.</span></div><div><b>Selected</b><span>All eligible bots gather one resource type.</span></div><div><b>Sequence</b><span>Complete each step before moving on.</span></div></div>\n            </div>\n            <div class=\"ryn-farm-card\">\n                <div class=\"ryn-farm-card-head\"><span class=\"ryn-farm-step\">02</span><div><h3>Single resource target</h3><p>Used when Gathering mode is set to Selected resource.</p></div></div>\n                <div class=\"ryn-farm-target-grid\">\n                    <div class=\"ryn-farm-control\"><label for=\"_botFarmType\">Resource</label><select id=\"_botFarmType\" class=\"ryn-select\"><option value=\"wood\">Wood</option><option value=\"stone\">Stone</option><option value=\"food\">Food</option><option value=\"gold\">Gold</option></select></div>\n                    <div class=\"ryn-farm-control\"><label for=\"_botFarmSingleGoal\">Gathering goal</label><div class=\"ryn-farm-number-wrap\"><input id=\"_botFarmSingleGoal\" class=\"input\" type=\"number\" min=\"0\" max=\"999999\" step=\"50\" placeholder=\"0 = unlimited\" aria-label=\"Selected resource target amount\"><span>units</span></div></div>\n                </div>\n                <div class=\"ryn-farm-footnote\"><span class=\"ryn-farm-info\">i</span> Set the goal to <b>0</b> to keep gathering until Auto Farm is turned off.</div>\n            </div>\n            <div class=\"ryn-farm-card\">\n                <div class=\"ryn-farm-card-head\"><span class=\"ryn-farm-step\">03</span><div><h3>Resource route</h3><p>Set up to four ordered steps. All eligible bots contribute to the current step's quota.</p></div></div>\n                <div class=\"farm-sequence-grid ryn-farm-route\">\n                    <div class=\"ryn-farm-route-step\"><div class=\"ryn-farm-route-index\">01</div><div class=\"ryn-farm-route-fields\"><label for=\"_botFarmSeq1\">Resource</label><select id=\"_botFarmSeq1\" class=\"ryn-select\"><option value=\"none\">Skip step</option><option value=\"wood\">Wood</option><option value=\"stone\">Stone</option><option value=\"food\">Food</option><option value=\"gold\">Gold</option></select><label for=\"_botFarmSeqAmount1\">Quota</label><div class=\"ryn-farm-number-wrap\"><input id=\"_botFarmSeqAmount1\" class=\"input\" type=\"number\" min=\"0\" max=\"999999\" step=\"50\" placeholder=\"Amount\" aria-label=\"Step 1 target amount\"><span>units</span></div></div></div>\n                    <div class=\"ryn-farm-route-step\"><div class=\"ryn-farm-route-index\">02</div><div class=\"ryn-farm-route-fields\"><label for=\"_botFarmSeq2\">Resource</label><select id=\"_botFarmSeq2\" class=\"ryn-select\"><option value=\"none\">Skip step</option><option value=\"wood\">Wood</option><option value=\"stone\">Stone</option><option value=\"food\">Food</option><option value=\"gold\">Gold</option></select><label for=\"_botFarmSeqAmount2\">Quota</label><div class=\"ryn-farm-number-wrap\"><input id=\"_botFarmSeqAmount2\" class=\"input\" type=\"number\" min=\"0\" max=\"999999\" step=\"50\" placeholder=\"Amount\" aria-label=\"Step 2 target amount\"><span>units</span></div></div></div>\n                    <div class=\"ryn-farm-route-step\"><div class=\"ryn-farm-route-index\">03</div><div class=\"ryn-farm-route-fields\"><label for=\"_botFarmSeq3\">Resource</label><select id=\"_botFarmSeq3\" class=\"ryn-select\"><option value=\"none\">Skip step</option><option value=\"wood\">Wood</option><option value=\"stone\">Stone</option><option value=\"food\">Food</option><option value=\"gold\">Gold</option></select><label for=\"_botFarmSeqAmount3\">Quota</label><div class=\"ryn-farm-number-wrap\"><input id=\"_botFarmSeqAmount3\" class=\"input\" type=\"number\" min=\"0\" max=\"999999\" step=\"50\" placeholder=\"Amount\" aria-label=\"Step 3 target amount\"><span>units</span></div></div></div>\n                    <div class=\"ryn-farm-route-step\"><div class=\"ryn-farm-route-index\">04</div><div class=\"ryn-farm-route-fields\"><label for=\"_botFarmSeq4\">Resource</label><select id=\"_botFarmSeq4\" class=\"ryn-select\"><option value=\"none\">Skip step</option><option value=\"wood\">Wood</option><option value=\"stone\">Stone</option><option value=\"food\">Food</option><option value=\"gold\">Gold</option></select><label for=\"_botFarmSeqAmount4\">Quota</label><div class=\"ryn-farm-number-wrap\"><input id=\"_botFarmSeqAmount4\" class=\"input\" type=\"number\" min=\"0\" max=\"999999\" step=\"50\" placeholder=\"Amount\" aria-label=\"Step 4 target amount\"><span>units</span></div></div></div>\n                </div>\n                <div class=\"ryn-farm-footnote\"><span class=\"ryn-farm-info\">i</span> The quota is the <b>additional amount gathered by the fleet</b> during that step. Choose Skip step or enter 0 to skip it.</div>\n            </div>\n            <div class=\"ryn-farm-capacity\"><div class=\"ryn-farm-capacity-icon\" aria-hidden=\"true\">⌁</div><div><b>Smart node assignment</b><p>Maximum 4 bots per individual resource node. Bots prefer nearby available resources, and attacks use the existing reload and attack state machine.</p></div><span class=\"ryn-farm-capacity-tag\">4 / NODE</span></div>\n        </div>\n    </div>\n    <div class=\"section\">\n        <div class=\"section-title\">Possession<span class=\"sec-sub\">Switch control into a bot and it becomes your character: its camera, its world, its HUD, its resources, its age, its inventory, its chat. Not a spectator view &mdash; you are that character until you switch back.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Who you are controlling</span>\n                    <span class=\"opt-desc\">Click a character to take it over. The game's own HUD, camera and minimap follow whoever is selected, and the rest of the fleet follows that character too.</span>\n                </div>\n                <div id=\"_possessList\"></div>\n            </div>\n        </div>\n    </div>\n\n</div>";
   const Music_default = "<div class=\"menu-page\" data-id=\"7\">\n<style>\n@keyframes ryn-eq{0%,100%{height:4px;}50%{height:16px;}}\n\n.rm-root{display:flex;flex-direction:column;max-width:1180px;margin:0 auto;}\n\n/* ---------- now playing ---------- */\n.rm-player{\n  display:grid;\n  grid-template-columns:auto minmax(0,1fr) auto;\n  grid-template-areas:\"art meta actions\" \"art transport transport\";\n  column-gap:26px;row-gap:22px;align-items:center;\n  padding:26px 0 30px;\n  border-bottom:1px solid var(--line);\n}\n.rm-art{\n  grid-area:art;\n  width:96px;height:96px;flex-shrink:0;\n  display:flex;align-items:flex-end;justify-content:center;gap:4px;\n  padding-bottom:22px;\n  border-radius:var(--r3);\n  background:linear-gradient(150deg,#221D33,#131320);\n  border:1px solid var(--line);\n  position:relative;\n  transition:border-color 260ms var(--ease);\n}\n.rm-art::after{\n  content:'\\266B';\n  position:absolute;inset:0;\n  display:flex;align-items:center;justify-content:center;\n  font-size:30px;color:var(--tx-4);\n  transition:opacity 220ms var(--ease);\n}\n.rm-art.playing{border-color:var(--sage-40);}\n.rm-art.playing::after{opacity:0;}\n.rm-eq{display:none;align-items:flex-end;gap:4px;height:18px;}\n.rm-art.playing .rm-eq{display:flex;}\n.rm-eq-bar{width:3px;border-radius:2px;background:var(--sage);animation:ryn-eq .95s ease-in-out infinite;}\n.rm-eq-bar:nth-child(2){animation-delay:.16s;}\n.rm-eq-bar:nth-child(3){animation-delay:.32s;}\n\n.rm-meta{grid-area:meta;min-width:0;}\n.rm-kicker{\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.24em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:9px;\n}\n.rm-title{\n  font-size:clamp(22px,2.1vw,29px);font-weight:800;line-height:1.12;\n  letter-spacing:-.028em;color:var(--tx-1);\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n}\n.rm-artist{\n  margin-top:7px;font-size:14px;font-weight:600;color:var(--tx-3);\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n}\n.rm-album-badge{\n  display:inline-block;margin-top:10px;\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--iris-hi);\n}\n.rm-album-badge:empty{display:none;}\n\n.rm-actions{grid-area:actions;display:flex;gap:8px;align-self:start;}\n.rm-like-btn,.rm-save-now-btn{\n  width:42px;height:42px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);border:1px solid var(--line);\n  font-size:16px;line-height:1;color:var(--tx-3);cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.rm-like-btn:hover,.rm-save-now-btn:hover{background:rgba(255,255,255,.08);color:var(--tx-1);border-color:var(--line-2);}\n.rm-like-btn.liked,.rm-like-btn.on{color:var(--rose);border-color:rgba(217,163,171,.4);background:var(--rose-12);}\n.rm-save-now-btn.on{color:var(--sky);border-color:var(--sky-45);background:var(--sky-12);}\n\n.rm-transport{grid-area:transport;display:flex;align-items:center;gap:24px;min-width:0;}\n.rm-ctrl{display:flex;align-items:center;gap:8px;flex-shrink:0;}\n.rm-btn{\n  width:38px;height:38px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r2);\n  background:transparent;border:1px solid transparent;\n  color:var(--tx-3);font-size:12.5px;cursor:pointer;\n  transition:background 150ms var(--ease),color 150ms var(--ease),border-color 150ms var(--ease);\n}\n.rm-btn:hover{background:rgba(255,255,255,.06);color:var(--tx-1);}\n.rm-btn.rm-on,.rm-btn.on{color:var(--sage);border-color:var(--sage-40);background:var(--sage-14);}\n.rm-play-btn{\n  width:52px;height:52px;flex-shrink:0;\n  border-radius:16px;\n  background:var(--tx-1);border:none;color:#0A0A0D;\n  font-size:15.5px;\n  transition:transform 150ms var(--ease),background 150ms var(--ease);\n}\n.rm-play-btn:hover{background:#FFFFFF;transform:scale(1.04);}\n.rm-play-btn:active{transform:scale(.97);}\n\n.rm-prog-wrap{flex:1;min-width:0;display:flex;align-items:center;gap:14px;}\n.rm-prog-rail{\n  flex:1;min-width:0;height:5px;border-radius:999px;cursor:pointer;\n  background:rgba(255,255,255,.08);position:relative;\n}\n.rm-prog-fill{\n  height:100%;border-radius:999px;width:0;\n  background:var(--sky);position:relative;\n  transition:width 120ms linear;\n}\n.rm-prog-fill::after{\n  content:'';position:absolute;right:-5px;top:50%;\n  width:11px;height:11px;border-radius:50%;background:#EEF4FA;\n  transform:translateY(-50%) scale(0);\n  transition:transform 150ms var(--ease);\n  box-shadow:0 1px 4px rgba(0,0,0,.6);\n}\n.rm-prog-wrap:hover .rm-prog-fill::after{transform:translateY(-50%) scale(1);}\n.rm-time{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);flex-shrink:0;\n}\n.rm-vol{display:flex;align-items:center;gap:10px;flex-shrink:0;}\n.rm-vol-icon{font-size:13px;color:var(--tx-4);}\n#music-volume{\n  -webkit-appearance:none;appearance:none;\n  width:110px;height:18px;background:transparent;cursor:pointer;\n}\n#music-volume::-webkit-slider-runnable-track{height:4px;border-radius:999px;background:rgba(255,255,255,.09);}\n#music-volume::-webkit-slider-thumb{\n  -webkit-appearance:none;width:12px;height:12px;margin-top:-4px;\n  border-radius:50%;background:#EEF4FA;border:1px solid rgba(0,0,0,.35);\n  transition:transform 130ms var(--ease);\n}\n#music-volume:hover::-webkit-slider-thumb{transform:scale(1.15);}\n.rm-vol-val{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);min-width:34px;text-align:right;\n}\n\n/* ---------- sections ---------- */\n.rm-sec{border-bottom:1px solid var(--line);}\n.rm-sec-head{\n  display:flex;align-items:center;gap:12px;\n  padding:22px 2px;cursor:pointer;user-select:none;\n}\n.rm-sec-dot{\n  width:5px;height:5px;border-radius:50%;flex-shrink:0;\n  background:var(--tx-4);transition:background 200ms var(--ease);\n}\n.rm-sec.open .rm-sec-dot{background:var(--iris-hi);}\n.rm-sec-title{\n  flex:1;font-family:var(--mono);font-size:11.5px;font-weight:700;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-2);\n}\n.rm-sec.open .rm-sec-title{color:var(--iris-hi);}\n.rm-sec-arrow{font-size:9px;color:var(--tx-4);transition:transform 200ms var(--ease);}\n.rm-sec.open .rm-sec-arrow{transform:rotate(180deg);}\n.rm-sec-body{display:none;flex-direction:column;gap:14px;padding:0 2px 26px;}\n.rm-sec.open .rm-sec-body{display:flex;animation:soft-in 180ms var(--ease);}\n\n/* ---------- library ---------- */\n.rm-filter-bar{display:flex;gap:7px;flex-wrap:wrap;}\n.rm-filter-btn{\n  height:34px;padding:0 16px;border-radius:999px;\n  background:rgba(255,255,255,.04);border:1px solid var(--line);\n  font-size:12.5px;font-weight:700;color:var(--tx-3);cursor:pointer;\n  transition:background 150ms var(--ease),color 150ms var(--ease),border-color 150ms var(--ease);\n}\n.rm-filter-btn:hover{background:rgba(255,255,255,.08);color:var(--tx-1);}\n.rm-filter-btn.active{background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;}\n\n#song-list{display:flex;flex-direction:column;}\n.rm-song-row{\n  display:flex;align-items:center;gap:15px;\n  padding:12px 13px;border-radius:var(--r2);cursor:pointer;\n  position:relative;\n  transition:background 140ms var(--ease);\n}\n.rm-song-row:hover{background:rgba(255,255,255,.035);}\n.rm-song-row.active{background:var(--sage-14);}\n.rm-song-row.active::before{\n  content:'';position:absolute;left:0;top:10px;bottom:10px;\n  width:2px;border-radius:0 2px 2px 0;background:var(--sage);\n}\n.rm-snum{\n  width:23px;flex-shrink:0;text-align:center;\n  font-family:var(--mono);font-size:12.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);\n}\n.rm-song-row.active .rm-snum{color:var(--sage);}\n.rm-stitle{\n  flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n}\n.rm-sartist{\n  flex-shrink:1;min-width:0;max-width:30%;\n  font-size:12.5px;font-weight:500;color:var(--tx-4);\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n}\n.rm-s-icons{display:flex;gap:4px;flex-shrink:0;opacity:0;transition:opacity 150ms var(--ease);}\n.rm-song-row:hover .rm-s-icons,.rm-song-row.active .rm-s-icons{opacity:1;}\n.rm-s-like,.rm-s-save,.rm-sdel{\n  width:30px;height:30px;flex-shrink:0;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r1);font-size:12.5px;line-height:1;\n  color:var(--tx-4);cursor:pointer;\n  transition:background 140ms var(--ease),color 140ms var(--ease);\n}\n.rm-s-like:hover,.rm-sdel:hover{background:var(--rose-12);color:var(--rose);}\n.rm-s-save:hover{background:var(--sky-12);color:var(--sky);}\n.rm-s-like.on{color:var(--rose);}\n.rm-s-save.on{color:var(--sky);}\n.rm-song-row:not(:hover) .rm-s-icons:has(.on){opacity:1;}\n.rm-empty{\n  padding:26px 0;text-align:center;\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n\n/* ---------- albums ---------- */\n.rm-album-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}\n.rm-album-card{\n  position:relative;padding:14px;border-radius:var(--r3);cursor:pointer;\n  background:rgba(255,255,255,.03);border:1px solid var(--line);\n  transition:background 160ms var(--ease),border-color 160ms var(--ease),transform 160ms var(--ease);\n}\n.rm-album-card:hover{background:rgba(255,255,255,.06);border-color:var(--line-2);transform:translateY(-2px);}\n.rm-album-card.active{background:var(--iris-12);border-color:var(--iris-45);}\n.rm-album-icon{\n  display:flex;align-items:center;justify-content:center;\n  width:100%;aspect-ratio:1.6;border-radius:var(--r2);margin-bottom:11px;\n  font-size:22px;\n  background:linear-gradient(150deg,#221D33,#131320);\n}\n.rm-album-name{font-size:13.5px;font-weight:700;color:var(--tx-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}\n.rm-album-count{margin-top:3px;font-size:11.5px;font-weight:500;color:var(--tx-4);}\n.rm-album-del{\n  position:absolute;top:8px;right:8px;\n  width:22px;height:22px;border-radius:var(--r1);\n  display:flex;align-items:center;justify-content:center;\n  background:rgba(0,0,0,.55);color:var(--tx-3);\n  font-size:10px;cursor:pointer;opacity:0;\n  transition:opacity 150ms var(--ease),color 150ms var(--ease);\n}\n.rm-album-card:hover .rm-album-del{opacity:1;}\n.rm-album-del:hover{color:var(--rose);}\n\n/* ---------- forms ---------- */\n.rm-form{display:flex;flex-direction:column;gap:9px;max-width:620px;}\n.rm-inp{\n  width:100%;height:42px;padding:0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);border:1px solid var(--line-2);\n  color:var(--tx-1);font-size:13.5px;font-weight:600;\n  outline:none;\n  transition:border-color 150ms var(--ease),background 150ms var(--ease);\n}\n.rm-inp::placeholder{color:var(--tx-4);font-weight:500;}\n.rm-inp:focus{border-color:var(--sky-45);background:var(--sky-12);}\ninput[type=\"file\"].rm-inp{padding:10px 12px;height:auto;font-size:12.5px;font-weight:500;cursor:pointer;}\n.rm-lrc{\n  padding:14px;border-radius:var(--r3);\n  background:rgba(255,255,255,.022);border:1px solid var(--line);\n}\n.rm-lrc-head{\n  display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n#lrc-status{font-family:var(--mono);font-size:11.5px;letter-spacing:0;text-transform:none;color:var(--sky);}\ntextarea.rm-inp{\n  height:98px;padding:11px 13px;resize:vertical;\n  font-family:var(--mono);font-size:12.5px;font-weight:500;line-height:1.6;\n}\n.rm-check{\n  display:flex;align-items:center;gap:9px;margin-top:11px;\n  font-size:12.5px;font-weight:600;color:var(--tx-3);cursor:pointer;\n}\n.rm-check input{accent-color:#A6D7B2;width:15px;height:15px;cursor:pointer;}\n.rm-row{display:flex;gap:9px;}\n\n/* ---------- sync ---------- */\n.rm-sync-row{\n  display:flex;align-items:center;justify-content:space-between;gap:16px;\n  padding:12px 14px;border-radius:var(--r2);\n  transition:background 140ms var(--ease);\n}\n.rm-sync-row:hover{background:rgba(255,255,255,.028);}\n.rm-sync-label{flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);}\n.rm-sync-note{padding:0 14px 8px;font-size:12.5px;font-weight:500;line-height:1.5;color:var(--tx-4);}\n.rm-badge{\n  display:inline-block;margin-left:9px;padding:2px 8px;border-radius:999px;\n  background:var(--iris-12);color:var(--iris-hi);\n  font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;\n  vertical-align:middle;\n}\n.rm-divider{height:1px;background:var(--line);margin:6px 0;}\n.rm-status{\n  font-family:var(--mono);font-size:11.5px;font-weight:500;\n  color:var(--tx-4);min-height:16px;\n}\n#bm-dbg-box{\n  margin:0;padding:11px 13px;border-radius:var(--r2);\n  background:rgba(0,0,0,.4);border:1px solid var(--line);\n  font-family:var(--mono);font-size:11.5px;color:var(--tx-3);\n  white-space:pre-wrap;max-height:150px;overflow-y:auto;\n}\n\n/* ---------- toast + guide ---------- */\n.rm-toast{\n  display:none;position:fixed;left:50%;bottom:28px;\n  transform:translateX(-50%);\n  padding:11px 20px;border-radius:999px;z-index:99999;\n  background:var(--tx-1);color:#0A0A0D;\n  font-size:12.5px;font-weight:700;\n  box-shadow:0 16px 40px -12px rgba(0,0,0,.8);\n}\n.rm-guide{\n  padding:18px 20px;margin-bottom:4px;\n  border-radius:var(--r3);\n  background:rgba(255,255,255,.022);border:1px solid var(--line);\n}\n.rm-guide summary{\n  cursor:pointer;list-style:none;\n  font-size:13.5px;font-weight:700;color:var(--tx-2);\n  display:flex;align-items:center;gap:10px;\n}\n.rm-guide summary::-webkit-details-marker{display:none;}\n.rm-guide summary::before{\n  content:'?';flex-shrink:0;width:20px;height:20px;border-radius:50%;\n  background:var(--iris-12);color:var(--iris-hi);\n  font-family:var(--mono);font-size:11px;font-weight:700;\n  display:grid;place-items:center;\n}\n.rm-guide[open] summary{margin-bottom:14px;color:var(--tx-1);}\n.rm-guide ol{margin:0;padding-left:20px;color:var(--tx-3);font-size:12.5px;line-height:2;}\n.rm-guide code{\n  background:rgba(255,255,255,.06);color:var(--sky);\n  padding:2px 7px;border-radius:5px;font-family:var(--mono);font-size:11.5px;\n}\n.rm-guide a{color:var(--sky);border-bottom:1px solid rgba(155,197,232,.35);}\n.rm-guide a:hover{color:var(--tx-1);border-bottom-color:var(--tx-1);}\n.rm-guide-note{margin-top:14px;color:var(--tx-4);font-size:11.5px;line-height:1.75;}\n</style>\n\n<div id=\"rm-toast\" class=\"rm-toast\"></div>\n\n<div class=\"page-head\">\n    <h1 class=\"page-title\">Music</h1>\n    <p class=\"page-description\">A local library that plays inside the client and can type synced lyrics into chat for you, for your bots, or for both at once.</p>\n</div>\n\n<div class=\"rm-root\">\n\n  <div class=\"rm-player\">\n    <div class=\"rm-art\" id=\"rm-art\">\n      <div class=\"rm-eq\"><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div></div>\n    </div>\n    <div class=\"rm-meta\">\n      <div class=\"rm-kicker\">Now playing</div>\n      <div id=\"music-title\" class=\"rm-title\">No song selected</div>\n      <div id=\"music-artist\" class=\"rm-artist\">--</div>\n      <div id=\"music-album-badge\" class=\"rm-album-badge\"></div>\n    </div>\n    <div class=\"rm-actions\">\n      <button id=\"rm-like-now\" class=\"rm-like-btn\" title=\"Like\">&#9825;</button>\n      <button id=\"rm-save-now\" class=\"rm-save-now-btn\" title=\"Save\">&#9733;</button>\n    </div>\n    <div class=\"rm-transport\">\n      <div class=\"rm-ctrl\">\n        <button id=\"music-prev\" class=\"rm-btn\" title=\"Previous\">&#9664;&#9664;</button>\n        <button id=\"music-play\" class=\"rm-btn rm-play-btn\" title=\"Play / pause\">&#9654;</button>\n        <button id=\"music-next\" class=\"rm-btn\" title=\"Next\">&#9654;&#9654;</button>\n        <button id=\"music-loop\" class=\"rm-btn\" title=\"Loop\">&#8635;</button>\n        <button id=\"music-shuffle\" class=\"rm-btn\" title=\"Shuffle\" style=\"font-size:10px;letter-spacing:.08em;font-weight:700;\">SHF</button>\n      </div>\n      <div class=\"rm-prog-wrap\">\n        <span id=\"music-time-current\" class=\"rm-time\">0:00</span>\n        <div id=\"music-progress-bar\" class=\"rm-prog-rail\"><div id=\"music-progress-fill\" class=\"rm-prog-fill\"></div></div>\n        <span id=\"music-time-total\" class=\"rm-time\">0:00</span>\n      </div>\n      <div class=\"rm-vol\">\n        <span class=\"rm-vol-icon\">&#9834;</span>\n        <input id=\"music-volume\" type=\"range\" min=\"0\" max=\"100\" value=\"70\">\n        <span id=\"music-volume-label\" class=\"rm-vol-val\">70%</span>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec open\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Library</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div id=\"rm-filter-bar\" class=\"rm-filter-bar\">\n        <button class=\"rm-filter-btn active\" data-filter=\"\">All songs</button>\n        <button class=\"rm-filter-btn\" data-filter=\"__liked\">&#9829; Liked</button>\n      </div>\n      <div id=\"song-list\"></div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec open\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Albums</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div id=\"rm-album-grid\" class=\"rm-album-grid\"></div>\n      <div class=\"rm-row\" style=\"max-width:480px;\">\n        <input id=\"album-name-input\" class=\"rm-inp\" type=\"text\" placeholder=\"New album name\" maxlength=\"30\">\n        <button id=\"add-album\" class=\"option-button\">Add</button>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Add song</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <details class=\"rm-guide\">\n        <summary>How to add a song with its lyrics</summary>\n        <ol>\n          <li>Find the song on <a href=\"https://www.youtube.com/\" target=\"_blank\" rel=\"noreferrer\">youtube.com</a> and copy its link.</li>\n          <li>Turn the link into a file on <a href=\"https://ytmp3.gl/\" target=\"_blank\" rel=\"noreferrer\">ytmp3.gl</a> and download the <code>.mp3</code>.</li>\n          <li>Search the same song on <a href=\"https://lrclib.net/\" target=\"_blank\" rel=\"noreferrer\">lrclib.net</a> and download the <b>synced</b> lyrics as <code>.lrc</code>.</li>\n          <li>Fill in the <b>Title</b> below and pick the <code>.mp3</code> in the file box, or paste a direct link in <b>URL</b>.</li>\n          <li>In the <b>LRC sync</b> box, pick the <code>.lrc</code> file &mdash; or paste its lines into the text area.</li>\n          <li>Press <b>Add song</b>. It shows up in the library with its lyrics attached.</li>\n        </ol>\n        <div class=\"rm-guide-note\">The <code>.lrc</code> has to be the synced kind &mdash; the one whose lines start with a timestamp like <code>[01:23.45]</code>. Plain lyrics still show up, but they will not follow the song. If the words drift, an <code>.lrc</code> from a different release of the track is usually the reason.</div>\n      </details>\n      <div class=\"rm-form\">\n        <input id=\"song-title-input\" class=\"rm-inp\" type=\"text\" placeholder=\"Title *\" maxlength=\"50\">\n        <input id=\"song-artist-input\" class=\"rm-inp\" type=\"text\" placeholder=\"Artist\" maxlength=\"30\">\n        <input id=\"song-url-input\" class=\"rm-inp\" type=\"text\" placeholder=\"URL (.mp3  .ogg  .wav)\">\n        <input id=\"song-file-input\" class=\"rm-inp\" type=\"file\" accept=\".mp3,.ogg,.wav,.flac,.aac,.m4a\">\n        <select id=\"song-album-select\" class=\"rm-inp ryn-select\"><option value=\"\">No album</option></select>\n        <div class=\"rm-lrc\">\n          <div class=\"rm-lrc-head\"><span>LRC sync</span><span id=\"lrc-status\"></span></div>\n          <input id=\"lrc-file-input\" class=\"rm-inp\" type=\"file\" accept=\".lrc,.txt\" style=\"margin-bottom:9px;\">\n          <textarea id=\"song-lyrics-input\" class=\"rm-inp\" placeholder=\"[0:15] Line 1&#10;[0:30] Line 2\"></textarea>\n          <label class=\"rm-check\"><input id=\"song-autosync\" type=\"checkbox\"> Auto-play and sync when added</label>\n        </div>\n        <div class=\"rm-row\">\n          <button id=\"add-song\" class=\"option-button primary wide\">Add song</button>\n          <button id=\"save-song-btn\" class=\"option-button\">Save lyrics</button>\n        </div>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Chat sync</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Enable chat sync</span><label class=\"switch-checkbox\"><input id=\"music-chat-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Mixed sync<span class=\"rm-badge\">Me + bots</span></span><label class=\"switch-checkbox\"><input id=\"music-mixed-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">You: line &#8594; bots: line &#8594; you &hellip;</div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Bots only sync<span class=\"rm-badge\">Bots</span></span><label class=\"switch-checkbox\"><input id=\"music-bots-only-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">Bot 1: line 1 &bull; bot 2: line 2 &bull; bot 3: line 3 &hellip;</div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Unified sync<span class=\"rm-badge\">All</span></span><label class=\"switch-checkbox\"><input id=\"music-unified-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">You and every bot post the same line at the same moment.</div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Auto delay<span id=\"bm-auto-delay-badge\" class=\"rm-badge\">off</span></span><label class=\"switch-checkbox\"><input id=\"music-auto-delay\" type=\"checkbox\" checked><span></span></label></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Sync bot<span id=\"bm-sync-bot-badge\" class=\"rm-badge\">off</span></span><button id=\"music-sync-bot-btn\" class=\"option-button\">OFF</button></div>\n      <div id=\"bm-manual-delay-row\" class=\"rm-sync-row\" style=\"display:none;\"><span class=\"rm-sync-label\">Delay</span><label class=\"slider\"><span class=\"slider-value\">0ms</span><input id=\"music-sync-delay\" type=\"range\" min=\"-3000\" max=\"3000\" step=\"50\" value=\"0\"></label></div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-row\" style=\"align-items:center;\">\n        <button id=\"bm-test-chat\" class=\"option-button\">Test chat</button>\n        <span id=\"bm-test-chat-status\" class=\"rm-status\" style=\"align-self:center;\"></span>\n      </div>\n      <button id=\"bm-send-all-lyrics\" class=\"option-button wide\">&#9836; Send All Lyrics: OFF</button>\n      <div id=\"bm-send-lyrics-status\" class=\"rm-status\" style=\"text-align:center;\"></div>\n      <div id=\"bm-dbg-wrap\" style=\"display:none;\"><pre id=\"bm-dbg-box\"></pre></div>\n      <button id=\"bm-dbg-toggle\" class=\"option-button wide\">Show Debug Log</button>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Backup &amp; restore</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <p class=\"rm-sync-note\" style=\"padding-left:0;\">Export the whole library to a JSON file and bring it back on another machine.</p>\n      <div class=\"rm-row\" style=\"max-width:420px;\">\n        <button id=\"music-export-btn\" class=\"option-button wide\">Export</button>\n        <button id=\"music-import-btn\" class=\"option-button wide\">Import</button>\n        <input id=\"music-import-file\" type=\"file\" accept=\".json\" style=\"display:none;\">\n      </div>\n      <div id=\"music-backup-status\" class=\"rm-status\"></div>\n    </div>\n  </div>\n\n</div>\n</div>";
   const styles_default = "@import url(\"https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap\");\n\n/* ============================================================\n   RYN TYPE 2 \u2014 interface stylesheet\n   Ground: near-black neutral. Iris (muted purple) = navigation.\n   Sage (soft light green) = enabled. Sky (light blue) = values,\n   focus and interaction. Nothing else carries colour.\n   ============================================================ */\n\n:root{\n  --ink-0:#07070A;\n  --ink-1:#0C0C11;\n  --ink-2:#101016;\n  --ink-3:#15151C;\n  --ink-4:#1B1B24;\n\n  --line:rgba(255,255,255,0.055);\n  --line-2:rgba(255,255,255,0.10);\n  --line-3:rgba(255,255,255,0.16);\n\n  --iris:#8E76CE;\n  --iris-hi:#A894E0;\n  --iris-05:rgba(142,118,206,0.05);\n  --iris-12:rgba(142,118,206,0.12);\n  --iris-18:rgba(142,118,206,0.18);\n  --iris-45:rgba(142,118,206,0.45);\n\n  --sage:#A6D7B2;\n  --sage-14:rgba(166,215,178,0.14);\n  --sage-40:rgba(166,215,178,0.40);\n\n  --sky:#9BC5E8;\n  --sky-12:rgba(155,197,232,0.12);\n  --sky-45:rgba(155,197,232,0.45);\n\n  --rose:#D9A3AB;\n  --rose-12:rgba(217,163,171,0.12);\n\n  --tx-1:#F3F2F7;\n  --tx-2:#ACA9BA;\n  --tx-3:#726F80;\n  --tx-4:#4E4B5A;\n\n  --r1:6px;\n  --r2:10px;\n  --r3:14px;\n  --r4:22px;\n\n  --s1:4px;  --s2:8px;   --s3:12px;  --s4:16px;\n  --s5:24px; --s6:32px;  --s7:44px;  --s8:64px;\n\n  --ease:cubic-bezier(.2,.8,.3,1);\n  --font:'Manrope','Segoe UI',system-ui,sans-serif;\n  --mono:'Space Grotesk','Manrope',system-ui,sans-serif;\n\n  /* legacy aliases kept so any stray rule still resolves */\n  --accent:#8E76CE;\n  --accent2:#9BC5E8;\n  --border:rgba(255,255,255,0.055);\n  --text:#F3F2F7;\n  --text-muted:#ACA9BA;\n  --text-dim:#726F80;\n}\n\n*{box-sizing:border-box;-webkit-user-select:none;user-select:none;}\nhtml,body{margin:0;padding:0;height:100%;overflow:hidden;background:transparent;}\nbody{font-family:var(--font);color:var(--tx-1);-webkit-font-smoothing:antialiased;}\nh1,h2,h3,p{margin:0;}\nbutton{font-family:inherit;border:none;outline:none;background:none;cursor:pointer;color:inherit;}\ninput,textarea,select{font-family:inherit;}\ninput,textarea{-webkit-user-select:text;user-select:text;}\na{color:var(--sky);text-decoration:none;}\n\n@keyframes toopen{from{opacity:0;transform:translateY(8px) scale(.994);}to{opacity:1;transform:none;}}\n@keyframes toclose{from{opacity:1;transform:none;}to{opacity:0;transform:translateY(6px) scale(.994);}}\n@keyframes page-in{from{opacity:0;transform:translateX(10px);}to{opacity:1;transform:none;}}\n@keyframes cap-pulse{0%,100%{opacity:1;}50%{opacity:.55;}}\n@keyframes ripple{from{opacity:.22;transform:scale(0);}to{opacity:0;transform:scale(1.3);}}\n@keyframes soft-in{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:none;}}\n\n/* ------------------------------------------------------------------\n   SHELL\n   ------------------------------------------------------------------ */\n\n#menu-container{\n  position:absolute;inset:0;\n  display:flex;align-items:center;justify-content:center;\n  padding:18px;\n}\n\n#menu-wrapper{\n  position:relative;\n  width:min(1100px,100%);\n  height:min(690px,100%);\n  min-width:860px;min-height:520px;\n  display:flex;\n  background:var(--ink-1);\n  border:1px solid var(--line-2);\n  border-radius:var(--r4);\n  overflow:hidden;\n  box-shadow:0 48px 110px -34px rgba(0,0,0,.92),0 0 0 1px rgba(0,0,0,.4);\n  transform:scale(var(--ryn-scale,1));\n  transform-origin:center center;\n}\n#menu-container.transparent #menu-wrapper{background:rgba(12,12,17,0.90);}\n#menu-wrapper.toopen{animation:180ms var(--ease) toopen both;}\n#menu-wrapper.toclose{animation:140ms ease-in toclose both;}\n\nmain{display:flex;flex:1;min-width:0;min-height:0;}\n\n/* the old top bar is gone \u2014 everything identifying lives in the rail */\nheader{display:none;}\n\n/* ------------------------------------------------------------------\n   NAVIGATION RAIL\n   ------------------------------------------------------------------ */\n\n#navbar-container{\n  width:236px;min-width:236px;flex-shrink:0;\n  display:flex;flex-direction:column;\n  background:var(--ink-2);\n  border-right:1px solid var(--line);\n  padding:22px 12px 12px;\n}\n\n.rail-brand{display:flex;align-items:baseline;gap:9px;padding:0 12px 18px;}\n.rail-mark{\n  font-family:var(--mono);font-weight:700;font-size:25px;line-height:1;\n  letter-spacing:-.02em;color:var(--tx-1);\n}\n.rail-sub{\n  font-family:var(--mono);font-weight:600;font-size:10.5px;line-height:1;\n  letter-spacing:.24em;text-transform:uppercase;color:var(--iris-hi);\n}\n\n.rail-label{\n  font-family:var(--mono);font-weight:600;font-size:10px;\n  letter-spacing:.22em;text-transform:uppercase;color:var(--tx-4);\n  padding:0 12px;margin:20px 0 7px;\n}\n\n#navbar-container nav{display:flex;flex-direction:column;gap:2px;}\n\n.open-menu{\n  position:relative;\n  display:flex;align-items:center;gap:13px;\n  width:100%;padding:12px 13px;\n  border-radius:var(--r2);\n  background:transparent;\n  color:var(--tx-2);\n  text-align:left;\n  overflow:hidden;\n  transition:background 150ms var(--ease),color 150ms var(--ease);\n}\n.open-menu .nav-index{\n  font-family:var(--mono);font-weight:600;font-size:11px;line-height:1;\n  letter-spacing:.06em;color:var(--tx-4);\n  width:20px;flex-shrink:0;\n  transition:color 150ms var(--ease);\n}\n.open-menu .nav-label{\n  font-weight:800;font-size:15px;line-height:1.1;letter-spacing:-.012em;\n}\n.open-menu:hover{background:rgba(255,255,255,.035);color:var(--tx-1);}\n.open-menu:active{background:rgba(255,255,255,.06);}\n.open-menu.active{background:var(--iris-12);color:#FFFFFF;}\n.open-menu.active .nav-index{color:var(--iris-hi);}\n.open-menu.active::before{\n  content:'';position:absolute;left:0;top:11px;bottom:11px;\n  width:3px;border-radius:0 3px 3px 0;background:var(--iris);\n}\n.open-menu .ripple{\n  position:absolute;border-radius:50%;\n  background:rgba(255,255,255,.07);\n  opacity:0;pointer-events:none;\n  animation:ripple 420ms ease-out;\n}\n\n/* live outline of the open category */\n#nav-outline{\n  display:flex;flex-direction:column;gap:1px;\n  margin-top:4px;padding-left:6px;\n  overflow-y:auto;flex:1;min-height:0;\n}\n#nav-outline::-webkit-scrollbar{width:6px;}\n#nav-outline::-webkit-scrollbar-thumb{background:rgba(255,255,255,.07);border-radius:6px;}\n.outline-item{\n  position:relative;\n  padding:7px 10px 7px 16px;\n  border-radius:var(--r1);\n  font-size:12.5px;font-weight:600;line-height:1.3;\n  color:var(--tx-3);text-align:left;\n  transition:color 140ms var(--ease),background 140ms var(--ease);\n}\n.outline-item::before{\n  content:'';position:absolute;left:4px;top:50%;\n  width:4px;height:4px;margin-top:-2px;border-radius:50%;\n  background:var(--tx-4);\n  transition:background 160ms var(--ease),transform 160ms var(--ease);\n}\n.outline-item:hover{color:var(--tx-1);background:rgba(255,255,255,.03);}\n.outline-item.current{color:var(--tx-1);}\n.outline-item.current::before{background:var(--iris-hi);transform:scale(1.35);}\n\n.rail-foot{\n  margin-top:auto;padding-top:16px;\n  border-top:1px solid var(--line);\n  display:flex;align-items:center;gap:10px;\n}\n#ryn-version{\n  font-family:var(--mono);font-size:10.5px;font-weight:500;\n  letter-spacing:.14em;text-transform:uppercase;color:var(--tx-4);\n  padding-left:12px;margin-right:auto;\n}\n#close-button{\n  width:34px;height:34px;padding:8px;flex-shrink:0;\n  border-radius:var(--r2);\n  fill:none;stroke:var(--tx-3);stroke-width:1.9;\n  background:transparent;cursor:pointer;\n  transition:background 150ms var(--ease),stroke 150ms var(--ease);\n}\n#close-button:hover{background:rgba(255,255,255,.06);stroke:var(--tx-1);}\n#close-button:active{background:rgba(255,255,255,.09);}\n\n/* search lives in the rail head */\n#ryn-search-wrap{\n  position:relative;\n  display:flex;align-items:center;gap:8px;\n  height:40px;padding:0 13px;\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line-2);\n  border-radius:var(--r2);\n  transition:border-color 160ms var(--ease),background 160ms var(--ease),box-shadow 160ms var(--ease);\n}\n#ryn-search-wrap:focus-within{\n  border-color:var(--sky-45);\n  background:var(--sky-12);\n  box-shadow:0 0 0 3px rgba(155,197,232,.10);\n}\n#ryn-search-wrap::before{\n  content:'';flex-shrink:0;width:15px;height:15px;\n  background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23726F80' stroke-width='1.6' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='4.6'/%3E%3Cpath d='M10.4 10.4L14 14'/%3E%3C/svg%3E\");\n  background-repeat:no-repeat;background-position:center;background-size:contain;\n}\n#ryn-search-input{\n  flex:1;min-width:0;\n  background:transparent;border:none;outline:none;\n  font-size:13.5px;font-weight:600;color:var(--tx-1);\n}\n#ryn-search-input::placeholder{color:var(--tx-4);font-weight:500;}\n#ryn-search-clear{\n  display:none;flex-shrink:0;\n  font-size:11px;line-height:1;color:var(--tx-4);cursor:pointer;\n  transition:color 140ms;\n}\n#ryn-search-clear:hover{color:var(--tx-1);}\n#ryn-search-dropdown{\n  display:none;position:absolute;top:calc(100% + 8px);left:0;\n  width:320px;max-height:340px;overflow-y:auto;\n  padding:6px;\n  background:var(--ink-3);\n  border:1px solid var(--line-2);\n  border-radius:var(--r3);\n  box-shadow:0 26px 60px -18px rgba(0,0,0,.9);\n  z-index:9999;\n  animation:soft-in 150ms var(--ease);\n}\n#ryn-search-dropdown::-webkit-scrollbar{width:8px;}\n#ryn-search-dropdown::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:8px;border:2px solid transparent;background-clip:padding-box;}\n.ryn-si{\n  display:flex;flex-direction:column;gap:3px;\n  padding:9px 11px;border-radius:var(--r2);cursor:pointer;\n  transition:background 130ms var(--ease);\n}\n.ryn-si:hover,.ryn-si.ryn-fx{background:var(--iris-12);}\n.ryn-st{font-size:13px;font-weight:700;color:var(--tx-1);line-height:1.3;}\n.ryn-st mark{background:var(--iris-45);color:#fff;border-radius:3px;padding:0 2px;}\n.ryn-sp{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--tx-4);}\n.ryn-se{text-align:center;padding:22px 12px;font-size:12.5px;font-weight:600;color:var(--tx-4);}\n.ryn-sl{\n  font-family:var(--mono);font-size:9.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--iris-hi);\n  padding:9px 11px 4px;\n}\n\n/* ------------------------------------------------------------------\n   CONTENT COLUMN \u2014 one continuous vertical flow, full available width\n   ------------------------------------------------------------------ */\n\n#page-container{\n  flex:1;min-width:0;\n  overflow-y:auto;overflow-x:hidden;\n  background:var(--ink-1);\n}\n#page-container::-webkit-scrollbar{width:12px;}\n#page-container::-webkit-scrollbar-track{background:transparent;}\n#page-container::-webkit-scrollbar-thumb{\n  background:rgba(255,255,255,.09);\n  border-radius:12px;\n  border:4px solid transparent;\n  background-clip:padding-box;\n}\n#page-container::-webkit-scrollbar-thumb:hover{background:rgba(142,118,206,.55);background-clip:padding-box;}\n\n.menu-page{display:none;}\n.menu-page.opened{\n  display:block;\n  padding:34px clamp(20px,2.6vw,38px) 92px;\n  animation:page-in 190ms var(--ease);\n}\n.page-head{\n  max-width:1180px;margin:0 auto 6px;\n  padding-bottom:24px;\n  border-bottom:1px solid var(--line);\n}\n.menu-page .page-title{\n  font-size:clamp(27px,2.5vw,33px);font-weight:800;line-height:1.03;\n  letter-spacing:-.03em;color:var(--tx-1);\n}\n.page-description{\n  margin-top:12px;max-width:74ch;\n  font-size:13.5px;font-weight:500;line-height:1.6;color:var(--tx-3);\n}\n\n.section{max-width:1180px;margin:0 auto;padding-top:36px;}\n.section-title{\n  display:flex;flex-direction:column;gap:7px;\n  padding:0 2px 13px;\n  border-bottom:1px solid var(--line);\n  font-family:var(--mono);font-size:11.5px;font-weight:700;\n  letter-spacing:.19em;text-transform:uppercase;color:var(--iris-hi);\n}\nh2.section-title{font-family:var(--mono);}\n.sec-sub{\n  font-family:var(--font);font-size:12.5px;font-weight:500;\n  letter-spacing:0;text-transform:none;line-height:1.55;color:var(--tx-3);\n}\n.section-content{display:flex;flex-direction:column;padding-top:4px;}\n\n/* ------------------------------------------------------------------\n   SETTING ROW\n   ------------------------------------------------------------------ */\n\n.content-option{\n  position:relative;\n  display:flex;align-items:center;justify-content:space-between;gap:24px;\n  min-height:60px;\n  padding:13px 15px 13px 17px;\n  border-radius:var(--r2);\n  border-bottom:1px solid rgba(255,255,255,.032);\n  transition:background 150ms var(--ease);\n}\n.content-option:last-child{border-bottom:none;}\n.content-option:hover{background:rgba(255,255,255,.026);}\n.content-option::before{\n  content:'';position:absolute;left:0;top:14px;bottom:14px;\n  width:2px;border-radius:0 2px 2px 0;\n  background:var(--sage);\n  opacity:0;\n  transition:opacity 190ms var(--ease);\n}\n.content-option:has(input[type=\"checkbox\"]:checked)::before{opacity:.85;}\n\n.content-option.centered{justify-content:center;}\n.content-option.left-flex{justify-content:flex-start;gap:14px;}\n.content-option.text{justify-content:flex-start;}\n.content-option.stacked{flex-direction:column;align-items:stretch;gap:14px;}\n\n.opt-main{display:flex;flex-direction:column;gap:5px;min-width:0;flex:1;}\n.option-title{\n  font-size:15.5px;font-weight:700;line-height:1.32;\n  letter-spacing:-.008em;color:var(--tx-1);\n}\nlabel.option-title{cursor:pointer;}\nlabel.option-title:active{opacity:.75;}\n.opt-desc{\n  font-size:12.5px;font-weight:500;line-height:1.5;\n  color:var(--tx-3);max-width:74ch;\n}\n.content-option.quiet .option-title{font-size:14.5px;font-weight:600;color:var(--tx-2);}\n.content-option.quiet{min-height:54px;}\n.content-option.quiet:hover .option-title{color:var(--tx-1);}\n.option-content{display:flex;align-items:center;gap:12px;flex-shrink:0;}.ryn-select{appearance:none;-webkit-appearance:none;background:rgba(255,255,255,.06);color:inherit;border:1px solid rgba(255,255,255,.18);border-radius:7px;padding:5px 26px 5px 10px;font:inherit;font-size:12px;cursor:pointer;flex-shrink:0;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 14px) calc(50% + 1px),calc(100% - 9px) calc(50% + 1px);background-size:5px 5px,5px 5px;background-repeat:no-repeat;}.ryn-select:hover{border-color:rgba(255,255,255,.32);}.ryn-select:focus{outline:none;border-color:var(--iris);}.ryn-select option{background:#1a1526;color:#fff;}\n\n.text-value{\n  font-family:var(--mono);font-size:15px;font-weight:700;\n  color:var(--sky);font-variant-numeric:tabular-nums;\n}\n.simplified{font-size:12.5px;font-weight:500;color:var(--tx-3);line-height:1.6;}\n.highlight{color:var(--iris-hi);}\n\n/* nested detail rows under a parent toggle */\n.sub-options{\n  margin:2px 0 6px 18px;\n  padding-left:16px;\n  border-left:1px solid var(--line-2);\n  transition:opacity 200ms var(--ease);\n}\n.sub-options .content-option{min-height:50px;padding-top:9px;padding-bottom:9px;}\n.sub-options .option-title{font-size:14px;font-weight:600;color:var(--tx-2);}\n.sub-options .content-option:hover .option-title{color:var(--tx-1);}\n.content-option:has(> .switch-checkbox > input:not(:checked)) + .sub-options{\n  opacity:.32;pointer-events:none;\n}\n\n/* ------------------------------------------------------------------\n   CONTROLS\n   ------------------------------------------------------------------ */\n\n/* toggle */\n.switch-checkbox{position:relative;width:48px;height:27px;flex-shrink:0;}\n.switch-checkbox input{position:absolute;opacity:0;width:0;height:0;}\n.switch-checkbox span{\n  position:absolute;inset:0;\n  border-radius:10px;cursor:pointer;\n  background:rgba(255,255,255,.06);\n  border:1px solid rgba(255,255,255,.11);\n  transition:background 180ms var(--ease),border-color 180ms var(--ease);\n}\n.switch-checkbox span::before{\n  content:'';position:absolute;left:4px;top:50%;\n  width:18px;height:18px;border-radius:6px;\n  background:rgba(255,255,255,.32);\n  transform:translateY(-50%);\n  transition:transform 190ms var(--ease),background 190ms var(--ease);\n}\n.switch-checkbox span:hover{border-color:rgba(255,255,255,.2);}\n.switch-checkbox input:checked + span{\n  background:var(--sage-14);\n  border-color:var(--sage-40);\n}\n.switch-checkbox input:checked + span::before{\n  transform:translateY(-50%) translateX(21px);\n  background:var(--sage);\n}\n.switch-checkbox input:focus-visible + span{box-shadow:0 0 0 3px rgba(155,197,232,.20);}\n\n/* keycap */\n.hotkeyInput{\n  display:flex;align-items:center;justify-content:center;\n  min-width:82px;height:42px;padding:0 15px;\n  border-radius:10px;\n  background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.028));\n  border:1px solid rgba(255,255,255,.115);\n  box-shadow:0 2px 0 rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.10);\n  font-family:var(--mono);font-size:13.5px;font-weight:700;\n  letter-spacing:.07em;text-transform:uppercase;color:var(--tx-1);\n  transition:transform 120ms var(--ease),border-color 150ms var(--ease),\n             background 150ms var(--ease),box-shadow 150ms var(--ease),color 150ms var(--ease);\n}\n.hotkeyInput:hover{border-color:var(--sky-45);color:#fff;}\n.hotkeyInput:active{transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.06);}\n.hotkeyInput.active{\n  border-color:var(--iris);background:var(--iris-18);color:var(--iris-hi);\n  box-shadow:inset 0 1px 0 rgba(255,255,255,.08);\n  transform:translateY(2px);\n  animation:cap-pulse 1.15s ease-in-out infinite;\n}\n.hotkeyInput.red{\n  border-color:rgba(217,163,171,.5);background:var(--rose-12);color:var(--rose);\n}\n.key-state{\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--tx-4);\n  min-width:78px;text-align:right;\n}\n.key-state::after{content:'';}\n.content-option:has(.hotkeyInput.red) .key-state::after{content:'Conflict';color:var(--rose);}\n.content-option:has(.hotkeyInput.active) .key-state::after{content:'Press a key';color:var(--iris-hi);}\n.content-option:has(.hotkeyInput.red) .key-state,\n.content-option:has(.hotkeyInput.active) .key-state{color:inherit;}\n\n/* button */\n.option-button{\n  display:inline-flex;align-items:center;justify-content:center;gap:8px;\n  height:42px;padding:0 21px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.05);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);\n  font-size:13.5px;font-weight:700;letter-spacing:.005em;\n  white-space:nowrap;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),\n             transform 110ms var(--ease),color 150ms var(--ease);\n}\n.option-button:hover{background:rgba(255,255,255,.085);border-color:var(--line-3);}\n.option-button:active{transform:translateY(1px);background:rgba(255,255,255,.11);}\n.option-button:disabled{opacity:.4;pointer-events:none;}\n.option-button.primary{\n  background:var(--iris-18);border-color:var(--iris-45);color:#EFEAFF;\n}\n.option-button.primary:hover{background:rgba(142,118,206,.26);border-color:rgba(142,118,206,.7);}\n.option-button.wide{width:100%;}\n.option-button.tall{height:48px;padding:0 28px;font-size:14.5px;}\n.option-button.red,.option-button.danger{\n  background:transparent;border-color:rgba(217,163,171,.28);color:var(--rose);\n}\n.option-button.red:hover,.option-button.danger:hover{\n  background:var(--rose-12);border-color:rgba(217,163,171,.5);color:#F0CDD2;\n}\n.option-button.icon-only{width:42px;padding:0;}\n\n/* segmented control */\n.seg{display:flex;gap:6px;flex-wrap:wrap;max-width:680px;}\n.seg-btn,.farm-type-btn{\n  flex:1;min-width:92px;height:44px;padding:0 15px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line);\n  color:var(--tx-3);\n  font-family:var(--font);font-size:13.5px;font-weight:700;\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.seg-btn:hover,.farm-type-btn:hover{background:rgba(255,255,255,.06);color:var(--tx-1);}\n.seg-btn.seg-active,.farm-type-btn.seg-active{\n  background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;\n}\n\n/* text / number input */\n.input{\n  height:42px;width:235px;padding:0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);\n  font-size:13.5px;font-weight:600;text-align:left;\n  transition:border-color 150ms var(--ease),background 150ms var(--ease),box-shadow 150ms var(--ease);\n}\n.input::placeholder{color:var(--tx-4);font-weight:500;}\n.input:focus{\n  outline:none;border-color:var(--sky-45);\n  background:var(--sky-12);\n  box-shadow:0 0 0 3px rgba(155,197,232,.11);\n}\ninput[type=\"number\"].input{width:122px;font-family:var(--mono);font-variant-numeric:tabular-nums;}\n.input.invalid{border-color:rgba(217,163,171,.6);background:var(--rose-12);}\n\n/* rows the client builds for auto chat: input plus a remove control */\n.chat-row{min-height:58px;}\n.chat-row .input{flex:1;min-width:0;}\n\n/* colour */\ninput[id][type=\"color\"]{\n  width:36px;height:36px;padding:0;\n  border:none;border-radius:9px;background:transparent;cursor:pointer;\n  box-shadow:0 0 0 1px rgba(255,255,255,.16);\n  transition:box-shadow 160ms var(--ease),transform 160ms var(--ease);\n}\ninput[id][type=\"color\"]::-webkit-color-swatch-wrapper{padding:3px;}\ninput[id][type=\"color\"]::-webkit-color-swatch{border:none;border-radius:7px;}\ninput[id][type=\"color\"]:hover{transform:scale(1.06);box-shadow:0 0 0 1px rgba(255,255,255,.34);}\n.reset-color{\n  width:15px;height:15px;flex-shrink:0;\n  border-radius:50%;border:1px solid rgba(255,255,255,.22);\n  background:var(--data-color,var(--iris));\n  opacity:0;cursor:pointer;\n  transition:opacity 160ms var(--ease),transform 160ms var(--ease);\n}\n.content-option:hover .reset-color{opacity:.85;}\n.reset-color:hover{opacity:1;transform:scale(1.2);}\n\n/* slider */\n.slider{display:flex;align-items:center;gap:18px;flex-shrink:0;}\n.slider input[type=\"range\"]{order:1;}\n.slider-value{\n  order:2;\n  font-family:var(--mono);font-size:13.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;\n  color:var(--sky);min-width:58px;text-align:right;\n}\n.slider input[type=\"range\"]{\n  -webkit-appearance:none;appearance:none;\n  width:clamp(150px,17vw,250px);height:22px;\n  background:transparent;cursor:pointer;outline:none;border:none;\n}\n.slider input[type=\"range\"]::-webkit-slider-runnable-track{\n  height:4px;border-radius:999px;\n  background:linear-gradient(90deg,var(--sky) var(--val,0%),rgba(255,255,255,.09) var(--val,0%));\n}\n.slider input[type=\"range\"]::-webkit-slider-thumb{\n  -webkit-appearance:none;\n  width:15px;height:15px;margin-top:-5.5px;\n  border-radius:50%;background:#EEF4FA;\n  border:1px solid rgba(0,0,0,.35);\n  box-shadow:0 1px 4px rgba(0,0,0,.55);\n  transition:transform 130ms var(--ease),box-shadow 130ms var(--ease);\n}\n.slider input[type=\"range\"]:hover::-webkit-slider-thumb{transform:scale(1.14);}\n.slider input[type=\"range\"]:active::-webkit-slider-thumb{\n  transform:scale(1.06);box-shadow:0 0 0 6px rgba(155,197,232,.16);\n}\n\n/* select */\nselect.ryn-select{\n  height:42px;padding:0 38px 0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);font-size:13.5px;font-weight:600;\n  -webkit-appearance:none;appearance:none;cursor:pointer;\n  background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7' viewBox='0 0 11 7'%3E%3Cpath d='M1 1l4.5 4.5L10 1' stroke='%239BC5E8' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\");\n  background-repeat:no-repeat;background-position:right 14px center;\n  transition:border-color 150ms var(--ease);\n}\nselect.ryn-select:focus{outline:none;border-color:var(--sky-45);}\nselect.ryn-select option{background:var(--ink-3);color:var(--tx-1);}\n\n/* misc atoms */\n.icon{width:20px;height:20px;}\n.small-icon{width:15px;height:15px;}\n.key-badge{\n  display:inline-flex;align-items:center;justify-content:center;\n  min-width:26px;height:20px;padding:0 6px;\n  border-radius:var(--r1);\n  background:rgba(255,255,255,.05);border:1px solid var(--line-2);\n  font-family:var(--mono);font-size:10.5px;font-weight:600;color:var(--tx-2);\n}\n.note{\n  max-width:1180px;margin:14px auto 0;\n  padding:14px 18px;\n  border-left:2px solid var(--line-2);\n  font-size:12.5px;font-weight:500;line-height:1.6;color:var(--tx-3);\n}\n\n/* ------------------------------------------------------------------\n   BOTS\n   ------------------------------------------------------------------ */\n\n#bot-container{display:flex;flex-direction:column;}\n#bot-container:empty{display:none;}\n.content-option[data-bot-id]{\n  background:rgba(255,255,255,.028);\n  border:1px solid var(--line);border-bottom:1px solid var(--line);\n  margin-bottom:6px;min-height:52px;\n}\n.content-option[data-bot-id] .option-title{font-family:var(--mono);font-size:13.5px;font-weight:600;}\n.disconnect-button{\n  width:16px;height:16px;flex-shrink:0;\n  fill:var(--tx-4);cursor:pointer;\n  transition:fill 150ms var(--ease);\n}\n.content-option:hover .disconnect-button{fill:var(--tx-2);}\n.disconnect-button:hover{fill:var(--rose)!important;}\n\n#connectingBot{\n  padding:14px 18px;margin-bottom:6px;\n  border-radius:var(--r2);\n  border:1px dashed var(--line-2);\n  font-family:var(--mono);font-size:12px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--tx-4);\n}\n\n#dynamic-bot-list{display:flex;flex-direction:column;gap:8px;}\n.bot-row{\n  display:flex;align-items:center;gap:10px;\n  padding:10px 12px;\n  background:rgba(255,255,255,.028);\n  border:1px solid var(--line);\n  border-radius:var(--r2);\n  transition:border-color 150ms var(--ease),opacity 150ms var(--ease);\n}\n.bot-row:hover{border-color:var(--line-2);}\n.bot-row.connected{background:var(--sage-14);border-color:var(--sage-40);}\n.bot-row-label{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  letter-spacing:.12em;text-transform:uppercase;color:var(--tx-4);\n  min-width:74px;flex-shrink:0;\n}\n.bot-row-name{flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}\n.bot-row-name .pending{color:var(--tx-4);font-weight:600;}\n.bot-row .input{flex:1;min-width:0;width:auto;}\n.bot-row-check{width:17px;height:17px;flex-shrink:0;fill:var(--sage);}\n.icon-btn{\n  display:flex;align-items:center;justify-content:center;\n  width:42px;height:42px;flex-shrink:0;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.045);\n  border:1px solid var(--line-2);\n  font-size:15px;line-height:1;color:var(--tx-2);\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.icon-btn:hover{background:rgba(255,255,255,.08);border-color:var(--line-3);color:var(--tx-1);}\n.icon-btn.danger:hover{background:var(--rose-12);border-color:rgba(217,163,171,.45);color:var(--rose);}\n\n/* option grids (weapons, age-4 building) */\n.wpn-label{\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:12px;\n}\n.wpn-grid{\n  display:grid;grid-template-columns:repeat(auto-fill,minmax(124px,1fr));\n  gap:8px;\n}\n.bot-weapon-btn,.bot-sec-weapon-btn{\n  display:flex;align-items:center;justify-content:center;\n  min-height:54px;padding:10px 12px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.03);\n  border:1px solid var(--line);\n  color:var(--tx-3);\n  font-size:13px;font-weight:600;text-align:center;line-height:1.3;\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.bot-weapon-btn:hover,.bot-sec-weapon-btn:hover{\n  background:rgba(255,255,255,.06);border-color:var(--line-2);color:var(--tx-1);\n}\n.bot-weapon-btn.wpn-active,.bot-sec-weapon-btn.wpn-active{\n  background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;\n}\n.wpn-selected-bar{\n  display:flex;align-items:center;gap:10px;\n  margin-top:12px;padding:11px 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.025);\n  border:1px solid var(--line);\n}\n.wpn-selected-dot{\n  width:6px;height:6px;flex-shrink:0;border-radius:50%;background:var(--iris-hi);\n}\n.wpn-selected-text{font-size:13px;font-weight:600;color:var(--tx-2);}\n\n.stack{display:flex;flex-direction:column;gap:22px;padding-top:8px;}\n.field{display:flex;flex-direction:column;gap:0;}\n.field-head{\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:10px;\n}\n.field-note{margin-top:10px;font-size:12.5px;font-weight:500;line-height:1.55;color:var(--tx-3);}\n.field-note b{color:var(--tx-2);font-weight:700;}\n.inline{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}\n#_botBulkRow .input{flex:1;min-width:180px;width:auto;}\n.bot-row-id{\n  font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.06em;\n  color:var(--tx-4);flex-shrink:0;padding:0 9px;height:25px;\n  display:flex;align-items:center;white-space:nowrap;\n  border:1px solid var(--line);border-radius:var(--r2);\n}\n\n#_formationGrid{width:100%;}\n\n/* ------------------------------------------------------------------\n   FORMATION POPUP (built in JS, lives on document.body)\n   ------------------------------------------------------------------ */\n\n.fsel-trigger{\n  display:flex;align-items:center;gap:12px;\n  width:100%;padding:13px 14px;max-width:680px;\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line-2);\n  border-radius:var(--r2);\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease);\n}\n.fsel-trigger:hover{background:rgba(255,255,255,.06);border-color:var(--line-3);}\n.fsel-trigger.open{border-color:var(--iris-45);background:var(--iris-12);}\n.fsel-trigger .fsel-icon{width:26px;flex-shrink:0;text-align:center;font-size:16px;color:var(--iris-hi);}\n.fsel-trigger .fsel-label{flex:1;font-size:14.5px;font-weight:700;color:var(--tx-1);}\n.fsel-trigger .fsel-arrow{font-size:10px;color:var(--tx-4);transition:transform 170ms var(--ease);}\n.fsel-trigger.open .fsel-arrow{transform:rotate(180deg);}\n\n.fsel-popup{\n  position:fixed;z-index:99999;width:300px;\n  display:flex;flex-direction:column;overflow:hidden;\n  background:var(--ink-3);\n  border:1px solid var(--line-2);\n  border-radius:var(--r3);\n  box-shadow:0 30px 70px -20px rgba(0,0,0,.92);\n}\n.fsel-popup.toopen{animation:soft-in 160ms var(--ease);}\n.fsel-popup-header{\n  display:flex;align-items:center;gap:10px;\n  padding:12px 14px;\n  border-bottom:1px solid var(--line);\n  cursor:grab;\n}\n.fsel-popup-header:active{cursor:grabbing;}\n.fsel-popup-title{\n  flex:1;font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n.fsel-popup-close{\n  width:22px;height:22px;flex-shrink:0;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r1);font-size:11px;color:var(--tx-4);cursor:pointer;\n  transition:background 140ms,color 140ms;\n}\n.fsel-popup-close:hover{background:rgba(255,255,255,.07);color:var(--tx-1);}\n.fsel-popup-body{\n  display:grid;grid-template-columns:repeat(4,1fr);gap:8px;\n  padding:12px;max-height:280px;overflow-y:auto;\n}\n.fsel-popup-body::-webkit-scrollbar{width:8px;}\n.fsel-popup-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:8px;border:2px solid transparent;background-clip:padding-box;}\n.fcat-btn{\n  position:relative;\n  display:flex;align-items:center;justify-content:center;\n  aspect-ratio:1;border-radius:var(--r2);\n  background:rgba(255,255,255,.03);\n  border:1px solid var(--line);\n  color:var(--tx-2);font-size:17px;cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.fcat-btn:hover{background:rgba(255,255,255,.07);border-color:var(--line-2);color:var(--tx-1);}\n.fcat-btn.active{background:var(--iris-18);border-color:var(--iris-45);color:#fff;}\n.fcat-tip{\n  display:none;position:absolute;top:calc(100% + 6px);left:50%;\n  transform:translateX(-50%);\n  padding:4px 9px;border-radius:var(--r1);\n  background:var(--ink-4);border:1px solid var(--line-2);\n  font-family:var(--font);font-size:11px;font-weight:600;color:var(--tx-1);\n  white-space:nowrap;pointer-events:none;z-index:5;\n}\n.fcat-btn:hover .fcat-tip{display:block;}\n.fcat-key{\n  position:absolute;top:3px;right:3px;\n  min-width:17px;height:15px;padding:0 3px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:4px;\n  background:rgba(0,0,0,.45);border:1px solid var(--line);\n  font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--tx-3);\n  line-height:1;cursor:pointer;\n  transition:background 130ms,border-color 130ms,color 130ms;\n}\n.fcat-key:hover{background:rgba(255,255,255,.10);color:var(--tx-1);}\n.fcat-key.set{background:var(--iris-18);border-color:var(--iris-45);color:#EFEAFF;}\n.fcat-key.recording{background:var(--sky-12);border-color:var(--sky-45);color:var(--sky);animation:cap-pulse 1.1s ease-in-out infinite;}\n.fcat-reset{\n  position:absolute;bottom:3px;left:3px;\n  width:15px;height:15px;display:none;\n  align-items:center;justify-content:center;\n  border-radius:4px;\n  background:var(--rose-12);border:1px solid rgba(217,163,171,.3);\n  font-size:9px;line-height:1;color:var(--rose);cursor:pointer;\n}\n.fcat-reset.show{display:flex;}\n.fcat-reset:hover{background:rgba(217,163,171,.24);}\n.fsel-popup-footer{padding:10px 12px;border-top:1px solid var(--line);}\n.fsel-reset-all{\n  width:100%;padding:9px 0;\n  border-radius:var(--r2);\n  background:transparent;border:1px solid rgba(217,163,171,.26);\n  font-family:var(--font);font-size:12px;font-weight:700;\n  color:var(--rose);text-align:center;cursor:pointer;\n  transition:background 140ms,border-color 140ms;\n}\n.fsel-reset-all:hover{background:var(--rose-12);border-color:rgba(217,163,171,.48);}\n\n/* ============================================================\n   Target Scan \u2014 the picker is a multi-select, so it is built\n   like one: a tick per row, picked rows lifted out of the list\n   rather than merely tinted, and a state chip only on the ones\n   actually being tracked. Colours come from the tokens above,\n   with sky for picked and sage for live.\n   ============================================================ */\n\n.scan-count{\n  font:600 10px/1 var(--mono);\n  letter-spacing:.08em;\n  text-transform:uppercase;\n  color:var(--tx-3);\n  background:var(--ink-4);\n  border:1px solid var(--line);\n  border-radius:999px;\n  padding:3px 8px;\n  margin-left:8px;\n  vertical-align:middle;\n}\n\n.scan-bar{\n  display:flex;\n  gap:var(--s2);\n  align-items:center;\n  width:100%;\n  margin-bottom:var(--s3);\n}\n.scan-filter{flex:1;min-width:0;}\n.scan-bar .option-button{flex:0 0 auto;white-space:nowrap;}\n\n#_scanList{\n  display:flex;\n  flex-direction:column;\n  gap:3px;\n  width:100%;\n  max-height:340px;\n  overflow-y:auto;\n  padding-right:2px;\n}\n#_scanList::-webkit-scrollbar{width:6px;}\n#_scanList::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:3px;}\n\n.scan-row{\n  display:flex;\n  align-items:center;\n  gap:var(--s3);\n  padding:8px 10px;\n  border-radius:var(--r2);\n  border:1px solid transparent;\n  background:var(--ink-2);\n  cursor:pointer;\n  transition:background 140ms var(--ease),border-color 140ms var(--ease);\n}\n.scan-row:hover{background:var(--ink-3);border-color:var(--line-2);}\n.scan-row.picked{background:var(--sky-12);border-color:var(--sky-45);}\n.scan-row.live{background:var(--sage-14);border-color:var(--sage-40);}\n\n.scan-tick{\n  flex:0 0 auto;\n  width:17px;\n  height:17px;\n  display:flex;\n  align-items:center;\n  justify-content:center;\n  border-radius:5px;\n  border:1px solid var(--line-3);\n  background:var(--ink-0);\n  font:700 11px/1 var(--font);\n  color:var(--ink-0);\n}\n.scan-row.picked .scan-tick{background:var(--sky);border-color:var(--sky);}\n.scan-row.live .scan-tick{background:var(--sage);border-color:var(--sage);}\n\n.scan-main{\n  flex:1;\n  min-width:0;\n  display:flex;\n  flex-direction:column;\n  gap:2px;\n}\n.scan-name{\n  font:600 13px/1.2 var(--font);\n  color:var(--tx-1);\n  overflow:hidden;\n  text-overflow:ellipsis;\n  white-space:nowrap;\n}\n.scan-meta{\n  font:500 10px/1.2 var(--mono);\n  color:var(--tx-3);\n  overflow:hidden;\n  text-overflow:ellipsis;\n  white-space:nowrap;\n}\n\n.scan-chip{\n  flex:0 0 auto;\n  font:700 9px/1 var(--mono);\n  letter-spacing:.1em;\n  color:var(--ink-0);\n  background:var(--sage);\n  border-radius:999px;\n  padding:4px 8px;\n}\n\n/* Per-row actions. SCAN and EXCLUDE are separate states on separate\n   buttons, because a player can be both and a single toggle cannot say\n   that. Excluded rows are tinted rose \u2014 the same colour the rest of the\n   menu uses for \"this is switched off / refused\". */\n\n.scan-actions{\n  flex:0 0 auto;\n  display:flex;\n  gap:6px;\n  align-items:center;\n}\n.scan-act{\n  font:700 9px/1 var(--mono);\n  letter-spacing:.09em;\n  padding:6px 9px;\n  border-radius:var(--r1);\n  border:1px solid var(--line-3);\n  background:var(--ink-0);\n  color:var(--tx-2);\n  cursor:pointer;\n  transition:background 140ms var(--ease),border-color 140ms var(--ease),color 140ms var(--ease);\n}\n.scan-act:hover{border-color:var(--line-3);background:var(--ink-4);color:var(--tx-1);}\n.scan-act.on-scan{background:var(--sky);border-color:var(--sky);color:var(--ink-0);}\n.scan-act.on-excl{background:var(--rose);border-color:var(--rose);color:var(--ink-0);}\n\n.scan-row.excluded{background:var(--rose-12);border-color:rgba(217,163,171,.45);}\n.scan-row.excluded .scan-name{color:var(--rose);}\n.scan-chip.excl{background:var(--rose);}\n.scan-give{\n  flex:0 0 auto;\n  display:flex;\n  align-items:center;\n  gap:2px;\n  border:1px solid var(--line-3);\n  border-radius:var(--r1);\n  background:var(--ink-0);\n  padding:1px;\n}\n.scan-give.on{border-color:var(--iris-45);background:var(--iris-18);}\n.scan-give.off{opacity:.45;}\n.scan-give-btn{\n  font:700 11px/1 var(--mono);\n  color:var(--tx-2);\n  padding:4px 6px;\n  border-radius:var(--r1);\n  cursor:pointer;\n  user-select:none;\n}\n.scan-give-btn:hover{background:var(--ink-4);color:var(--tx-1);}\n.scan-give-val{\n  font:700 9px/1 var(--mono);\n  letter-spacing:.08em;\n  color:var(--tx-2);\n  padding:0 3px;\n  white-space:nowrap;\n}\n.scan-give.on .scan-give-val{color:#FFFFFF;}\n.scan-row.given{border-color:var(--iris-45);}\n.scan-chip.given{background:var(--iris-45);color:#FFFFFF;}\n\n.scan-empty{\n  font:500 12px/1.5 var(--font);\n  color:var(--tx-3);\n  padding:14px 10px;\n  text-align:center;\n  border:1px dashed var(--line-2);\n  border-radius:var(--r2);\n}\n";
   const Game_default = "#ryn-menu-frame {\r\n    position: absolute;\r\n    top: 0;\r\n    left: 0;\r\n    bottom: 0;\r\n    right: 0;\r\n    width: 100%;\r\n    height: 100%;\r\n    border: none;\r\n    outline: none;\r\n    z-index: 10;\r\n}\r\n\r\n#promoImgHolder,\r\n.menuHeader,\r\n.menuText,\r\n#guideCard,\r\n#gameName,\r\n#pingDisplay,\r\n#partyButton,\r\n#onetrust-consent-sdk,\r\n.adMenuCard,\r\n#topInfoHolder > div:not([id]):not([class]),\r\n#touch-controls-fullscreen,\r\n#altcha,\r\n#joinPartyButton {\r\n    display: none!important;\r\n}\r\n\r\n.menuCard {\r\n    box-shadow: none;\r\n}\r\n\r\n#setupCard {\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 12px;\r\n    background: rgba(25,25,25,0.45);\r\n    backdrop-filter: blur(25px);\r\n    -webkit-backdrop-filter: blur(25px);\r\n    border: 1px solid rgba(255,255,255,0.2);\r\n    border-radius: 20px;\r\n    box-shadow: 0 8px 32px 0 rgba(0,0,0,0.2), inset 0 1px 1px rgba(255,255,255,0.1);\r\n    max-height: auto;\r\n    width: 280px;\r\n}\r\n\r\n#setupCard > * {\r\n    margin: 0!important;\r\n}\r\n\r\n#linksContainer2 {\r\n    background: #6d6d6d77;\r\n}\r\n\r\n#bottomContainer {\r\n    bottom: 20px;\r\n}\r\n\r\n#topInfoHolder {\r\n    display: flex;\r\n    flex-direction: column;\r\n    justify-content: right;\r\n    align-items: flex-end;\r\n    gap: 10px;\r\n}\r\n\r\n#killCounter, #totalKillCounter {\r\n    position: static;\r\n    margin: 0;\r\n    background-image: url(../img/icons/skull.png);\r\n}\r\n\r\n.actionBarItem {\r\n    position: relative;\r\n    margin: 3px 5px !important;\r\n    border: 1.5px solid rgba(255,255,255,0.16) !important;\r\n    border-radius: 13px !important;\r\n    background-color: rgba(18,17,24,0.40) !important;\r\n    box-shadow: 0 3px 10px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.07) !important;\r\n    transition: transform 130ms ease, border-color 130ms ease, box-shadow 130ms ease !important;\r\n}\r\n\r\n.actionBarItem:hover {\r\n    transform: translateY(-2px) !important;\r\n    border-color: rgba(255,255,255,0.38) !important;\r\n    box-shadow: 0 6px 16px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.10) !important;\r\n}\r\n\r\n/* The weapon's reload, inside its own tile: a white edge that runs the tile's\r\n   outline, drawn whole the moment you swing and draining away as the weapon\r\n   comes back, so a bare tile is a ready weapon. It is one SVG path stroked\r\n   around a rounded square, with the dash pattern doing the drawing —\r\n   stroke-dasharray on a path is as old as SVG itself, so there is nothing here\r\n   a browser can quietly not support. The path starts at the top left corner\r\n   and runs clockwise. */\r\n.ryn-reload-ring {\r\n    position: absolute !important;\r\n    top: -1px !important;\r\n    left: -1px !important;\r\n    width: calc(100% + 2px) !important;\r\n    height: calc(100% + 2px) !important;\r\n    display: block !important;\r\n    overflow: visible !important;\r\n    pointer-events: none !important;\r\n    z-index: 9 !important;\r\n    filter: drop-shadow(0 0 2px rgba(0,0,0,0.75)) !important;\r\n}\r\n/* The stroke and nothing else. How much of it is drawn is set inline on the\r\n   path every tick, and it has to be: a stylesheet rule outranks an SVG\r\n   presentation attribute, so a stroke-dashoffset written here would pin every\r\n   ring at whatever it said and no attribute could move it. */\r\n.ryn-reload-edge {\r\n    fill: none;\r\n    stroke: #ffffff;\r\n    stroke-width: 6;\r\n    stroke-linecap: butt;\r\n    /* The reload advances once a game tick, about 110ms, so the edge would\r\n       otherwise step 25, 50, 75. Handing the interpolation to the browser is\r\n       what makes it continuous without a frame loop of our own: one property,\r\n       two small paths, and no javascript between the ticks. */\r\n    transition: stroke-dashoffset 110ms linear;\r\n}\r\n/* The upgrade layer: the same idea one step inside the reload edge, filling\r\n   rather than draining, in the colour of the variant the weapon is working\r\n   towards — gold, then diamond, then ruby. Its colour is set inline, since it\r\n   changes with the step. */\r\n.ryn-upgrade-edge {\r\n    fill: none;\r\n    stroke-width: 4;\r\n    stroke-linecap: butt;\r\n    transition: stroke-dashoffset 110ms linear;\r\n}\r\n\r\n.itemCounter {\r\n    position: absolute;\r\n    top: 3px;\r\n    right: 3px;\r\n    font-size: 0.95em;\r\n    color: white;\r\n    text-shadow: #3d3f42 2px 0px 0px, #3d3f42 1.75517px 0.958851px 0px, #3d3f42 1.0806px 1.68294px 0px, #3d3f42 0.141474px 1.99499px 0px, #3d3f42 -0.832294px 1.81859px 0px, #3d3f42 -1.60229px 1.19694px 0px, #3d3f42 -1.97998px 0.28224px 0px, #3d3f42 -1.87291px -0.701566px 0px, #3d3f42 -1.30729px -1.5136px 0px, #3d3f42 -0.421592px -1.95506px 0px, #3d3f42 0.567324px -1.91785px 0px, #3d3f42 1.41734px -1.41108px 0px, #3d3f42 1.92034px -0.558831px 0px;\r\n}\r\n\r\n.itemCounter.hidden {\r\n    display: none;\r\n}\r\n\r\n#ryn-topright-hud { position: fixed; top: 12px; right: 12px; z-index: 9999; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; pointer-events: none; font-family: \"Hammersmith One\", Arial, sans-serif; }\r\n.ryn-hud-row { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 160px; }\r\n.ryn-hud-bar-bg { width: 160px; height: 8px; background: rgba(0,0,0,0.55); border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }\r\n.ryn-hud-bar-fill { height: 100%; border-radius: 4px; transition: width 0.15s ease; }\r\n#ryn-hud-hp-fill { background: linear-gradient(90deg,#cc5151,#e05151); }\r\n#ryn-hud-r1-fill { background: linear-gradient(90deg,#f0b429,#f0c060); }\r\n#ryn-hud-r2-fill { background: linear-gradient(90deg,#51cc88,#60e0a0); }\r\n.ryn-hud-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.6); text-shadow: 0 1px 3px rgba(0,0,0,0.9); }\r\n.ryn-hud-val { font-size: 11px; color: rgba(255,255,255,0.9); text-shadow: 0 1px 4px rgba(0,0,0,0.9); letter-spacing: 0.05em; }\r\n\r\n/* The readout, on one line across the top of the screen. It used to be a\r\n   column tucked into the bottom left, above where the action bar ends; it is\r\n   now a single row centred at the top, which is the one strip of the screen\r\n   nothing else of the game's lives in permanently.\r\n\r\n   White rather than the old lilac, small, unbolded, and with nothing behind\r\n   it: no shadow, no outline, no plate. It reads off the map directly. */\r\n#rynStats {\r\n    position: absolute;\r\n    top: 6px;\r\n    left: 50%;\r\n    transform: translateX(-50%);\r\n    z-index: 9;\r\n    pointer-events: none;\r\n\r\n    display: flex;\r\n    flex-direction: row;\r\n    align-items: baseline;\r\n    gap: 7px;\r\n    white-space: nowrap;\r\n\r\n    color: #ffffff;\r\n    font: 12px \"Hammersmith One\", Arial, sans-serif;\r\n    letter-spacing: 0.03em;\r\n}\r\n\r\n/* The separators are drawn by the stylesheet rather than sat in the markup,\r\n   so no field carries a bar it would still draw if the one before it were\r\n   ever removed. Dimmer than the text around it: it is punctuation. */\r\n#rynStats > span + span::before {\r\n    content: \"|\";\r\n    margin-right: 7px;\r\n    color: rgba(255,255,255,0.34);\r\n}\r\n\r\n.hidden {\r\n    display: none!important;\r\n}";
@@ -9494,7 +10077,7 @@ window.grbtp = 35;
         const owner = PlayerManager.playerData.get(object.ownerID) || PlayerManager.createPlayer({
           id: object.ownerID
         });
-        object.seenPlacement = this.inPlacementRange(object);
+        object.seenPlacement = object._rynRestored !== true && this.inPlacementRange(object);
         owner.handleObjectPlacement(object);
         // Something an assigned player just built, for their escort to build
         // with. Deduplicated there: every bot near them receives the same H.
@@ -9521,6 +10104,11 @@ window.grbtp = 35;
         const isResource = buffer[i + 6] == null || Items[buffer[i + 6]] === void 0;
         const data = [ buffer[i + 0], buffer[i + 1], buffer[i + 2], buffer[i + 3], buffer[i + 4] ];
         const object = isResource ? new Resource(...data, buffer[i + 5]) : new PlayerObject(...data, buffer[i + 6], buffer[i + 7]);
+        // Put back from a resume snapshot, not placed now: nothing that reacts
+        // to a fresh placement next to you should fire for it.
+        if (this._restoring) {
+          object._rynRestored = true;
+        }
         // Seven of the server's eight fields are already on the object — id,
         // position, angle, scale, type and owner — and none of them change
         // after creation. The sixth is the only one this client has no use for
@@ -9533,6 +10121,14 @@ window.grbtp = 35;
         this.insertObject(object);
       }
     }
+    // The server's own 8-field "H" row for an object, rebuilt from the object
+    // (createObjects keeps the one field the object does not: _rynType5).
+    static row(object, out) {
+      const pos = object.pos.current;
+      const isPlayerObject = object._rynType5 !== void 0;
+      out.push(object.id, pos.x, pos.y, object.angle, object.scale, isPlayerObject ? object._rynType5 : object.type, isPlayerObject ? object.type : null, isPlayerObject ? object.ownerID : -1);
+    }
+    _restoring=false;
     deletedObjects=new Set;
     isDestroyedObject() {
       return this.deletedObjects.size !== 0;
@@ -10244,6 +10840,11 @@ window.grbtp = 35;
       this.y = clamp(this.y, this.scale, Config_default.mapScale - this.scale);
     }
   }
+  // How long an upgrade RYN sent waits for the server's "V" before it is
+  // taken to have been refused (ClientPlayer.syncLoadout).
+  const RYN_LOADOUT_PENDING_MS = 1500;
+  // How old a resume snapshot may be (PlayerClient._ownSpawn).
+  const RYN_RESUME_MAX_AGE_MS = 18e4;
   class ClientPlayer extends Player_default {
     inventory={};
     weaponXP=[ {}, {} ];
@@ -10270,6 +10871,9 @@ window.grbtp = 35;
     underTurretAttack=false;
     upgradeOrder=[];
     upgradeIndex=0;
+    // When each upgrade RYN sent went out, items [0] and weapons [1], until the
+    // server's "V" for it arrives (syncLoadout).
+    _loadoutPending=[ [], [] ];
     joinRequests=[];
     killedSomeone=false;
     actuallyKilledSomeone=false;
@@ -10493,7 +11097,20 @@ window.grbtp = 35;
     playerInit(id) {
       this.id = id;
       const {PlayerManager: PlayerManager} = this.client;
-      if (!PlayerManager.playerData.has(id)) {
+      /* The id is this player's, whatever is already filed under it. Your own
+       * buildings ("H") and your leaderboard row ("G") each file a stand-in
+       * Player for their owner's sid, and a player the server re-attaches
+       * after a refresh can be sent both before "C" and "D". Keeping the
+       * stand-in left every update moving it instead of you: RYN ran with you
+       * frozen at 0,0 and no weapon. What it learned — the buildings it owns —
+       * comes across. */
+      const held = PlayerManager.playerData.get(id);
+      if (held !== this) {
+        if (held !== void 0 && held.objects instanceof Set) {
+          for (const object of held.objects) {
+            this.objects.add(object);
+          }
+        }
         PlayerManager.playerData.set(id, this);
       }
       // A connection learning its own sid changes who is friendly, and it can
@@ -10575,6 +11192,7 @@ window.grbtp = 35;
     }
     upgradeItem(id) {
       this.upgradeOrder.push(id);
+      this._loadoutPending[id < 16 ? 1 : 0].push(Date.now());
       const {isOwner: isOwner, clients: clients} = this.client;
       if (isOwner) {
         for (const client2 of clients) {
@@ -10687,6 +11305,89 @@ window.grbtp = 35;
         XP.max = -1;
       }
     }
+    /* What the server says you are carrying ("V"): the weapons by slot, or
+     * the item list. The game's bar is drawn from this frame alone; RYN used
+     * to ignore it and track the loadout only through its own upgrade clicks,
+     * which a player the server re-attaches after a refresh never makes — RYN
+     * then fought with the age-1 kit while you held your real one. */
+    syncLoadout(list, isWeapons) {
+      if (!Array.isArray(list)) {
+        return;
+      }
+      // RYN changes the loadout itself the moment it sends an upgrade, and the
+      // server answers each one with a "V" of its own. While a later answer is
+      // still on its way, this one describes a loadout RYN has already moved
+      // past (two upgrades sent back to back, as the insta modules do), so it
+      // is not applied.
+      const pending = this._loadoutPending[isWeapons ? 1 : 0];
+      const now = Date.now();
+      while (pending.length !== 0 && now - pending[0] > RYN_LOADOUT_PENDING_MS) {
+        pending.shift();
+      }
+      if (pending.length !== 0) {
+        pending.shift();
+        if (pending.length !== 0) {
+          return;
+        }
+      }
+      if (isWeapons) {
+        const slots = [ null, null ];
+        for (const id of list) {
+          const weapon = Weapons[id];
+          if (weapon !== void 0 && (weapon.itemType === 0 || weapon.itemType === 1)) {
+            slots[weapon.itemType] = id;
+          }
+        }
+        if (slots[0] === null) {
+          return;
+        }
+        for (let type = 0; type < 2; type++) {
+          if (this.inventory[type] === slots[type]) {
+            continue;
+          }
+          this.inventory[type] = slots[type];
+          // A different weapon in the slot: its XP and reload are its own, as
+          // after an upgrade (ModuleHandler._upgradeItem).
+          const XP = this.weaponXP[type];
+          XP.current = 0;
+          XP.max = -1;
+          if (slots[type] !== null) {
+            try {
+              this.client._ModuleHandler.staticModules.reloading.updateMaxReload(type);
+            } catch (_) {}
+          }
+        }
+        return;
+      }
+      for (let type = 2; type <= 9; type++) {
+        this.inventory[type] = null;
+      }
+      for (const id of list) {
+        const item = Items[id];
+        if (item !== void 0) {
+          this.inventory[item.itemType] = id;
+        }
+      }
+    }
+    // The part of the player that belongs to one connection (see
+    // PlayerClient._newConnection); reset(true) has done the loadout.
+    _resetConnection() {
+      this.id = -1;
+      this.age = 1;
+      this.upgradeAge = 1;
+      this.teammates.clear();
+      this.clanMembers.clear();
+      this.clanMembersAt = 0;
+      this.clanName = null;
+      this.isLeader = false;
+      this.itemCount.clear();
+      this.objects.clear();
+      this.joinRequests.length = 0;
+      this.teleported = false;
+      this.previousHealth = 100;
+      this.currentHealth = 100;
+      this.tempHealth = 100;
+    }
     spawn(customName) {
       const base = customName || this.client._botCustomName || window.localStorage.getItem("moo_name") || "";
       const skin = this.client.isOwner ? Number(window.localStorage.getItem("skin_color")) || 0 : Math.floor(Math.random() * Config_default.skinColors.length);
@@ -10737,6 +11438,8 @@ window.grbtp = 35;
       this.wasDead = true;
       this.upgradeOrder.length = 0;
       this.upgradeIndex = 0;
+      this._loadoutPending[0].length = 0;
+      this._loadoutPending[1].length = 0;
       if (first) {
         return;
       }
@@ -11810,9 +12513,18 @@ window.grbtp = 35;
       }
       return null;
     }
-    createPlayer({socketID: socketID, id: id, nickname: nickname, health: health, skinID: skinID}) {
+    createPlayer({socketID: socketID, id: id, nickname: nickname, health: health, skinID: skinID, isYou: isYou}) {
       const {myPlayer: myPlayer} = this.client;
-      if (socketID === this.client.clientID && myPlayer.id === -1) {
+      /* The add-player frame says whether it is you, and the game goes by that
+       * alone. A player resumed after a refresh (the 2025 server keeps you on
+       * the server you left) still carries the socket id of the connection it
+       * was made on, not this one's, and may come before setupGame: matched by
+       * socket id alone it was never yours, RYN never put you in the game, and
+       * you stood there unable to move. */
+      if (isYou && myPlayer.id !== id) {
+        if (myPlayer.id !== -1 && this.playerData.get(myPlayer.id) === myPlayer) this.playerData.delete(myPlayer.id);
+        myPlayer.playerInit(id);
+      } else if (socketID === this.client.clientID && myPlayer.id === -1) {
         myPlayer.playerInit(id);
       }
       const player = this.playerData.get(id) || new Player_default(this.client);
@@ -12498,10 +13210,23 @@ window.grbtp = 35;
           _installGameSocketGate(socket);
         } catch (_) {}
       }
-      socket.addEventListener("message", event => this.handleMessage(event));
+      // A socket this manager has moved on from is not read any more: a frame
+      // from the old connection arriving after the new one opened would be
+      // applied to the new server's world.
+      socket.addEventListener("message", event => {
+        if (this.socket === socket) {
+          this.handleMessage(event);
+        }
+      });
       socket.addEventListener("close", event => {
         const {code: code, reason: reason, wasClean: wasClean} = event;
         Logger.warn(`WebSocket Closed: ${code}, '${reason}', ${wasClean}`);
+        // The bundle drops its session on close (`pe=null`); RYN's handle on
+        // it goes with it, so nothing is signed or un-masked with a dead key
+        // before the next connection's io-init.
+        if (this.socket === socket && this.client.isOwner) {
+          this.client._gameCrypto = null;
+        }
       });
       socket.addEventListener("error", () => {
         Logger.error("WebSocket Error");
@@ -12509,6 +13234,24 @@ window.grbtp = 35;
     }
     pingTimeout;
     minPingTime=Infinity;
+    // Per-connection state, for PlayerClient._newConnection. The next io-init
+    // starts the tick clock and the ping again.
+    _resetConnection() {
+      clearTimeout(this._tickWatch);
+      this._tickWatch = null;
+      clearTimeout(this.pingTimeout);
+      this.proto2025 = null;
+      this._seenPlayers.clear();
+      this._seenAnimals.clear();
+      this.PacketQueue.length = 0;
+      this.action = null;
+      this._sendsEmptyTicks = false;
+      this._emptyRun = 0;
+      this._emptyAt = 0;
+      this._realAt = 0;
+      this._synthAt = 0;
+      this._synthRun = 0;
+    }
     handlePing() {
       this.pong = Math.round(performance.now() - this.startPing);
       if (Number.isFinite(this.pong) && this.pong >= 0 && this.pong < this.minPingTime) {
@@ -12882,6 +13625,18 @@ window.grbtp = 35;
           const seed = args[1] >>> 0;
           const keyHex = args[2];
           const pinned = args[4] === 1;
+          /* A pinned session needs the build's mixKey and BUILD_SALT. Without
+           * them the key and the opcode tables come out wrong, the server
+           * refuses every frame, and the bot just disappeared. A bot says why
+           * and leaves instead. (The main player's own session is the
+           * bundle's; this copy is only RYN's view of it.) */
+          if (pinned && enc && (typeof enc.mixKey !== "function" || enc.salt == null) && !this.client.isOwner) {
+            rynBotNotice("This bot could not load the game's protocol module (moomoo-protocol), so it cannot sign in to a protected server. Reload the page and add it again.");
+            try {
+              this.socket.close();
+            } catch (_) {}
+            return;
+          }
           if (enc && enc.jt !== undefined && keyHex !== undefined && args[1] !== undefined) {
             const baseKey = enc.Ro(keyHex);
             const key = pinned && enc.mixKey ? enc.mixKey(baseKey, seed) : baseKey;
@@ -12947,7 +13702,9 @@ window.grbtp = 35;
         break;
 
        case "C":
-        myPlayer.playerInit(temp[1]);
+        // Already put in the game by an add-player frame that said it was you
+        // (a resumed player): that player is you, whatever sid this says.
+        if (!(myPlayer.inGame && myPlayer.id !== -1)) myPlayer.playerInit(temp[1]);
         break;
 
        // The server letting this connection go, and why: "kicked", "server is
@@ -12990,12 +13747,16 @@ window.grbtp = 35;
             id: data2[1],
             nickname: data2[2],
             health: data2[6],
-            skinID: data2[9]
+            skinID: data2[9],
+            isYou: !!temp[2]
           });
           // Kept verbatim so the entity's world can be replayed into the game
           // bundle on a possession switch. It is the server's own payload, so
           // the replay is exact rather than reconstructed.
           player._rynSpawnRaw = data2;
+          if (temp[2] && this.client.isOwner) {
+            this.client._ownSpawn(data2[0], data2[1]);
+          }
           // A sid can be handed to a new player; their appearance is their own.
           this._seenPlayers.delete(data2[1]);
           // A connection's first "D" is an arrival; every later one is that
@@ -13196,6 +13957,10 @@ window.grbtp = 35;
 
        case "U":
         myPlayer.newUpgrade(temp[1], temp[2]);
+        break;
+
+       case "V":
+        myPlayer.syncLoadout(temp[1], !!temp[2]);
         break;
 
        case "S":
@@ -33645,6 +34410,134 @@ window.grbtp = 35;
     spawn() {
       this.myPlayer.spawn();
     }
+    /* A new game connection on the same page.
+     *
+     * The 3d3599b6 game no longer reloads the page to come back after a drop
+     * or to change server: it closes the socket, clears its own world (Gs) and
+     * opens another. This client lives for the whole page, so the next
+     * connection used to start with the last one's state — its crypto session
+     * (the new io-init was un-masked with the old key and never read, so the
+     * connection id, the tick clock and the ping all stayed on the old one),
+     * its player id and "in game" flag, its players, buildings and owned hats,
+     * and Possession kept topping the game up with the old world's buildings.
+     *
+     * Everything reset here belongs to one connection. Settings, bots, the
+     * lobby and the session totals (kills, deaths) are the page's and stay. */
+    _newConnection() {
+      if (!this.isOwner) {
+        return;
+      }
+      // What this connection knew, in case the next one is the server
+      // re-attaching the same player (see _ownSpawn).
+      this._rynPrevWorld = this._worldSnapshot();
+      this._rynSelfSock = null;
+      // The screen first: whatever it was showing is about to be cleared.
+      try {
+        if (Possess !== null && Possess.owner === this) {
+          Possess._resetConnection();
+        }
+      } catch (_) {}
+      this._gameCrypto = null;
+      this.connectSuccess = false;
+      this.clientID = null;
+      this.SocketManager._resetConnection();
+      this.ObjectManager = new ObjectManager_default(this);
+      this.PlayerManager = new PlayerManager_default(this);
+      this.ProjectileManager = new ProjectileManager_default(this);
+      this.EnemyManager = new EnemyManager_default(this);
+      this.LeaderboardManager = new LeaderboardManager_default(this);
+      this.myPlayer.reset(true);
+      this.myPlayer._resetConnection();
+      this.InputHandler.reset();
+      // Owned hats are per player on a server. A resumed player is told what
+      // it owns again by the "5" frames; a new one owns nothing.
+      const ModuleHandler = this._ModuleHandler;
+      for (let t = 0; t < 2; t++) {
+        ModuleHandler.bought[t].clear();
+        const store = ModuleHandler.store[t];
+        store.lastUtility = null;
+        store.current = 0;
+        store.best = 0;
+        store.actual = -1;
+        store.last = 0;
+        const shop = StoreHandler_default.store[t];
+        shop.previous = -1;
+        shop.current = -1;
+        shop.list.clear();
+      }
+      try {
+        GameUI_default.reset();
+      } catch (_) {}
+      delete this._rynMirror;
+    }
+    /* Buildings and resources after a resume.
+     *
+     * The server sends each object to a player once and remembers it under
+     * the id of the connection that player was created on. A player it
+     * re-attaches after a refresh or a drop keeps that id, so nothing it was
+     * sent before is sent again: everything that was around you came back
+     * solid but undrawn. So the objects this client knew are kept — in memory
+     * across a reconnect, in sessionStorage across a refresh — and put back
+     * when the server is seen re-attaching that same player. Possess._topUp
+     * then puts the ones around you on screen, as it does for anything known
+     * but not drawn. */
+    _rynSelfSock=null;
+    _rynPrevWorld=null;
+    _worldSnapshot() {
+      const socket = this.SocketManager.socket;
+      if (!this.myPlayer.inGame || this.myPlayer.id === -1 || this._rynSelfSock === null || socket === null) {
+        return null;
+      }
+      let host = "";
+      try {
+        host = new URL(socket.url).host;
+      } catch (_) {}
+      const rows = [];
+      for (const object of this.ObjectManager.objects.values()) {
+        ObjectManager_default.row(object, rows);
+      }
+      return {
+        host: host,
+        sid: this.myPlayer.id,
+        sock: this._rynSelfSock,
+        at: Date.now(),
+        rows: rows
+      };
+    }
+    // Your own add-player frame on this connection.
+    _ownSpawn(socketID, sid) {
+      const prev = this._rynPrevWorld;
+      this._rynPrevWorld = null;
+      this._rynSelfSock = socketID;
+      if (prev === null || typeof prev !== "object" || !Array.isArray(prev.rows)) {
+        return;
+      }
+      // The same player, re-attached under the id it was created on: a new
+      // or respawned player is created on this connection and carries its id.
+      if (prev.sid !== sid || prev.sock !== socketID || socketID === this.clientID || Date.now() - prev.at > RYN_RESUME_MAX_AGE_MS) {
+        return;
+      }
+      try {
+        if (prev.host && new URL(this.SocketManager.socket.url).host !== prev.host) {
+          return;
+        }
+      } catch (_) {}
+      const om = this.ObjectManager;
+      const rows = [];
+      for (let i = 0; i + 7 < prev.rows.length; i += 8) {
+        if (!om.objects.has(prev.rows[i])) {
+          for (let k = 0; k < 8; k++) {
+            rows.push(prev.rows[i + k]);
+          }
+        }
+      }
+      om._restoring = true;
+      try {
+        om.createObjects(rows);
+      } catch (_) {} finally {
+        om._restoring = false;
+      }
+    }
   }
   const PlayerClient_default = PlayerClient;
   const UI = new class {
@@ -34540,6 +35433,40 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 }
 /* members-only and not signed in: still listed, visibly not joinable */
 .rs-row.rs-locked { opacity: .5; }
+/* members-only, said on the row itself: bots join as guests and cannot go */
+.rs-tag {
+    flex: 0 0 auto;
+    height: 18px;
+    padding: 0 7px;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    border: 1px solid rgba(217,163,171,0.45);
+    background: rgba(217,163,171,0.10);
+    color: #E7BCC3;
+    font-family: var(--rl-mono);
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+.rs-tag[hidden] { display: none; }
+.rs-pref {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-top: 9px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--rl-tx-3);
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+}
+.rs-pref[hidden] { display: none; }
+.rs-pref input { width: 14px; height: 14px; margin: 0; accent-color: #8E76CE; cursor: pointer; }
+.rs-pref:hover { color: var(--rl-tx-1); }
 
 .rs-id { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
 .rs-name {
@@ -35118,7 +36045,8 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     isHotkeyInput(target) {
       return target instanceof this.frame.window.HTMLButtonElement && target.classList.contains("hotkeyInput") && target.hasAttribute("id");
     }
-    handleCheckboxToggle(id, checked) {
+    // `byUser`: the box was just clicked, not set up from the saved settings.
+    handleCheckboxToggle(id, checked, byUser = false) {
       switch (id) {
        case "_menuTransparency":
         {
@@ -35166,6 +36094,16 @@ html.ryn-in-lobby .ryn-v2-wrapper {
        case "_botsAutoAssassin":
         break;
 
+       case "_preferBotServers":
+        // Only on a click: applied at load it would undo a server you had
+        // picked yourself.
+        if (byUser) {
+          try {
+            rynApplyBotServerPref(checked);
+          } catch (_) {}
+        }
+        break;
+
       }
     }
     attachCheckboxes() {
@@ -35182,7 +36120,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
           if (id in Settings_default) {
             Settings_default[id] = checkbox.checked;
             SaveSettings();
-            this.handleCheckboxToggle(id, checkbox.checked);
+            this.handleCheckboxToggle(id, checkbox.checked, true);
           } else {
             Logger.error(`attachCheckboxes Error: Property "${id}" was deleted from settings`);
           }
@@ -35472,8 +36410,27 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       const {addBotDynamic: addBotDynamic} = this.getElements();
       if (addBotDynamic) addBotDynamic.click();
     }
+    // The same name again, through the same row and Connect button a press
+    // makes: what a failed bot's "Try again" does.
+    _retryBot(name) {
+      const doc = this.frame && this.frame.document;
+      const add = doc && doc.querySelector("#add-bot-dynamic");
+      if (!add) return;
+      add.click();
+      const inputs = doc.querySelectorAll('[id^="dyn-bot-input-"]');
+      const buttons = doc.querySelectorAll('[id^="dyn-bot-btn-"]');
+      const input = inputs[inputs.length - 1];
+      const button = buttons[buttons.length - 1];
+      if (input && name) input.value = name;
+      if (button) button.click();
+    }
     handleBotCreation(button, nameInputId = "bot-name-input", withDelay = false, rowId = null) {
       button.onclick = async () => {
+        // Nothing to join, a members-only server, a build mismatch: each is
+        // said on screen (rynBotPreflight). This used to return silently.
+        if (!rynBotPreflight()) {
+          return;
+        }
         const ws = client.SocketManager.socket;
         if (ws === null) {
           return;
@@ -35506,24 +36463,51 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         // createSocket's `fresh` flag was written for: a newly minted token
         // instead of a pooled one, through the same verification as always. It
         // was never wired up, so a rejected pooled token simply lost the bot.
-        const attempt = async tryNo => {
+        const dropRow = () => {
+          if (rowId) {
+            const rowEl = this.frame.document.getElementById(rowId);
+            if (rowEl && !rowEl.dataset.botPlayerId) rowEl.remove();
+          }
+        };
+        // The bot's own card (RynCF.attempt) is up from the press: what it is
+        // waiting on, the Cloudflare check inside it when one is drawn, a
+        // cancel, and the reason when it does not get in. The one retry below
+        // keeps the same card.
+        const attempt = async (tryNo, att = null) => {
+          if (att === null || att.closed) {
+            att = RynCF.attempt(botName, {
+              text: "Waiting for a connection slot…"
+            });
+            att.onCancel(() => {
+              this.removeBotConnecting();
+              dropRow();
+            });
+          }
           // Wait for a handshake slot (RynEntry): a full-fleet press opens its
           // sockets a few at a time instead of all in one frame.
           const slot = await RynEntry.acquire();
+          if (att.cancelled) {
+            RynEntry.release(slot);
+            return;
+          }
           if (rowGone() || client.SocketManager.socket === null) {
             RynEntry.release(slot);
             this.removeBotConnecting();
+            att.fail(rowGone() ? "Its row was removed." : "Your own connection closed before this bot started.");
             return;
           }
           let socket;
           try {
-            socket = await createSocket_default(ws.url, tryNo > 0, botName);
+            socket = await createSocket_default(ws.url, tryNo > 0, botName, att);
           } catch (e) {
             RynEntry.release(slot);
             this.removeBotConnecting();
-            if (rowId) {
-              const rowEl = this.frame.document.getElementById(rowId);
-              if (rowEl && !rowEl.dataset.botPlayerId) rowEl.remove();
+            dropRow();
+            if (att.cancelled || e && e.message === "cancelled") {
+              att.close();
+            } else {
+              const reason = e && (e.rynReason || e.message) || "it did not get a connection";
+              att.fail(reason, e && e.rynFinal ? null : () => this._retryBot(botName));
             }
             return;
           }
@@ -35533,29 +36517,42 @@ html.ryn-in-lobby .ryn-v2-wrapper {
           socket.addEventListener("connected", () => {
             verified = true;
             RynEntry.release(slot);
+            att.ok("In — spawning");
           });
           socket.addEventListener("close", event => {
             RynEntry.release(slot);
             this.removeBotConnecting();
-            try {
-              const why = event && RYN_CLOSE_REASONS[event.code];
-              if (why) rynBotNotice("Bot " + (verified ? "disconnected" : "refused") + ": " + why);
-            } catch (_) {}
+            if (att.cancelled) {
+              dropRow();
+              return;
+            }
+            const why = event && RYN_CLOSE_REASONS[event.code];
+            if (verified) {
+              try {
+                if (why) rynBotNotice("Bot disconnected: " + why);
+              } catch (_) {}
+            }
+            if (event && event.code === 4003) {
+              try {
+                rynMembersNotice(rynServerOfHost(new URL(ws.url).host));
+              } catch (_) {}
+            }
             // Another token cannot change a new build, a members-only server
             // or the wrong site; only a refused ticket or a plain drop is
             // worth the one retry.
             const final = event && (event.code === 4002 || event.code === 4003 || event.code === 4004);
             if (!final && !verified && tryNo === 0 && !rowGone() && client.SocketManager.socket !== null && client.clients.size < RYN_FLEET_CAP) {
               this.addBotConnecting();
+              att.say("The server closed before answering" + (why ? " (" + why + ")" : "") + " — trying again with a fresh check…", "bad");
               setTimeout(() => {
-                attempt(1);
+                if (!att.cancelled) attempt(1, att);
               }, RYN_ENTRY_RETRY_MS);
               return;
             }
-            if (rowId) {
-              const rowEl = this.frame.document.getElementById(rowId);
-              if (rowEl && !rowEl.dataset.botPlayerId) rowEl.remove();
+            if (!verified) {
+              att.fail("Refused by the server: " + (why || "the connection closed before it answered" + (event && event.code ? " (code " + event.code + ")" : "")), final ? null : () => this._retryBot(botName));
             }
+            dropRow();
           });
           socket.onopen = () => {
             const player = new PlayerClient_default(client);
@@ -36227,6 +37224,8 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         bits.push("stopped");
       } else if (!running) {
         bits.push("paused until you are in the game");
+      } else if (TokenPool.holding) {
+        bits.push("last check failed — waiting before the next (" + (RynCF.lastError || "Cloudflare") + ")");
       }
       if (minting > 0) {
         bits.push(minting + " solving");
@@ -37280,6 +38279,10 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     _markRynPlayers: true,
     // Tokens the pool keeps ready (Bots → Spawn, shown with !tk).
     _tokenPoolTarget: 4,
+    // Signed in: the game's server pick prefers servers that are not
+    // members-only, so bots (guests) can join you. A server you pick
+    // yourself is still yours. No effect for a guest.
+    _preferBotServers: true,
     // The Crab King's health under it, like any animal's, instead of the
     // game's bar across the top of the screen.
     _bossHealthUnder: true,
@@ -39456,8 +40459,15 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         mapDisplay: querySelector("#mapDisplay")
       };
     }
+    /* The colour index goes to the game as a number. The old "toString" skin
+     * (index 10) is no longer one the 2025 game knows: it keeps the index for
+     * the spawn packet as it was given and only checks it at load, so a
+     * string went to the server as the skin, and its own save of it broke
+     * RYN's next start (CustomStorage.get). Anything that is not one of the
+     * game's colours is colour 0. */
     selectSkinColor(skin) {
-      const skinValue = skin === 10 ? "toString" : skin;
+      const n = typeof skin === "number" ? skin : Number(skin);
+      const skinValue = Number.isInteger(n) && n >= 0 && n < Config_default.skinColors.length ? n : 0;
       CustomStorage.set("skin_color", skinValue);
       const selectSkin = getTargetValue(window, "selectSkinColor");
       if (selectSkin !== void 0) {
@@ -39466,8 +40476,8 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       return skinValue;
     }
     createSkinColors(host) {
-      const skin_color = CustomStorage.get("skin_color") || 0;
-      const index = typeof skin_color === "number" && skin_color >= 0 && skin_color < Config_default.skinColors.length ? skin_color : 0;
+      const skin_color = Number(CustomStorage.get("skin_color")) || 0;
+      const index = Number.isInteger(skin_color) && skin_color >= 0 && skin_color < Config_default.skinColors.length ? skin_color : 0;
       const skinHolder = document.createElement("div");
       skinHolder.id = "ryn-skin-holder";
       let prevIndex = index;
@@ -39755,28 +40765,49 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         } catch (e) {}
       });
 
-      /* Sign out: the game's own link, which asks FRVR to log out and then
-       * tells the whole page. If FRVR never answers, the page would sit on
-       * "signed in" for good — the stuck sign-out — so if the game has not
-       * shown it signed out within six seconds, the page is reloaded: FRVR's
-       * session is gone by then, and a fresh page comes up as a guest. */
+      /* Sign out: what the game's own link does — FRVR logs out, and the game
+       * hears it through the status listener it gave FRVR, and shows Sign in.
+       *
+       * The link itself cannot be pressed from here. The game makes it with
+       * generateElement, which wraps its onclick in the trusted-click guard
+       * (the checkTrusted hook only reaches the copy on the utils object), so
+       * a click passed on from this button is ignored: nothing happened, and
+       * six seconds later the page was reloaded still signed in.
+       *
+       * If the game has not shown the sign-out once FRVR is done, the page is
+       * reloaded; FRVR's session is gone by then, so it comes up as a guest. */
       let leaving = 0;
-      signOut.addEventListener("click", () => {
-        if (leaving) return;
-        const link = gameRow !== null ? gameRow.querySelector("a") : null;
-        if (link === null) return;
-        signOut.classList.add("rl-busy");
-        signOut.querySelector(".rl-pill-label").textContent = "Signing out…";
+      const reloadIfStillIn = ms => {
+        clearTimeout(leaving);
         leaving = setTimeout(() => {
           if (shownByGame(gameRow)) {
             try {
               location.reload();
             } catch (e) {}
           }
-        }, 6e3);
+        }, ms);
+      };
+      signOut.addEventListener("click", () => {
+        if (leaving) return;
+        const link = gameRow !== null ? gameRow.querySelector("a") : null;
+        let auth = null;
         try {
-          link.click();
+          auth = window.FRVR && window.FRVR.auth;
         } catch (e) {}
+        const canLogout = !!auth && typeof auth.logout === "function";
+        if (!canLogout && link === null) return;
+        signOut.classList.add("rl-busy");
+        signOut.querySelector(".rl-pill-label").textContent = "Signing out…";
+        reloadIfStillIn(15e3);
+        if (!canLogout) {
+          try {
+            link.click();
+          } catch (e) {}
+          return;
+        }
+        Promise.resolve().then(() => auth.logout()).catch(() => {}).then(() => {
+          if (leaving) reloadIfStillIn(1500);
+        });
       });
 
       const accountName = () => {
@@ -40126,6 +41157,24 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       titleRow.appendChild(online);
       head.appendChild(titleRow);
       head.appendChild(el("div", "rs-note", "Live player counts, refreshed every five seconds"));
+      // Signed in only: a guest is never put on a members-only server.
+      const pref = el("label", "rs-pref");
+      pref.hidden = true;
+      pref.title = "Bots join as guests, and members-only servers turn guests away";
+      const prefBox = doc.createElement("input");
+      prefBox.type = "checkbox";
+      prefBox.id = "ryn-prefer-bots";
+      prefBox.checked = Settings_default._preferBotServers !== false;
+      prefBox.addEventListener("change", () => {
+        Settings_default._preferBotServers = prefBox.checked;
+        SaveSettings();
+        try {
+          rynApplyBotServerPref(prefBox.checked);
+        } catch (_) {}
+      });
+      pref.appendChild(prefBox);
+      pref.appendChild(doc.createTextNode("Prefer servers bots can join"));
+      head.appendChild(pref);
 
       const filters = el("div", "rs-filters");
       head.appendChild(filters);
@@ -40472,15 +41521,19 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         const count = el("span", "rs-count");
         const meter = el("span", "rs-meter");
         const fill = el("i");
+        const tag = el("span", "rs-tag");
+        tag.hidden = true;
         meter.appendChild(fill);
         row.appendChild(id);
+        row.appendChild(tag);
         row.appendChild(count);
         row.appendChild(meter);
         row._parts = {
           name: name,
           region: region,
           count: count,
-          fill: fill
+          fill: fill,
+          tag: tag
         };
         row.addEventListener("click", () => choose(server.value));
         return row;
@@ -40506,7 +41559,17 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         const locked = server.joinable === false;
         if (row.classList.contains("rs-locked") !== locked) {
           row.classList.toggle("rs-locked", locked);
-          row.title = locked ? "Members only: sign in to join this server" : "";
+        }
+        // Members-only, on the row: signed in you can play there, but your
+        // bots (guests) cannot follow you.
+        const tagText = server.members ? signedIn ? "Members · no bots" : "Members" : "";
+        if (parts.tag.textContent !== tagText) {
+          parts.tag.textContent = tagText;
+          parts.tag.hidden = !server.members;
+        }
+        const title = locked ? "Members only: sign in to join this server" : server.members ? "Members only: bots join as guests and cannot join this server" : "";
+        if (row.title !== title) {
+          row.title = title;
         }
         if (parts.region.textContent !== under) {
           parts.region.textContent = under;
@@ -40534,7 +41597,16 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         }
       };
 
+      let signedIn = false;
       const render = model => {
+        signedIn = rynSignedIn();
+        if (pref.hidden === signedIn) {
+          pref.hidden = !signedIn;
+        }
+        const prefOn = Settings_default._preferBotServers !== false;
+        if (prefBox.checked !== prefOn) {
+          prefBox.checked = prefOn;
+        }
         const regions = [];
         const seen = new Set();
         for (let i = 0; i < model.length; i++) {
@@ -41003,12 +42075,9 @@ html.ryn-in-lobby .ryn-v2-wrapper {
               console.warn("[RYN] item bar reload ring:", e4);
             }
           }
-          if (ringNote === null) {
-            ringNoteEl.style.display = "none";
-          } else {
-            ringNoteEl.style.display = "block";
-            ringNoteEl.textContent = "RELOAD RING: " + ringNote;
-          }
+          // Not shown on screen: a missing ring explains itself in the console
+          // (above) and does not need a line over the game.
+          ringNoteEl.style.display = "none";
           try {
             var ac = AC();
             if (!window.client || !ac || !ac.myPlayer || !ac.myPlayer.inGame) {
@@ -41312,7 +42381,15 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         configurable: true
       });
     }
+    // Called from every io-init, and a page can now have several connections:
+    // the buttons and the action bar it wraps are the page's and outlive them,
+    // so they are wrapped and given counters once.
+    _gameLoaded=false;
     loadGame() {
+      if (this._gameLoaded) {
+        return;
+      }
+      this._gameLoaded = true;
       this.attachItemCount();
       const {storeButton: storeButton, allianceButton: allianceButton, mapDisplay: mapDisplay} = this.getElements();
       const that = this;
@@ -41399,14 +42476,27 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       handleClick(0);
       handleClick(1);
     }
+    // The game's own "you are playing" state: its HUD is up and its menu is
+    // put away. RYN's inGame can trail it by a frame or two around a spawn
+    // and a resume.
+    gameShowsHud() {
+      const menu = document.getElementById("mainMenu");
+      return document.body !== null && document.body.classList.contains("hud") || menu !== null && menu.style.display === "none";
+    }
     clientSpawn() {
+      // Play pressed while the game is running does not spawn anything: the
+      // game puts up its "Connecting..." screen, which hides the HUD, and as
+      // you are already in the game nothing ever brings it back.
+      if (this.gameShowsHud()) {
+        return;
+      }
       const {enterGame: enterGame} = this.getElements();
       enterGame.click();
     }
     handleEnter(event) {
       const {allianceInput: allianceInput, allianceButton: allianceButton} = this.getElements();
       const active = document.activeElement;
-      if (AC().myPlayer.inGame) {
+      if (AC().myPlayer.inGame || this.gameShowsHud()) {
         if (active === allianceInput) {
           allianceButton.click();
         } else {
@@ -41471,6 +42561,10 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     hookCount=0;
     hookAttempts=0;
     ANY_LETTER="(?:[^\\x00-\\x7F-]|\\$|\\w)";
+    // A decoded string i(242,"knGx") or a literal "ay"; a property key is one
+    // or more of them joined by +, in brackets — or a plain .name.
+    OB_STR='(?:\\w+\\(\\d+,"(?:[^"\\\\]|\\\\.)*"\\)|"(?:[^"\\\\]|\\\\.)*")';
+    OB_KEY="(?:\\[" + this.OB_STR + "(?:\\+" + this.OB_STR + ")*\\]|\\.\\w+)";
     NumberSystem=[ {
       radix: 2,
       prefix: "0b0*"
@@ -41499,6 +42593,15 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       regex = regex.replace(/{VAR}/g, "(?:let|var|const)");
       regex = regex.replace(/{QUOTE{(\w+)}}/g, "(?:'$1'|\"$1\"|`$1`)");
       regex = regex.replace(/NUM{(\d+)}/g, (...args) => this.generateNumberSystem(Number(args[1])));
+      /* The obfuscator's own vocabulary, so a hook can say what the code does
+       * instead of how one build happened to spell it:
+       *   {OBKEY}        a property access: [i(242,"knGx")], [i(1,"ab")+"ed"], ["x"], .x
+       *   {OBCALL:name}  a call it may or may not route through a proxy object —
+       *                  fn(…  or  o[i(225,"tU&W")](fn,…  — capturing fn as the
+       *                  named group <nameP> (proxied) or <nameD> (direct).
+       * Expanded before \w is widened, so their \w take `$` too. */
+      regex = regex.replace(/\{OBKEY\}/g, () => this.OB_KEY);
+      regex = regex.replace(/\{OBCALL:(\w+)\}/g, (m, g) => "(?:\\w+" + this.OB_KEY + "\\((?<" + g + "P>\\w+),|(?<" + g + "D>\\w+)\\()");
       regex = regex.replace(/\\w/g, this.ANY_LETTER);
       return regex;
     }
@@ -41576,7 +42679,10 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     // old pattern expected a bare identifier then one call.
     Hook.append("postRenderLoop", /\w+\(\),\w+\(\),requestAnimFrame\(\w+\)/, ";RYN._Renderer._postRender();");
     // The frame itself, guarded, so nothing RYN draws can stop the loop.
-    Hook.replace("frameGuard", /(\w+)\(\),(\w+)\(\),requestAnimFrame\((\w+)\)/, "RYN._Renderer._frame($1),$2(),requestAnimFrame($3)");
+    // The next frame is asked for through the browser's own scheduler if the
+    // game's global has gone missing: without one the loop ends, and the screen
+    // freezes on whatever it last drew.
+    Hook.replace("frameGuard", /(\w+)\(\),(\w+)\(\),requestAnimFrame\((\w+)\)/, "RYN._Renderer._frame($1),$2(),(window.requestAnimFrame||window.requestAnimationFrame)($3)");
     // The game's resize handler, so the zoom can call it directly instead of
     // firing a window resize at every listener on the page.
     Hook.replace("exposeResize", /window\.addEventListener\("resize",(\w+)\.checkTrusted\((\w+)\)\)/, "window.addEventListener(\"resize\",$1.checkTrusted(RYN._Renderer._gameResize=$2))");
@@ -41589,8 +42695,17 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     Hook.replace("zoomOutCap", /const (\w+)=(\w+)\*1\.15;/, "const $1={valueOf:function(){return $2*1.15}};");
     // ...and its tail made idempotent (Renderer._viewport).
     Hook.replace("viewport", /(\w+)\.width=(\w+)\*(\w+),\1\.height=(\w+)\*\3,\1\.style\.width=\2\+"px",\1\.style\.height=\4\+"px",(\w+)\.setTransform\((\w+)\*\3,0,0,\6\*\3,0,0\),\5\.resize\(\6\*\3\)/, "RYN._Renderer._viewport($1,$2,$4,$3,$5,$6)");
-    // Name colours (Renderer._nameColor): where the game picks white or clan.
-    Hook.replace("nameColor", /(\w+)=(\w+)!=(\w+)&&\2\.clan&&\2\.clan==\3\.clan&&!\(\2\.team&&\2\.team==\3\.team\),(\w+)=\1\?(\w+):"#fff",/, "$1=$2!=$3&&$2.clan&&$2.clan==$3.clan&&!($2.team&&$2.team==$3.team),$4=RYN._Renderer._nameColor($2,$3,$1?$5:\"#fff\"),");
+    /* Name colours (Renderer._nameColor): where the game picks white or the
+     * clan colour. cfaab428 put that one colour on a style object for the
+     * whole nameplate (`S=k?Bx:"#fff",g={color:S,`); 3d3599b6 builds the
+     * plate as coloured pieces for label() — clan tag, gold, name — each
+     * pushed with its own colour (`g=[],b=function(D,V,A){…}`), and the
+     * name goes last as `b(p.name||"",x,S)`. There only the NAME piece takes
+     * your colour; the clan tag keeps the game's. */
+    Hook.replace("nameColor", /(\w+)=(\w+)!=(\w+)&&\2\.clan&&\2\.clan==\3\.clan&&!\(\2\.team&&\2\.team==\3\.team\),(\w+)=\1\?(\w+):"#fff",(?:(\w+)=\{color:\4,|\w+=\[\],(\w+)=function[^]{0,400}?\7\(\2\.name\|\|"",(\w+),\4\))/,
+      (whole, isClan, player, me, color, clanColor, styleVar, add, size) => styleVar
+        ? whole.replace(color + "=" + isClan + "?" + clanColor + ":\"#fff\",", () => color + "=RYN._Renderer._nameColor(" + player + "," + me + "," + isClan + "?" + clanColor + ":\"#fff\"),")
+        : whole.slice(0, whole.length - (add + "(" + player + ".name||\"\"," + size + "," + color + ")").length) + add + "(" + player + ".name||\"\"," + size + ",RYN._Renderer._nameColor(" + player + "," + me + "," + color + "))");
     // The renderer the frame is drawn with, the moment it exists.
     Hook.replace("adoptRenderer", /(\w+)=(\w+)\((\w+),(\w+)\?\{pageSize:\+\4\[1\],maxPages:\+\4\[2\]\}:null\);/, "$1=RYN._Renderer._adopt($2($3,$4?{pageSize:+$4[1],maxPages:+$4[2]}:null),$3);");
     Hook.append("mapPreRender", /(\w+)\.lineWidth=NUM{4};/, "RYN._Renderer._mapPreRender($1);");
@@ -41603,7 +42718,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     Hook.replace("mapSelfColor", /globalAlpha=1,(\w+)\.fillStyle="#fff",(\w+)\./, 'globalAlpha=1,$1.fillStyle=RYN._Renderer._mapColors.self,$2.');
     Hook.replace("mapTeamColor", /fillStyle="rgba\(255,255,255,0\.35\)"/, "fillStyle=RYN._Renderer._mapColors.team");
     Hook.replace("mapDeathMarker", /fillStyle="#fc5553"/, "fillStyle=RYN._Renderer._mapColors.death");
-    Hook.prepend("gameInit", /function (\w+)\(\w+\)\{const \w+=[^;]{0,80};if\(!\w+&&!\w+\)\{\w+\("No servers are available right now/, "RYN._gameInit=function(a){$1(a);};");
+    Hook.prepend("gameInit", /function (\w+)\(\w+\)\{\w+\.\w+\(\w+,f/, "RYN._gameInit=function(a){$1(a);};");
     Hook.prepend("LockRotationClient", /return \w+\?\(\!/, "return RYN._Possess.angle();");
     Hook.replace("DisableResetMoveDir", /\w+=\{\},\w+\.send\("\w+"\)/, "");
     Hook.append("offset", /\W170\W.+?(\w+)=\w+\-\w+\/2.+?(\w+)=\w+\-\w+\/2;/, "RYN._offset._setXY($1,$2);");
@@ -41630,16 +42745,9 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     // loosely because it is the one part being replaced.
     Hook.replace("totalDamage", /(\w+)\.showText\((\w+),(\w+),NUM{50},[\d.]+,NUM{500},Math\.abs\((\w+)\),[^()]+\)/, "RYN._DamageText._show($1,$2,$3,$4)");
     Hook.replace("objectAlpha", /(\w+)\.globalAlpha=(\w+)\.hideFromEnemy\?([\d.]+):1,/, "$1.globalAlpha=RYN._Renderer._objectAlpha()*($2.hideFromEnemy?$3:1),");
-    // 2025 draws a structure with an if-statement rather than a ternary; the
-    // 2024 ternary is only looked for when that is not what this bundle has,
-    // so the one that cannot match is not reported as a miss.
-    {
-      const before = Hook.hookCount;
-      Hook.replace("buildingTint2025", /\.isItem\)\{if\((\w+)=(\w+)\((\w+)\),/, ".isItem){if($1=RYN._Renderer._buildingSprite($2($3),$3),");
-      if (Hook.hookCount === before) {
-        Hook.replace("buildingTint", /\.isItem\?\((\w+)=(\w+)\((\w+)\),/, ".isItem?($1=RYN._Renderer._buildingSprite($2($3),$3),");
-      }
-    }
+    Hook.replace("buildingTint", /\.isItem\?\((\w+)=(\w+)\((\w+)\),/, ".isItem?($1=RYN._Renderer._buildingSprite($2($3),$3),");
+    // 2025 draws a structure with an if-statement rather than a ternary.
+    Hook.replace("buildingTint2025", /\.isItem\)\{if\((\w+)=(\w+)\((\w+)\),/, ".isItem){if($1=RYN._Renderer._buildingSprite($2($3),$3),");
     // $3 is the resource being drawn, and it is now handed through so the
     // renderer can tell food from wood and stone. buildingTint has always
     // passed its object the same way.
@@ -41666,6 +42774,26 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     // The 2025 server list: the object the bundle's two dropdowns are drawn
     // from and that Play joins through. RYN's server panel reads it.
     Hook.replace("exposeServers", /const (\w+)=\{init:function\((\w+)\)\{(\w+)=\2\.baseHost,/, "const $1=RYN._servers={init:function($2){$3=$2.baseHost,");
+    /* The game's account (sign-in state, sign out, email code / password),
+     * found by its first two members. RYN reads verified() from it — a
+     * members-only server is "auth" for exactly the players it calls
+     * verified — and the lobby's account bar acts through it. */
+    Hook.replace("exposeAccount", /const (\w+)=\{accessToken:(\w+),freshAccessToken:async function\(\)\{/, (whole, account, token) => "const " + account + "=RYN._account={accessToken:" + token + ",freshAccessToken:async function(){");
+    /* Prefer servers bots can join (Bots → Fleet, and the lobby's server
+     * list). Signed in, the game only ever auto-picks members-only servers
+     * when your region has one — and bots, which join as guests, cannot follow
+     * you there. With the setting on (the default), the three places the game
+     * makes that choice prefer a server that is not members-only instead:
+     *   Uc()       the best server of a region:   keep the non-members ones
+     *   moveOff()  a full or closed server:       sort non-members first
+     *   qi()       the re-pick on a refresh:      leave a members server for
+     *              an open one, where the game would have done the reverse
+     * A server you picked yourself is still yours — the game's own "picked by
+     * you" flag decides that, untouched — and a guest is never on a members
+     * server in the first place. */
+    Hook.replace("botServerPick", /(\w+)\(\)&&(\w+)\.some\(function\((\w+)\)\{return \3\.auth\}\)&&\(\2=\2\.filter\(function\((\w+)\)\{return \4\.auth\}\)\)/, (whole, member, list, a, b) => member + "()&&(RYN._preferBotServers&&RYN._preferBotServers()?" + list + ".some(function(" + a + "){return!" + a + ".auth})&&(" + list + "=" + list + ".filter(function(" + b + "){return!" + b + ".auth})):" + list + ".some(function(" + a + "){return " + a + ".auth})&&(" + list + "=" + list + ".filter(function(" + b + "){return " + b + ".auth})))");
+    Hook.replace("botServerMoveOff", /\((\w+)\?!!(\w+)\.auth-!!(\w+)\.auth:0\)\|\|\2\.playerCount-\3\.playerCount/, (whole, member, o, i) => "(" + member + "?(RYN._preferBotServers&&RYN._preferBotServers()?!!" + i + ".auth-!!" + o + ".auth:!!" + o + ".auth-!!" + i + ".auth):0)||" + o + ".playerCount-" + i + ".playerCount");
+    Hook.replace("botServerRepick", /(\w+)=(\w+)&&!(\w+)&&(\w+)\(\)&&(\w+)&&!\5\.auth&&(\w+)&&\6\.auth/, (whole, s, e, explicit, member, cur, best) => s + "=" + e + "&&!" + explicit + "&&" + member + "()&&" + cur + "&&(RYN._preferBotServers&&RYN._preferBotServers()?" + cur + ".auth&&" + best + "&&!" + best + ".auth:!" + cur + ".auth&&" + best + "&&" + best + ".auth)");
 
     /* ── LOGIN: release the two latches that make a failure permanent ──────
      *
@@ -41759,27 +42887,43 @@ html.ryn-in-lobby .ryn-v2-wrapper {
      * Note the two directions are NOT the same function: incoming frames are
      * keyed on the receive counter through wf(), outgoing ones on the frame's
      * own signature through bf(). */
-    const cryptoName = (m, i) => m && m.length > i && /^[\w$]+$/.test(m[i]) ? m[i] : null;
+    /* Each primitive is recognised by what the code around it DOES, and every
+     * call in these patterns may be direct or routed through one of the
+     * obfuscator's proxy objects ({OBCALL:x}); the obfuscator flips that per
+     * call site per build. cfaab428 proxied the unpinned tables call and the
+     * signer; 3d3599b6 proxies the pinned tables call, both receive-side calls,
+     * the outgoing masker and the `So+c.length` addition — which is all it
+     * took for the four 2.7.0 patterns to miss.
+     *   session:  D=hex(k[2]),V=b?mixKey(D,B):D;pe={mode:M,key:V,tables:b?tables(B,SALT):…,seq:0,mask:b?maskFrom(V):null,received:0}
+     *   receive:  pe&&pe.mask&&xor(h,maskIn(pe.mask.s2c,++pe.received))
+     *   send:     d=sign(pe.key,l),f=new Uint8Array(W+l.length) … pe.mask&&xor(f.subarray(W),maskVal(pe.mask.c2s,d))
+     * Note the two directions are NOT the same function: incoming frames are
+     * keyed on the receive counter, outgoing ones on the frame's own
+     * signature. */
+    const cryptoPick = (m, g) => {
+      const v = m && m.groups ? m.groups[g + "P"] || m.groups[g + "D"] || m.groups[g] : null;
+      return typeof v === "string" && /^[\w$]+$/.test(v) ? v : null;
+    };
     const cryptoRef = id => id ? "(typeof " + id + "!=='undefined'?" + id + ":null)" : "null";
-    const cryptoSession = Hook.match("cryptoSession", /(\w+)=(?:\w+\[[^\]]*\]\()?(\w+)[(,]\w+\[[^\]]+\]\),(\w+)=(\w+)\?(?:\w+\[[^\]]*\]\()?(\w+)[(,]\1,(\w+)\):\1;(\w+)=(?:RYN\._myClient\._gameCrypto=)?\{(?:_bundle:!0,)?mode:(\w+),key:\3,tables:\4\?(?:\w+\[[^\]]*\]\()?(\w+)[(,]\6,(\w+)\):.*?,seq:0,mask:\4\?(?:\w+\[[^\]]*\]\()?(\w+)[(,]\3\):null,received:0\}/);
-    const cryptoInbound = Hook.match("cryptoInbound", /&&(?:\w+\[[^\]]*\]\()?(\w+)[(,]\w+,(?:\w+\[[^\]]*\]\()?(\w+)[(,](\w+)\[\w+\(\d+,"[^"]*"\)\]\[\w+\(\d+,"[^"]*"\)\],\(?\+\+\3\[/);
-    const cryptoSign = Hook.match("cryptoSign", /[\](,]\s*(\w+),(\w+)\[\w+\(\d+,"[^"]*"\)\],(\w+)\),\w+=new Uint8Array\((?:\w+\[[^\]]*\]\()?(\w+)[+,]\3\[/);
-    const cryptoOutbound = Hook.match("cryptoOutbound", /(?:\w+\[[^\]]*\]\()?(\w+)[(,]\w+\[\w+\(\d+,"[^"]*"\)\+"ay"\]\(\w+\),(\w+)\(\w+\[/);
-    const cryptoBuild = Hook.match("cryptoBuild", /\+"b=",(\w+)\)/);
+    const cryptoSession = Hook.match("cryptoSession", /(?<key>\w+)={OBCALL:hex}\w+\[[^\]]+\]\),(?<mixed>\w+)=(?<pinned>\w+)\?{OBCALL:mix}\k<key>,(?<seed>\w+)\):\k<key>;(?<sess>\w+)=(?:RYN\._myClient\._gameCrypto=)?\{(?:_bundle:!0,)?mode:(?<mode>\w+),key:\k<mixed>,tables:\k<pinned>\?{OBCALL:tables}\k<seed>,(?<salt>\w+)\):.*?,seq:0,mask:\k<pinned>\?{OBCALL:maskFrom}\k<mixed>\):null,received:0\}/);
+    const cryptoInbound = Hook.match("cryptoInbound", /(?<sess>\w+)&&\k<sess>{OBKEY}&&{OBCALL:apply}\w+,{OBCALL:maskIn}\k<sess>{OBKEY}{OBKEY},\+\+\k<sess>{OBKEY}\)/);
+    const cryptoSign = Hook.match("cryptoSign", /(?<sig>\w+)={OBCALL:sign}(?<sess>\w+){OBKEY},(?<data>\w+)\),(?<frame>\w+)=new Uint8Array\((?:(?<widthD>\w+)\+|\w+{OBKEY}\((?<widthP>\w+),)\k<data>{OBKEY}\)/);
+    const cryptoOutbound = Hook.match("cryptoOutbound", /(?<sess>\w+){OBKEY}&&{OBCALL:apply}(?<frame>\w+){OBKEY}\((?<width>\w+)\),{OBCALL:maskVal}\k<sess>{OBKEY}{OBKEY},(?<sig>\w+)\)\)/);
+    const cryptoBuild = Hook.match("cryptoBuild", /"b="(?:\+|,)(?<build>\w+)/);
     const encFields = [
       "Hi:$1",
-      "Eo:" + cryptoRef(cryptoName(cryptoSign, 1)),
-      "jt:" + cryptoRef(cryptoName(cryptoSign, 4)),
-      "Ro:" + cryptoRef(cryptoName(cryptoSession, 2)),
-      "Po:" + cryptoRef(cryptoName(cryptoSession, 9)),
-      "mode:" + cryptoRef(cryptoName(cryptoSession, 8)),
-      "mixKey:" + cryptoRef(cryptoName(cryptoSession, 5)),
-      "salt:" + cryptoRef(cryptoName(cryptoSession, 10)),
-      "buildId:" + cryptoRef(cryptoName(cryptoBuild, 1)),
-      "maskFrom:" + cryptoRef(cryptoName(cryptoSession, 11)),
-      "applyMask:" + cryptoRef(cryptoName(cryptoInbound, 1) || cryptoName(cryptoOutbound, 1)),
-      "maskIn:" + cryptoRef(cryptoName(cryptoInbound, 2)),
-      "maskVal:" + cryptoRef(cryptoName(cryptoOutbound, 2))
+      "Eo:" + cryptoRef(cryptoPick(cryptoSign, "sign")),
+      "jt:" + cryptoRef(cryptoPick(cryptoSign, "width")),
+      "Ro:" + cryptoRef(cryptoPick(cryptoSession, "hex")),
+      "Po:" + cryptoRef(cryptoPick(cryptoSession, "tables")),
+      "mode:" + cryptoRef(cryptoPick(cryptoSession, "mode")),
+      "mixKey:" + cryptoRef(cryptoPick(cryptoSession, "mix")),
+      "salt:" + cryptoRef(cryptoPick(cryptoSession, "salt")),
+      "buildId:" + cryptoRef(cryptoPick(cryptoBuild, "build")),
+      "maskFrom:" + cryptoRef(cryptoPick(cryptoSession, "maskFrom")),
+      "applyMask:" + cryptoRef(cryptoPick(cryptoInbound, "apply") || cryptoPick(cryptoOutbound, "apply")),
+      "maskIn:" + cryptoRef(cryptoPick(cryptoInbound, "maskIn")),
+      "maskVal:" + cryptoRef(cryptoPick(cryptoOutbound, "maskVal"))
     ].join(",");
     // A function replacement: minified names may contain `$`, which a string
     // replacement would read as a group reference.
@@ -41790,9 +42934,15 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         "try{return{" + encFields.replace("Hi:$1", () => "Hi:" + encoder) + "};}catch(e){return null}}})}catch(e){}" +
         "let " + session + "=null");
     // The main socket's frame signature through RynSign: the same bytes,
-    // checked against the game's own function first (see RynSign).
-    Hook.replace("fastSign", /\]\((\w+),(\w+\[\w+\(\d+,"[^"]*"\)\],\w+\),\w+=new Uint8Array\((?:\w+\[[^\]]*\]\()?\w+[+,]\w+\[)/,
-      (whole, signFn, rest) => "](RYN._sign(" + signFn + ")," + rest);
+    // checked against the game's own function first (see RynSign). The sign
+    // call is wrapped where it stands, proxied (o[k](fn,…) -> o[k](RYN._sign(fn),…)
+    // or direct (fn(… -> RYN._sign(fn)(…).
+    Hook.replace("fastSign", /(?<sig>\w+)={OBCALL:sign}(?<sess>\w+){OBKEY},(?<data>\w+)\),(?<frame>\w+)=new Uint8Array\(/,
+      (...a) => {
+        const whole = a[0], g = a[a.length - 1];
+        if (g.signP) return whole.replace("(" + g.signP + ",", () => "(RYN._sign(" + g.signP + "),");
+        return whole.replace("=" + g.signD + "(", () => "=RYN._sign(" + g.signD + ")(");
+      });
     Hook.replace("handleBuy", /\w+\.send\("\w+",1,(\w+),(\w+)\)/, "RYN._Possess.c()._ModuleHandler._buy($2,$1,true)");
     Hook.prepend("RemovePingCall", /\w+&&clearTimeout/, "return;");
     /* The game's pong handler. RemovePingCall stops the game's own pings —
@@ -41808,7 +42958,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
      * in another function, and deleted all of it, `const Oe=…` included. The
      * render loop then threw "Oe is not defined" on every frame. The grid is
      * now two loops of M.line() after `globalAlpha=.06`; only those go. */
-    Hook.replace("RenderGrid", /(\.globalAlpha=\.06;const (\w+)=\w+\/18;)for\((?:var|let) (\w+)=[^;]+;[^;]*\3<\w+;\3\+=\2\)\3>0&&\w+\.line\([^)]*\);for\((?:var|let) (\w+)=[^;]+;[^;]*\4<\w+;\4\+=\2\)\4>0&&\w+\.line\([^)]*\);/, "$1");
+    Hook.replace("RenderGrid", /(\.globalAlpha=\.06;const (\w+)=\w+\/18;)for\((?:var|let) (\w+)=[^;]+;(?:\w+&&)?\3<\w+;\3\+=\2\)\3>0&&\w+\.line\([^)]*\);for\((?:var|let) (\w+)=[^;]+;(?:\w+&&)?\4<\w+;\4\+=\2\)\4>0&&\w+\.line\([^)]*\);/, "$1");
     Hook.replace("upgradeItem", /(upgradeItem.+?onclick.+?)\w+\.send\("\w+",(\w+)\)\}/, "$1RYN._Possess.c()._ModuleHandler._upgradeItem($2)}");
     const data = Hook.match("DeathMarker", /99999.+?(\w+)=\{x:(\w+)/);
     Hook.append("playerDied", /NUM{99999};function \w+\(\)\{/, `if(RYN._settings._autospawn){${data[1]}={x:${data[2]}.x,y:${data[2]}.y};return};`);
@@ -42019,7 +43169,27 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         // sockets use (RynWire).
         return lead + ws + parts.map(p => "const " + p + " = (RYN._modules[" + JSON.stringify(path) + "] = await import(" + abs + "))").join(";");
       });
+      // The whole preload-helper call, so no <link rel=modulepreload> for the chunk is made either.
+      code = code.replace(/[\w$]+\(\(\)=>import\(\s*(["'])\.\/texture-pack-[^"']+\1\s*\),\[[^\]]*\],import\.meta\.url\)|\bimport\s*\(\s*(["'])\.\/texture-pack-[^"']+\2\s*\)/g, 'Promise.reject(new Error("[RYN] texture pack chunk not loaded: it imports the original game module"))');
       code = code.replace(/(\bimport\s*\(\s*)(["'])(\.\.?\/[^"']+)\2/g, (m, kw, quote, path) => kw + quote + toAbs(path) + quote);
+      /* Exports are module-only syntax as well. The 3d3599b6 build ends with
+       *
+       *   ...;window.config=I;export{m as U};
+       *
+       * (its texture-pack chunk takes the game's utils from it), and that one
+       * statement was enough for the whole rewritten bundle to fail to compile
+       * ("Unexpected token 'export'"): RYN never started the game. An export
+       * list becomes an assignment to RYN._exports, so the bindings stay
+       * reachable; `export` in front of a declaration is dropped. */
+      code = code.replace(/(^|[\n;{}])(\s*)export\s*\{([^}]*)\}\s*(?:;|(?=\n|$))/g, (full, lead, ws, list) => {
+        const pairs = list.split(",").map(s => s.trim()).filter(Boolean).map(s => {
+          const asM = s.split(/\s+as\s+/);
+          const local = asM[0].trim();
+          const name = (asM.length === 2 ? asM[1] : asM[0]).trim();
+          return JSON.stringify(name) + ": " + local;
+        });
+        return lead + ws + "RYN._exports = Object.assign(RYN._exports || {}, {" + pairs.join(", ") + "});";
+      }).replace(/(^|[\n;{}])(\s*)export\s+(?=(?:const|let|var|function|async\s+function|class)\b)/g, "$1$2");
       // import.meta is module-only syntax too; the bundle passes
       // import.meta.url to Vite's preload helper for the touch-controls chunk.
       code = code.replace(/\bimport\.meta\.url\b/g, JSON.stringify(src)).replace(/\bimport\.meta\b/g, "({url:" + JSON.stringify(src) + "})");
@@ -42192,12 +43362,32 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       win.customElements.define = function() {
         win.customElements.define = _define;
       };
-      win.requestAnimFrame = function() {
+      /* The fallback way in: the page copy's next frame. It and the
+       * createElement trap below each take the stand-in away when they start
+       * RYN's copy — but only while it is still the stand-in. When the page
+       * copy has already run (a refresh, the page from cache, the script a
+       * moment behind it), this one fires first, and by the time the page copy
+       * reaches the trap — its server list comes back and it builds its menu —
+       * `requestAnimFrame` is RYN's copy's own frame scheduler. Deleting that
+       * ended RYN's frame loop with "requestAnimFrame is not defined": FPS 1
+       * and the screen frozen on the menu, with no player on it. */
+      let rafStub = function() {
+        rafStub = null;
         delete win.requestAnimFrame;
         if (scriptBundle !== null) {
           Injector_default.init(scriptBundle);
         }
       };
+      const dropRafStub = () => {
+        if (rafStub === null) {
+          return;
+        }
+        rafStub = null;
+        try {
+          delete win.requestAnimFrame;
+        } catch (e) {}
+      };
+      win.requestAnimFrame = rafStub;
       blockProperty(win, "requestAnimFrame");
       /* Late injection: <head> was already parsed, so the game's own
        * <script type="module"> has been prepared, and taking it out of the
@@ -42225,12 +43415,23 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       // touch-controls chunk is an /assets/index-*.js too, imported later by
       // RYN's copy; only the module that was stopped is refused after that.
       let pageUrl = null;
+      // Before the trap has fired, the page's entry module is the script
+      // element resetGame found — so RYN's own copy importing the game's
+      // touch-controls chunk (also an /assets/index-*.js) is never taken for it.
+      const entryUrl = () => {
+        if (pageUrl !== null) {
+          return pageUrl;
+        }
+        const hit = scriptBundle !== null && scriptBundle.src ? pageModule.exec(scriptBundle.src) : null;
+        return hit !== null ? hit[0] : null;
+      };
       const stopPageCopy = function createElement() {
         let hit = null;
         try {
           hit = pageModule.exec(new Error().stack || "");
         } catch (e) {}
-        if (hit === null || pageUrl !== null && hit[0] !== pageUrl) {
+        const entry = hit === null ? null : entryUrl();
+        if (hit === null || entry !== null && hit[0] !== entry) {
           return nativeCreateElement.apply(this, arguments);
         }
         if (stopped === null) {
@@ -42243,10 +43444,9 @@ html.ryn-in-lobby .ryn-v2-wrapper {
           };
           window.addEventListener("error", quiet, true);
           // The fallback and the stub it needed are done with: the first frame
-          // of RYN's own copy must not start a second one.
-          try {
-            delete win.requestAnimFrame;
-          } catch (e) {}
+          // of RYN's own copy must not start a second one. If the fallback
+          // already fired, what is there now is RYN's copy's own and stays.
+          dropRafStub();
           win.customElements.define = _define;
           try {
             Injector_default.init(scriptBundle !== null ? scriptBundle : {
@@ -42341,8 +43541,13 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       }
     });
     CustomStorage.set("moofoll", 1);
-    if (CustomStorage.get("skin_color") === null) {
-      CustomStorage.set("skin_color", "toString");
+    // A "toString" left by an older RYN is put back to a colour the game has
+    // (see Menu.selectSkinColor); a fresh profile is left to the game.
+    {
+      const saved = CustomStorage.get("skin_color");
+      if (saved !== null && !(Number.isInteger(Number(saved)) && Number(saved) >= 0 && Number(saved) < Config_default.skinColors.length)) {
+        CustomStorage.set("skin_color", 0);
+      }
     }
     window.addEventListener = new Proxy(window.addEventListener, {
       apply(target, _this, args) {
@@ -42456,6 +43661,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         "./img/weapons/axe_1_r.png": "data:image/webp;base64,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",
         "./img/accessories/access_13.png": "data:image/webp;base64,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",
         "./img/animals/wolf_2.png": "data:image/webp;base64,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",
+        "./img/animals/crab_1.png": "data:image/webp;base64,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",
         "./img/animals/enemy.png": "data:image/webp;base64,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"
       };
       const _imgDesc = Object.getOwnPropertyDescriptor(Image.prototype, "src");
@@ -44971,6 +46177,33 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     return null;
   }));
   const client = new PlayerClient_default;
+  // The resume snapshot across a refresh: per tab, kept until the next page
+  // reads it (PlayerClient._ownSpawn).
+  const RYN_RESUME_KEY = "_ryn_resume_world";
+  try {
+    const saved = sessionStorage.getItem(RYN_RESUME_KEY);
+    if (saved !== null) {
+      sessionStorage.removeItem(RYN_RESUME_KEY);
+      const prev = JSON.parse(saved);
+      if (prev && Array.isArray(prev.rows)) {
+        client._rynPrevWorld = prev;
+      }
+    }
+  } catch (_) {}
+  const saveResumeWorld = () => {
+    try {
+      const snap = client._worldSnapshot();
+      if (snap !== null) {
+        sessionStorage.setItem(RYN_RESUME_KEY, JSON.stringify(snap));
+      }
+    } catch (_) {}
+  };
+  window.addEventListener("pagehide", saveResumeWorld);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      saveResumeWorld();
+    }
+  });
   window.WebSocket = new window.Proxy(window.WebSocket, {
     construct(target, args) {
       const socket = new target(...args);
@@ -44982,6 +46215,11 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       const isGameSocket = !isNonGame && /^wss?:\/\//i.test(url);
       if (isGameSocket) {
         Logger.test("Found game socket! Socket initialization..");
+        // Not the page's first: the game is rejoining or changing server
+        // without a reload, and the last connection's state goes first.
+        if (client.SocketManager.socket !== null) {
+          client._newConnection();
+        }
         client.SocketManager.init(socket);
         try {
           window.WebSocket = target;
@@ -45526,6 +46764,28 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       this.active = owner;
       this.index = -1;
     }
+    // The main connection is being replaced (PlayerClient._newConnection). The
+    // game clears its world for the new one, so the record of what it is
+    // drawing goes too — left in place, _topUp would hand the new server's
+    // screen the old one's buildings. A possessed bot is let go without a
+    // repaint: there is no world to project into until the new one arrives.
+    _resetConnection() {
+      if (this.possessing) {
+        this._release(this.active);
+        this.active = this.owner;
+        this.index = -1;
+        this._lostSince = 0;
+        try {
+          _possessBadge();
+          _possessSyncFleetUI();
+        } catch (_) {}
+      }
+      this.projectionBlind = false;
+      this._held.clear();
+      this._noteEvent = null;
+      this._noteType = null;
+      this._noteArgs = null;
+    }
     // The client every player-facing system should read from.
     c() {
       return this.active !== null ? this.active : this.owner;
@@ -46060,12 +47320,10 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         if (held !== void 0 && (held[3] === true || missingOnly)) {
           continue;
         }
-        const pos = object.pos.current;
-        const isPlayerObject = object._rynType5 !== void 0;
         if (batch === null) {
           batch = [];
         }
-        batch.push(object.id, pos.x, pos.y, object.angle, object.scale, isPlayerObject ? object._rynType5 : object.type, isPlayerObject ? object.type : null, isPlayerObject ? object.ownerID : -1);
+        ObjectManager_default.row(object, batch);
         if (batch.length >= POSSESS_OBJECT_BATCH * 8) {
           this._emit("H", [ batch ]);
           batch = null;
@@ -47730,6 +48988,10 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         return !!(real && typeof real === "object" && key in real) || key in RYN_FRVR_STANDIN;
       }
     }),
+    // Read by the bundle's server pick (botServerPick / MoveOff / Repick).
+    _preferBotServers() {
+      return Settings_default._preferBotServers !== false;
+    },
     _noAd(kind, done) {
       if (typeof done === "function") setTimeout(done, 0);
       return Promise.resolve();
@@ -47757,10 +49019,36 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         if (!c) return;
         const net = c._gameNet;
         const sm = c.SocketManager;
-        if (sm && !c._sockBound && !sm.socket && net && net.socket && net.socket.readyState <= 1) {
-          c._sockBound = true;
+        // Normally the WebSocket construct trap binds every game socket and
+        // this finds them already bound. It is the fallback for one the trap
+        // did not see, and it follows the game onto every later socket as
+        // well — it used to bind once and then sit on the first connection.
+        if (sm && net && net.socket && net.socket !== sm.socket && net.socket.readyState <= 1) {
+          if (sm.socket !== null) {
+            c._newConnection();
+          }
           sm.init(net.socket);
         }
+        // The HUD back if the game hid it while you are alive and connected
+        // (two checks in a row, so a real death or reconnect is never fought).
+        try {
+          const ui = document.getElementById("gameUI");
+          const live = c.myPlayer && c.myPlayer.inGame && sm && sm.socket !== null && sm.socket.readyState === 1;
+          if (live && ui !== null && document.body !== null && (!document.body.classList.contains("hud") || ui.style.display === "none")) {
+            c._hudLostTicks = (c._hudLostTicks || 0) + 1;
+            if (c._hudLostTicks >= 2) {
+              c._hudLostTicks = 0;
+              ui.style.display = "block";
+              document.body.classList.add("hud");
+              const menu = document.getElementById("mainMenu");
+              if (menu !== null) menu.style.display = "none";
+              const loading = document.getElementById("loadingText");
+              if (loading !== null) loading.style.display = "none";
+            }
+          } else {
+            c._hudLostTicks = 0;
+          }
+        } catch (_) {}
         const pt = win.pingTime;
         if (typeof pt === "number" && pt >= 0) {
           if (sm) {
@@ -47774,7 +49062,17 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     }, 500);
   } catch (e) {}
   resetGame_default(loadedFast);
+  // Once. It is bound to DOMContentLoaded and also called straight away when
+  // the page is past "loading" (further down), and a script that arrives
+  // between the page turning "interactive" and DOMContentLoaded firing got
+  // both: two #rynStats bars on top of each other, the second never filled
+  // in, and every key and mouse listener registered twice.
+  let contentLoadedDone = false;
   const contentLoaded = () => {
+    if (contentLoadedDone) {
+      return;
+    }
+    contentLoadedDone = true;
     Logger.test("Menu initialization..");
     client.InputHandler.init();
     GameUI_default.init();

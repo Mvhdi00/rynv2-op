@@ -22,13 +22,25 @@
 const WRAPPED = String.raw`(?:\w+\[[^\]]*\]\()?`;
 
 /*
- * Apply the repairs to `editor` (tools/edits.js), using `drivers`
- * (drivers/game-drivers.json) for the key mixer.
+ * The repairs, in groups, so a base that has absorbed some of them upstream can
+ * take only the ones it still needs. Ryn Type 2 2.9.4 fixed the crypto hooks,
+ * nameColor, RenderGrid and learn() itself, and still needs the bot devices.
  */
-function apply(editor, drivers) {
-  const { edit } = {
-    edit: (label, find, replace) => editor.edit(label, find, replace),
-  };
+const GROUPS = { transport, hooks, bots };
+
+/*
+ * Apply the named groups to `editor` (tools/edits.js), using `drivers`
+ * (drivers/game-drivers.json) for the key mixer. All groups by default.
+ */
+function apply(editor, drivers, groups = Object.keys(GROUPS)) {
+  for (const name of groups) {
+    if (!GROUPS[name]) throw new Error("no repair group named " + name);
+    GROUPS[name](editor, drivers);
+  }
+}
+
+function transport(editor, drivers) {
+  const edit = (label, find, replace) => editor.edit(label, find, replace);
   const MIXER = drivers.protocol.keyMixer;
 
   /* ------------------------------------------------------------------ *
@@ -223,6 +235,11 @@ function apply(editor, drivers) {
         : g.buildId != null ? g.buildId : ${JSON.stringify(MIXER.buildId)},`
   );
 
+}
+
+function hooks(editor) {
+  const edit = (label, find, replace) => editor.edit(label, find, replace);
+
   /* ------------------------------------------------------------------ *
    * 3. The four hooks that name the transport, and fastSign
    *
@@ -357,4 +374,206 @@ function apply(editor, drivers) {
   );
 }
 
-module.exports = { apply, WRAPPED };
+
+/* ------------------------------------------------------------------ *
+ * Bots get their own device
+ *
+ * The join API (`POST <api>/join`) takes a device id, `did`, that it hands a
+ * browser on its first join and expects back on every later one; the game
+ * keeps its own in localStorage as `moo_did`. Ryn Type 2 2.9.4's
+ * RynBotDevices says each bot is its own device and none is ever yours — and
+ * then does the opposite: take() returns your `moo_did` for every bot, keep()
+ * writes a bot's id into your `moo_did` when you have none yet, release() does
+ * nothing, and the pool it declares (`_ryn_bot_dids`, `inUse`) is never used.
+ *
+ * So to the server every bot was you. Signed in, that device is a member's
+ * that is already connected, and no bot gets in; as a guest, the one device
+ * gets one extra seat, and one bot gets in.
+ *
+ * Here each bot draws its own id from a pool of ids the API has issued to
+ * bots, or sends none and keeps the one the API issues. Yours is never sent,
+ * never written, and never pooled.
+ * ------------------------------------------------------------------ */
+
+function bots(editor) {
+  const edit = (label, find, replace) => editor.edit(label, find, replace);
+
+  edit(
+    "bots: a device pool of their own, never yours",
+    `  const RYN_BOT_DIDS_KEY = "_ryn_bot_dids";
+  const RynBotDevices = {
+    inUse: new Set,
+    _load() {
+      try {
+        const list = JSON.parse(localStorage.getItem(RYN_BOT_DIDS_KEY) || "[]");
+        return Array.isArray(list) ? list.filter(d => typeof d === "string" && d) : [];
+      } catch (_) {
+        return [];
+      }
+    },
+    // The id the game itself joins with (moo_did), as the game and Glotus
+    // send it. Null before the first join of this browser: the API then
+    // issues one, and keep() stores it where the game keeps its own.
+    take() {
+      try {
+        const own = localStorage.getItem("moo_did");
+        if (typeof own === "string" && own) return own;
+      } catch (_) {}
+      return null;
+    },
+    keep(did) {
+      if (typeof did !== "string" || !did) return;
+      try {
+        if (!localStorage.getItem("moo_did")) localStorage.setItem("moo_did", did);
+      } catch (_) {}
+    },
+    release(did) {}
+  };`,
+    `  const RYN_BOT_DIDS_KEY = "_ryn_bot_dids";
+  // Ids remembered for bots. A fleet is at most RYN_FLEET_CAP (40); the rest
+  // is room for ids the API has replaced.
+  const RYN_BOT_DIDS_MAX = 64;
+  const RynBotDevices = {
+    // Ids a bot is joining or connected with right now. Two bots never hold
+    // the same one.
+    inUse: new Set,
+    // Yours: read so it can be kept out, never sent and never written.
+    _own() {
+      try {
+        const own = localStorage.getItem("moo_did");
+        return typeof own === "string" && own ? own : null;
+      } catch (_) {
+        return null;
+      }
+    },
+    _load() {
+      const own = this._own();
+      try {
+        const list = JSON.parse(localStorage.getItem(RYN_BOT_DIDS_KEY) || "[]");
+        return Array.isArray(list) ? list.filter(d => typeof d === "string" && d && d !== own) : [];
+      } catch (_) {
+        return [];
+      }
+    },
+    _save(list) {
+      try {
+        localStorage.setItem(RYN_BOT_DIDS_KEY, JSON.stringify(list.slice(-RYN_BOT_DIDS_MAX)));
+      } catch (_) {}
+    },
+    // An id a bot had before and nobody is using now, or null: the API then
+    // issues this bot a device of its own, and keep() remembers it.
+    take() {
+      for (const did of this._load()) {
+        if (!this.inUse.has(did)) {
+          this.inUse.add(did);
+          return did;
+        }
+      }
+      return null;
+    },
+    // The id the API gave this bot: remembered for bots, and held by this one.
+    keep(did) {
+      if (typeof did !== "string" || !did || did === this._own()) return;
+      const list = this._load().filter(d => d !== did);
+      list.push(did);
+      this._save(list);
+      this.inUse.add(did);
+    },
+    // The API answered with a different id: the old one will not be taken
+    // again, so it is forgotten rather than handed to the next bot.
+    retire(did) {
+      if (typeof did !== "string" || !did) return;
+      this.inUse.delete(did);
+      this._save(this._load().filter(d => d !== did));
+    },
+    release(did) {
+      if (did) this.inUse.delete(did);
+    }
+  };`
+  );
+
+  edit(
+    "bots: a bot's join never carries your session",
+    `    return fetch(RYN_API_BASE + "/join", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },`,
+    `    return fetch(RYN_API_BASE + "/join", {
+      method: "POST",
+      // The API is another origin, so no cookie goes with this anyway; said
+      // here so a bot's join can never carry your session.
+      credentials: "omit",
+      headers: {
+        "Content-Type": "application/json"
+      },`
+  );
+
+  /* createSocket takes an id and has a dozen ways out before the socket that
+   * releases it on close exists — a cancelled check, a refusal, a throw. Each
+   * of those used to leave the id held for the rest of the page. The body now
+   * records the id on a lease, and a wrapper gives it back on any way out the
+   * socket did not take over. */
+  edit(
+    "bots: createSocket records its device on a lease",
+    `  const createSocket = async (href, fresh = false, label = "Bot", att = null) => {`,
+    `  const createSocketWith = async (lease, href, fresh = false, label = "Bot", att = null) => {`
+  );
+
+  edit(
+    "bots: the lease holds the device the bot took",
+    `        did = RynBotDevices.take();
+        let joined = await rynJoinTicket(host, token.slice(3), did);`,
+    `        did = lease.did = RynBotDevices.take();
+        let joined = await rynJoinTicket(host, token.slice(3), did);`
+  );
+
+  edit(
+    "bots: a replaced device is retired, not reused",
+    `        if (joined.did && joined.did !== did) {
+          RynBotDevices.release(did);
+          did = joined.did;
+          RynBotDevices.keep(did);
+        }`,
+    `        if (joined.did && joined.did !== did) {
+          RynBotDevices.retire(did);
+          did = lease.did = joined.did;
+          RynBotDevices.keep(did);
+        }`
+  );
+
+  edit(
+    "bots: the socket takes the device over",
+    `    // The bot's device id is its own until this socket closes.
+    if (did) {
+      ws._rynDid = did;
+      ws.addEventListener("close", () => RynBotDevices.release(did));
+    }
+    return ws;
+  };
+  const createSocket_default = createSocket;`,
+    `    // The bot's device id is its own until this socket closes.
+    if (did) {
+      ws._rynDid = did;
+      ws.addEventListener("close", () => RynBotDevices.release(did));
+    }
+    lease.held = true;
+    return ws;
+  };
+  const createSocket = async (href, fresh = false, label = "Bot", att = null) => {
+    const lease = {
+      did: null,
+      held: false
+    };
+    try {
+      return await createSocketWith(lease, href, fresh, label, att);
+    } catch (e) {
+      if (!lease.held) RynBotDevices.release(lease.did);
+      throw e;
+    }
+  };
+  const createSocket_default = createSocket;`
+  );
+}
+
+module.exports = { apply, GROUPS, WRAPPED };
