@@ -20826,6 +20826,9 @@ window.grbtp = 35;
           return 31;
         }
       }
+      if (useSoldier && EnemyManager2.nearestDangerAnimal !== null) {
+        return 6;
+      }
       if (useEmp && Settings_default._empDefense && _empNearbyTurret) {
         return 22;
       }
