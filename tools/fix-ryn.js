@@ -23,6 +23,7 @@ const path = require("path");
 
 const { Editor } = require("./edits.js");
 const repairs = require("./repairs.js");
+const tweaks = require("./tweaks.js");
 
 const ROOT = path.resolve(__dirname, "..");
 const BASE = path.join(ROOT, "src/Ryn_Type_2.user.js");
@@ -40,15 +41,19 @@ const editor = new Editor(fs.readFileSync(BASE, "utf8"));
 const GROUPS = ["bots", "turnstile"];
 repairs.apply(editor, DRIVERS, GROUPS);
 
+// What the user asked for on top: the token pool at 50, and a bottom-right
+// corner that stays empty unless Cloudflare wants a click (tools/tweaks.js).
+tweaks.apply(editor, ["pool50", "quietChecks"]);
+
 /* The version, so an installed copy can be told from the one it replaced.
  * Everything else in the header is the client's own. */
 {
   const version = editor.code.match(/^\/\/ @version(\s+)([\d.]+)\s*$/m);
   if (!version) throw new Error("could not find @version in the userscript header");
   editor.edit(
-    "header: version " + version[2] + " -> " + version[2] + "-fix2",
+    "header: version " + version[2] + " -> " + version[2] + "-fix3",
     version[0],
-    "// @version" + version[1] + version[2] + "-fix2"
+    "// @version" + version[1] + version[2] + "-fix3"
   );
 }
 
