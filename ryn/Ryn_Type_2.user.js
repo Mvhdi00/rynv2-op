@@ -2503,8 +2503,10 @@ window.grbtp = 35;
         }
       } catch (_) {}
       if (!acct.verified) return keep || this.randomName();
+      // The name this bot already had (kept while its email was unverified)
+      // first, so it stays the bot's; random ones after it.
       for (let i = 0; i < 6; i++) {
-        const name = this.randomName();
+        const name = i === 0 && keep ? keep : this.randomName();
         let r = null;
         try {
           r = await rynApiPost("/name", {
@@ -2715,9 +2717,16 @@ window.grbtp = 35;
             return;
           }
           let started = null;
-          try {
-            started = typeof sdk.init === "function" ? sdk.init(w.Function("return (" + this._initArg() + ");")()) : null;
-          } catch (_) {}
+          if (typeof sdk.init === "function") {
+            // The page's own argument where it can be read; {} otherwise.
+            let arg = {};
+            try {
+              arg = w.Function("return (" + this._initArg() + ");")();
+            } catch (_) {}
+            try {
+              started = sdk.init(arg);
+            } catch (_) {}
+          }
           // The page goes on if init fails; so does this, and gives it at most 8 s.
           rynWithin(started, 8e3, "init").catch(() => {}).then(() => {
             clearTimeout(timer);
