@@ -42027,12 +42027,9 @@ html.ryn-in-lobby .ryn-v2-wrapper {
               console.warn("[RYN] item bar reload ring:", e4);
             }
           }
-          if (ringNote === null) {
-            ringNoteEl.style.display = "none";
-          } else {
-            ringNoteEl.style.display = "block";
-            ringNoteEl.textContent = "RELOAD RING: " + ringNote;
-          }
+          // Not shown on screen: a missing ring explains itself in the console
+          // (above) and does not need a line over the game.
+          ringNoteEl.style.display = "none";
           try {
             var ac = AC();
             if (!window.client || !ac || !ac.myPlayer || !ac.myPlayer.inGame) {
