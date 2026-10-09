@@ -12715,6 +12715,7 @@ window.grbtp = 35;
           r[4] = rows[i + 4] / 100;
           r[5] = rows[i + 5];
           r[6] = rows[i + 6];
+          r.state = rows[i + 7] || 0;
           r.visible = true;
           if (RynCrab.watches(r[1])) {
             try {
@@ -38191,6 +38192,9 @@ html.ryn-in-lobby .ryn-v2-wrapper {
   const POSSESS_ROUTED_SENDS = new Set([ "9", "e", "F", "D", "K", "z", "S", "6", "c", "H", "P", "Q", "b", "L", "N" ]);
   const POSSESS_OBJECT_BATCH = 512;
   const POSSESS_STREAM_MS = 250;
+  const POSSESS_SIGHT_X = 900;
+  const POSSESS_SIGHT_Y = 500;
+  const POSSESS_MAX_EMIT_FAILS = 30;
 
   let _gameHandler = null;
   let _gameSocket = null;
@@ -38323,6 +38327,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     _lostSince=0;
     _held=new Map;
     _streamAt=0;
+    _emitFails=0;
 
     init(owner) {
       this.owner = owner;
@@ -38421,19 +38426,48 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       if (previous === target) {
         return true;
       }
+      if (target !== owner && _gameHandler === null) {
+        this._toast("Can't switch yet — the game connection is not hooked");
+        return false;
+      }
       this._release(previous);
       this.active = target;
       this.index = target === owner ? -1 : [ ...owner.clients ].indexOf(target);
       this._lostSince = 0;
+      this._emitFails = 0;
       this._adopt(target);
       const painted = this.project(target);
       this.projectionBlind = !painted;
-      this._toast(this._label(target) + (painted ? "" : " — control only, world not repainted"));
+      if (!painted && target !== owner) {
+        this._fallBackToOwner("Couldn't repaint the view for " + this._label(target).replace("Controlling: ", "") + " — back to you");
+        return false;
+      }
+      this._toast(this._label(target));
       try {
         _possessBadge();
         _possessSyncFleetUI();
       } catch (_) {}
       return true;
+    }
+    _fallBackToOwner(reason) {
+      const owner = this.owner;
+      if (owner === null) {
+        return;
+      }
+      if (this.active !== owner) {
+        this._release(this.active);
+      }
+      this.active = owner;
+      this.index = -1;
+      this._lostSince = 0;
+      this._emitFails = 0;
+      this._adopt(owner);
+      this.projectionBlind = !this.project(owner);
+      this._toast(reason);
+      try {
+        _possessBadge();
+        _possessSyncFleetUI();
+      } catch (_) {}
     }
     _release(c) {
       if (!c) {
@@ -38510,7 +38544,11 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         if (type === "2" && RynAllegiance.isFriendlyID(c, args[0])) {
           return;
         }
-        this._emit(type, args);
+        if (this._emit(type, args)) {
+          this._emitFails = 0;
+        } else if (++this._emitFails >= POSSESS_MAX_EMIT_FAILS) {
+          this._fallBackToOwner("Lost the bot's view — back to you");
+        }
         return;
       }
       if (type === "Q" || type === "R") {
@@ -38608,7 +38646,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       }
     }
     holdMain(event) {
-      if (!this.possessing) {
+      if (!this.possessing || this.projectionBlind) {
         return false;
       }
       const type = this._typeOf(event);
@@ -38810,6 +38848,74 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       const ids = om.grid2D.queryFull(at.x, at.y, Math.ceil(this._viewRadius() / om.grid2D.cellSize));
       this._sendObjects(om.objects, ids, true);
     }
+    _clients() {
+      return this.owner === null ? [] : [ this.owner, ...this.owner.clients ];
+    }
+    _playerSnapshot(next) {
+      const known = next.PlayerManager.playerData;
+      const pos = [], look = [], listed = new Set;
+      for (const r of next.SocketManager._seenPlayers.values()) {
+        if (!r.visible || !known.has(r[0])) {
+          continue;
+        }
+        listed.add(r[0]);
+        pos.push(r[0], r[1], r[2], Math.round(r[3] * 100));
+        look.push(r[0], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[12]);
+      }
+      const gone = [];
+      for (const c of this._clients()) {
+        const rows = c && c.SocketManager && c.SocketManager._seenPlayers;
+        if (!rows) {
+          continue;
+        }
+        for (const sid of rows.keys()) {
+          if (!listed.has(sid)) {
+            listed.add(sid);
+            gone.push(sid);
+          }
+        }
+      }
+      return [ pos, look, gone ];
+    }
+    _animalSnapshot(next) {
+      const rows = [], listed = new Set;
+      for (const r of next.SocketManager._seenAnimals.values()) {
+        if (!r.visible) {
+          continue;
+        }
+        listed.add(r[0]);
+        rows.push(r[0], r[1], r[2], r[3], Math.round(r[4] * 100), r[5], r[6], r.state || 0);
+      }
+      const gone = [];
+      for (const c of this._clients()) {
+        const seen = c && c.SocketManager && c.SocketManager._seenAnimals;
+        if (!seen) {
+          continue;
+        }
+        for (const sid of seen.keys()) {
+          if (!listed.has(sid)) {
+            listed.add(sid);
+            gone.push(sid);
+          }
+        }
+      }
+      return [ rows, gone ];
+    }
+    _dropUnseenObjects(next, at) {
+      const objects = next.ObjectManager.objects;
+      const drop = [];
+      for (const [id, held] of this._held) {
+        if (held[3] === true || objects.has(id)) {
+          continue;
+        }
+        if (Math.abs(held[0] - at.x) <= POSSESS_SIGHT_X && Math.abs(held[1] - at.y) <= POSSESS_SIGHT_Y) {
+          drop.push(id);
+        }
+      }
+      for (let i = 0; i < drop.length; i++) {
+        this._emit("Q", [ drop[i] ]);
+      }
+    }
     project(next) {
       if (_gameHandler === null || !next || !next.myPlayer) {
         return false;
@@ -38819,7 +38925,9 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         return false;
       }
       const objects = next.ObjectManager.objects;
-      this._emit("C", [ selfSid ]);
+      if (!this._emit("C", [ selfSid ])) {
+        return false;
+      }
       const seen = new Set;
       const players = next.PlayerManager.players;
       for (let i = 0; i < players.length; i++) {
@@ -38830,16 +38938,24 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         seen.add(p.id);
         this._emit("D", [ _possessSpawnFrame(p), false ]);
       }
-      this._emit("D", [ _possessSpawnFrame(next.myPlayer, selfSid), true ]);
+      if (!this._emit("D", [ _possessSpawnFrame(next.myPlayer, selfSid), true ])) {
+        return false;
+      }
+      const m = next._rynMirror;
+      const deltaTicks = !!(next.SocketManager && next.SocketManager.proto2025 === true);
+      if (deltaTicks) {
+        this._emit("a", this._playerSnapshot(next));
+      } else if (m && m.tick) {
+        this._emit("a", [ m.tick ]);
+      }
       const at = next.myPlayer.pos.current;
+      this._dropUnseenObjects(next, at);
       const grid = next.ObjectManager.grid2D;
       const near = objects.size <= POSSESS_OBJECT_BATCH ? [ ...objects.keys() ] : grid.queryFull(at.x, at.y, Math.ceil(this._viewRadius() / grid.cellSize));
       this._sendObjects(objects, near, false);
-      const m = next._rynMirror;
-      if (m && m.tick) {
-        this._emit("a", [ m.tick ]);
-      }
-      if (m && m.animals) {
+      if (deltaTicks) {
+        this._emit("I", this._animalSnapshot(next));
+      } else if (m && m.animals) {
         this._emit("I", [ m.animals ]);
       }
       const self = next.myPlayer;
@@ -38968,15 +39084,16 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       }
       const bot = this.active;
       if (!this.owner.clients.has(bot)) {
-        this._toast("Bot disconnected — back to you");
-        this.to(this.owner);
+        this._fallBackToOwner("Bot disconnected — back to you");
         return;
       }
       const alive = !!(bot.myPlayer && bot.myPlayer.inGame);
       if (alive) {
         if (this._lostSince !== 0) {
           this._lostSince = 0;
-          this.projectionBlind = !this.project(bot);
+          if (!this.project(bot)) {
+            this._fallBackToOwner("Couldn't repaint the bot's view — back to you");
+          }
         }
         return;
       }
@@ -38985,53 +39102,61 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         return;
       }
       if (now - this._lostSince >= 6e3) {
-        this._toast("Bot is not respawning — back to you");
-        this.to(this.owner);
+        this._fallBackToOwner("Bot is not respawning — back to you");
       }
     }
   }();
   Possess.init(client);
   FrameDriver.add(() => Possess.frame());
 
-  function _escapeHTML(s) {
-    return String(s == null ? "" : s).replace(/[&<>"']/g, ch => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;"
-    })[ch]);
-  }
-
   function _possessRenderMenu(doc) {
     const host = doc.getElementById("_possessList");
     if (!host) {
       return;
     }
-    const ring = Possess.ring();
-    let html = "";
-    for (let i = 0; i < ring.length; i++) {
-      const c = ring[i];
-      const isMain = c === Possess.owner;
-      const on = Possess.active === c;
-      const p = c.myPlayer;
-      const name = isMain ? p && p.nickname || "you" : p && p.nickname || c._botCustomName || "bot";
-      const res = p && p.resources || {};
-      html += '<button class="option-button ryn-possess-row" data-possess-slot="' + (isMain ? "main" : c.id) + '"' + ' style="display:block;width:100%;text-align:left;margin-bottom:6px;padding:9px 11px;' + "border-radius:11px;font-family:inherit;font-size:12px;line-height:1.5;" + (on ? "border:1px solid rgba(170,130,255,.85);background:rgba(150,96,255,.16);" : "") + '">' + '<b>' + (isMain ? "You" : "Bot " + c.id) + "</b> · " + _escapeHTML(name) + (on ? ' <span style="color:#b18cff">◀ controlling</span>' : "") + '<br><span style="opacity:.6">' + "hp " + Math.round(p && p.currentHealth || 0) + " · age " + (p && p.age || 1) + " · " + (res.food | 0) + "f " + (res.wood | 0) + "w " + (res.stone | 0) + "s " + (res.gold | 0) + "g" + "</span></button>";
+    if (!host._rynPossessClick) {
+      host._rynPossessClick = true;
+      host.addEventListener("click", event => {
+        const btn = event.target && event.target.closest ? event.target.closest("[data-possess-slot]") : null;
+        if (!btn || !host.contains(btn)) {
+          return;
+        }
+        const slot = btn.getAttribute("data-possess-slot");
+        if (slot === "main") {
+          Possess.toMain();
+        } else {
+          Possess.toSlot(Number(slot));
+        }
+        _possessRenderMenu(doc);
+      });
     }
-    if (host._rynHTML !== html) {
-      host._rynHTML = html;
+    const ring = Possess.ring();
+    const layout = ring.map(c => (c === Possess.owner ? "main" : c.id) + (Possess.active === c ? "*" : "")).join(",");
+    if (host._rynLayout !== layout) {
+      host._rynLayout = layout;
+      let html = "";
+      for (let i = 0; i < ring.length; i++) {
+        const c = ring[i];
+        const isMain = c === Possess.owner;
+        const on = Possess.active === c;
+        html += '<button class="option-button ryn-possess-row" data-possess-slot="' + (isMain ? "main" : c.id) + '"' + ' style="display:block;width:100%;text-align:left;margin-bottom:6px;padding:9px 11px;' + "border-radius:11px;font-family:inherit;font-size:12px;line-height:1.5;" + (on ? "border:1px solid rgba(170,130,255,.85);background:rgba(150,96,255,.16);" : "") + '">' + "<b>" + (isMain ? "You" : "Bot " + c.id) + '</b> · <span data-possess-name></span>' + (on ? ' <span style="color:#b18cff">◀ controlling</span>' : "") + '<br><span data-possess-stats style="opacity:.6"></span></button>';
+      }
       host.innerHTML = html;
-      for (const btn of host.querySelectorAll("[data-possess-slot]")) {
-        btn.onclick = () => {
-          const slot = btn.getAttribute("data-possess-slot");
-          if (slot === "main") {
-            Possess.toMain();
-          } else {
-            Possess.toSlot(Number(slot));
-          }
-          _possessRenderMenu(doc);
-        };
+    }
+    const rows = host.querySelectorAll("[data-possess-slot]");
+    for (let i = 0; i < ring.length && i < rows.length; i++) {
+      const c = ring[i];
+      const p = c.myPlayer;
+      const name = c === Possess.owner ? p && p.nickname || "you" : p && p.nickname || c._botCustomName || "bot";
+      const res = p && p.resources || {};
+      const stats = "hp " + Math.round(p && p.currentHealth || 0) + " · age " + (p && p.age || 1) + " · " + (res.food | 0) + "f " + (res.wood | 0) + "w " + (res.stone | 0) + "s " + (res.gold | 0) + "g";
+      const nameEl = rows[i].querySelector("[data-possess-name]");
+      const statsEl = rows[i].querySelector("[data-possess-stats]");
+      if (nameEl && nameEl.textContent !== name) {
+        nameEl.textContent = name;
+      }
+      if (statsEl && statsEl.textContent !== stats) {
+        statsEl.textContent = stats;
       }
     }
   }
