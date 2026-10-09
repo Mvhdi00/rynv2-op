@@ -216,3 +216,42 @@ nothing it saw before is resent (solid but invisible). The script now keeps what
 knew (in memory across a reconnect, in `sessionStorage` across a refresh) and puts
 it back when the server re-attaches the same player on the same server
 (`PlayerClient._ownSpawn`); `Possess._topUp` draws it as you move.
+
+### Auto Heal: the Laffer engine
+
+Combat → Defense → **Heal Mode** picks the engine Autoheal runs. **Laffer** is
+the default; **Novastorm** is the previous engine, unchanged.
+
+The Laffer engine is the auto heal of the Laffer script, built on RYN's state.
+It is shaped around the server's shame rule (`buildItem`):
+
+- the first eat after a hit within 120 ms raises shame by 1;
+- a later eat lowers it by 2;
+- at 8 you cannot eat for 30 s.
+
+How it decides:
+
+- **Damage this tick** is matched to its source: a swing (weapon × variant × hats),
+  a shot (`ProjectileManager.hitThisTick`), a spike, or poison.
+- **Prediction (the "anti")** estimates what is coming next:
+  - hit by a primary → the secondary and the turret (normal insta);
+  - hit by a hammer or a shot → the bull primary and the turret (reverse insta);
+  - spikes from the swing's knockback, from where you walk, from where you are going;
+  - a trap breaking under you;
+  - the nearest enemy's spike sync;
+  - poison on its 9-tick clock.
+- **Eat now** only when the kill is real and shame is below 7: health ≤ prediction,
+  a turret hit, the first spike ticks, or two enemies on you.
+  - If health is above 75% of the prediction, it wears **Soldier** instead of
+    eating, which keeps the shame.
+  - Otherwise it eats **one tick after** the last hit, which pays shame back down.
+- **Bull hat** is worn while there is shame and nothing near can insta you. Its
+  own −5 a second is a hit that the next-tick heal answers, so shame drops by 2
+  each time.
+- **Final Soldier** (`ModuleHandler.healSoldier`) goes on for:
+  - a spike sync;
+  - the Soldier window;
+  - a one tick in flight;
+  - a breaking trap.
+
+  It beats every other hat on the same tick.
