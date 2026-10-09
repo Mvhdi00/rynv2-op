@@ -253,6 +253,10 @@ if (sandbox && sandbox.__t) {
       }
       check("a bot in its place sends one stop and swings every tick", sent.stop === 1 && sent.move === 0 && sent.swing === 4,
         JSON.stringify(sent));
+      check("at the boss: marked close, so the Monkey Tail comes off", mh._rynCrabClose === true, "close is " + mh._rynCrabClose);
+      c.myPlayer.pos.current = { x: -2500 + 1200, y: 7200 };
+      bot.postTick();
+      check("walking in from afar: not close, the tail may stay", mh._rynCrabClose === false, "close is " + mh._rynCrabClose);
     }
     clock.now += 9e3;
     check("a boss nobody has seen for a while is let go", RynCrab.bossNow(clock.now) === null, "still held");
@@ -300,6 +304,9 @@ if (sandbox && sandbox.__t) {
   check("the Bots menu has Crabking movment", /Crabking movment[\s\S]{0,400}id="_botCrabKing" type="checkbox"/.test(html),
     "no switch in Bots_default");
   check("it is off until switched on", /\n\s*_botCrabKing: false,/.test(slice("defaultSettings")), "no default");
+  check("no Monkey Tail at the boss: Blood Wings, the chosen one, or none",
+    /getBestCurrentAcc\(\) \{[\s\S]{0,1200}if \(ModuleHandler\._rynMode === BOT_MODE\.CRAB && ModuleHandler\._rynCrabClose\) \{\s*if \(useBloodWings\) return 18;\s*if \(useActual && actual !== 11\) return actual;\s*return 0;\s*\}\s*if \(Settings_default\._tailPriority/.test(client),
+    "DefaultAcc still picks the tail at the boss");
   check("the arbiter hands out the mode", client.includes("if (Settings_default._botCrabKing && RynCrab.bossNow(now) !== null) return BOT_MODE.CRAB;"),
     "BotArbiter never decides CRAB");
   check("the follow and roaming stand down for it", client.includes("|| m === BOT_MODE.GUARDING || m === BOT_MODE.CRAB;"),

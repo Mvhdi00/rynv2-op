@@ -54,9 +54,9 @@ tweaks.apply(editor, ["pool50", "quietChecks", "crabArena", "crabMovement"]);
   const version = editor.code.match(/^\/\/ @version(\s+)([\d.]+)\s*$/m);
   if (!version) throw new Error("could not find @version in the userscript header");
   editor.edit(
-    "header: version " + version[2] + " -> " + version[2] + "-fix4",
+    "header: version " + version[2] + " -> " + version[2] + "-fix5",
     version[0],
-    "// @version" + version[1] + version[2] + "-fix4"
+    "// @version" + version[1] + version[2] + "-fix5"
   );
 }
 

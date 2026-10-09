@@ -509,6 +509,24 @@ function crabMovement(editor) {
     `this.staticModules.botScanMission, this.staticModules.botCrabKing, this.staticModules.botExplorer,`
   );
 
+  /* The Monkey Tail cuts damage to a fifth (dmgMultO .2). DefaultAcc only took
+   * it off for a player close by, and the boss is an animal, so a bot at the
+   * boss kept swinging with it on. At the boss: Blood Wings (each hit heals),
+   * else the chosen accessory, else none — never the tail. Away from it the
+   * tail's speed still helps with walking in and dodging. */
+  edit(
+    "crab movement: no Monkey Tail at the boss",
+    `      if (Settings_default._tailPriority && !Settings_default._cowboyWhenSafe && useTail && this.shouldUseTail()) {
+`,
+    `      if (ModuleHandler._rynMode === BOT_MODE.CRAB && ModuleHandler._rynCrabClose) {
+        if (useBloodWings) return 18;
+        if (useActual && actual !== 11) return actual;
+        return 0;
+      }
+      if (Settings_default._tailPriority && !Settings_default._cowboyWhenSafe && useTail && this.shouldUseTail()) {
+`
+  );
+
   edit(
     "crab movement: BotCrabKing",
     `  class BotArbiter {
@@ -556,11 +574,16 @@ function crabMovement(editor) {
     client;
     // As the follow keeps it: a stop goes out once, not on every tick stood.
     isStopped=true;
+    // At the boss and swinging (DefaultAcc takes the Monkey Tail off for it).
+    // On at reach + 80, off past reach + 200, so the accessory does not
+    // flicker at the edge.
+    close=false;
     constructor(client2) {
       this.client = client2;
     }
     reset() {
       this.isStopped = true;
+      this.close = false;
     }
     // This bot's share of the circle round the boss.
     _slot(c) {
@@ -672,14 +695,18 @@ function crabMovement(editor) {
       const primary = p.getItemByType(0), secondary = p.getItemByType(1);
       const pw = primary !== null && primary !== void 0 ? DataHandler_default.getWeapon(primary) : null;
       const sw = secondary !== null && secondary !== void 0 ? DataHandler_default.getWeapon(secondary) : null;
+      const reach = pw && pw.range || 60;
       const plan = this._plan({
         x: pos.x,
         y: pos.y,
         speed: (p.speed || 0) / RYN_CRAB_TICK_MS,
-        reach: pw && pw.range || 60,
+        reach: reach,
         ranged: !!(sw && sw.projectile !== void 0),
         slot: this._slot(c)
       }, now);
+      const gap = Math.hypot(boss.x - pos.x, boss.y - pos.y) - RYN_CRAB_BODY;
+      this.close = this.close ? gap <= reach + 200 : gap <= reach + 80;
+      mh._rynCrabClose = this.close && boss.state !== 1 && boss.state !== 2;
       if (plan.move === null) {
         if (!this.isStopped) {
           this.isStopped = true;
