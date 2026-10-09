@@ -216,3 +216,19 @@ nothing it saw before is resent (solid but invisible). The script now keeps what
 knew (in memory across a reconnect, in `sessionStorage` across a refresh) and puts
 it back when the server re-attaches the same player on the same server
 (`PlayerClient._ownSpawn`); `Possess._topUp` draws it as you move.
+
+### Game build 12d386a8
+
+Checked against `index-12d386a8.js` (the vendor chunk is unchanged):
+
+- **Hooks:** all 74 bundle hooks still bind, and the injector's import and export
+  rewriting matches.
+- **Protocol:** same scheme. The opcode lists grew by one each:
+  - c2s `"I"`, the new Anonymous toggle;
+  - s2c `"p"`, a player profile reply.
+
+  Pinned servers permute the whole list. RYN reads the lists from the bundle
+  (`RynWire.learn`); the fallback copies now match the new build.
+- **Server list:** `servers?v=1.30` (learned from the bundle; the fallback is updated too).
+- **Data:** Crab Shell (hat 61) is now `dmg .375`, `dmgMult .8`, `spdMult .93`.
+  Every other weapon, item, hat, accessory, projectile and group is unchanged.

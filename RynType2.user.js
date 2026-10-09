@@ -5404,9 +5404,13 @@ window.grbtp = 35;
    * functions lifted out of the bundle.
    * ======================================================================== */
   const RynWire = new class {
-    c2s = [ "M", "D", "9", "e", "F", "z", "H", "K", "L", "N", "b", "P", "Q", "c", "6", "S", "0", "T", "R", "A", "V" ];
+    // 12d386a8's lists, the fallback when learn() cannot read the bundle. That
+    // build added c2s "I" (the Anonymous toggle) and s2c "p" (a player profile
+    // reply); a pinned server permutes the whole list, so one missing entry
+    // shuffles every opcode.
+    c2s = [ "M", "D", "9", "e", "F", "z", "H", "K", "L", "N", "b", "P", "Q", "c", "6", "S", "0", "T", "R", "A", "V", "I" ];
     c2sPlain = 17;
-    s2c = [ "A", "B", "C", "D", "E", "a", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "X", "Y", "Z", "g", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "W", "F" ];
+    s2c = [ "A", "B", "C", "D", "E", "a", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "X", "Y", "Z", "g", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "W", "F", "p" ];
     s2cPlain = 36;
     defaultSalt = 1;
     sigBytes = 6;
@@ -5430,7 +5434,8 @@ window.grbtp = 35;
         if (key && rynGameSitekey === null) rynGameSitekey = key[1];
       } catch (e) {}
       try {
-        // 1.27: `${Se}/servers?v=1.27`; 3d3599b6: const Kx="1.28",Qx=`${Te}/servers?v=${Kx}`
+        // 1.27: `${Se}/servers?v=1.27`; 3d3599b6: const Kx="1.28",Qx=`${Te}/servers?v=${Kx}`;
+        // 12d386a8: const Qx="1.30",Yx=`${Re}/servers?v=${Qx}`
         const v = /\/servers\?v=(?:([\d.]+)|\$\x7b([\w$]+)\x7d)/.exec(text);
         if (v && v[1]) rynServersVersion = v[1];
         else if (v) {
@@ -6556,9 +6561,10 @@ window.grbtp = 35;
       price: 0,
       scale: 120,
       description: "dropped by the Crab King. reflects damage and reduces damage taken",
-      dmg: .3,
-      dmgMult: .85,
-      spdMult: .92
+      // 12d386a8: .3/.85/.92 became .375/.8/.93
+      dmg: .375,
+      dmgMult: .8,
+      spdMult: .93
     }
   };
   const Accessories = {
@@ -40468,7 +40474,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
    * 1.27; the game's bundle names its own (`/servers?v=…`), and RYN reads it
    * out of the bundle it loads (RynWire.learn), so a newer build's list is
    * asked for at the newer version. 1.27 until the bundle has been seen. */
-  const rynServerApi = () => RYN_API_BASE + "/servers?v=" + (rynServersVersion || "1.27");
+  const rynServerApi = () => RYN_API_BASE + "/servers?v=" + (rynServersVersion || "1.30");
   // The bundle's own server model (see the exposeServers hook): regions,
   // servers, which one Play joins, and choose(region, name) to change it.
   const rynServers = () => {
