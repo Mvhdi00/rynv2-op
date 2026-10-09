@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.4-fix9
+// @version         2.9.4-fix10
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -20740,7 +20740,7 @@ window.grbtp = 35;
       if (soldierActive && useShadow) {
         return 19;
       }
-      if (EnemyManager2.detectedEnemy || EnemyManager2.nearestEnemyInRangeOf(300, EnemyManager2.nearestEntity)) {
+      if (EnemyManager2.detectedEnemy || EnemyManager2.nearestEnemyInRangeOf(400, EnemyManager2.nearestEntity)) {
         if (useShadow) {
           return 19;
         }
