@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.4-fix8
+// @version         2.9.4-fix9
 // @run-at          document-start
 // @grant           none
 // @license         MIT
