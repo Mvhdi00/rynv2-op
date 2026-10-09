@@ -101,14 +101,19 @@ The flags, each one a way the live game behaves that a plain run would not show:
 - `+reload` — in, spawned, then the page reloaded (F5); everything after is
   measured on the second load.
 - `+botacct` — bots with accounts of their own ("Bots sign in"). Bot 2 signs
-  in with a password (`bot1@mock`/`pw1`), Bot 3 with an email code
-  (`bot2@mock`, code `424242`), a wrong password must be said. Both must join
-  on their account's token alone (no captcha, no Cloudflare check) under a
-  random name claimed past a taken one (`/name` answers 409 once); removed and
-  added again, and after a reload, they must come back on the same accounts
-  with nothing typed (tokens refreshed: `BOT_JWT_S`, 70 s); switched off, a bot
-  is a guest. The fake FRVR SDK keeps its session in localStorage and a
-  cookie, and the page's own must stay untouched throughout.
+  in with a typed password (`bot1@mock`/`pw1`), Bot 3 with an email code
+  (`bot2@mock`, code `424242`), Bot 4 (`bot3@mock`, a password account) asks
+  for a code and must sign in on the bot password the dialog filled in
+  (`123456789aa`). A wrong password, and an account whose email is not
+  verified (`bot4@mock`), must each be said. All must join on their
+  account's token alone (no captcha, no Cloudflare check) under a random name
+  claimed past a taken one (`/name` answers 409 once); removed and added
+  again, and after a reload, they must come back on the same accounts with
+  nothing typed (tokens run out in `BOT_JWT_S`, 70 s). bot2's and bot3's
+  sessions end after 10 s, so Bot 3 — no password saved — must get back in on
+  the bot password by itself. Switched off, a bot is a guest. The fake FRVR
+  SDK keeps its session in localStorage and a cookie, and the page's own must
+  stay untouched throughout.
 - `toolate` (a mode, like `fast`/`late`) — RYN injected after the game has
   already started, as a cached reload can do: it must reload the page once.
   `toolate+lateagain` — the second time within a minute: it must stand aside

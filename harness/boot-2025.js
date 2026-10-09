@@ -206,14 +206,25 @@ window.FRVR = {
    * keep all of that away from the page's own. */
   auth: {
     _in: false, _l: [],
-    _users: { "bot1@mock": "pw1", "bot2@mock": null },
-    _sess: function () { try { return JSON.parse(localStorage.getItem("frvr_session") || "null"); } catch (e) { return null; } },
+    /* bot1: a password; bot2: signs in with email codes, and has the bot
+     * password too; bot3: the bot password only (it takes no code:
+     * registrationConflict); bot4: the bot password, email not verified, so
+     * FRVR will not let it in yet. bot2's and bot3's sessions are over in
+     * 10 s, and FRVR wants the password again. */
+    _users: { "bot1@mock": { pw: "pw1" }, "bot2@mock": { code: true, pw: "123456789aa", short: true }, "bot3@mock": { pw: "123456789aa", short: true },
+      "bot4@mock": { pw: "123456789aa", unverified: true } },
+    _sess: function () {
+      var s = null;
+      try { s = JSON.parse(localStorage.getItem("frvr_session") || "null"); } catch (e) {}
+      return s && s.until && Date.now() > s.until ? null : s;
+    },
     _jwt: function (email) {
       var p = { extra: { identifier: email, verified: true }, exp: Math.floor(Date.now() / 1000) + ${+(process.env.BOT_JWT_S || 70)}, iat: Date.now() };
       return "h." + btoa(JSON.stringify(p)).replace(/=+$/, "").replace(/\\+/g, "-").replace(/\\//g, "_") + ".s";
     },
     _set: function (email) {
-      localStorage.setItem("frvr_session", JSON.stringify({ email: email, access: this._jwt(email) }));
+      var u = this._users[email] || {};
+      localStorage.setItem("frvr_session", JSON.stringify({ email: email, access: this._jwt(email), until: u.short ? Date.now() + 10000 : 0 }));
       document.cookie = "frvr_sid=" + encodeURIComponent(email) + "; path=/";
       this._l.forEach(function (f) { try { f(); } catch (e) {} });
     },
@@ -232,6 +243,7 @@ window.FRVR = {
       var self = this;
       if (!/@mock$/.test(e)) return Promise.resolve({});
       if (!(e in this._users)) return Promise.reject({ type: "userNotFound" });
+      if (this._users[e].pw && !this._users[e].code) return Promise.reject({ type: "registrationConflict" });
       return Promise.resolve({
         continue: function (code) { if (code !== "424242") return Promise.reject({ type: "wrongCode" }); self._set(e); return Promise.resolve(); },
         resend: function () { return Promise.resolve(); },
@@ -243,7 +255,10 @@ window.FRVR = {
       (window.__frvrCalls = window.__frvrCalls || []).push("loginToFRVR");
       var c = (o && o.credentials) || {};
       if (!/@mock$/.test(c.email || "")) return Promise.resolve({});
-      if (!this._users[c.email] || this._users[c.email] !== c.password) return Promise.reject({ type: "invalidCredentials" });
+      var u = this._users[c.email];
+      if (!u || !u.pw || u.pw !== c.password) return Promise.reject({ type: "invalidCredentials" });
+      if (u.unverified) return Promise.reject({ type: "emailNotVerified" });
+      (window.__frvrLogins = window.__frvrLogins || []).push(c.email);
       this._set(c.email);
       return Promise.resolve({});
     },
@@ -1668,24 +1683,33 @@ async function run(spec) {
       return { id: row.id, n: row.id.replace("dyn-bot-row-", ""), slot: row.dataset.acct, chip: (row.querySelector(".bot-acct") || {}).textContent || null,
         name: inp ? inp.value : null, fixed: inp ? inp.readOnly : null };
     });
+    /* how: {email, password} types a password and presses Sign in;
+     * {email, prefilled: true} presses Sign in on the password the dialog
+     * filled in; {email, code} or {email, codeButton: true} presses "Email me
+     * a code" (and enters the code if a code box comes up). */
     const signIn = async (f, slot, how) => {
       await f.evaluate(s => document.querySelector('.bot-acct[data-acct-chip="' + s + '"]').click(), slot);
-      await f.evaluate(h => {
+      const prefill = await f.evaluate(h => {
         const d = document.getElementById("ryn-acct-dialog");
+        const pw = d.querySelector('[data-f="password"]');
+        const was = pw.value;
         d.querySelector('[data-f="email"]').value = h.email;
-        if (h.password) { d.querySelector('[data-f="password"]').value = h.password; d.querySelector('[data-act="password"]').click(); }
-        else d.querySelector('[data-act="send"]').click();
+        if (h.password) pw.value = h.password;
+        d.querySelector(h.password || h.prefilled ? '[data-act="password"]' : '[data-act="send"]').click();
+        return was;
       }, how);
-      if (!how.password) {
+      if (!how.password && !how.prefilled) {
         await f.waitForFunction(() => { const d = document.getElementById("ryn-acct-dialog"); const s = d.querySelector(".ryn-acct-status");
-          return d.querySelector(".ryn-acct-code").style.display !== "none" || s.dataset.tone === "bad"; }, null, { timeout: 25000 });
-        await f.evaluate(h => { const d = document.getElementById("ryn-acct-dialog");
-          d.querySelector('[data-f="code"]').value = h.code; d.querySelector('[data-act="code"]').click(); }, how);
+          return d.querySelector(".ryn-acct-code").style.display !== "none" || s.dataset.tone === "bad" || s.dataset.tone === "ok" && /Signed in as/.test(s.textContent); },
+          null, { timeout: 25000 });
+        const codeBox = await f.evaluate(() => document.querySelector("#ryn-acct-dialog .ryn-acct-code").style.display !== "none");
+        if (codeBox) await f.evaluate(h => { const d = document.getElementById("ryn-acct-dialog");
+          d.querySelector('[data-f="code"]').value = h.code || ""; d.querySelector('[data-act="code"]').click(); }, how);
       }
       await f.waitForFunction(() => { const s = document.querySelector("#ryn-acct-dialog .ryn-acct-status");
         return s && (s.dataset.tone === "ok" && /Signed in as/.test(s.textContent) || s.dataset.tone === "bad"); }, null, { timeout: 25000 });
-      return f.evaluate(() => { const d = document.getElementById("ryn-acct-dialog"); const s = d.querySelector(".ryn-acct-status");
-        const res = { tone: s.dataset.tone, text: s.textContent }; d.querySelector('[data-act="close"]').click(); return res; });
+      return f.evaluate(p => { const d = document.getElementById("ryn-acct-dialog"); const s = d.querySelector(".ryn-acct-status");
+        const res = { tone: s.dataset.tone, text: s.textContent, prefill: p }; d.querySelector('[data-act="close"]').click(); return res; }, prefill);
     };
     // Connect the rows numbered `ns` and wait for each to spawn.
     const connect = async (f, ns) => {
@@ -1711,23 +1735,29 @@ async function run(spec) {
       ba.mineBefore = await mine();
       let f = await menu();
       await f.evaluate(() => { const c = document.getElementById("_botAccounts"); if (!c.checked) c.click(); });
-      const r2 = await addRow(f), r3 = await addRow(f);
-      ba.rows1 = [r2, r3];
-      ba.signin = [await signIn(f, r2.slot, { email: "bot1@mock", password: "pw1" }), await signIn(f, r3.slot, { email: "bot2@mock", code: "424242" })];
-      ba.wrong = await (async () => { const r = await addRow(f); const res = await signIn(f, r.slot, { email: "bot1@mock", password: "nope" });
-        await f.evaluate(id => document.getElementById(id).querySelector(".icon-btn.danger").click(), r.id); return res; })();
+      const r2 = await addRow(f), r3 = await addRow(f), r4 = await addRow(f);
+      ba.rows1 = [r2, r3, r4];
+      ba.signin = [await signIn(f, r2.slot, { email: "bot1@mock", password: "pw1" }), await signIn(f, r3.slot, { email: "bot2@mock", code: "424242" }),
+        // a password account asked for a code: it signs in on the bot password the dialog filled in
+        await signIn(f, r4.slot, { email: "bot3@mock", codeButton: true })];
+      const tryRow = async how => { const r = await addRow(f); const res = await signIn(f, r.slot, how);
+        await f.evaluate(id => document.getElementById(id).querySelector(".icon-btn.danger").click(), r.id); return res; };
+      ba.wrong = await tryRow({ email: "bot1@mock", password: "nope" });
+      ba.unverified = await tryRow({ email: "bot4@mock", prefilled: true });
       ba.saved1 = await saved();
       ba.mineAfterSignIn = await mine();
       ba.rowsAfter = await f.evaluate(ids => ids.map(id => { const r = document.getElementById(id); const i = r.querySelector("input.input");
-        return { name: i.value, fixed: i.readOnly, chip: r.querySelector(".bot-acct").textContent }; }), [r2.id, r3.id]);
-      ba.round1 = await connect(f, [r2.n, r3.n]);
-      await removeRows(f, [r2.id, r3.id]);
+        return { name: i.value, fixed: i.readOnly, chip: r.querySelector(".bot-acct").textContent }; }), [r2.id, r3.id, r4.id]);
+      ba.round1 = await connect(f, [r2.n, r3.n, r4.n]);
+      await removeRows(f, [r2.id, r3.id, r4.id]);
       // long enough that the first tokens are within a minute of running out
       await page.waitForTimeout(+(process.env.BOT_REFRESH_WAIT_MS || 12000));
-      const q2 = await addRow(f), q3 = await addRow(f);
-      ba.rows2 = [q2, q3];
+      const q2 = await addRow(f), q3 = await addRow(f), q4 = await addRow(f);
+      ba.rows2 = [q2, q3, q4];
       ba.dialogs2 = await f.evaluate(() => !!document.getElementById("ryn-acct-dialog"));
-      ba.round2 = await connect(f, [q2.n, q3.n]);
+      // bot3's session is over by now: FRVR wants its password again
+      ba.round2 = await connect(f, [q2.n, q3.n, q4.n]);
+      ba.saved2 = await saved();
       ba.mineAfterJoins = await mine();
 
       // a reload: the page from the top, in again, and the same accounts
@@ -2016,36 +2046,48 @@ function report(r) {
      " of 900 centre px are not grass " + r.centre.outline + ")");
   if (r.botacct) {
     const a = r.botacct, J = x => JSON.stringify(x);
+    const DEF = "123456789aa";
     ok(!a.error, "the bot-accounts run finished" + (a.error ? ": " + a.error : ""));
     const s = a.saved1 || {};
     const rnd = n => /^[A-Za-z0-9]{8}$/.test(n || "");
-    const [p2, p3] = a.rows1 || [{}, {}];
-    ok(p2.slot === "2" && p3.slot === "3" && p2.chip === "Sign in" && p3.chip === "Sign in",
-       "with Bot 1 taken, the next two rows are Bots 2 and 3, each with a Sign in button (" + J(a.rows1) + ")");
-    ok(a.signin && a.signin.every(x => x.tone === "ok") && s[2] && s[2].email === "bot1@mock" && s[3] && s[3].email === "bot2@mock" && s[3].method === "code" && !s[3].password,
-       "Bot 2 signs in with a password, Bot 3 with an email code, and both are saved for them (" + J(a.signin) + ")");
-    ok(s[2] && s[3] && rnd(s[2].name) && rnd(s[3].name) && s[2].name !== s[3].name && (r.nameClaims || []).length >= 4,
-       "each account gets a random name of its own, claimed past a taken one (" + J([s[2] && s[2].name, s[3] && s[3].name]) + ", " + (r.nameClaims || []).length + " claims)");
+    const rows = a.rows1 || [];
+    ok(rows.length === 3 && rows.map(x => x.slot).join() === "2,3,4" && rows.every(x => x.chip === "Sign in"),
+       "with Bot 1 taken, the next rows are Bots 2, 3 and 4, each with a Sign in button (" + J(rows) + ")");
+    const si = a.signin || [];
+    ok(si.length === 3 && si.every(x => x.tone === "ok") && s[2] && s[2].email === "bot1@mock" && s[3] && s[3].email === "bot2@mock" &&
+       s[3].method === "code" && !s[3].password,
+       "Bot 2 signs in with a typed password, Bot 3 with an email code, and both are saved for them (" + J(si.slice(0, 2)) + ")");
+    ok(si.every(x => x.prefill === DEF), "the dialog's password starts as the bot password, " + DEF + " (" + J(si.map(x => x.prefill)) + ")");
+    ok(si[2] && si[2].tone === "ok" && s[4] && s[4].email === "bot3@mock" && s[4].password === DEF,
+       "a password account asked for a code signs in on the bot password by itself (" + J(si[2]) + ")");
+    ok(s[2] && s[3] && s[4] && [s[2], s[3], s[4]].every(x => rnd(x.name)) && new Set([s[2].name, s[3].name, s[4].name]).size === 3 && (r.nameClaims || []).length >= 6,
+       "each account gets a random name of its own, claimed past a taken one (" + J([2, 3, 4].map(k => s[k] && s[k].name)) + ", " + (r.nameClaims || []).length + " claims)");
     ok(a.wrong && a.wrong.tone === "bad" && /incorrect/i.test(a.wrong.text), "a wrong password is said on the dialog (" + J(a.wrong) + ")");
-    ok(a.rowsAfter && a.rowsAfter.every((x, i) => x.fixed && x.name === [s[2], s[3]][i].name && x.chip === x.name),
+    ok(a.unverified && a.unverified.tone === "bad" && /not verified/i.test(a.unverified.text),
+       "an account whose email is not verified yet is told to verify it first (" + J(a.unverified) + ")");
+    ok(a.rowsAfter && a.rowsAfter.length === 3 && a.rowsAfter.every((x, i) => x.fixed && x.name === [s[2], s[3], s[4]][i].name && x.chip === x.name),
        "a signed-in row shows its account's name, fixed (" + J(a.rowsAfter) + ")");
     const quiet = m => m && !m.sess && !m.cookie && m.frames === 0 && m.signed === (a.mineBefore && a.mineBefore.signed);
     ok(quiet(a.mineAfterSignIn) && quiet(a.mineAfterJoins) && quiet(a.mineEnd),
        "your own sign-in is untouched — no session, cookie or frame left on the page (" + J([a.mineBefore, a.mineAfterSignIn, a.mineAfterJoins, a.mineEnd]) + ")");
-    const names = s[2] && s[3] ? [s[2].name, s[3].name] : [];
+    const names = s[2] && s[3] && s[4] ? [s[2].name, s[3].name, s[4].name] : [];
     const asAccounts = (x, n) => x && x.spawned.length === n && x.authJoins.length === n && x.authJoins.every(j => !j.captcha) && x.tsMinted === 0;
     const ids = x => x ? x.authJoins.map(j => j.id).sort().join(",") : "";
-    ok(asAccounts(a.round1, 2) && ids(a.round1) === "bot1@mock,bot2@mock" && names.every(n => a.round1.spawned.includes(n)),
-       "both join as their accounts, with no Cloudflare check, under their names (" + J(a.round1) + ")");
+    const all3 = "bot1@mock,bot2@mock,bot3@mock";
+    ok(asAccounts(a.round1, 3) && ids(a.round1) === all3 && names.every(n => a.round1.spawned.includes(n)),
+       "all three join as their accounts, with no Cloudflare check, under their names (" + J(a.round1 && a.round1.spawned) + ")");
     const tok = (x, id) => ((x && x.authJoins || []).find(j => j.id === id) || {}).auth;
-    ok(a.rows2 && a.rows2[0].slot === "2" && a.rows2[1].slot === "3" && !a.dialogs2 && asAccounts(a.round2, 2) && ids(a.round2) === "bot1@mock,bot2@mock" &&
-       names.every(n => a.round2.spawned.includes(n)) && tok(a.round2, "bot1@mock") !== tok(a.round1, "bot1@mock") &&
-       tok(a.round2, "bot2@mock") !== tok(a.round1, "bot2@mock"),
-       "removed and added again, they are back on the same accounts and names with nothing typed, on refreshed tokens — the " +
-       "code account's from its saved session, having no password (" + J({ rows: a.rows2, round: a.round2 && a.round2.spawned }) + ")");
+    const s2 = a.saved2 || {};
+    ok(a.rows2 && a.rows2.map(x => x.slot).join() === "2,3,4" && !a.dialogs2 && asAccounts(a.round2, 3) && ids(a.round2) === all3 &&
+       names.every(n => a.round2.spawned.includes(n)) && ["bot1@mock", "bot2@mock", "bot3@mock"].every(id => tok(a.round2, id) !== tok(a.round1, id)),
+       "removed and added again, they are back on the same accounts and names with nothing typed, on new tokens (" +
+       J({ rows: a.rows2 && a.rows2.map(x => x.slot), round: a.round2 && a.round2.spawned }) + ")");
+    ok(s2[3] && s2[3].password === DEF && asAccounts(a.round2, 3),
+       "Bot 3 (signed in by code, no password saved) was signed out by FRVR and came back in on the bot password by itself, and keeps it (" +
+       J(s2[3] && { password: s2[3].password }) + ")");
     ok(a.relogged && a.rows3 && a.rows3[0].chip === "Sign in" && a.rows3[1].fixed && a.rows3[1].name === names[0] &&
        asAccounts(a.round3, 1) && ids(a.round3) === "bot1@mock" && a.round3.spawned[0] === names[0],
-       "after a reload, Bot 2 is still its account and joins as it (" + J({ rows: a.rows3, round: a.round3 }) + ")");
+       "after a reload, Bot 2 is still its account and joins as it (" + J({ rows: a.rows3, round: a.round3 && a.round3.spawned }) + ")");
     ok(a.round4 && a.round4.spawned.length === 1 && /^guest1/.test(a.round4.spawned[0]) && a.round4.authJoins.length === 0 &&
        a.round4.joins.length === 1 && a.round4.joins[0].captcha && !a.round4.joins[0].auth,
        "with \"Bots sign in\" off, a bot is a guest again: a Cloudflare token and no account (" + J(a.round4) + ")");
