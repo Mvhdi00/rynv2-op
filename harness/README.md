@@ -100,20 +100,23 @@ The flags, each one a way the live game behaves that a plain run would not show:
   `+hold+quiet+lag` is where 2.5.1's taps landed a tick late (557 ms).
 - `+reload` — in, spawned, then the page reloaded (F5); everything after is
   measured on the second load.
-- `+botacct` — bots with accounts of their own ("Bots sign in"). Bot 2 signs
-  in with a typed password (`bot1@mock`/`pw1`), Bot 3 with an email code
-  (`bot2@mock`, code `424242`), Bot 4 (`bot3@mock`, a password account) asks
-  for a code and must sign in on the bot password the dialog filled in
-  (`123456789aa`). A wrong password, and an account whose email is not
-  verified (`bot4@mock`), must each be said. All must join on their
-  account's token alone (no captcha, no Cloudflare check) under a random name
-  claimed past a taken one (`/name` answers 409 once); removed and added
-  again, and after a reload, they must come back on the same accounts with
-  nothing typed (tokens run out in `BOT_JWT_S`, 70 s). bot2's and bot3's
-  sessions end after 10 s, so Bot 3 — no password saved — must get back in on
-  the bot password by itself. Switched off, a bot is a guest. The fake FRVR
-  SDK keeps its session in localStorage and a cookie, and the page's own must
-  stay untouched throughout.
+- `+botacct` — bots with accounts of their own ("Bots sign in"), signed in
+  through the game's own sign-in card. From the lobby, Bot 1's Sign in with a
+  typed password (`bot1@mock.test`/`botpass01`) and Bot 2's on the bot
+  password the dialog fills in (`bot3@mock.test`/`123456789aa`): Ryn drives
+  the game's card, saves what the sign-in wrote to the page (the fake SDK's
+  `frvr_session` and `frvr_sid` cookie) for the bot, and reloads the page back
+  to how it was. An unverified account (`bot4@mock.test`) must be refused in
+  the game's own words and cancel cleanly. In the game, both must join on
+  their account's token alone (no captcha, no Cloudflare check) under random
+  names claimed past a taken one (`/name` answers 409 once per bot account);
+  removed and added again, they come back on the same accounts, the tokens
+  renewed in a hidden frame from the saved sessions (tokens run out in
+  `BOT_JWT_S`, 70 s; bot3's session ends after 10 s, so it has to get back in
+  on its saved password). Switched off, a bot is a guest. `+mine`: you are
+  signed in to your own account (`me@mock.test`) throughout — it must be set
+  aside and put back, never signed out or signed in again. The fake SDK logs
+  every sign-in and sign-out across reloads (`sessionStorage.__frvrLog`).
 - `toolate` (a mode, like `fast`/`late`) — RYN injected after the game has
   already started, as a cached reload can do: it must reload the page once.
   `toolate+lateagain` — the second time within a minute: it must stand aside

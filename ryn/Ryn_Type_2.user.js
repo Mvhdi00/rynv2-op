@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.4-fix7
+// @version         2.9.4-fix8
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -2548,7 +2548,6 @@ window.grbtp = 35;
    * removed when the sign-in, or the token, is done. */
   const RynBotAuth = {
     _chain: Promise.resolve(),
-    _pending: null,
     _run(fn) {
       const run = this._chain.then(fn, fn);
       this._chain = run.catch(() => {});
@@ -2769,112 +2768,6 @@ window.grbtp = 35;
       if (claims && claims.extra && typeof claims.extra.identifier === "string") acct.identifier = claims.extra.identifier;
       return token;
     },
-    async _finish(slot, acct) {
-      const prev = RynBotAccounts.get(slot);
-      acct.name = await RynBotAccounts.claimName(acct, prev && prev.email === acct.email ? prev.name : null);
-      acct.savedAt = Date.now();
-      RynBotAccounts.put(slot, acct);
-      return acct;
-    },
-    _dropPending() {
-      const p = this._pending;
-      this._pending = null;
-      if (p) {
-        clearTimeout(p.timer);
-        p.inst.close();
-      }
-    },
-    signInPassword(slot, email, password) {
-      return this._run(async () => {
-        this._dropPending();
-        const acct = {
-          email: email,
-          method: "password",
-          password: password,
-          store: {},
-          cookies: {}
-        };
-        const inst = await this._open(acct.store, acct.cookies, () => {});
-        try {
-          try {
-            await rynWithin(inst.auth.loginToFRVR({
-              platform: "frvr",
-              credentials: {
-                email: email,
-                password: password
-              }
-            }), 2e4, "Signing in");
-          } catch (e) {
-            throw rynFrvrError(e, "Email or password incorrect. (A new account's email has to be verified first.)");
-          }
-          await this._capture(inst, acct);
-        } finally {
-          inst.close();
-        }
-        return this._finish(slot, acct);
-      });
-    },
-    // The game's own order: a sign-in code, or for an email with no account
-    // yet, a sign-up code. The frame stays up until the code is entered.
-    requestCode(slot, email) {
-      return this._run(async () => {
-        this._dropPending();
-        const acct = {
-          email: email,
-          method: "code",
-          store: {},
-          cookies: {}
-        };
-        const inst = await this._open(acct.store, acct.cookies, () => {});
-        let flow = null;
-        try {
-          let first = null;
-          try {
-            flow = await rynWithin(inst.auth.requestEmailLoginCode(email), 2e4, "Sending the code");
-          } catch (e) {
-            first = e;
-          }
-          if (first !== null) {
-            const kind = first && first.type || "";
-            if (kind === "networkError" || kind === "accountNotActive" || kind === "registrationConflict") throw rynFrvrError(first, "");
-            try {
-              flow = await rynWithin(inst.auth.requestEmailRegisterCode(email), 2e4, "Sending the code");
-            } catch (e) {
-              throw rynFrvrError(e, "Couldn't send a code to that email.");
-            }
-          }
-          if (!flow || typeof flow.continue !== "function") throw new Error("Couldn't send a code to that email.");
-        } catch (e) {
-          inst.close();
-          throw e;
-        }
-        this._pending = {
-          slot: slot,
-          acct: acct,
-          inst: inst,
-          flow: flow,
-          timer: setTimeout(() => this._dropPending(), 15 * 60e3)
-        };
-      });
-    },
-    submitCode(slot, code) {
-      return this._run(async () => {
-        const p = this._pending;
-        if (!p || p.slot !== slot) throw new Error("Send a code first.");
-        try {
-          await rynWithin(p.flow.continue(code), 2e4, "Checking the code");
-        } catch (e) {
-          // Kept open: a mistyped code can be typed again.
-          throw (e && e.type) === "serverError" ? new Error("Code expired. Send a new one.") : rynFrvrError(e, "Wrong or expired code.");
-        }
-        try {
-          await this._capture(p.inst, p.acct);
-        } finally {
-          this._dropPending();
-        }
-        return this._finish(slot, p.acct);
-      });
-    },
     /* A token for bot `slot` to join with. The one from last time while it
      * has a minute left; otherwise the saved session is opened and refreshed,
      * and if that session has ended, a saved password signs it in again. */
@@ -2939,9 +2832,452 @@ window.grbtp = 35;
         }
         RynBotAccounts.save();
         return acct.access;
+      }).catch(e => {
+        // Kept for the sign-in report (no token or password in it).
+        try {
+          const acct = RynBotAccounts.get(slot);
+          if (acct) {
+            acct.lastError = String(e && e.message || e).slice(0, 300);
+            RynBotAccounts.save();
+          }
+        } catch (_) {}
+        throw e;
       });
     }
   };
+  /* A bot signed in through the game's own sign-in.
+   *
+   * FRVR's SDK will not sign anyone in from a frame of its own on the live
+   * site, but the game's sign-in works. So Ryn drives that: the game's card,
+   * the bot's email, its password (the bot password by default). Once the page
+   * is signed in as the bot, what the sign-in wrote to this page's storage is
+   * the bot's session — that is saved for the bot, the page's storage goes
+   * back to what it was (your own sign-in included, set aside first and never
+   * signed out), and the page reloads into it.
+   *
+   * The state lives in localStorage, so it carries across those reloads. */
+  const RYN_BOT_CAPTURE_KEY = "_ryn_bot_capture";
+  // Never moved: Ryn's own keys and the game's settings.
+  const RYN_CAPTURE_KEEP = /^(RYN$|_ryn|ryn|moo_|skin_color$|moofoll$|native_resolution$|show_ping$)/i;
+  const RYN_CAPTURE_MS = 5 * 60e3;
+  const rynClock = ms => {
+    try {
+      return new Date(ms).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    } catch (_) {
+      return "?";
+    }
+  };
+  const RynBotCapture = {
+    _timer: null,
+    _state() {
+      try {
+        const s = JSON.parse(localStorage.getItem(RYN_BOT_CAPTURE_KEY) || "null");
+        return s && typeof s === "object" ? s : null;
+      } catch (_) {
+        return null;
+      }
+    },
+    _put(s) {
+      try {
+        if (s) localStorage.setItem(RYN_BOT_CAPTURE_KEY, JSON.stringify(s));
+        else localStorage.removeItem(RYN_BOT_CAPTURE_KEY);
+      } catch (_) {}
+    },
+    _account() {
+      try {
+        return RYN._account || null;
+      } catch (_) {
+        return null;
+      }
+    },
+    _signedIn() {
+      const J = this._account();
+      try {
+        return !!(J && J.signedIn());
+      } catch (_) {
+        return false;
+      }
+    },
+    _who() {
+      const J = this._account();
+      try {
+        return J && J.email() || "";
+      } catch (_) {
+        return "";
+      }
+    },
+    // The lobby, not a game: the game's menu is up and its HUD is not.
+    _lobby() {
+      const menu = document.getElementById("mainMenu");
+      return !!menu && menu.style.display !== "none" && !(document.body && document.body.classList.contains("hud"));
+    },
+    // Everything a sign-in could have written here, outside Ryn's and the
+    // game's own keys.
+    _entries() {
+      const ls = {};
+      const ck = {};
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k !== null && !RYN_CAPTURE_KEEP.test(k)) ls[k] = localStorage.getItem(k);
+        }
+      } catch (_) {}
+      try {
+        for (const part of String(document.cookie || "").split(";")) {
+          const at = part.indexOf("=");
+          const k = (at === -1 ? part : part.slice(0, at)).trim();
+          if (k && !RYN_CAPTURE_KEEP.test(k)) ck[k] = at === -1 ? "" : part.slice(at + 1).trim();
+        }
+      } catch (_) {}
+      return {
+        ls: ls,
+        ck: ck
+      };
+    },
+    _cookie(k, v) {
+      const host = location.hostname.replace(/^www\./, "");
+      for (const domain of [ "", "; domain=." + host ]) {
+        try {
+          document.cookie = v === null ? k + "=; path=/; max-age=0" + domain : k + "=" + v + "; path=/; max-age=31536000" + domain;
+        } catch (_) {}
+        if (v !== null) break;
+      }
+    },
+    // The page's storage as `target` has it, for these keys and its own.
+    _write(target, lsKeys, ckKeys) {
+      const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+      for (const k of new Set([ ...lsKeys, ...Object.keys(target.ls) ])) {
+        try {
+          if (has(target.ls, k)) localStorage.setItem(k, target.ls[k]);
+          else localStorage.removeItem(k);
+        } catch (_) {}
+      }
+      for (const k of new Set([ ...ckKeys, ...Object.keys(target.ck) ])) this._cookie(k, has(target.ck, k) ? target.ck[k] : null);
+    },
+    _say(text, tone, actions, ms) {
+      try {
+        RynNotice.show("bot-capture", {
+          text: text,
+          tone: tone || "info",
+          actions: actions || [],
+          ms: ms || 0
+        });
+      } catch (_) {}
+    },
+    // From the bot's account dialog. Says why when it cannot start.
+    start(slot, email, password) {
+      if (this._state()) return "A bot sign-in is already going on — finish or cancel it first.";
+      if (!this._lobby()) return "Go back to the lobby first: signing a bot in reloads the page.";
+      if (!this._account() || !document.getElementById("signInButton") || !document.getElementById("accountCard")) return "The game's sign-in is not ready yet — try again in a moment.";
+      const base = this._entries();
+      const s = {
+        slot: slot,
+        email: email,
+        password: password,
+        at: Date.now(),
+        step: "signin",
+        base: base,
+        stash: null,
+        me: ""
+      };
+      if (this._signedIn()) {
+        // Your own sign-in, set aside (not signed out) for the bot's.
+        s.step = "aside";
+        s.stash = base;
+        s.me = this._who();
+        this._put(s);
+        this._write({
+          ls: {},
+          ck: {}
+        }, Object.keys(base.ls), Object.keys(base.ck));
+        this._say("Setting your own sign-in aside for Bot " + slot + "'s — the page reloads…");
+        setTimeout(() => location.reload(), 150);
+        return null;
+      }
+      this._put(s);
+      this._signIn(s);
+      return null;
+    },
+    cancel(why) {
+      const s = this._state();
+      clearInterval(this._timer);
+      this._timer = null;
+      if (!s) return;
+      this._put(null);
+      try {
+        const close = document.getElementById("accountClose");
+        if (close) close.click();
+      } catch (_) {}
+      let reload = false;
+      // Signed in as the bot already, or your own set aside: back as it was.
+      if (s.stash || this._signedIn() && this._who() !== s.me) {
+        const now = this._entries();
+        this._write(s.stash || s.base || {
+          ls: {},
+          ck: {}
+        }, Object.keys(now.ls), Object.keys(now.ck));
+        reload = true;
+      }
+      if (reload) {
+        if (why) this._put({
+          step: "note",
+          text: why,
+          at: Date.now()
+        });
+        setTimeout(() => location.reload(), 150);
+      } else if (why) {
+        this._say(why, "bad");
+      } else {
+        try {
+          RynNotice.hide("bot-capture");
+        } catch (_) {}
+      }
+    },
+    // The game's card, filled in and sent; then watched until the page is
+    // signed in as the bot.
+    _signIn(s) {
+      const $ = id => document.getElementById(id);
+      try {
+        if (UI_default.menuOpened) UI_default.closeMenu();
+      } catch (_) {}
+      const cancel = {
+        label: "Cancel",
+        run: () => this.cancel(null)
+      };
+      this._say("Signing Bot " + s.slot + " in through the game's sign-in (" + s.email + ")…", "info", [ cancel ]);
+      let sent = false;
+      let shownError = "";
+      let busy = false;
+      const visible = el => !!el && el.style.display !== "none" && (() => {
+        try {
+          return getComputedStyle(el).display !== "none";
+        } catch (_) {
+          return true;
+        }
+      })();
+      const fill = () => {
+        if (sent) return;
+        const card = $("accountCard");
+        if (!visible(card)) {
+          const open = $("signInButton");
+          if (open && !this._signedIn()) open.click();
+          return;
+        }
+        const email = $("accountEmail");
+        const pw = $("accountPassword");
+        const link = $("accountLinkA");
+        const submit = $("accountSubmit");
+        if (!email || !pw || !submit) return;
+        email.value = s.email;
+        // "Use password instead" shows the password box (the game redraws on
+        // the click itself).
+        if (!visible(pw) && link && /password instead/i.test(link.textContent || "")) link.click();
+        if (!visible(pw)) return;
+        pw.value = s.password || RynBotAccounts.defaultPassword();
+        sent = true;
+        submit.click();
+      };
+      clearInterval(this._timer);
+      this._timer = setInterval(() => {
+        if (busy) return;
+        const cur = this._state();
+        if (!cur || cur.at !== s.at) {
+          clearInterval(this._timer);
+          this._timer = null;
+          return;
+        }
+        if (Date.now() - s.at > RYN_CAPTURE_MS) {
+          this.cancel("Bot " + s.slot + "'s sign-in took too long and was stopped — your page is as it was.");
+          return;
+        }
+        if (this._signedIn()) {
+          if (s.me && this._who() === s.me) {
+            // Your own sign-in came back by itself: FRVR keeps it somewhere
+            // Ryn cannot set aside.
+            this.cancel("Your own sign-in could not be set aside here. Sign out of your account in the game, then press Sign in on Bot " + s.slot + " again.");
+            return;
+          }
+          busy = true;
+          clearInterval(this._timer);
+          this._timer = null;
+          this._capture(s).catch(e => this.cancel("Bot " + s.slot + " signed in, but saving it failed: " + (e && e.message || e)));
+          return;
+        }
+        fill();
+        // The game's own answer (wrong password, email not verified, …),
+        // said here with the way on.
+        const status = $("accountStatus");
+        const err = status && status.className === "error" ? (status.textContent || "").trim() : "";
+        if (err && err !== shownError) {
+          shownError = err;
+          this._say("Bot " + s.slot + ": the game says \"" + err + "\". A new account has to verify its email first (FRVR's email). You can also sign it in with a code from its email: type it in the game's box and press Continue.", "bad", [ {
+            label: "Use an email code",
+            keep: true,
+            run: () => {
+              // "Forgot password?" is the game's way back to codes; then send.
+              const link = $("accountLinkA");
+              if (link && /forgot|use a code/i.test(link.textContent || "")) link.click();
+              const email = $("accountEmail");
+              if (email) email.value = s.email;
+              const submit = $("accountSubmit");
+              if (submit) submit.click();
+              this._say("A code is on its way to " + s.email + " — type it in the game's box and press Continue.", "info", [ cancel ]);
+            }
+          }, cancel ]);
+        }
+      }, 300);
+    },
+    async _capture(s) {
+      const J = this._account();
+      this._say("Saving Bot " + s.slot + "'s sign-in…", "info");
+      let token = null;
+      try {
+        token = await rynWithin(J.freshAccessToken(), 8e3, "The token");
+      } catch (_) {}
+      if (!token) {
+        try {
+          token = J.accessToken();
+        } catch (_) {}
+      }
+      if (!token) throw new Error("the game gave no token for it");
+      const claims = rynJwtClaims(token) || {};
+      const base = s.base || {
+        ls: {},
+        ck: {}
+      };
+      const now = this._entries();
+      const store = {};
+      const cookies = {};
+      for (const k of Object.keys(now.ls)) {
+        if (base.ls[k] !== now.ls[k]) store[k] = now.ls[k];
+      }
+      for (const k of Object.keys(now.ck)) {
+        if (base.ck[k] !== now.ck[k]) cookies[k] = now.ck[k];
+      }
+      let verified = false;
+      try {
+        verified = !!J.verified();
+      } catch (_) {}
+      if (!verified && claims.extra && claims.extra.verified) verified = true;
+      let idb = [];
+      try {
+        if (window.indexedDB && indexedDB.databases) idb = (await rynWithin(indexedDB.databases(), 2e3, "IndexedDB")).map(d => d && d.name).filter(Boolean);
+      } catch (_) {}
+      const email = claims.extra && typeof claims.extra.identifier === "string" && claims.extra.identifier || this._who() || s.email;
+      const iat = typeof claims.iat === "number" ? claims.iat > 1e12 ? Math.round(claims.iat / 1e3) : claims.iat : null;
+      const acct = {
+        email: email,
+        method: "game",
+        password: s.password || RynBotAccounts.defaultPassword(),
+        store: store,
+        cookies: cookies,
+        access: token,
+        accessExp: claims.exp ? claims.exp * 1e3 : Date.now() + 5 * 60e3,
+        verified: verified,
+        identifier: email,
+        report: {
+          keys: Object.keys(store),
+          cookies: Object.keys(cookies),
+          idb: idb,
+          lifetimeS: claims.exp && iat ? claims.exp - iat : null,
+          at: Date.now()
+        }
+      };
+      const prev = RynBotAccounts.get(s.slot);
+      acct.name = await RynBotAccounts.claimName(acct, prev && prev.email === acct.email ? prev.name : null);
+      acct.savedAt = Date.now();
+      RynBotAccounts.put(s.slot, acct);
+      // Back to the page as it was: the bot's keys out, yours (if any) back.
+      // Never a sign-out — that would end the bot's session too.
+      this._write(s.stash || base, Object.keys(store), Object.keys(cookies));
+      this._put({
+        step: "done",
+        slot: s.slot,
+        name: acct.name,
+        me: s.me,
+        bot: email,
+        exp: acct.accessExp,
+        at: Date.now()
+      });
+      this._say("Bot " + s.slot + " saved as " + acct.name + " — reloading back to your own sign-in…", "ok");
+      setTimeout(() => location.reload(), 150);
+    },
+    // After any reload this started.
+    resume() {
+      const s = this._state();
+      if (!s) return;
+      if (s.step === "note") {
+        this._put(null);
+        this._say(s.text, "bad");
+        return;
+      }
+      if (s.step === "done") {
+        this._put(null);
+        if (this._signedIn() && s.bot && this._who() === s.bot) {
+          // The game kept the bot signed in on this page (its session is not
+          // where Ryn could put it back): signed out here, and the bot keeps
+          // the token it has.
+          try {
+            this._account().signOut();
+          } catch (_) {}
+          this._say("Bot " + s.slot + " is saved as " + s.name + " (its token is good until " + rynClock(s.exp) + "). The game kept that account signed in on this page, so it was signed out" + (s.me ? " — sign back in to your own account." : "."), "info");
+        } else {
+          this._say("Bot " + s.slot + " is signed in as " + s.name + " and saved." + (s.me ? " Your own sign-in is back." : ""), "ok", null, 15e3);
+        }
+        return;
+      }
+      if (Date.now() - s.at > RYN_CAPTURE_MS) {
+        this.cancel("A bot sign-in from before was never finished — your page is as it was.");
+        return;
+      }
+      if (s.step === "aside") {
+        if (this._signedIn() && this._who() === s.me) {
+          this.cancel("Your own sign-in could not be set aside here. Sign out of your account in the game, then press Sign in on Bot " + s.slot + " again.");
+          return;
+        }
+        s.step = "signin";
+        s.base = this._entries();
+        this._put(s);
+      }
+      this._signIn(s);
+    }
+  };
+  // A sign-in this started before the last reload is picked up once the game
+  // and FRVR's SDK are up.
+  (function rynBotCaptureBoot() {
+    try {
+      if (!localStorage.getItem(RYN_BOT_CAPTURE_KEY)) return;
+    } catch (_) {
+      return;
+    }
+    let tries = 0;
+    const go = () => setTimeout(() => {
+      try {
+        RynBotCapture.resume();
+      } catch (e) {
+        try {
+          console.error("[RYN] bot sign-in:", e);
+        } catch (_) {}
+      }
+    }, 1200);
+    const wait = () => {
+      let ready = false;
+      try {
+        ready = !!(RYN._account && document.getElementById("accountCard") && document.getElementById("signInButton"));
+      } catch (_) {}
+      if (!ready) {
+        if (++tries < 400) setTimeout(wait, 300);
+        return;
+      }
+      const p = window.frvrSdkInitPromise;
+      if (p && typeof p.then === "function") p.then(go, go);
+      else go();
+    };
+    wait();
+  })();
   const RYN_JOIN_REFUSED = {
     members: "This server is members-only, and bots join as guests — switch to a server bots can join.",
     refused: "The join API refused this bot's Cloudflare token. If a check box appeared, it has to be answered.",
@@ -38258,16 +38594,10 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       const box = doc.createElement("div");
       box.id = "ryn-acct-dialog";
       box.dataset.slot = String(slot);
-      box.innerHTML = '<div class="ryn-acct-card" role="dialog">' + '<div class="ryn-acct-head"><span class="ryn-acct-title"></span><button type="button" class="icon-btn" data-act="close" title="Close">✕</button></div>' + '<div class="ryn-acct-now"></div>' + '<input class="input" data-f="email" type="email" placeholder="Email" autocomplete="off" spellcheck="false">' + '<input class="input" data-f="password" type="password" placeholder="Password" autocomplete="new-password">' + '<div class="ryn-acct-row"><button type="button" class="option-button primary" data-act="password">Sign in</button>' + '<button type="button" class="option-button" data-act="send">Email me a code instead</button></div>' + '<div class="ryn-acct-code" style="display:none"><input class="input" data-f="code" type="text" inputmode="numeric" placeholder="Code from the email" autocomplete="off">' + '<button type="button" class="option-button primary" data-act="code">Confirm</button></div>' + '<div class="ryn-acct-status"></div>' + '<button type="button" class="option-button" data-act="forget" style="display:none">Sign out — forget this account</button>' + '<div class="ryn-acct-note">The password starts as the bot password from the Bots settings, and is tried again by itself whenever FRVR signs the bot out. A new account\'s email has to be verified (FRVR\'s email) before its password signs in. Saved for this bot in this browser; new accounts get a random name that stays theirs.</div>' + "</div>";
+      box.innerHTML = '<div class="ryn-acct-card" role="dialog">' + '<div class="ryn-acct-head"><span class="ryn-acct-title"></span><button type="button" class="icon-btn" data-act="close" title="Close">✕</button></div>' + '<div class="ryn-acct-now"></div>' + '<input class="input" data-f="email" type="email" placeholder="Bot\'s email" autocomplete="off" spellcheck="false">' + '<input class="input" data-f="password" type="text" placeholder="Password" autocomplete="off" spellcheck="false">' + '<div class="ryn-acct-row"><button type="button" class="option-button primary" data-act="signin">Sign in</button>' + '<button type="button" class="option-button" data-act="forget" style="display:none">Sign out — forget it</button>' + '<button type="button" class="option-button" data-act="report">Copy sign-in report</button></div>' + '<div class="ryn-acct-status"></div>' + '<textarea class="input ryn-acct-report" readonly style="display:none" rows="5"></textarea>' + '<div class="ryn-acct-note">Sign in uses the game\'s own sign-in: Ryn fills in the email and password and saves the account for this bot, then reloads the page back to your own sign-in (once, or twice if you are signed in). Do it from the lobby. The password starts as the bot password from the Bots settings; a new account has to verify its email first.</div>' + "</div>";
       const $ = sel => box.querySelector(sel);
       $(".ryn-acct-title").textContent = "Bot " + slot + " account";
-      // The bot password (Bots settings), ready to go.
-      const fillPassword = () => {
-        const acct = RynBotAccounts.get(slot);
-        $('[data-f="password"]').value = acct && acct.password || RynBotAccounts.defaultPassword();
-      };
-      fillPassword();
-      for (const inp of box.querySelectorAll("input")) {
+      for (const inp of box.querySelectorAll("input, textarea")) {
         inp.onfocus = () => {
           this.activeInput = inp;
         };
@@ -38282,25 +38612,15 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       };
       const showNow = () => {
         const acct = RynBotAccounts.get(slot);
-        $(".ryn-acct-now").textContent = acct ? "Signed in as " + (acct.name || "?") + " (" + acct.email + ")" + (acct.verified ? "" : " — its email is not verified yet") + "." : "No account yet: Bot " + slot + " joins as a guest.";
+        let text = "No account yet: Bot " + slot + " joins as a guest.";
+        if (acct) {
+          const left = acct.accessExp - Date.now();
+          text = "Signed in as " + (acct.name || "?") + " (" + acct.email + ")" + (acct.verified ? "" : " — its email is not verified yet") + ". " + (left > 0 ? "Token good until " + rynClock(acct.accessExp) + "." : "Its token has run out; it is renewed when the bot joins, or press Sign in again.");
+        }
+        $(".ryn-acct-now").textContent = text;
         $('[data-act="forget"]').style.display = acct ? "" : "none";
         if (acct && !$('[data-f="email"]').value) $('[data-f="email"]').value = acct.email;
-      };
-      const busy = on => {
-        for (const b of box.querySelectorAll("button[data-act]")) {
-          if (b.dataset.act !== "close") b.disabled = on;
-        }
-      };
-      const done = acct => {
-        busy(false);
-        showNow();
-        $(".ryn-acct-code").style.display = "none";
-        fillPassword();
-        status("Signed in as " + acct.name + ". " + (acct.verified ? "" : "Its email is not verified yet, so it joins with a Cloudflare check until it is. ") + (RynBotAccounts.on() ? "Bot " + slot + " uses it from its next connect." : "Turn on \"Bots sign in\" for bots to use it."), "ok");
-      };
-      const fail = e => {
-        busy(false);
-        status(e && e.message || String(e), "bad");
+        $('[data-f="password"]').value = acct && acct.password || RynBotAccounts.defaultPassword();
       };
       const close = () => {
         box.remove();
@@ -38313,53 +38633,63 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         }
         const act = ev.target && ev.target.dataset ? ev.target.dataset.act : null;
         if (!act) return;
-        const email = $('[data-f="email"]').value.trim();
         if (act === "close") {
           close();
         } else if (act === "forget") {
           RynBotAccounts.forget(slot);
           showNow();
           status("Forgotten. Bot " + slot + " joins as a guest.", "");
-        } else if (!/^[^@\s]+@[^@\s]+$/.test(email)) {
-          status("Enter the account's email.", "bad");
-        } else if (act === "password") {
-          const password = $('[data-f="password"]').value;
-          if (!password) {
-            status("Enter its password, or use a code instead.", "bad");
-            return;
-          }
-          busy(true);
-          status("Signing in…", "");
-          RynBotAuth.signInPassword(slot, email, password).then(done, fail);
-        } else if (act === "send") {
-          busy(true);
-          status("Sending a code to " + email + "…", "");
-          RynBotAuth.requestCode(slot, email).then(() => {
-            busy(false);
-            $(".ryn-acct-code").style.display = "";
-            status("Code sent — check " + email + ".", "ok");
-            try {
-              $('[data-f="code"]').focus();
-            } catch (_) {}
-          }, e => {
-            // An account with a password takes no code: its password then.
-            const password = $('[data-f="password"]').value || RynBotAccounts.defaultPassword();
-            if (!(e && e.rynPassword) || !password) {
-              fail(e);
-              return;
-            }
-            status("This account signs in with a password — signing in with it…", "");
-            RynBotAuth.signInPassword(slot, email, password).then(done, fail);
+        } else if (act === "report") {
+          // Names and times only: no token, no password, no session values.
+          const acct = RynBotAccounts.get(slot);
+          const report = JSON.stringify({
+            ryn: "2.9.4-fix8",
+            sdk: RynBotAuth._sdkUrl(),
+            init: RynBotAuth._initArg().slice(0, 200),
+            slot: slot,
+            account: acct ? {
+              method: acct.method,
+              verified: !!acct.verified,
+              keys: acct.report && acct.report.keys || Object.keys(acct.store || {}),
+              cookies: acct.report && acct.report.cookies || Object.keys(acct.cookies || {}),
+              idb: acct.report && acct.report.idb || [],
+              tokenLifetimeS: acct.report ? acct.report.lifetimeS : null,
+              tokenLeftS: Math.round((acct.accessExp - Date.now()) / 1e3),
+              lastError: acct.lastError || null
+            } : null
           });
-        } else if (act === "code") {
-          const code = $('[data-f="code"]').value.trim();
-          if (!code) {
-            status("Enter the code from the email.", "bad");
+          const area = $(".ryn-acct-report");
+          area.style.display = "";
+          area.value = report;
+          try {
+            area.select();
+          } catch (_) {}
+          let copied = false;
+          try {
+            copied = doc.execCommand("copy");
+          } catch (_) {}
+          try {
+            if (!copied && window.navigator.clipboard) window.navigator.clipboard.writeText(report).then(() => status("Report copied — send it to whoever is fixing Ryn.", "ok"), () => {});
+          } catch (_) {}
+          status(copied ? "Report copied — send it to whoever is fixing Ryn." : "Report below — select it and copy it.", copied ? "ok" : "");
+        } else if (act === "signin") {
+          const email = $('[data-f="email"]').value.trim();
+          const password = $('[data-f="password"]').value || RynBotAccounts.defaultPassword();
+          if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+            status("Enter the bot account's email.", "bad");
             return;
           }
-          busy(true);
-          status("Checking the code…", "");
-          RynBotAuth.submitCode(slot, code).then(done, fail);
+          if (password.length < 8) {
+            status("The game wants a password of 8 characters or more.", "bad");
+            return;
+          }
+          const why = RynBotCapture.start(slot, email, password);
+          if (why) {
+            status(why, "bad");
+            return;
+          }
+          status("Signing in through the game's sign-in…", "ok");
+          close();
         }
       };
       doc.body.appendChild(box);
