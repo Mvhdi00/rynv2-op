@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.4-fix1
+// @version         2.9.4-fix2
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -732,6 +732,21 @@ window.grbtp = 35;
    * render call (wrapTurnstile) or, before that, from its bundle's text
    * (RynWire.learn); the constant is the 2025 key, for until either is seen. */
   let rynGameSitekey = null;
+  // Set by RYN's trap on window.turnstile once it is installed: puts the trap
+  // back around an API RynCF's own copy of Cloudflare's script published.
+  let rynTurnstileAdopt = null;
+  // What occupies window.turnstile right now, for saying why a check failed.
+  const rynTurnstileSlot = () => {
+    try {
+      const d = Object.getOwnPropertyDescriptor(window, "turnstile");
+      if (!d) return "none";
+      const v = d.get ? d.get.call(window) : d.value;
+      return (d.get ? "trap" : "value") + ":" + (v && typeof v.render === "function" ? "api" : typeof v);
+    } catch (_) {
+      return "unreadable";
+    }
+  };
+  let rynTurnstileReadySeq = 0;
   // The server list's API version, from the game's bundle (RynWire.learn).
   let rynServersVersion = null;
   const rynSitekey = () => rynGameSitekey || RYN_SITEKEY;
@@ -842,7 +857,12 @@ window.grbtp = 35;
         const finish = (error, api) => {
           if (done) return;
           done = true;
-          timers.forEach(t => clearTimeout(t) || clearInterval(t));
+          timers.forEach(t => t && typeof t.clear === "function" ? t.clear() : clearTimeout(t) || clearInterval(t));
+          if (!error && cleared && typeof rynTurnstileAdopt === "function") {
+            try {
+              rynTurnstileAdopt(api);
+            } catch (_) {}
+          }
           if (this._loading === loading) this._loading = null;
           if (error) {
             this._failedAt = Date.now();
@@ -858,11 +878,40 @@ window.grbtp = 35;
           const api = this.api();
           if (api) finish(null, api);
         }, 100));
+        let slotBefore = "unseen";
+        let cleared = false;
+        let calledBack = false;
+        const why = () => "copies of Cloudflare's script on the page: " + this.scripts().length +
+          ", window.turnstile before: " + slotBefore + ", now: " + rynTurnstileSlot() +
+          ", Cloudflare's onload: " + (calledBack ? "called" : "never called");
         const putOwn = () => {
           if (done || this.api()) return;
+          /* A turnstile property holding no API is a slot nothing will fill:
+           * Cloudflare's script finds it and takes itself for a duplicate.
+           * Cleared so this copy publishes; the trap is put back around what
+           * it publishes (rynTurnstileAdopt). */
+          slotBefore = rynTurnstileSlot();
+          if (slotBefore !== "none") {
+            try {
+              cleared = delete window.turnstile;
+            } catch (_) {}
+          }
+          const ready = "__rynTurnstileReady" + ++rynTurnstileReadySeq;
+          window[ready] = () => {
+            calledBack = true;
+            const api = this.api();
+            if (api) finish(null, api);
+          };
+          timers.push({
+            clear: () => {
+              try {
+                delete window[ready];
+              } catch (_) {}
+            }
+          });
           try {
             own = document.createElement("script");
-            own.src = RYN_TS_SRC + "?render=explicit";
+            own.src = RYN_TS_SRC + "?render=explicit&onload=" + ready;
             own.async = true;
             own.setAttribute("data-ryn", "turnstile");
             own.addEventListener("error", () => {
@@ -875,8 +924,8 @@ window.grbtp = 35;
             });
             own.addEventListener("load", () => {
               timers.push(setTimeout(() => {
-                if (!this.api()) finish(new Error("Cloudflare's script loaded, but its check never became available"));
-              }, 4e3));
+                if (!this.api()) finish(new Error("Cloudflare's script loaded, but its check never became available (" + why() + ")"));
+              }, 8e3));
             }, {
               once: true
             });
@@ -43336,17 +43385,34 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     };
     try {
       let turnstileApi = win.turnstile;
-      Object.defineProperty(win, "turnstile", {
+      const trap = {
         configurable: true,
         enumerable: true,
         get() {
           return turnstileApi;
         },
         set(api) {
-          turnstileApi = wrapTurnstile(api);
+          // Kept whatever the wrap does: a wrap that fails must not cost the
+          // page its Cloudflare API.
+          turnstileApi = api;
+          try {
+            turnstileApi = wrapTurnstile(api) || api;
+          } catch (e) {}
         }
-      });
-      wrapTurnstile(turnstileApi);
+      };
+      Object.defineProperty(win, "turnstile", trap);
+      try {
+        wrapTurnstile(turnstileApi);
+      } catch (e) {}
+      // RynCF clears this slot when Cloudflare's script will not fill it, and
+      // hands back the API its own copy then published.
+      rynTurnstileAdopt = api => {
+        turnstileApi = api;
+        try {
+          turnstileApi = wrapTurnstile(api) || api;
+        } catch (e) {}
+        Object.defineProperty(win, "turnstile", trap);
+      };
     } catch (e) {}
     {
       // ...and if the API defines itself some other way than by assignment.

@@ -35,8 +35,9 @@ const editor = new Editor(fs.readFileSync(BASE, "utf8"));
 
 /* The groups this base still needs. 2.9.4 absorbed the hook and transport
  * repairs upstream (tools/check-hooks.js, tools/check-wire.js); what it still
- * gets wrong on the bot path is the device each bot joins as. */
-const GROUPS = ["bots"];
+ * gets wrong on the bot path is the device each bot joins as, and getting
+ * each bot its Cloudflare check when the page's window.turnstile is dead. */
+const GROUPS = ["bots", "turnstile"];
 repairs.apply(editor, DRIVERS, GROUPS);
 
 /* The version, so an installed copy can be told from the one it replaced.
@@ -45,9 +46,9 @@ repairs.apply(editor, DRIVERS, GROUPS);
   const version = editor.code.match(/^\/\/ @version(\s+)([\d.]+)\s*$/m);
   if (!version) throw new Error("could not find @version in the userscript header");
   editor.edit(
-    "header: version " + version[2] + " -> " + version[2] + "-fix1",
+    "header: version " + version[2] + " -> " + version[2] + "-fix2",
     version[0],
-    "// @version" + version[1] + version[2] + "-fix1"
+    "// @version" + version[1] + version[2] + "-fix2"
   );
 }
 
