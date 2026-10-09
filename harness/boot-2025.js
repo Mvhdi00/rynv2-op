@@ -183,6 +183,12 @@ const tag = id => CANVAS.has(id) ? `<canvas id="${id}" width="1280" height="720"
   : id === "menuDialog" ? `<div id="${id}"><span></span>${MENU_DIALOG}${ids.filter(c => PARENT[c] === id).map(c => tag(c)).join("")}</div>`
   : `<div id="${id}"><span></span>${ids.filter(c => PARENT[c] === id).map(c => tag(c)).join("")}</div>`;
 
+// What a JWT says (the mock SDK's tokens are base64url JWTs).
+const jwtClaims = token => {
+  try { return JSON.parse(Buffer.from(String(token).split(".")[1].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString()); }
+  catch (e) { return null; }
+};
+
 const FRVR_SDK = `
 /* stand-in for the FRVR SDK: the surface the 2025 bundle calls, and a record
  * of every ad it was asked to show */
@@ -194,18 +200,54 @@ window.FRVR = {
   channelCharacteristics: { allowNavigation: true },
   setChannel: function () {},
   profile: { name: function () { return "frvr-user"; } },
+  /* Signed in to a *@mock account, the session is kept as an SDK keeps it:
+   * in this window's localStorage (and a cookie), the access token a JWT
+   * that names the account and runs out (BOT_JWT_S). A bot's sign-in has to
+   * keep all of that away from the page's own. */
   auth: {
     _in: false, _l: [],
-    isLoggedIn: function () { return this._in; },
-    isVerified: function () { return this._in; },
+    _users: { "bot1@mock": "pw1", "bot2@mock": null },
+    _sess: function () { try { return JSON.parse(localStorage.getItem("frvr_session") || "null"); } catch (e) { return null; } },
+    _jwt: function (email) {
+      var p = { extra: { identifier: email, verified: true }, exp: Math.floor(Date.now() / 1000) + ${+(process.env.BOT_JWT_S || 70)}, iat: Date.now() };
+      return "h." + btoa(JSON.stringify(p)).replace(/=+$/, "").replace(/\\+/g, "-").replace(/\\//g, "_") + ".s";
+    },
+    _set: function (email) {
+      localStorage.setItem("frvr_session", JSON.stringify({ email: email, access: this._jwt(email) }));
+      document.cookie = "frvr_sid=" + encodeURIComponent(email) + "; path=/";
+      this._l.forEach(function (f) { try { f(); } catch (e) {} });
+    },
+    isLoggedIn: function () { return this._in || !!this._sess(); },
+    isVerified: function () { return this.isLoggedIn(); },
     getFRVRID: function () { return this._in ? "frvr-1" : null; },
-    getAccessToken: function () { return this._in ? "acc-token" : null; },
-    getFreshAccessToken: function () { return Promise.resolve(this.getAccessToken()); },
+    getAccessToken: function () { if (this._in) return "acc-token"; var s = this._sess(); return s ? s.access : null; },
+    getFreshAccessToken: function () {
+      var s = this._sess();
+      if (s) { s.access = this._jwt(s.email); localStorage.setItem("frvr_session", JSON.stringify(s)); }
+      return Promise.resolve(this.getAccessToken());
+    },
     authenticatedFetch: function (url, opts) { return fetch(url, opts); },
-    requestEmailLoginCode: function (e) { (window.__frvrCalls = window.__frvrCalls || []).push("requestEmailLoginCode:" + e); return Promise.resolve({}); },
+    requestEmailLoginCode: function (e) {
+      (window.__frvrCalls = window.__frvrCalls || []).push("requestEmailLoginCode:" + e);
+      var self = this;
+      if (!/@mock$/.test(e)) return Promise.resolve({});
+      if (!(e in this._users)) return Promise.reject({ type: "userNotFound" });
+      return Promise.resolve({
+        continue: function (code) { if (code !== "424242") return Promise.reject({ type: "wrongCode" }); self._set(e); return Promise.resolve(); },
+        resend: function () { return Promise.resolve(); },
+      });
+    },
     requestEmailRegisterCode: function (e) { (window.__frvrCalls = window.__frvrCalls || []).push("requestEmailRegisterCode:" + e); return Promise.resolve({}); },
     registerOnFRVR: function (o) { (window.__frvrCalls = window.__frvrCalls || []).push("registerOnFRVR:" + (o && o.email)); return Promise.resolve({}); },
-    loginToFRVR: function (o) { (window.__frvrCalls = window.__frvrCalls || []).push("loginToFRVR"); return Promise.resolve({}); },
+    loginToFRVR: function (o) {
+      (window.__frvrCalls = window.__frvrCalls || []).push("loginToFRVR");
+      var c = (o && o.credentials) || {};
+      if (!/@mock$/.test(c.email || "")) return Promise.resolve({});
+      if (!this._users[c.email] || this._users[c.email] !== c.password) return Promise.reject({ type: "invalidCredentials" });
+      this._set(c.email);
+      return Promise.resolve({});
+    },
+    logout: function () { localStorage.removeItem("frvr_session"); return Promise.resolve(); },
     addStatusChangeListener: function (f) { this._l.push(f); },
   },
   init: function () { return Promise.resolve(); },
@@ -619,6 +661,14 @@ async function run(spec) {
         const n = out.joins.length;
         const refuse = (status, body) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body),
           headers: { "access-control-allow-origin": "*" } });
+        /* A *@mock account's token (a bot signed in to its own account):
+         * verified, so it is let in on that alone, no captcha — the way the
+         * game lets a verified player in. */
+        const who = body.auth ? jwtClaims(body.auth) : null;
+        if (who && who.extra && who.extra.identifier) {
+          (out.authJoins = out.authJoins || []).push({ id: who.extra.identifier, captcha: !!body.captcha, auth: body.auth, n });
+          if (who.extra.verified && !body.captcha) return send(JSON.stringify({ ticket: "T" + n, did: body.did || "did-" + n }), "application/json");
+        }
         if (n >= 2 && joinRefuse === "members") return refuse(403, { error: "auth" });
         if (n === 2 && joinRefuse === "busy") return refuse(429, { error: "rate" });
         /* A Cloudflare token is good once: the API's siteverify refuses one
@@ -638,6 +688,23 @@ async function run(spec) {
         const name = url.searchParams.get("name") || "";
         (out.nameChecks = out.nameChecks || []).push(name);
         return send(JSON.stringify(name === "bot11" ? { reserved: true } : {}), "application/json");
+      }
+      /* An account's name: /account says it, /name claims one — the first
+       * claim for each account is "taken" (409), so a bot has to try another. */
+      if (url.pathname === "/account" || url.pathname === "/name") {
+        let body = {};
+        try { body = JSON.parse(req.postData() || "{}"); } catch (e) {}
+        const who = body.auth ? jwtClaims(body.auth) : null;
+        const id = who && who.extra && who.extra.identifier;
+        if (id) {
+          out.acctNames = out.acctNames || {};
+          if (url.pathname === "/account") return send(JSON.stringify({ name: out.acctNames[id] || null }), "application/json");
+          (out.nameClaims = out.nameClaims || []).push({ id, name: body.name });
+          if (out.nameClaims.filter(c => c.id === id).length === 1) return route.fulfill({ status: 409, contentType: "application/json",
+            body: JSON.stringify({ error: "taken" }), headers: { "access-control-allow-origin": "*" } });
+          out.acctNames[id] = body.name;
+          return send(JSON.stringify({ name: body.name }), "application/json");
+        }
       }
       if (url.pathname === "/top") return send(JSON.stringify({ players: [], clans: [] }), "application/json");
       if (url.pathname === "/clan/mine") return send(JSON.stringify({ clan: null, role: null, invites: [], requests: [] }), "application/json");
@@ -665,7 +732,13 @@ async function run(spec) {
       close: (code, reason) => { try { ws.close({ code, reason }); } catch (e) {} },
     };
     ws.onMessage(m => { const b = typeof m === "string" ? Buffer.from(m) : m; later(() => handlers.message.forEach(f => f(b))); });
-    ws.onClose(() => handlers.close.forEach(f => f()));
+    /* A close from the page is answered, as a server answers one: with an
+     * onClose handler set, Playwright leaves that to the route, and the
+     * page's socket would sit in CLOSING with its close event never fired. */
+    ws.onClose((code, reason) => {
+      handlers.close.forEach(f => f());
+      try { ws.close({ code, reason }); } catch (e) {}
+    });
     server.attach(sock, (...a) => {
       out.frames.push(a.join(" ").slice(0, 160));
       conn.letters.push(a[1]);
@@ -1568,6 +1641,122 @@ async function run(spec) {
     }
   }
 
+  /* +botacct: bots with accounts of their own. "Bots sign in" on; Bot 2
+   * signs in with a password and Bot 3 with an email code (Bot 1 is the
+   * guest bot added above). Then: both in under their accounts with no
+   * Cloudflare check; removed and added again, back on the same accounts
+   * with nothing typed (and a token refreshed on the way); a reload, the same
+   * again; "Bots sign in" off, a guest. Your own sign-in untouched throughout. */
+  if (flags.includes("botacct") && isRyn) {
+    const ba = out.botacct = {};
+    const menu = async () => {
+      for (let i = 0; i < 60; i++) {
+        const f = page.frames().find(fr => /^blob:/.test(fr.url()));
+        if (f && await f.evaluate(() => !!document.getElementById("add-bot-dynamic")).catch(() => false)) return f;
+        await page.waitForTimeout(250);
+      }
+      return null;
+    };
+    const mine = () => page.evaluate(() => ({ sess: localStorage.getItem("frvr_session"), signed: !!(window.FRVR && FRVR.auth.isLoggedIn()),
+      cookie: /frvr_sid/.test(document.cookie), frames: document.querySelectorAll("iframe[data-ryn-bot-auth]").length }));
+    const saved = () => page.evaluate(() => { try { return JSON.parse(localStorage.getItem("_ryn_bot_accounts")).slots; } catch (e) { return null; } });
+    const addRow = f => f.evaluate(() => {
+      document.getElementById("add-bot-dynamic").click();
+      const rows = document.querySelectorAll("#dynamic-bot-list .bot-row");
+      const row = rows[rows.length - 1];
+      const inp = row.querySelector("input.input");
+      return { id: row.id, n: row.id.replace("dyn-bot-row-", ""), slot: row.dataset.acct, chip: (row.querySelector(".bot-acct") || {}).textContent || null,
+        name: inp ? inp.value : null, fixed: inp ? inp.readOnly : null };
+    });
+    const signIn = async (f, slot, how) => {
+      await f.evaluate(s => document.querySelector('.bot-acct[data-acct-chip="' + s + '"]').click(), slot);
+      await f.evaluate(h => {
+        const d = document.getElementById("ryn-acct-dialog");
+        d.querySelector('[data-f="email"]').value = h.email;
+        if (h.password) { d.querySelector('[data-f="password"]').value = h.password; d.querySelector('[data-act="password"]').click(); }
+        else d.querySelector('[data-act="send"]').click();
+      }, how);
+      if (!how.password) {
+        await f.waitForFunction(() => { const d = document.getElementById("ryn-acct-dialog"); const s = d.querySelector(".ryn-acct-status");
+          return d.querySelector(".ryn-acct-code").style.display !== "none" || s.dataset.tone === "bad"; }, null, { timeout: 25000 });
+        await f.evaluate(h => { const d = document.getElementById("ryn-acct-dialog");
+          d.querySelector('[data-f="code"]').value = h.code; d.querySelector('[data-act="code"]').click(); }, how);
+      }
+      await f.waitForFunction(() => { const s = document.querySelector("#ryn-acct-dialog .ryn-acct-status");
+        return s && (s.dataset.tone === "ok" && /Signed in as/.test(s.textContent) || s.dataset.tone === "bad"); }, null, { timeout: 25000 });
+      return f.evaluate(() => { const d = document.getElementById("ryn-acct-dialog"); const s = d.querySelector(".ryn-acct-status");
+        const res = { tone: s.dataset.tone, text: s.textContent }; d.querySelector('[data-act="close"]').click(); return res; });
+    };
+    // Connect the rows numbered `ns` and wait for each to spawn.
+    const connect = async (f, ns) => {
+      const from = out.conns.length, j0 = out.joins.length, a0 = (out.authJoins || []).length;
+      const ts0 = await page.evaluate(() => window.__tsOtherTokens || 0).catch(() => 0);
+      await f.evaluate(list => list.forEach(n => document.getElementById("dyn-bot-btn-" + n).click()), ns);
+      const t = Date.now();
+      while (Date.now() - t < 25000 && out.conns.slice(from).filter(c => c.spawnName).length < ns.length) {
+        await answerChallenge();
+        await page.waitForTimeout(200);
+      }
+      await page.waitForTimeout(500);
+      return { spawned: out.conns.slice(from).filter(c => c.spawnName).map(c => c.spawnName),
+        joins: out.joins.slice(j0).map(j => ({ captcha: !!j.captcha, auth: !!j.auth })),
+        authJoins: (out.authJoins || []).slice(a0), tsMinted: (await page.evaluate(() => window.__tsOtherTokens || 0).catch(() => 0)) - ts0,
+        toast: await page.evaluate(() => (document.getElementById("rynBotToast") || {}).textContent || "").catch(() => "") };
+    };
+    const removeRows = async (f, ids) => {
+      await f.evaluate(list => list.forEach(id => { const r = document.getElementById(id); const x = r && r.querySelector(".icon-btn.danger"); if (x) x.click(); }), ids);
+      await f.waitForFunction(list => list.every(id => !document.getElementById(id)), ids, { timeout: 10000 }).catch(() => {});
+    };
+    try {
+      ba.mineBefore = await mine();
+      let f = await menu();
+      await f.evaluate(() => { const c = document.getElementById("_botAccounts"); if (!c.checked) c.click(); });
+      const r2 = await addRow(f), r3 = await addRow(f);
+      ba.rows1 = [r2, r3];
+      ba.signin = [await signIn(f, r2.slot, { email: "bot1@mock", password: "pw1" }), await signIn(f, r3.slot, { email: "bot2@mock", code: "424242" })];
+      ba.wrong = await (async () => { const r = await addRow(f); const res = await signIn(f, r.slot, { email: "bot1@mock", password: "nope" });
+        await f.evaluate(id => document.getElementById(id).querySelector(".icon-btn.danger").click(), r.id); return res; })();
+      ba.saved1 = await saved();
+      ba.mineAfterSignIn = await mine();
+      ba.rowsAfter = await f.evaluate(ids => ids.map(id => { const r = document.getElementById(id); const i = r.querySelector("input.input");
+        return { name: i.value, fixed: i.readOnly, chip: r.querySelector(".bot-acct").textContent }; }), [r2.id, r3.id]);
+      ba.round1 = await connect(f, [r2.n, r3.n]);
+      await removeRows(f, [r2.id, r3.id]);
+      // long enough that the first tokens are within a minute of running out
+      await page.waitForTimeout(+(process.env.BOT_REFRESH_WAIT_MS || 12000));
+      const q2 = await addRow(f), q3 = await addRow(f);
+      ba.rows2 = [q2, q3];
+      ba.dialogs2 = await f.evaluate(() => !!document.getElementById("ryn-acct-dialog"));
+      ba.round2 = await connect(f, [q2.n, q3.n]);
+      ba.mineAfterJoins = await mine();
+
+      // a reload: the page from the top, in again, and the same accounts
+      const relogFrom = out.conns.length;
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.waitForFunction(() => { const d = document.querySelector("#serverSelect .dropdownList"); return d && d.children.length > 0; }, null, { timeout: 20000 });
+      await page.waitForTimeout(2500);
+      await page.fill("#nameInput", "tester").catch(() => {});
+      await answerChallenge();
+      await page.click("#enterGame", { timeout: 5000, force: true }).catch(() => {});
+      const t = Date.now();
+      while (Date.now() - t < 15000 && !out.conns.slice(relogFrom).some(c => c.spawnName === "tester")) { await answerChallenge(); await page.waitForTimeout(200); }
+      ba.relogged = out.conns.slice(relogFrom).some(c => c.spawnName === "tester");
+      f = await menu();
+      const s1 = await addRow(f), s2 = await addRow(f);
+      ba.rows3 = [s1, s2];
+      ba.round3 = await connect(f, [s2.n]);
+      // "Bots sign in" off: the next one is a guest
+      await f.evaluate(() => { const c = document.getElementById("_botAccounts"); if (c.checked) c.click(); });
+      const g = await addRow(f);
+      await f.evaluate(id => { const i = document.getElementById(id).querySelector("input.input"); i.value = "guest1"; }, g.id);
+      ba.rowGuest = g;
+      ba.round4 = await connect(f, [g.n]);
+      ba.mineEnd = await mine();
+    } catch (e) {
+      ba.error = e.message.split("\n")[0];
+    }
+  }
+
   await browser.close();
   return out;
 }
@@ -1825,6 +2014,42 @@ function report(r) {
   }
   ok(r.centre.skin > 300, "the player is drawn at the centre of the screen (" + r.centre.skin +
      " of 900 centre px are not grass " + r.centre.outline + ")");
+  if (r.botacct) {
+    const a = r.botacct, J = x => JSON.stringify(x);
+    ok(!a.error, "the bot-accounts run finished" + (a.error ? ": " + a.error : ""));
+    const s = a.saved1 || {};
+    const rnd = n => /^[A-Za-z0-9]{8}$/.test(n || "");
+    const [p2, p3] = a.rows1 || [{}, {}];
+    ok(p2.slot === "2" && p3.slot === "3" && p2.chip === "Sign in" && p3.chip === "Sign in",
+       "with Bot 1 taken, the next two rows are Bots 2 and 3, each with a Sign in button (" + J(a.rows1) + ")");
+    ok(a.signin && a.signin.every(x => x.tone === "ok") && s[2] && s[2].email === "bot1@mock" && s[3] && s[3].email === "bot2@mock" && s[3].method === "code" && !s[3].password,
+       "Bot 2 signs in with a password, Bot 3 with an email code, and both are saved for them (" + J(a.signin) + ")");
+    ok(s[2] && s[3] && rnd(s[2].name) && rnd(s[3].name) && s[2].name !== s[3].name && (r.nameClaims || []).length >= 4,
+       "each account gets a random name of its own, claimed past a taken one (" + J([s[2] && s[2].name, s[3] && s[3].name]) + ", " + (r.nameClaims || []).length + " claims)");
+    ok(a.wrong && a.wrong.tone === "bad" && /incorrect/i.test(a.wrong.text), "a wrong password is said on the dialog (" + J(a.wrong) + ")");
+    ok(a.rowsAfter && a.rowsAfter.every((x, i) => x.fixed && x.name === [s[2], s[3]][i].name && x.chip === x.name),
+       "a signed-in row shows its account's name, fixed (" + J(a.rowsAfter) + ")");
+    const quiet = m => m && !m.sess && !m.cookie && m.frames === 0 && m.signed === (a.mineBefore && a.mineBefore.signed);
+    ok(quiet(a.mineAfterSignIn) && quiet(a.mineAfterJoins) && quiet(a.mineEnd),
+       "your own sign-in is untouched — no session, cookie or frame left on the page (" + J([a.mineBefore, a.mineAfterSignIn, a.mineAfterJoins, a.mineEnd]) + ")");
+    const names = s[2] && s[3] ? [s[2].name, s[3].name] : [];
+    const asAccounts = (x, n) => x && x.spawned.length === n && x.authJoins.length === n && x.authJoins.every(j => !j.captcha) && x.tsMinted === 0;
+    const ids = x => x ? x.authJoins.map(j => j.id).sort().join(",") : "";
+    ok(asAccounts(a.round1, 2) && ids(a.round1) === "bot1@mock,bot2@mock" && names.every(n => a.round1.spawned.includes(n)),
+       "both join as their accounts, with no Cloudflare check, under their names (" + J(a.round1) + ")");
+    const tok = (x, id) => ((x && x.authJoins || []).find(j => j.id === id) || {}).auth;
+    ok(a.rows2 && a.rows2[0].slot === "2" && a.rows2[1].slot === "3" && !a.dialogs2 && asAccounts(a.round2, 2) && ids(a.round2) === "bot1@mock,bot2@mock" &&
+       names.every(n => a.round2.spawned.includes(n)) && tok(a.round2, "bot1@mock") !== tok(a.round1, "bot1@mock") &&
+       tok(a.round2, "bot2@mock") !== tok(a.round1, "bot2@mock"),
+       "removed and added again, they are back on the same accounts and names with nothing typed, on refreshed tokens — the " +
+       "code account's from its saved session, having no password (" + J({ rows: a.rows2, round: a.round2 && a.round2.spawned }) + ")");
+    ok(a.relogged && a.rows3 && a.rows3[0].chip === "Sign in" && a.rows3[1].fixed && a.rows3[1].name === names[0] &&
+       asAccounts(a.round3, 1) && ids(a.round3) === "bot1@mock" && a.round3.spawned[0] === names[0],
+       "after a reload, Bot 2 is still its account and joins as it (" + J({ rows: a.rows3, round: a.round3 }) + ")");
+    ok(a.round4 && a.round4.spawned.length === 1 && /^guest1/.test(a.round4.spawned[0]) && a.round4.authJoins.length === 0 &&
+       a.round4.joins.length === 1 && a.round4.joins[0].captcha && !a.round4.joins[0].auth,
+       "with \"Bots sign in\" off, a bot is a guest again: a Cloudflare token and no account (" + J(a.round4) + ")");
+  }
 }
 
 (async () => {

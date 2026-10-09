@@ -100,6 +100,15 @@ The flags, each one a way the live game behaves that a plain run would not show:
   `+hold+quiet+lag` is where 2.5.1's taps landed a tick late (557 ms).
 - `+reload` — in, spawned, then the page reloaded (F5); everything after is
   measured on the second load.
+- `+botacct` — bots with accounts of their own ("Bots sign in"). Bot 2 signs
+  in with a password (`bot1@mock`/`pw1`), Bot 3 with an email code
+  (`bot2@mock`, code `424242`), a wrong password must be said. Both must join
+  on their account's token alone (no captcha, no Cloudflare check) under a
+  random name claimed past a taken one (`/name` answers 409 once); removed and
+  added again, and after a reload, they must come back on the same accounts
+  with nothing typed (tokens refreshed: `BOT_JWT_S`, 70 s); switched off, a bot
+  is a guest. The fake FRVR SDK keeps its session in localStorage and a
+  cookie, and the page's own must stay untouched throughout.
 - `toolate` (a mode, like `fast`/`late`) — RYN injected after the game has
   already started, as a cached reload can do: it must reload the page once.
   `toolate+lateagain` — the second time within a minute: it must stand aside
