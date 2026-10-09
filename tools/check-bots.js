@@ -2,13 +2,15 @@
 /*
  * check-bots.js
  *
- * Does each bot join as a device of its own?
+ * Does each bot join as a device of its own — and does a fleet that runs into
+ * the join API's per-address limit (429) wait it out and get in, instead of
+ * failing with "Too many joins"?
  *
- * Simulated, with no network: the client's real RynBotDevices, rynJoinTicket
- * and createSocket are sliced out of the script and run against a fake
- * localStorage (holding the player's own device id), a fake join API and a
- * fake WebSocket. The Cloudflare check and the server list are stubbed — they
- * are not what is under test.
+ * Simulated, with no network: the client's real RynBotDevices, rynJoinTicket,
+ * RynJoinGate and createSocket are sliced out of the script and run against a
+ * fake localStorage (holding the player's own device id), a fake join API, a
+ * fake WebSocket and a fake clock. The Cloudflare check and the server list
+ * are stubbed — they are not what is under test.
  *
  *   node tools/check-bots.js [path/to/client.js]
  */
@@ -49,12 +51,36 @@ function world() {
   const requests = [];
   const sockets = [];
   let issued = 0;
-  const api = { refuse: null };
+  // `limit`: at most `max` /join requests (accepted or not, the way a rate
+  // limiter counts them) in any `windowMs`; past it, 429.
+  const api = { refuse: null, limit: null, tokens: 0 };
+
+  /* A clock that moves only when a timer is due: each timer runs on its own
+   * turn of the real event loop, so every promise it starts settles first. */
+  const clock = { now: 1e6 };
+  const timers = [];
+  let seq = 0, pending = false;
+  const drain = () => {
+    pending = false;
+    if (!timers.length) return;
+    timers.sort((a, b) => a.at - b.at || a.id - b.id);
+    const t = timers.shift();
+    if (t.at > clock.now) clock.now = t.at;
+    t.fn();
+    if (timers.length && !pending) { pending = true; setImmediate(drain); }
+  };
+  const later = (fn, ms) => {
+    timers.push({ id: ++seq, at: clock.now + (ms || 0), fn });
+    if (!pending) { pending = true; setImmediate(drain); }
+    return seq;
+  };
 
   const sandbox = {
     console: { log() {}, warn() {}, error() {} },
-    JSON, Math, Array, Set, Map, Promise, Error, URL, encodeURIComponent,
-    setTimeout: (fn) => { fn(); return 0; },
+    JSON, Math, Array, Set, Map, Promise, Error, URL, Number, encodeURIComponent,
+    Date: { now: () => clock.now, parse: (s) => Date.parse(s) },
+    setTimeout: later,
+    clearTimeout: (id) => { const i = timers.findIndex((t) => t.id === id); if (i >= 0) timers.splice(i, 1); },
     localStorage: {
       getItem: (k) => (store.has(k) ? store.get(k) : null),
       setItem: (k, v) => store.set(k, String(v)),
@@ -65,7 +91,14 @@ function world() {
     // one back for a join that does.
     fetch: async (url, init) => {
       const body = JSON.parse(init.body);
-      requests.push({ url, init, body });
+      requests.push({ url, init, body, at: clock.now });
+      if (api.limit) {
+        const recent = requests.filter((r) => r.at > clock.now - api.limit.windowMs);
+        if (recent.length > api.limit.max) {
+          requests[requests.length - 1].busy = true;
+          return { status: 429, ok: false, json: async () => ({}) };
+        }
+      }
       if (api.refuse) {
         return { status: 403, ok: false, json: async () => ({ error: api.refuse }) };
       }
@@ -91,9 +124,9 @@ function world() {
     rynMembersNotice: () => {},
     rynBotNotice: () => {},
     RynWire: { protocol: () => ({}), ensureProtocol: async () => {} },
-    TokenPool: { take: () => "CF", minting: 0, waitFor: async () => null, refill() {} },
+    TokenPool: { take: () => (api.tokens++, "CF"), minting: 0, waitFor: async () => null, refill() {} },
     TURNSTILE_WAIT_MS: 0,
-    generateTurnstileToken: async () => "CF",
+    generateTurnstileToken: async () => (api.tokens++, "CF"),
     rynEnc: () => ({ buildId: "s16nvz" }),
     _rynOwnSocket: false,
     // A signed-in player: the bot path must not care.
@@ -105,6 +138,10 @@ function world() {
     [
       slice("RYN_JOIN_REFUSED"),
       slice("rynJoinTicket"),
+      // The join queue, where the client has one.
+      ...["rynRetryAfterMs", "RYN_JOIN_LANES", "RYN_JOIN_GAP_MIN_MS", "RYN_JOIN_GAP_MAX_MS",
+        "RYN_JOIN_BUSY_WAIT_MS", "RYN_JOIN_BUSY_WAIT_MAX_MS", "RYN_JOIN_GIVE_UP_MS", "RYN_JOIN_STALE_MS",
+        "RynJoinGate"].map((name) => (client.includes("  const " + name + " = ") ? slice(name) : "")),
       slice("RYN_BOT_DIDS_KEY"),
       client.includes("  const RYN_BOT_DIDS_MAX = ") ? slice("RYN_BOT_DIDS_MAX") : "",
       slice("RynBotDevices"),
@@ -114,7 +151,7 @@ function world() {
     ].join("\n"),
     sandbox
   );
-  return { store, requests, sockets, api, ...sandbox.__t };
+  return { store, requests, sockets, api, clock, ...sandbox.__t };
 }
 
 const HREF = "wss://abc.moomoo.io/?token=tk:mine&b=s16nvz";
@@ -190,15 +227,47 @@ const check = (what, pass, detail) => (pass ? ok : problems).push(pass ? what : 
       "threw cancelled: " + threw + ", held: " + JSON.stringify([...w.RynBotDevices.inUse]));
   }
 
+  /* Under the API's limit: a fleet is not held back. */
+  {
+    const w = world();
+    const start = w.clock.now;
+    await Promise.all([1, 2, 3, 4, 5, 6, 7, 8].map((n) => w.createSocket(HREF, false, "Bot " + n)));
+    const took = w.clock.now - start;
+    check("under the join limit, eight bots join without waiting", w.sockets.length === 8 && took < 2e3,
+      w.sockets.length + " joined in " + took + " ms");
+  }
+
+  /* Over it: the API takes 3 joins per 10 s, and eight bots are added at once. */
+  {
+    const w = world();
+    w.api.limit = { max: 3, windowMs: 10e3 };
+    const results = await Promise.all([1, 2, 3, 4, 5, 6, 7, 8].map((n) =>
+      w.createSocket(HREF, false, "Bot " + n).then(() => null, (e) => (e && (e.rynReason || e.message)) || "threw")));
+    const failed = results.filter(Boolean);
+    check("over the join limit, all eight bots still get in on their own", w.sockets.length === 8 && failed.length === 0,
+      w.sockets.length + " joined; failed: " + JSON.stringify(failed));
+    const busy = w.requests.filter((r) => r.busy);
+    check("429s are waited out, not hammered (fewer 429s than bots)", busy.length < 8,
+      busy.length + " requests answered 429 out of " + w.requests.length);
+    let tooSoon = null;
+    for (const r of busy) {
+      const next = w.requests.find((q) => q.at > r.at);
+      if (next && next.at - r.at < 2500) tooSoon = next.at - r.at;
+    }
+    check("after a 429 the next join waits at least 2.5 s", tooSoon === null, "next one went " + tooSoon + " ms later");
+    check("every bot still has a device of its own", new Set(w.sockets.map((s) => s._rynDid)).size === 8,
+      JSON.stringify(w.sockets.map((s) => s._rynDid)));
+  }
+
   console.log("client :", path.relative(ROOT, CLIENT_PATH));
-  console.log("mode   : simulated (fake storage, join API and sockets; no network)\n");
+  console.log("mode   : simulated (fake storage, join API, sockets and clock; no network)\n");
   for (const line of ok) console.log("  ok    " + line);
   for (const line of problems) console.log("  FAIL  " + line);
   if (problems.length) {
-    console.log("\n" + problems.length + " problem(s): bots do not join as devices of their own.");
+    console.log("\n" + problems.length + " problem(s).");
     process.exit(1);
   }
-  console.log("\nOK - every bot joins as a device of its own, and yours is never used.");
+  console.log("\nOK - every bot joins as a device of its own, yours is never used, and a 429 is waited out.");
 })().catch((e) => {
   console.error("check-bots crashed:", e && e.stack || e);
   process.exit(2);

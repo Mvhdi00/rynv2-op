@@ -36,14 +36,17 @@ const editor = new Editor(fs.readFileSync(BASE, "utf8"));
 
 /* The groups this base still needs. 2.9.4 absorbed the hook and transport
  * repairs upstream (tools/check-hooks.js, tools/check-wire.js); what it still
- * gets wrong on the bot path is the device each bot joins as, and getting
- * each bot its Cloudflare check when the page's window.turnstile is dead. */
-const GROUPS = ["bots", "turnstile"];
+ * gets wrong on the bot path is the device each bot joins as, getting each
+ * bot its Cloudflare check when the page's window.turnstile is dead, and a
+ * fleet that runs into the join API's per-address limit giving up. */
+const GROUPS = ["bots", "turnstile", "joins"];
 repairs.apply(editor, DRIVERS, GROUPS);
 
-// What the user asked for on top: the token pool at 50, and a bottom-right
-// corner that stays empty unless Cloudflare wants a click (tools/tweaks.js).
-tweaks.apply(editor, ["pool50", "quietChecks"]);
+// What the user asked for on top (tools/tweaks.js): the token pool at 50, a
+// bottom-right corner that stays empty unless Cloudflare wants a click, no
+// building and no Flipper in the Crab King's arena, and "Crabking movment" in
+// the Bots menu.
+tweaks.apply(editor, ["pool50", "quietChecks", "crabArena", "crabMovement"]);
 
 /* The version, so an installed copy can be told from the one it replaced.
  * Everything else in the header is the client's own. */
@@ -51,9 +54,9 @@ tweaks.apply(editor, ["pool50", "quietChecks"]);
   const version = editor.code.match(/^\/\/ @version(\s+)([\d.]+)\s*$/m);
   if (!version) throw new Error("could not find @version in the userscript header");
   editor.edit(
-    "header: version " + version[2] + " -> " + version[2] + "-fix3",
+    "header: version " + version[2] + " -> " + version[2] + "-fix4",
     version[0],
-    "// @version" + version[1] + version[2] + "-fix3"
+    "// @version" + version[1] + version[2] + "-fix4"
   );
 }
 

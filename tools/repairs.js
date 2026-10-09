@@ -26,7 +26,7 @@ const WRAPPED = String.raw`(?:\w+\[[^\]]*\]\()?`;
  * take only the ones it still needs. Ryn Type 2 2.9.4 fixed the crypto hooks,
  * nameColor, RenderGrid and learn() itself, and still needs the bot devices.
  */
-const GROUPS = { transport, hooks, bots, turnstile };
+const GROUPS = { transport, hooks, bots, turnstile, joins };
 
 /*
  * Apply the named groups to `editor` (tools/edits.js), using `drivers`
@@ -745,5 +745,251 @@ function turnstile(editor) {
     } catch (e) {}`
   );
 }
+
+/* ------------------------------------------------------------------ *
+ * Joins: queued and paced, so a 429 is waited out instead of failing
+ *
+ * The join API counts /join requests per address, and every bot comes from
+ * the same one. 2.9.4 sends each bot's /join the moment its token is ready, so
+ * a fleet is a burst; past the API's limit each answer is a 429, and the bot
+ * retries twice (3 s, then 6 s, a fresh Cloudflare check each time) and gives
+ * up with "Too many joins from your address right now — wait a little and add
+ * the bot again." The bots that failed are exactly the ones you then have to
+ * add by hand.
+ *
+ * Now every bot's /join goes through one queue, RynJoinGate. While the API
+ * takes them it lets three through at once, as fast as they come, so a fleet
+ * that is under the limit joins as quickly as before. The first 429 drops it
+ * to one at a time and holds the next start back: the API's Retry-After if
+ * the browser is allowed to read it, otherwise 2.5 s doubling to 30 s. Joins
+ * that go through shorten the wait again and, three in a row, open another
+ * lane. A bot that meets a 429 keeps its device and its place, takes a new
+ * token (the pool's first) and queues again, for up to five minutes, so it is
+ * the queue that waits and not you.
+ *
+ * The limit is the server's: nothing here gets more joins through than it
+ * allows, it only stops spending tokens against it and giving up.
+ * ------------------------------------------------------------------ */
+
+function joins(editor) {
+  const edit = (label, find, replace) => editor.edit(label, find, replace);
+
+  edit(
+    "joins: a 429 says how long the API asked to wait, when it says",
+    `      if (response.status === 403 || response.status === 429) {
+        return response.json().catch(() => ({})).then(body => ({
+          ticket: null,
+          error: response.status === 429 ? "busy" : body && body.error === "auth" ? "members" : body && body.error === "vpn" ? "vpn" : "refused"
+        }));
+      }`,
+    `      if (response.status === 403 || response.status === 429) {
+        return response.json().catch(() => ({})).then(body => ({
+          ticket: null,
+          error: response.status === 429 ? "busy" : body && body.error === "auth" ? "members" : body && body.error === "vpn" ? "vpn" : "refused",
+          retryAfterMs: response.status === 429 ? rynRetryAfterMs(response, body) : 0
+        }));
+      }`
+  );
+
+  edit(
+    "joins: the queue every bot's /join goes through",
+    `    }, () => ({
+      ticket: null,
+      error: "network"
+    }));
+  };
+  /* A device id for each bot, the way the game keeps one for you.`,
+    `    }, () => ({
+      ticket: null,
+      error: "network"
+    }));
+  };
+  /* How long a 429 asked to wait, in ms, or 0. Retry-After is only readable
+   * if the API exposes it to this origin; a body that names a wait is read
+   * too. Seconds or an HTTP date, as the header allows. */
+  const rynRetryAfterMs = (response, body) => {
+    let raw = null;
+    try {
+      raw = response.headers && typeof response.headers.get === "function" ? response.headers.get("Retry-After") : null;
+    } catch (_) {}
+    if (raw === null && body && typeof body === "object") {
+      raw = body.retryAfter ?? body.retry_after ?? body.wait ?? null;
+    }
+    if (raw === null || raw === void 0 || raw === "") return 0;
+    const secs = Number(raw);
+    if (Number.isFinite(secs)) return Math.max(0, Math.min(RYN_JOIN_BUSY_WAIT_MAX_MS, secs * 1e3));
+    const at = Date.parse(String(raw));
+    return Number.isFinite(at) ? Math.max(0, Math.min(RYN_JOIN_BUSY_WAIT_MAX_MS, at - Date.now())) : 0;
+  };
+  /* Every bot's /join, through one queue (see tools/repairs.js, "joins"):
+   * up to RYN_JOIN_LANES at once while the API takes them; after a 429, one at
+   * a time, each start held back until the API's wait is over. */
+  const RYN_JOIN_LANES = 3;
+  const RYN_JOIN_GAP_MIN_MS = 120;
+  const RYN_JOIN_GAP_MAX_MS = 12e3;
+  const RYN_JOIN_BUSY_WAIT_MS = 2500;
+  const RYN_JOIN_BUSY_WAIT_MAX_MS = 30e3;
+  // A bot stops queueing after this long of nothing but 429s.
+  const RYN_JOIN_GIVE_UP_MS = 5 * 60e3;
+  // A token that waited this long in the queue may have expired by the time
+  // it is offered; a "refused" for one of those gets one new token.
+  const RYN_JOIN_STALE_MS = 60e3;
+  const RynJoinGate = {
+    lanes: RYN_JOIN_LANES,
+    inFlight: 0,
+    gap: RYN_JOIN_GAP_MIN_MS,
+    nextAt: 0,
+    streak: 0,
+    wins: 0,
+    queue: [],
+    timer: null,
+    // How long until the next /join may start.
+    waitMs() {
+      return Math.max(0, this.nextAt - Date.now());
+    },
+    // \`fn\` sends one /join and resolves with rynJoinTicket's answer, which
+    // comes back with \`queuedMs\` (how long it waited for its turn) added.
+    // \`onWait(ms)\` is told whenever the queue is holding it back.
+    run(fn, onWait) {
+      return new Promise((resolve, reject) => {
+        this.queue.push({
+          fn: fn,
+          onWait: onWait,
+          at: Date.now(),
+          resolve: resolve,
+          reject: reject
+        });
+        this._pump();
+      });
+    },
+    _pump() {
+      if (this.timer !== null) return;
+      while (this.queue.length > 0 && this.inFlight < this.lanes) {
+        const wait = this.waitMs();
+        if (wait > 0) {
+          for (const job of this.queue) {
+            try {
+              if (job.onWait) job.onWait(wait);
+            } catch (_) {}
+          }
+          this.timer = setTimeout(() => {
+            this.timer = null;
+            this._pump();
+          }, wait);
+          return;
+        }
+        const job = this.queue.shift();
+        const sentAt = Date.now();
+        this.inFlight++;
+        this.nextAt = sentAt + this.gap;
+        Promise.resolve().then(job.fn).then(answer => {
+          this.inFlight--;
+          if (answer && typeof answer === "object") answer.queuedMs = sentAt - job.at;
+          this._note(answer);
+          job.resolve(answer);
+          this._pump();
+        }, error => {
+          this.inFlight--;
+          job.reject(error);
+          this._pump();
+        });
+      }
+    },
+    _note(answer) {
+      const now = Date.now();
+      if (answer && answer.error === "busy") {
+        this.streak++;
+        this.wins = 0;
+        this.lanes = 1;
+        this.gap = Math.min(RYN_JOIN_GAP_MAX_MS, Math.max(this.gap * 2, 1e3));
+        const backoff = Math.min(RYN_JOIN_BUSY_WAIT_MAX_MS, RYN_JOIN_BUSY_WAIT_MS * Math.pow(2, this.streak - 1));
+        this.nextAt = Math.max(this.nextAt, now + Math.max(backoff, answer.retryAfterMs || 0));
+      } else if (answer && answer.ticket) {
+        this.streak = 0;
+        this.gap = Math.max(RYN_JOIN_GAP_MIN_MS, Math.round(this.gap * .7));
+        if (++this.wins >= 3 && this.lanes < RYN_JOIN_LANES) {
+          this.lanes++;
+          this.wins = 0;
+        }
+      }
+    }
+  };
+  /* A device id for each bot, the way the game keeps one for you.`
+  );
+
+  edit(
+    "joins: a bot that meets a 429 queues again instead of failing",
+    `        did = lease.did = RynBotDevices.take();
+        let joined = await rynJoinTicket(host, token.slice(3), did);
+        stop();
+        // Too many joins at once: wait, and offer a new token (one that has
+        // been offered is spent, whatever the answer was).
+        for (let retry = 1; joined.error === "busy" && retry <= 2; retry++) {
+          say("Too many joins from your address — trying again in " + 3 * retry + " s…");
+          if (!att) rynBotNotice("Too many joins from your address — trying again in " + 3 * retry + " s");
+          await new Promise(resolve => setTimeout(resolve, 3e3 * retry));
+          stop();
+          let again = null;
+          try {
+            again = await generateTurnstileToken({
+              label: label,
+              attempt: att
+            });
+          } catch (_) {}
+          stop();
+          if (!again) break;
+          say("Joining " + (server && server.name ? server.name : host) + "…");
+          joined = await rynJoinTicket(host, again, did);
+          stop();
+        }`,
+    `        did = lease.did = RynBotDevices.take();
+        const where = server && server.name ? server.name : host;
+        // Through the queue (RynJoinGate), which spaces the fleet's joins the
+        // way the API has been taking them.
+        const ask = captcha => RynJoinGate.run(() => {
+          stop();
+          say("Joining " + where + "…");
+          return rynJoinTicket(host, captcha, did);
+        }, wait => say("Waiting for the join API — " + Math.max(1, Math.ceil(wait / 1e3)) + " s…"));
+        let joined = await ask(token.slice(3));
+        stop();
+        /* Over the API's limit for your address (429): the queue has already
+         * held the next start back. This bot keeps its device and queues
+         * again with a new token (one that was offered is spent, whatever the
+         * answer was), until it is in, refused for another reason, cancelled,
+         * or RYN_JOIN_GIVE_UP_MS of nothing but 429s. A token that waited in
+         * the queue long enough to expire comes back "refused"; that gets one
+         * new token too. */
+        const queuedSince = Date.now();
+        let renewed = false;
+        for (let tries = 2; ; tries++) {
+          const busy = joined.error === "busy" && Date.now() - queuedSince < RYN_JOIN_GIVE_UP_MS;
+          const stale = !renewed && joined.error === "refused" && joined.queuedMs > RYN_JOIN_STALE_MS;
+          if (!busy && !stale) break;
+          if (stale) renewed = true;
+          if (busy) say("The join API is pacing your address — queued for try " + tries + "…");
+          let again = TokenPool.take();
+          if (again === null) {
+            try {
+              again = await generateTurnstileToken({
+                label: label,
+                attempt: att
+              });
+            } catch (_) {}
+          }
+          stop();
+          if (!again) break;
+          joined = await ask(again);
+          stop();
+        }`
+  );
+
+  edit(
+    "joins: what a bot says when five minutes of 429s were not enough",
+    `    busy: "Too many joins from your address right now — wait a little and add the bot again.",`,
+    `    busy: "The join API kept turning away joins from your address for five minutes — add the bot again later.",`
+  );
+}
+
 
 module.exports = { apply, GROUPS, WRAPPED };
