@@ -37,9 +37,10 @@ const editor = new Editor(fs.readFileSync(BASE, "utf8"));
 /* The groups this base still needs. 2.9.4 absorbed the hook and transport
  * repairs upstream (tools/check-hooks.js, tools/check-wire.js); what it still
  * gets wrong on the bot path is the device each bot joins as, getting each
- * bot its Cloudflare check when the page's window.turnstile is dead, and a
- * fleet that runs into the join API's per-address limit giving up. */
-const GROUPS = ["bots", "turnstile", "joins"];
+ * bot its Cloudflare check when the page's window.turnstile is dead, a fleet
+ * that runs into the join API's per-address limit giving up, and the few bots
+ * that never got into your clan. */
+const GROUPS = ["bots", "turnstile", "joins", "clan"];
 repairs.apply(editor, DRIVERS, GROUPS);
 
 // What the user asked for on top (tools/tweaks.js): the token pool at 50, a
@@ -54,9 +55,9 @@ tweaks.apply(editor, ["pool50", "quietChecks", "crabArena", "crabMovement"]);
   const version = editor.code.match(/^\/\/ @version(\s+)([\d.]+)\s*$/m);
   if (!version) throw new Error("could not find @version in the userscript header");
   editor.edit(
-    "header: version " + version[2] + " -> " + version[2] + "-fix5",
+    "header: version " + version[2] + " -> " + version[2] + "-fix6",
     version[0],
-    "// @version" + version[1] + version[2] + "-fix5"
+    "// @version" + version[1] + version[2] + "-fix6"
   );
 }
 

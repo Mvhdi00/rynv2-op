@@ -26,7 +26,7 @@ const WRAPPED = String.raw`(?:\w+\[[^\]]*\]\()?`;
  * take only the ones it still needs. Ryn Type 2 2.9.4 fixed the crypto hooks,
  * nameColor, RenderGrid and learn() itself, and still needs the bot devices.
  */
-const GROUPS = { transport, hooks, bots, turnstile, joins };
+const GROUPS = { transport, hooks, bots, turnstile, joins, clan };
 
 /*
  * Apply the named groups to `editor` (tools/edits.js), using `drivers`
@@ -988,6 +988,213 @@ function joins(editor) {
     "joins: what a bot says when five minutes of 429s were not enough",
     `    busy: "Too many joins from your address right now — wait a little and add the bot again.",`,
     `    busy: "The join API kept turning away joins from your address for five minutes — add the bot again later.",`
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Clan joins: every bot in, and Re-check keeps at it
+ *
+ * Most of the fleet got into your clan and a few never did, for three
+ * reasons in the client:
+ *
+ *   - The leader's AutoAccept empties its list of join requests whenever the
+ *     clan changes. A bot that asked before the leader's tick had seen the new
+ *     clan had its request thrown away unanswered — and a request the server
+ *     still holds is one the bot's later asks cannot get past.
+ *   - AutoAccept declines (clanRequest(id, false)) any request it does not
+ *     recognise as the fleet's while it is expecting fleet joins, and it
+ *     recognised a bot only by RynAllegiance or clientIDList, never by the
+ *     pendingJoins the queue had just put the bot's id in. A bot not yet in
+ *     those lists was turned away, every time it asked.
+ *   - Only a candidate's own tick could send its request, so a candidate
+ *     whose tick had stopped held the whole queue; and a slow answer (1.4 s
+ *     was all it got) cost it 6 s more.
+ *
+ * Now a fleet bot's request is never thrown away or declined; when a bot's
+ * request is not answered in 2.5 s, the leader (when it is you or one of the
+ * bots) answers it again, which clears a request the server is still holding;
+ * any bot's tick sends for the bot whose turn it is; and a bot still outside
+ * is asked again every ~2 s, for as long as it is outside. "Re-check clan
+ * joins" goes further: for two minutes the bots still outside are tried back
+ * to back — the leader answers, the bot asks, again — until each one is in.
+ *
+ * A leader who is somebody else cannot be answered for: the bots' requests
+ * wait on that player.
+ * ------------------------------------------------------------------ */
+
+function clan(editor) {
+  const edit = (label, find, replace) => editor.edit(label, find, replace);
+
+  edit(
+    "clan: answers that come late still count, and a bot outside is asked again every 2 s",
+    `  const CLAN_JOIN_CONFIRM_MS = 1400;
+  const CLAN_PACKET_GAP_MS = 450;
+  const CLAN_RETRY_BACKOFF_MS = 6000;
+  const CLAN_AUDIT_INTERVAL_MS = 5000;
+`,
+    `  const CLAN_JOIN_CONFIRM_MS = 2500;
+  const CLAN_PACKET_GAP_MS = 450;
+  const CLAN_RETRY_BACKOFF_MS = 2000;
+  const CLAN_AUDIT_INTERVAL_MS = 2000;
+  // Re-check clan joins: how long the bots still outside are tried back to back.
+  const CLAN_INSIST_MS = 120e3;
+
+  // One of this fleet's players: you, a bot, or a bot the queue has just sent
+  // a request for. Whichever connection is asking, the fleet is the owner's.
+  function clanIsFleet(c, id) {
+    if (id === null || id === void 0 || !c) return false;
+    try {
+      if (RynAllegiance.isFriendlyID(c, id)) return true;
+    } catch (_) {}
+    if (c.clientIDList && c.clientIDList.has(id)) return true;
+    if (c.pendingJoins && c.pendingJoins.has(id)) return true;
+    const owner = c.ownerClient || c;
+    if (owner.pendingJoins && owner.pendingJoins.has(id)) return true;
+    if (owner.myPlayer && owner.myPlayer.id === id) return true;
+    for (const b of owner.clients || []) {
+      if (b && b.myPlayer && b.myPlayer.id === id) return true;
+    }
+    return false;
+  }
+
+  // The leader answers this bot's request, whether or not its client still
+  // has it listed: a request it lost is still waiting on the server, and the
+  // bot's next ask cannot get past it. With nothing waiting, the server
+  // ignores the answer. Only when the leader is one of ours.
+  function clanLeaderAccept(owner, bot) {
+    const anchor = clanAnchor(owner);
+    const p = bot && bot.myPlayer;
+    if (!anchor || anchor === bot || !anchor.myPlayer || !anchor.myPlayer.isLeader || !p || p.id === null || p.id === void 0) return;
+    try {
+      anchor.PacketManager.clanRequest(p.id, true);
+    } catch (_) {}
+    const reqs = anchor.myPlayer.joinRequests || [];
+    for (let i = reqs.length - 1; i >= 0; i--) {
+      if (reqs[i][0] === p.id) reqs.splice(i, 1);
+    }
+  }
+`
+  );
+
+  edit(
+    "clan: the queue remembers a Re-check",
+    `        nextPacketAt: 0, nextAuditAt: 0, manualRequested: false,
+`,
+    `        nextPacketAt: 0, nextAuditAt: 0, manualRequested: false, insistUntil: 0,
+`
+  );
+
+  edit(
+    "clan: an unanswered request is answered again by the leader",
+    `      } else if (now - q.pendingAt >= CLAN_JOIN_CONFIRM_MS) {
+        q.failed.add(pending);
+        q.retryAt.set(pending, now + CLAN_RETRY_BACKOFF_MS);
+`,
+    `      } else if (now - q.pendingAt >= CLAN_JOIN_CONFIRM_MS) {
+        if (action === "join") clanLeaderAccept(owner, pending);
+        q.failed.add(pending);
+        // During a Re-check, straight back in line.
+        q.retryAt.set(pending, now + (q.insistUntil > now ? 0 : CLAN_RETRY_BACKOFF_MS));
+`
+  );
+
+  edit(
+    "clan: during a Re-check the next round starts at once",
+    `    if (q.phase === "monitor" && now >= q.nextAuditAt) {
+`,
+    `    if (q.phase === "monitor" && (now >= q.nextAuditAt || q.insistUntil > now)) {
+`
+  );
+
+  edit(
+    "clan: any bot's tick sends for the bot whose turn it is",
+    `      // Only the current candidate's own module sends its packet. Other bot
+      // ticks can advance/confirm the shared state, but cannot send for it.
+      if (candidate !== bot) return false;
+`,
+    `      // Any bot's tick sends for the current candidate, on the candidate's
+      // own connection, so a candidate whose own tick has stopped cannot hold
+      // the queue. One without an open socket is passed over.
+      const sock = candidate.SocketManager && candidate.SocketManager.socket;
+      if (!sock || sock.readyState !== 1) {
+        q.index++;
+        continue;
+      }
+`
+  );
+
+  edit(
+    "clan: Re-check tries the bots still outside until they are in",
+    `    q.clan = clan;
+    if (q.pendingBot) {
+`,
+    `    q.clan = clan;
+    // Back to back, until each is in or CLAN_INSIST_MS is up; and a request
+    // any of them has waiting is answered now.
+    q.insistUntil = now + CLAN_INSIST_MS;
+    for (const b of clanMissingBots(owner, clan)) {
+      q.retryAt.delete(b);
+      clanLeaderAccept(owner, b);
+    }
+    if (q.pendingBot) {
+`
+  );
+
+  edit(
+    "clan: a new clan keeps the fleet's requests",
+    `        this.prevClan = currentClan;
+        myPlayer.joinRequests.length = 0;
+`,
+    `        this.prevClan = currentClan;
+        // Strangers' requests were for the clan that is gone. The fleet's are
+        // for this one: a bot that asked before this tick saw the new clan.
+        for (let i = myPlayer.joinRequests.length - 1; i >= 0; i--) {
+          if (!clanIsFleet(this.client, myPlayer.joinRequests[i][0])) myPlayer.joinRequests.splice(i, 1);
+        }
+`
+  );
+
+  edit(
+    "clan: a fleet bot is always accepted (first pass)",
+    `        if (RynAllegiance.isFriendlyID(this.client, id) || clientIDList.has(id)) {
+          PacketManager2.clanRequest(id, true);
+`,
+    `        if (clanIsFleet(this.client, id)) {
+          PacketManager2.clanRequest(id, true);
+`
+  );
+  edit(
+    "clan: a fleet bot is never declined",
+    `        const isMine = RynAllegiance.isFriendlyID(this.client, id) || clientIDList.has(id);
+`,
+    `        const isMine = clanIsFleet(this.client, id);
+`
+  );
+
+  edit(
+    "clan: leaving keeps the fleet's requests",
+    `    leaveClan() {
+      this.client.myPlayer.joinRequests.length = 0;
+`,
+    `    leaveClan() {
+      const reqs = this.client.myPlayer.joinRequests;
+      for (let i = reqs.length - 1; i >= 0; i--) {
+        if (!clanIsFleet(this.client, reqs[i][0])) reqs.splice(i, 1);
+      }
+`
+  );
+
+  edit(
+    "clan: the button says it keeps going",
+    `          button.textContent = a.clan === null ? "You are not in a clan" : a.joined + "/" + a.alive + " joined — retrying " + a.missing;
+`,
+    `          button.textContent = a.clan === null ? "You are not in a clan" : a.missing === 0 ? a.joined + "/" + a.alive + " joined — all in" : a.joined + "/" + a.alive + " joined — retrying " + a.missing + " until in";
+`
+  );
+  edit(
+    "clan: and so does its description",
+    `retries only bots still outside your clan. Each bot gets one turn at a time.`,
+    `retries the bots still outside your clan, again and again, until they are in (for up to two minutes).`
   );
 }
 
