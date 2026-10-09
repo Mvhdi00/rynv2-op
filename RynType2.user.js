@@ -42531,7 +42531,10 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     // old pattern expected a bare identifier then one call.
     Hook.append("postRenderLoop", /\w+\(\),\w+\(\),requestAnimFrame\(\w+\)/, ";RYN._Renderer._postRender();");
     // The frame itself, guarded, so nothing RYN draws can stop the loop.
-    Hook.replace("frameGuard", /(\w+)\(\),(\w+)\(\),requestAnimFrame\((\w+)\)/, "RYN._Renderer._frame($1),$2(),requestAnimFrame($3)");
+    // The next frame is asked for through the browser's own scheduler if the
+    // game's global has gone missing: without one the loop ends, and the screen
+    // freezes on whatever it last drew.
+    Hook.replace("frameGuard", /(\w+)\(\),(\w+)\(\),requestAnimFrame\((\w+)\)/, "RYN._Renderer._frame($1),$2(),(window.requestAnimFrame||window.requestAnimationFrame)($3)");
     // The game's resize handler, so the zoom can call it directly instead of
     // firing a window resize at every listener on the page.
     Hook.replace("exposeResize", /window\.addEventListener\("resize",(\w+)\.checkTrusted\((\w+)\)\)/, "window.addEventListener(\"resize\",$1.checkTrusted(RYN._Renderer._gameResize=$2))");
@@ -43211,12 +43214,32 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       win.customElements.define = function() {
         win.customElements.define = _define;
       };
-      win.requestAnimFrame = function() {
+      /* The fallback way in: the page copy's next frame. It and the
+       * createElement trap below each take the stand-in away when they start
+       * RYN's copy — but only while it is still the stand-in. When the page
+       * copy has already run (a refresh, the page from cache, the script a
+       * moment behind it), this one fires first, and by the time the page copy
+       * reaches the trap — its server list comes back and it builds its menu —
+       * `requestAnimFrame` is RYN's copy's own frame scheduler. Deleting that
+       * ended RYN's frame loop with "requestAnimFrame is not defined": FPS 1
+       * and the screen frozen on the menu, with no player on it. */
+      let rafStub = function() {
+        rafStub = null;
         delete win.requestAnimFrame;
         if (scriptBundle !== null) {
           Injector_default.init(scriptBundle);
         }
       };
+      const dropRafStub = () => {
+        if (rafStub === null) {
+          return;
+        }
+        rafStub = null;
+        try {
+          delete win.requestAnimFrame;
+        } catch (e) {}
+      };
+      win.requestAnimFrame = rafStub;
       blockProperty(win, "requestAnimFrame");
       /* Late injection: <head> was already parsed, so the game's own
        * <script type="module"> has been prepared, and taking it out of the
@@ -43244,12 +43267,23 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       // touch-controls chunk is an /assets/index-*.js too, imported later by
       // RYN's copy; only the module that was stopped is refused after that.
       let pageUrl = null;
+      // Before the trap has fired, the page's entry module is the script
+      // element resetGame found — so RYN's own copy importing the game's
+      // touch-controls chunk (also an /assets/index-*.js) is never taken for it.
+      const entryUrl = () => {
+        if (pageUrl !== null) {
+          return pageUrl;
+        }
+        const hit = scriptBundle !== null && scriptBundle.src ? pageModule.exec(scriptBundle.src) : null;
+        return hit !== null ? hit[0] : null;
+      };
       const stopPageCopy = function createElement() {
         let hit = null;
         try {
           hit = pageModule.exec(new Error().stack || "");
         } catch (e) {}
-        if (hit === null || pageUrl !== null && hit[0] !== pageUrl) {
+        const entry = hit === null ? null : entryUrl();
+        if (hit === null || entry !== null && hit[0] !== entry) {
           return nativeCreateElement.apply(this, arguments);
         }
         if (stopped === null) {
@@ -43262,10 +43296,9 @@ html.ryn-in-lobby .ryn-v2-wrapper {
           };
           window.addEventListener("error", quiet, true);
           // The fallback and the stub it needed are done with: the first frame
-          // of RYN's own copy must not start a second one.
-          try {
-            delete win.requestAnimFrame;
-          } catch (e) {}
+          // of RYN's own copy must not start a second one. If the fallback
+          // already fired, what is there now is RYN's copy's own and stays.
+          dropRafStub();
           win.customElements.define = _define;
           try {
             Injector_default.init(scriptBundle !== null ? scriptBundle : {

@@ -197,9 +197,15 @@ connection per page, so the next connection inherited the last one's state:
   left a stand-in player under your id, so RYN drove a frozen copy of you at 0,0;
 - your loadout: RYN never read `V`, so a resumed player kept the age-1 kit in RYN;
 - when injected late, the UI was built twice (the doubled stats bar, every key
-  handled twice, and Play stopped reconnecting after a drop).
+  handled twice, and Play stopped reconnecting after a drop);
+- when injected after the page's own copy of the game had started (refresh, then
+  Play straight away), the trap that stops that copy deleted RYN's copy's
+  `requestAnimFrame`: "requestAnimFrame is not defined", FPS 1, and the screen
+  frozen on the menu with no player. Waiting until the page had loaded avoided it.
 
 Each new game socket now resets the owner client's per-connection state
 (`PlayerClient._newConnection`), `playerInit` always files your id to you, `V`
-syncs the loadout (ignoring answers to upgrades RYN has already moved past), and
-the UI boots once.
+syncs the loadout (ignoring answers to upgrades RYN has already moved past), the
+UI boots once, and the late-injection stand-in for `requestAnimFrame` is only
+removed while it is still the stand-in (the frame loop also falls back to the
+browser's `requestAnimationFrame`).
