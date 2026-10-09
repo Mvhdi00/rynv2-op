@@ -44547,7 +44547,10 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     Hook.replace("mapSelfColor", /globalAlpha=1,(\w+)\.fillStyle="#fff",(\w+)\./, 'globalAlpha=1,$1.fillStyle=RYN._Renderer._mapColors.self,$2.');
     Hook.replace("mapTeamColor", /fillStyle="rgba\(255,255,255,0\.35\)"/, "fillStyle=RYN._Renderer._mapColors.team");
     Hook.replace("mapDeathMarker", /fillStyle="#fc5553"/, "fillStyle=RYN._Renderer._mapColors.death");
-    Hook.prepend("gameInit", /function (\w+)\(\w+\)\{\w+\.\w+\(\w+,f/, "RYN._gameInit=function(a){$1(a);};");
+    // The game's own Play handler, where Vx wires it to #enterGame — the
+    // fallback RYN.startGame presses. (The 2024 pattern found an init that
+    // took an altcha token; the game has since moved to its own checks.)
+    Hook.replace("gameInit", /(\w+)\.onclick=(\w+)\.checkTrusted\((\w+)\),\2\.hookTouchEvents\(\1\)/, "$1.onclick=$2.checkTrusted(RYN._gameInit=$3),$2.hookTouchEvents($1)");
     Hook.prepend("LockRotationClient", /return \w+\?\(\!/, "return RYN._Possess.angle();");
     Hook.replace("DisableResetMoveDir", /\w+=\{\},\w+\.send\("\w+"\)/, "");
     Hook.append("offset", /\W170\W.+?(\w+)=\w+\-\w+\/2.+?(\w+)=\w+\-\w+\/2;/, "RYN._offset._setXY($1,$2);");
@@ -44574,8 +44577,8 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     // loosely because it is the one part being replaced.
     Hook.replace("totalDamage", /(\w+)\.showText\((\w+),(\w+),NUM{50},[\d.]+,NUM{500},Math\.abs\((\w+)\),[^()]+\)/, "RYN._DamageText._show($1,$2,$3,$4)");
     Hook.replace("objectAlpha", /(\w+)\.globalAlpha=(\w+)\.hideFromEnemy\?([\d.]+):1,/, "$1.globalAlpha=RYN._Renderer._objectAlpha()*($2.hideFromEnemy?$3:1),");
-    Hook.replace("buildingTint", /\.isItem\?\((\w+)=(\w+)\((\w+)\),/, ".isItem?($1=RYN._Renderer._buildingSprite($2($3),$3),");
-    // 2025 draws a structure with an if-statement rather than a ternary.
+    // A structure is drawn with an if-statement (2024's ternary form is gone
+    // from the bundle, and with it the hook that matched it).
     Hook.replace("buildingTint2025", /\.isItem\)\{if\((\w+)=(\w+)\((\w+)\),/, ".isItem){if($1=RYN._Renderer._buildingSprite($2($3),$3),");
     // $3 is the resource being drawn, and it is now handed through so the
     // renderer can tell food from wood and stone. buildingTint has always
@@ -50884,14 +50887,11 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       const settled = p && typeof p.then === "function" ? Promise.resolve(p).catch(() => {}) : Promise.resolve();
       return Promise.race([ settled, new Promise(r => setTimeout(r, 4e3)) ]);
     },
-    _gameInit(token) {},
+    // The game's own Play (gameInit hook). It runs the game's own checks —
+    // the name, Cloudflare — so nothing is fetched or solved here.
+    _gameInit() {},
     async startGame() {
-      const token = await gameToken();
-      if (typeof token !== "string" || token.length === 0) {
-        Logger.error("Failed to generate altcha token..");
-        return;
-      }
-      this._gameInit(token);
+      this._gameInit();
     }
   };
   win.RYN = RYN;
