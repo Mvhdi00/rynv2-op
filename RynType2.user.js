@@ -10779,6 +10779,9 @@ window.grbtp = 35;
       this.y = clamp(this.y, this.scale, Config_default.mapScale - this.scale);
     }
   }
+  // How long an upgrade RYN sent waits for the server's "V" before it is
+  // taken to have been refused (ClientPlayer.syncLoadout).
+  const RYN_LOADOUT_PENDING_MS = 1500;
   class ClientPlayer extends Player_default {
     inventory={};
     weaponXP=[ {}, {} ];
@@ -10805,6 +10808,9 @@ window.grbtp = 35;
     underTurretAttack=false;
     upgradeOrder=[];
     upgradeIndex=0;
+    // When each upgrade RYN sent went out, items [0] and weapons [1], until the
+    // server's "V" for it arrives (syncLoadout).
+    _loadoutPending=[ [], [] ];
     joinRequests=[];
     killedSomeone=false;
     actuallyKilledSomeone=false;
@@ -11028,7 +11034,20 @@ window.grbtp = 35;
     playerInit(id) {
       this.id = id;
       const {PlayerManager: PlayerManager} = this.client;
-      if (!PlayerManager.playerData.has(id)) {
+      /* The id is this player's, whatever is already filed under it. Your own
+       * buildings ("H") and your leaderboard row ("G") each file a stand-in
+       * Player for their owner's sid, and a player the server re-attaches
+       * after a refresh can be sent both before "C" and "D". Keeping the
+       * stand-in left every update moving it instead of you: RYN ran with you
+       * frozen at 0,0 and no weapon. What it learned — the buildings it owns —
+       * comes across. */
+      const held = PlayerManager.playerData.get(id);
+      if (held !== this) {
+        if (held !== void 0 && held.objects instanceof Set) {
+          for (const object of held.objects) {
+            this.objects.add(object);
+          }
+        }
         PlayerManager.playerData.set(id, this);
       }
       // A connection learning its own sid changes who is friendly, and it can
@@ -11110,6 +11129,7 @@ window.grbtp = 35;
     }
     upgradeItem(id) {
       this.upgradeOrder.push(id);
+      this._loadoutPending[id < 16 ? 1 : 0].push(Date.now());
       const {isOwner: isOwner, clients: clients} = this.client;
       if (isOwner) {
         for (const client2 of clients) {
@@ -11222,6 +11242,89 @@ window.grbtp = 35;
         XP.max = -1;
       }
     }
+    /* What the server says you are carrying ("V"): the weapons by slot, or
+     * the item list. The game's bar is drawn from this frame alone; RYN used
+     * to ignore it and track the loadout only through its own upgrade clicks,
+     * which a player the server re-attaches after a refresh never makes — RYN
+     * then fought with the age-1 kit while you held your real one. */
+    syncLoadout(list, isWeapons) {
+      if (!Array.isArray(list)) {
+        return;
+      }
+      // RYN changes the loadout itself the moment it sends an upgrade, and the
+      // server answers each one with a "V" of its own. While a later answer is
+      // still on its way, this one describes a loadout RYN has already moved
+      // past (two upgrades sent back to back, as the insta modules do), so it
+      // is not applied.
+      const pending = this._loadoutPending[isWeapons ? 1 : 0];
+      const now = Date.now();
+      while (pending.length !== 0 && now - pending[0] > RYN_LOADOUT_PENDING_MS) {
+        pending.shift();
+      }
+      if (pending.length !== 0) {
+        pending.shift();
+        if (pending.length !== 0) {
+          return;
+        }
+      }
+      if (isWeapons) {
+        const slots = [ null, null ];
+        for (const id of list) {
+          const weapon = Weapons[id];
+          if (weapon !== void 0 && (weapon.itemType === 0 || weapon.itemType === 1)) {
+            slots[weapon.itemType] = id;
+          }
+        }
+        if (slots[0] === null) {
+          return;
+        }
+        for (let type = 0; type < 2; type++) {
+          if (this.inventory[type] === slots[type]) {
+            continue;
+          }
+          this.inventory[type] = slots[type];
+          // A different weapon in the slot: its XP and reload are its own, as
+          // after an upgrade (ModuleHandler._upgradeItem).
+          const XP = this.weaponXP[type];
+          XP.current = 0;
+          XP.max = -1;
+          if (slots[type] !== null) {
+            try {
+              this.client._ModuleHandler.staticModules.reloading.updateMaxReload(type);
+            } catch (_) {}
+          }
+        }
+        return;
+      }
+      for (let type = 2; type <= 9; type++) {
+        this.inventory[type] = null;
+      }
+      for (const id of list) {
+        const item = Items[id];
+        if (item !== void 0) {
+          this.inventory[item.itemType] = id;
+        }
+      }
+    }
+    // The part of the player that belongs to one connection (see
+    // PlayerClient._newConnection); reset(true) has done the loadout.
+    _resetConnection() {
+      this.id = -1;
+      this.age = 1;
+      this.upgradeAge = 1;
+      this.teammates.clear();
+      this.clanMembers.clear();
+      this.clanMembersAt = 0;
+      this.clanName = null;
+      this.isLeader = false;
+      this.itemCount.clear();
+      this.objects.clear();
+      this.joinRequests.length = 0;
+      this.teleported = false;
+      this.previousHealth = 100;
+      this.currentHealth = 100;
+      this.tempHealth = 100;
+    }
     spawn(customName) {
       const base = customName || this.client._botCustomName || window.localStorage.getItem("moo_name") || "";
       const skin = this.client.isOwner ? Number(window.localStorage.getItem("skin_color")) || 0 : Math.floor(Math.random() * Config_default.skinColors.length);
@@ -11272,6 +11375,8 @@ window.grbtp = 35;
       this.wasDead = true;
       this.upgradeOrder.length = 0;
       this.upgradeIndex = 0;
+      this._loadoutPending[0].length = 0;
+      this._loadoutPending[1].length = 0;
       if (first) {
         return;
       }
@@ -13042,10 +13147,23 @@ window.grbtp = 35;
           _installGameSocketGate(socket);
         } catch (_) {}
       }
-      socket.addEventListener("message", event => this.handleMessage(event));
+      // A socket this manager has moved on from is not read any more: a frame
+      // from the old connection arriving after the new one opened would be
+      // applied to the new server's world.
+      socket.addEventListener("message", event => {
+        if (this.socket === socket) {
+          this.handleMessage(event);
+        }
+      });
       socket.addEventListener("close", event => {
         const {code: code, reason: reason, wasClean: wasClean} = event;
         Logger.warn(`WebSocket Closed: ${code}, '${reason}', ${wasClean}`);
+        // The bundle drops its session on close (`pe=null`); RYN's handle on
+        // it goes with it, so nothing is signed or un-masked with a dead key
+        // before the next connection's io-init.
+        if (this.socket === socket && this.client.isOwner) {
+          this.client._gameCrypto = null;
+        }
       });
       socket.addEventListener("error", () => {
         Logger.error("WebSocket Error");
@@ -13053,6 +13171,24 @@ window.grbtp = 35;
     }
     pingTimeout;
     minPingTime=Infinity;
+    // Per-connection state, for PlayerClient._newConnection. The next io-init
+    // starts the tick clock and the ping again.
+    _resetConnection() {
+      clearTimeout(this._tickWatch);
+      this._tickWatch = null;
+      clearTimeout(this.pingTimeout);
+      this.proto2025 = null;
+      this._seenPlayers.clear();
+      this._seenAnimals.clear();
+      this.PacketQueue.length = 0;
+      this.action = null;
+      this._sendsEmptyTicks = false;
+      this._emptyRun = 0;
+      this._emptyAt = 0;
+      this._realAt = 0;
+      this._synthAt = 0;
+      this._synthRun = 0;
+    }
     handlePing() {
       this.pong = Math.round(performance.now() - this.startPing);
       if (Number.isFinite(this.pong) && this.pong >= 0 && this.pong < this.minPingTime) {
@@ -13755,6 +13891,10 @@ window.grbtp = 35;
 
        case "U":
         myPlayer.newUpgrade(temp[1], temp[2]);
+        break;
+
+       case "V":
+        myPlayer.syncLoadout(temp[1], !!temp[2]);
         break;
 
        case "S":
@@ -34204,6 +34344,62 @@ window.grbtp = 35;
     spawn() {
       this.myPlayer.spawn();
     }
+    /* A new game connection on the same page.
+     *
+     * The 3d3599b6 game no longer reloads the page to come back after a drop
+     * or to change server: it closes the socket, clears its own world (Gs) and
+     * opens another. This client lives for the whole page, so the next
+     * connection used to start with the last one's state — its crypto session
+     * (the new io-init was un-masked with the old key and never read, so the
+     * connection id, the tick clock and the ping all stayed on the old one),
+     * its player id and "in game" flag, its players, buildings and owned hats,
+     * and Possession kept topping the game up with the old world's buildings.
+     *
+     * Everything reset here belongs to one connection. Settings, bots, the
+     * lobby and the session totals (kills, deaths) are the page's and stay. */
+    _newConnection() {
+      if (!this.isOwner) {
+        return;
+      }
+      // The screen first: whatever it was showing is about to be cleared.
+      try {
+        if (Possess !== null && Possess.owner === this) {
+          Possess._resetConnection();
+        }
+      } catch (_) {}
+      this._gameCrypto = null;
+      this.connectSuccess = false;
+      this.clientID = null;
+      this.SocketManager._resetConnection();
+      this.ObjectManager = new ObjectManager_default(this);
+      this.PlayerManager = new PlayerManager_default(this);
+      this.ProjectileManager = new ProjectileManager_default(this);
+      this.EnemyManager = new EnemyManager_default(this);
+      this.LeaderboardManager = new LeaderboardManager_default(this);
+      this.myPlayer.reset(true);
+      this.myPlayer._resetConnection();
+      this.InputHandler.reset();
+      // Owned hats are per player on a server. A resumed player is told what
+      // it owns again by the "5" frames; a new one owns nothing.
+      const ModuleHandler = this._ModuleHandler;
+      for (let t = 0; t < 2; t++) {
+        ModuleHandler.bought[t].clear();
+        const store = ModuleHandler.store[t];
+        store.lastUtility = null;
+        store.current = 0;
+        store.best = 0;
+        store.actual = -1;
+        store.last = 0;
+        const shop = StoreHandler_default.store[t];
+        shop.previous = -1;
+        shop.current = -1;
+        shop.list.clear();
+      }
+      try {
+        GameUI_default.reset();
+      } catch (_) {}
+      delete this._rynMirror;
+    }
   }
   const PlayerClient_default = PlayerClient;
   const UI = new class {
@@ -42050,7 +42246,15 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         configurable: true
       });
     }
+    // Called from every io-init, and a page can now have several connections:
+    // the buttons and the action bar it wraps are the page's and outlive them,
+    // so they are wrapped and given counters once.
+    _gameLoaded=false;
     loadGame() {
+      if (this._gameLoaded) {
+        return;
+      }
+      this._gameLoaded = true;
       this.attachItemCount();
       const {storeButton: storeButton, allianceButton: allianceButton, mapDisplay: mapDisplay} = this.getElements();
       const that = this;
@@ -45803,6 +46007,11 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       const isGameSocket = !isNonGame && /^wss?:\/\//i.test(url);
       if (isGameSocket) {
         Logger.test("Found game socket! Socket initialization..");
+        // Not the page's first: the game is rejoining or changing server
+        // without a reload, and the last connection's state goes first.
+        if (client.SocketManager.socket !== null) {
+          client._newConnection();
+        }
         client.SocketManager.init(socket);
         try {
           window.WebSocket = target;
@@ -46346,6 +46555,28 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       this.owner = owner;
       this.active = owner;
       this.index = -1;
+    }
+    // The main connection is being replaced (PlayerClient._newConnection). The
+    // game clears its world for the new one, so the record of what it is
+    // drawing goes too — left in place, _topUp would hand the new server's
+    // screen the old one's buildings. A possessed bot is let go without a
+    // repaint: there is no world to project into until the new one arrives.
+    _resetConnection() {
+      if (this.possessing) {
+        this._release(this.active);
+        this.active = this.owner;
+        this.index = -1;
+        this._lostSince = 0;
+        try {
+          _possessBadge();
+          _possessSyncFleetUI();
+        } catch (_) {}
+      }
+      this.projectionBlind = false;
+      this._held.clear();
+      this._noteEvent = null;
+      this._noteType = null;
+      this._noteArgs = null;
     }
     // The client every player-facing system should read from.
     c() {
@@ -48582,8 +48813,14 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         if (!c) return;
         const net = c._gameNet;
         const sm = c.SocketManager;
-        if (sm && !c._sockBound && !sm.socket && net && net.socket && net.socket.readyState <= 1) {
-          c._sockBound = true;
+        // Normally the WebSocket construct trap binds every game socket and
+        // this finds them already bound. It is the fallback for one the trap
+        // did not see, and it follows the game onto every later socket as
+        // well — it used to bind once and then sit on the first connection.
+        if (sm && net && net.socket && net.socket !== sm.socket && net.socket.readyState <= 1) {
+          if (sm.socket !== null) {
+            c._newConnection();
+          }
           sm.init(net.socket);
         }
         const pt = win.pingTime;
@@ -48599,7 +48836,17 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     }, 500);
   } catch (e) {}
   resetGame_default(loadedFast);
+  // Once. It is bound to DOMContentLoaded and also called straight away when
+  // the page is past "loading" (further down), and a script that arrives
+  // between the page turning "interactive" and DOMContentLoaded firing got
+  // both: two #rynStats bars on top of each other, the second never filled
+  // in, and every key and mouse listener registered twice.
+  let contentLoadedDone = false;
   const contentLoaded = () => {
+    if (contentLoadedDone) {
+      return;
+    }
+    contentLoadedDone = true;
     Logger.test("Menu initialization..");
     client.InputHandler.init();
     GameUI_default.init();

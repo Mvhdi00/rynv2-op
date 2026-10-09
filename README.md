@@ -177,3 +177,29 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+## Ryn Type 2 (`RynType2.user.js`)
+
+Ryn Type 2 v2.9.4, with a fix for coming back into a game on the 3d3599b6 build.
+
+That build keeps your progress when you come back: after a refresh the server
+re-attaches your player, and after a drop or a server change the game reconnects
+**inside the same page** instead of reloading it. Ryn Type 2 assumed one
+connection per page, so the next connection inherited the last one's state:
+
+- its crypto session, so the new `io-init` was un-masked with the old key and
+  never read (stale connection id, dead ping);
+- its player id and "in game" flag, players, buildings and owned hats — and
+  Possession kept feeding the old world's buildings back into the game;
+- after a refresh, your own buildings / leaderboard row arriving before `C`/`D`
+  left a stand-in player under your id, so RYN drove a frozen copy of you at 0,0;
+- your loadout: RYN never read `V`, so a resumed player kept the age-1 kit in RYN;
+- when injected late, the UI was built twice (the doubled stats bar, every key
+  handled twice, and Play stopped reconnecting after a drop).
+
+Each new game socket now resets the owner client's per-connection state
+(`PlayerClient._newConnection`), `playerInit` always files your id to you, `V`
+syncs the loadout (ignoring answers to upgrades RYN has already moved past), and
+the UI boots once.
