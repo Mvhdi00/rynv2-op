@@ -651,7 +651,7 @@ async function run(spec) {
   out.conns = [];
   await context.routeWebSocket(/^wss:\/\/[^/]*moomoo\.io/, ws => {
     out.sockets.push(ws.url());
-    const conn = { url: ws.url(), letters: [], violations: [] };
+    const conn = { url: ws.url(), letters: [], violations: [], ws: ws };
     out.conns.push(conn);
     const handlers = { message: [], close: [] };
     /* NET_DELAY_MS: each way, for every frame — a ping of twice that. The
@@ -1534,6 +1534,40 @@ async function run(spec) {
     out.zoom = { before: z0, out: zOut, back: zBack };
   }
 
+  /* +switch: back to the lobby and in again, twice — the server drops the
+   * connection (as a server switch, a kick or a restart does) and Play is
+   * pressed. Every new connection needs a new Cloudflare token: the game
+   * spends one on each join and asks for the next with reset(). */
+  if (flags.includes("switch")) {
+    out.rejoins = [];
+    for (let round = 0; round < 2; round++) {
+      // the player's own connections (a bot has its own, by now)
+      const mine = out.conns.filter(c => c.spawnAt && c.spawnName === "tester");
+      const last = mine[mine.length - 1];
+      if (!last) break;
+      const before = out.conns.length;
+      const t1 = Date.now();
+      try { last.ws.close({ code: 1000, reason: "switch" }); } catch (e) {}
+      // RYN may take you straight back in by itself; if the lobby is up
+      // instead, Play is pressed, as you would
+      let ms = null, clicked = false;
+      while (Date.now() - t1 < 20000) {
+        await answerChallenge();
+        const fresh = out.conns.slice(before).find(c => c.spawnAt && c.spawnName === "tester");
+        if (fresh) { ms = fresh.spawnAt - t1; break; }
+        if (!clicked && Date.now() - t1 > 1200) {
+          const visible = await page.evaluate(() => { const b = document.getElementById("enterGame"); if (!b) return false; const r = b.getBoundingClientRect(); return r.width > 0 && r.height > 0; }).catch(() => false);
+          if (visible) {
+            clicked = true;
+            try { await page.click("#enterGame", { timeout: 3000, force: true }); } catch (e) { out.notes.push("rejoin click: " + e.message.split("\n")[0]); }
+          }
+        }
+        await page.waitForTimeout(150);
+      }
+      out.rejoins.push(ms);
+    }
+  }
+
   await browser.close();
   return out;
 }
@@ -1606,6 +1640,8 @@ function report(r) {
    * check wants a click, the box is in front of the player within the game's
    * own 1.5 s) and Play goes straight through. */
   const budget = r.interactive ? 4500 : 2500;
+  if (r.rejoins) ok(r.rejoins.length === 2 && r.rejoins.every(ms => ms !== null && ms <= 4000),
+    "back in the lobby and in again, twice, each on a fresh Cloudflare token (" + JSON.stringify(r.rejoins) + " ms)");
   ok(r.joinMs !== null && r.joinMs <= budget, "Play gets you in on the first press, inside " + budget + " ms" +
      (r.joinMs !== null ? " (" + r.joinMs + " ms)" : " (never)"));
   if (r.interactive) ok(r.answered > 0, "the human check that wants a click is on screen where it can be clicked (" + r.answered + " answered)");

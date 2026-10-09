@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.7
+// @version         2.9.8
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -790,7 +790,19 @@ window.grbtp = 35;
   /* The game's own check (the one Play waits on), as RYN sees it through the
    * render wrapper: when it last produced a token, whether it is asking for a
    * click, and its last error code. Login watches this to repair the check. */
-  const RYN_GAME_CF = { interactive: false, tokenAt: 0, error: null, errorAt: 0, gen: 0, current: 0, ids: [] };
+  const RYN_GAME_CF = { interactive: false, tokenAt: 0, error: null, errorAt: 0, gen: 0, current: 0, ids: [], currentId: null, stale: new Set() };
+  // A page on which the game's own check had to be replaced, remembered for
+  // the next ones (a server switch, normal <-> sandbox, a refresh): there the
+  // working check is put in place at once, so a token is ready before Play.
+  const RYN_CF_REPAIR_KEY = "ryn_cf_repair";
+  const rynCfRepairRemembered = () => {
+    try {
+      const at = +localStorage.getItem(RYN_CF_REPAIR_KEY) || 0;
+      return Date.now() - at < 3 * 864e5;
+    } catch (e) {
+      return false;
+    }
+  };
   // A line in the game's "one quick check" box (#verifyText), which otherwise
   // says only "Verification failed" with no reason.
   const rynVerifyNote = text => {
@@ -43148,10 +43160,37 @@ body #verifyDialog #verifyText, .ryn-lift #verifyText, .ryn-lift-fixed #verifyTe
         const widgetId = render.call(this, target, options, ...Array.prototype.slice.call(arguments, 2));
         try {
           const own = container === "#turnstileWidget" || container && container.id === "turnstileWidget";
-          if (own && widgetId != null) RYN_GAME_CF.ids.push(widgetId);
+          if (own && widgetId != null) {
+            RYN_GAME_CF.ids.push(widgetId);
+            if (RYN_GAME_CF.currentId != null && RYN_GAME_CF.currentId !== widgetId) RYN_GAME_CF.stale.add(RYN_GAME_CF.currentId);
+            RYN_GAME_CF.currentId = widgetId;
+          }
         } catch (e) {}
         return widgetId;
       };
+      /* The game keeps the id of the widget it rendered (vi) for good, and
+       * after every join it asks that widget for the next token:
+       * g0() -> turnstile.reset(vi). Once RYN has replaced a broken widget,
+       * vi names one that is gone, the reset did nothing, and the next join
+       * — a server switch, a reconnect — had no token: "sometimes it gets me
+       * in". Calls on a replaced widget's id go to the one working now. */
+      const redirect = id => id != null && RYN_GAME_CF.stale.has(id) && RYN_GAME_CF.currentId != null && RYN_GAME_CF.currentId !== id ? RYN_GAME_CF.currentId : id;
+      for (const name of [ "reset", "getResponse", "isExpired" ]) {
+        const fn = api[name];
+        if (typeof fn !== "function") continue;
+        api[name] = function(id) {
+          const args = Array.prototype.slice.call(arguments);
+          args[0] = redirect(id);
+          return fn.apply(this, args);
+        };
+      }
+      const removeFn = api.remove;
+      if (typeof removeFn === "function") {
+        api.remove = function(id) {
+          if (id != null && RYN_GAME_CF.stale.has(id)) return;
+          return removeFn.apply(this, arguments);
+        };
+      }
       try {
         Object.defineProperty(api, "__rynWrapped", {
           value: true
@@ -48739,33 +48778,43 @@ body #verifyDialog #verifyText, .ryn-lift #verifyText, .ryn-lift-fixed #verifyTe
       if (this._watch25) return;
       let since = 0;
       let lastFix = 0;
-      let fixes = 0;
+      const started = Date.now();
+      const remembered = rynCfRepairRemembered();
+      let preempted = false;
       this._watch25 = setInterval(() => {
         try {
+          const now = Date.now();
+          /* Remembered from an earlier page: the game's own check had to be
+           * replaced there, so it is replaced here as soon as it has had a
+           * moment, and a token is waiting before Play is pressed. */
+          if (remembered && !preempted && this._api() && RYN_GAME_CF.tokenAt === 0 && now - started > 2500) {
+            preempted = true;
+            lastFix = now;
+            this._renderVisible();
+            return;
+          }
           const dlg = document.getElementById("verifyDialog");
           if (!dlg || !dlg.classList.contains("showing")) {
             since = 0;
             return;
           }
-          const now = Date.now();
           if (!since) since = now;
-          if (RYN_GAME_CF.tokenAt > since) {
-            fixes = 0;
-            return;
-          }
+          if (RYN_GAME_CF.tokenAt > since) return;
           if (RYN_GAME_CF.interactive) return;
           const errored = RYN_GAME_CF.errorAt > since;
-          if (!errored && now - since < 5e3) return;
-          if (now - lastFix < 9e3 || fixes >= 6) return;
+          // once this page (or an earlier one) has needed a fresh check, the
+          // next one does not wait five seconds for it
+          const grace = this._repaired || remembered ? 1500 : 3e3;
+          if (!errored && now - since < grace) return;
+          if (now - lastFix < 6e3) return;
           lastFix = now;
           if (!this._api()) {
             rynVerifyNote("Cloudflare's check never loaded: challenges.cloudflare.com is being blocked (an ad blocker or tracking protection?). Allow it for this site and reload, or sign in.");
             return;
           }
-          fixes++;
           this._renderVisible();
         } catch (e) {}
-      }, 500);
+      }, 300);
     }
     _renderVisible() {
       const ts = this._api();
@@ -48777,18 +48826,30 @@ body #verifyDialog #verifyText, .ryn-lift #verifyText, .ryn-lift-fixed #verifyTe
         try {
           if (typeof ts.remove === "function") ts.remove(id);
         } catch (e) {}
+        RYN_GAME_CF.stale.add(id);
       }
       this._widgetId = null;
+      this._repaired = true;
       const box = this._freshContainer(el);
       rynVerifyNote("Starting a fresh Cloudflare check…");
-      rynCfStatus("the game's check did not answer — showing a fresh one in its box", "info");
+      let waiting = false;
+      try {
+        const dlg = document.getElementById("verifyDialog");
+        waiting = !!dlg && dlg.classList.contains("showing");
+      } catch (e) {}
+      if (waiting) rynCfStatus("the game's check did not answer — showing a fresh one in its box", "info");
       try {
         const id = ts.render(box, {
           sitekey: rynSitekey(),
           theme: "dark",
           size: "normal",
           appearance: "always",
-          callback: t => rynDeliverToken(t, "RYN's visible check"),
+          callback: t => {
+            try {
+              localStorage.setItem(RYN_CF_REPAIR_KEY, String(Date.now()));
+            } catch (e) {}
+            rynDeliverToken(t, "RYN's visible check");
+          },
           "error-callback": code => {
             try {
               window.onTurnstileError && window.onTurnstileError(code);
