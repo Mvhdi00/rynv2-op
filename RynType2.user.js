@@ -47135,6 +47135,14 @@ html.ryn-in-lobby .ryn-v2-wrapper {
           chatBox.value = "";
           return;
         }
+        if (/^\//.test(value.trim()) && typeof RYN._gameChatCommand === "function") {
+          try {
+            if (RYN._gameChatCommand(value)) {
+              chatBox.value = "";
+              return;
+            }
+          } catch (_) {}
+        }
         if (value.length > 0) {
           Possess.chat(value);
         }
@@ -47700,6 +47708,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     Hook.replace("meleeWeapon", /(\w+)\((\w+)\.weapons\[(\w+)\.weaponIndex\],(\w+)\.weaponVariants\[\3\.weaponVariant\]\.src,\3\.scale,0,(\w+)\)/, "RYN._Renderer._guardCall(RYN._MeleeAnim,\"_drawWeapon\",$1,$3,$2.weapons[$3.weaponIndex],$4.weaponVariants[$3.weaponVariant].src,$3.scale,0,$5)", "g");
     Hook.replace("meleeHands", /(\w+)\.fillStyle=(\w+)\.skinColors\[(\w+)\.skinColor\],(\w+)\(\3\.scale\*Math\.cos\((\w+)\),\3\.scale\*Math\.sin\(\5\),NUM{14}\),\4\(\3\.scale\*(\w+)\*Math\.cos\(-\5\*(\w+)\),\3\.scale\*\6\*Math\.sin\(-\5\*\7\),NUM{14}\)/, "$1.fillStyle=$2.skinColors[$3.skinColor],RYN._Renderer._guardCall(RYN._MeleeAnim,\"_drawHands\",$4,$3,$5,$7,$6,$1)");
     Hook.replace("meleeBody", /(\w+)=\((\w+)==(\w+)\?(\w+)\(\):\2\.dir\)\+\2\.dirPlus/, "$1=($2==$3?$4():$2.dir)+(RYN._Renderer._guardCall(RYN._MeleeAnim,\"_bodyRot\",$2)??$2.dirPlus)");
+    Hook.append("exposeChatCommand", /function \w+\((\w+)\)\{(\w+)\(\1\)\|\|\w+\.send\("6",\1\.slice\(0,30\)\)\}/, "RYN._gameChatCommand=$2;");
     Hook.replace("chatMute", /function (\w+)\((\w+),(\w+)\)\{(if\(\2==-1\)\{[\s\S]*?return\})const (\w+)=(\w+)\(\2\);\5&&\(\5\.chatMessage=\3,\5\.chatCountdown=(\w+)\.chatCountdown\)\}/, "function $1($2,$3){if(RYN._ChatLog&&RYN._ChatLog.isMuted($2))return;$4const $5=$6($2);$5&&($5.chatMessage=$3,$5.chatCountdown=$7.chatCountdown)}");
     Hook.replace("maskFRVR", /window\.FRVR/, "FRVR", "g");
     Hook.replace("scaleWidth", /=1920/, "=RYN._ZoomHandler._scale._smooth._w");
