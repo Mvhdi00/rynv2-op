@@ -148,3 +148,20 @@ dummies, rules, your age, weapons, hats, resources and position: `restore`,
 before you leave (before the server removes your buildings) and when the page
 closes. Respawning after a death keeps playing the same world. Worlds live in
 localStorage (`_ryn_worlds`, `_ryn_world_<id>`).
+
+1v1 sparring (`src/sparring.js`, `!spar [easy|normal|hard|pro] [classic|hammer|bow|daggers|random] [ping=ms]`,
+`!spar stop|score`, or Test → 1v1 sparring in the panel): a server-side player that
+fights you with a person's limits. It sees you late (its ping plus a reaction time,
+from a history of what a client would see: your position, weapon, hat, health, a
+trap under you, and the swing of your weapons, from which it tracks your reloads),
+aims with an error and leads your movement. It plays through the same Player code
+as you: soldier in a fight, bull on the tick it hits, booster to chase; it holds a
+weapon to reload it (but not the musket while chasing), eats after a delay and never
+inside the 120 ms shame window, heals higher when you threaten an insta, does the
+bull + polearm then musket insta when it can kill or you are trapped, places spikes
+and traps, lines up spike pushes, breaks traps it is caught in, strafes (more when a
+musket points at it) and keeps off your spikes. The level sets its reaction time,
+aim error, mistakes, heal threshold and delay, and which tricks it uses. It is back
+3 s after dying, comes to you if you respawn far away, keeps score and says gg.
+Bot against bot, the levels come out in order (pro beat hard, hard beat normal,
+normal beat easy). Ryn's commands from the panel now also work while you are dead.

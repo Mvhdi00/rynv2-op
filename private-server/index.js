@@ -884,8 +884,13 @@ server.addListener('connection', function (conn) {
 	// Ryn's admin panel sends its commands as chat from the owner, without the chat box
 	conn.rynCommand = function (text) {
 		const tmpPlayer = findPlayerByID(conn.id)
-		if (!tmpPlayer || !tmpPlayer.alive) return false
-		onMessage(msgpack.encode([UTILS.OldToNew('ch', 'SEND'), [PREFIX + String(text).replace(/^[!]/, '')]]))
+		if (!tmpPlayer) return false
+		const clean = String(text).replace(/^[!]/, '')
+		if (!tmpPlayer.alive) {
+			// dead (in the lobby): Ryn's own commands still work, like stopping a 1v1
+			return !!tmpPlayer.admin && ryn.command(conn, tmpPlayer, clean, msg => rynTell(conn, msg))
+		}
+		onMessage(msgpack.encode([UTILS.OldToNew('ch', 'SEND'), [PREFIX + clean]]))
 		return true
 	}
 

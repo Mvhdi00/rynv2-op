@@ -89,7 +89,7 @@ ${modules}
         if (!factory) throw new Error("private server: no module " + rel);
         const module = { exports: {} };
         cache[rel] = module;
-        factory(module, module.exports, require, processShim, quiet, timers.setInterval, timers.clearInterval, timers.setTimeout, timers.clearTimeout);
+        factory(module, module.exports, requireFrom(rel), processShim, quiet, timers.setInterval, timers.clearInterval, timers.setTimeout, timers.clearTimeout);
         return module.exports;
       };
       const codec = (() => {
@@ -118,11 +118,19 @@ ${modules}
         "node-fetch": async () => ({ json: async () => ({ version: "1.2.2" }) }),
         "./package.json": { version: "1.2.2" }
       };
-      function require(name) {
-        if (Object.prototype.hasOwnProperty.call(externals, name)) return externals[name];
-        let rel = name.replace(/^\\.\\//, "");
-        if (!rel.endsWith(".js")) rel += ".js";
-        return run(rel);
+      // require() as Node resolves it: relative to the module that calls it
+      function requireFrom(from) {
+        return name => {
+          if (Object.prototype.hasOwnProperty.call(externals, name)) return externals[name];
+          const parts = from.split("/").slice(0, -1);
+          for (const part of name.split("/")) {
+            if (part === "..") parts.pop();
+            else if (part !== ".") parts.push(part);
+          }
+          let rel = parts.join("/");
+          if (!rel.endsWith(".js")) rel += ".js";
+          return run(rel);
+        };
       }
       run("index.js");
       if (hub === null) throw new Error("private server: index.js never opened its socket server");
