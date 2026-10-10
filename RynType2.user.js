@@ -28013,6 +28013,7 @@ module.exports.PACKETCODE = PACKETCODE
 
   const PLACER_ANGLE_RESOLUTIONS = [ 36, 72, 144, 200 ];
   const PLACER_ANGLE_STEPS_DEFAULT = 200;
+  const PLACER_PLACE_COST = 5;
 
 
   const PLACER_BAN_TICKS = 18;
@@ -28607,46 +28608,34 @@ module.exports.PACKETCODE = PACKETCODE
       }
 
       const typeOf = obj => obj.id === trapId ? PLACER_TRAP_TYPE : PLACER_SPIKE_TYPE;
+      const outOfBudget = () => ModuleHandler.packetCount + PLACER_PLACE_COST > ModuleHandler.packetLimit;
+      const emit = obj => {
+        const type = typeOf(obj);
+        if (!myPlayer.canPlace(type)) return;
+        if (RynCrab.noBuild(myPos)) return;
+        ModuleHandler.place(type, obj.angle);
+        ModuleHandler.placedOnce = true;
+        ModuleHandler.placeAngles[0] = type;
+        ModuleHandler.placeAngles[1].push({
+          angle: obj.angle,
+          type: type
+        });
+        ModuleHandler.moduleActive = true;
+        this._placedSlots.push({
+          id: obj.id,
+          x: obj.x,
+          y: obj.y,
+          scale: obj.scale,
+          tick: this._tick
+        });
+      };
 
       this._lastProduced = this._predictObjects.length > 0;
 
-      const byType = new Map;
       for (const obj of this._predictObjects) {
         if (obj.preplace) continue;
-        const type = typeOf(obj);
-        if (!byType.has(type)) byType.set(type, []);
-        byType.get(type).push(obj);
-      }
-      for (const [type, objs] of byType) {
-        if (!myPlayer.canPlace(type)) continue;
-        if (!Array.isArray(ModuleHandler.placeAngles[1])) ModuleHandler.placeAngles[1] = [];
-        const list = ModuleHandler.placeAngles[1];
-        const from = list.length;
-        const sent = ModuleHandler.requestPlaceMany(type, objs.map(o => o.angle), "autoPlacer");
-        if (!sent) continue;
-        const went = ModuleHandler.placeAngles[1] === list ? list.slice(from) : [];
-        const taken = new Set;
-        for (const angle of went) {
-          let best = -1, bestDist = .05;
-          for (let k = 0; k < objs.length; k++) {
-            if (taken.has(k)) continue;
-            const d = GeometrySolver.angleDist(objs[k].angle, angle);
-            if (d < bestDist) {
-              bestDist = d;
-              best = k;
-            }
-          }
-          if (best === -1) continue;
-          taken.add(best);
-          const obj = objs[best];
-          this._placedSlots.push({
-            id: obj.id,
-            x: obj.x,
-            y: obj.y,
-            scale: obj.scale,
-            tick: this._tick
-          });
-        }
+        if (outOfBudget()) break;
+        emit(obj);
       }
     }
   }
