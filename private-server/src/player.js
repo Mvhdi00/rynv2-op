@@ -255,7 +255,8 @@ module.exports = function (
 				this.slowMult
 
 			if (!this.zIndex && this.y >= config.mapScale / 2 - config.riverWidth / 2 && this.y <= config.mapScale / 2 + config.riverWidth / 2) {
-				var current = this.x >= 0 ? config.waterCurrent : 0
+				// calm water at the west edge of the river, so the gorge can be walked into
+				var current = !config.secretPool || this.x >= 700 ? config.waterCurrent : 0
 				if (this.skin && this.skin.watrImm) {
 					spdMult *= 0.75
 					this.xVel += current * 0.4 * delta

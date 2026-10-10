@@ -28,6 +28,12 @@ var ais = []
 var players = []
 var gameObjects = []
 var projectiles = []
+// messages to one connection: Ryn's admin panel when it is there, the game's notice otherwise
+function rynTell(conn, text) {
+	if (conn && typeof conn.rynNotice === 'function') conn.rynNotice(String(text))
+	else if (conn) server.send(conn.id, 'ch', [-1, String(text)])
+}
+
 function findPlayerByID(id) {
 	for (let i = 0; i < players.length; ++i) {
 		if (players[i].id === id) {
@@ -162,7 +168,18 @@ server.addListener('connection', function (conn) {
 		}
 	})
 
-	conn.on('message', function (message) {
+	// Ryn's admin panel reads the server's state through this
+	conn.rynState = function () {
+		const me = findPlayerByID(conn.id)
+		return {
+			me: me ? { sid: me.sid, name: me.name, alive: me.alive, admin: !!me.admin, god: !!me.rynGod, x: me.x, y: me.y } : null,
+			players: players.map(p => ({ sid: p.sid, name: p.name, alive: p.alive, god: !!p.rynGod, health: Math.round(p.health), maxHealth: p.maxHealth, age: p.age })),
+			world: { mobs: !!config.spawnMobs, hostile: !!config.spawnHostile, bosses: !!config.spawnBosses },
+			mode: MODE
+		}
+	}
+
+	const onMessage = function (message) {
 		let data,
 			parsed,
 			type,
@@ -206,7 +223,7 @@ server.addListener('connection', function (conn) {
 		function rynAdminCommand(me, text) {
 			const args = text.trim().split(/\s+/)
 			const cmd = (args.shift() || '').toLowerCase()
-			const tell = msg => server.send(conn.id, 'ch', [-1, msg])
+			const tell = msg => rynTell(conn, msg)
 			const num = v => (v === undefined || v === '' ? NaN : Number(v))
 			const who = v => {
 				if (v === undefined) return me
@@ -306,7 +323,8 @@ server.addListener('connection', function (conn) {
 					const amount = num(args[0])
 					if (p && !isNaN(amount)) {
 						for (let type = 0; type < 3; type++) p.addResource(type, amount - p[config.resourceTypes[type]], true)
-						p.addResource(3, amount - p.points, true)
+						p.points = amount
+						server.send(p.id, '9', ['points', Math.round(p.points), 1])
 						tell('[Admin] ' + p.name + ' resources ' + amount)
 					}
 					return true
@@ -407,13 +425,7 @@ server.addListener('connection', function (conn) {
 					: ''
 				if (conn.rynOwner || (config.adminNames && config.adminNames.includes(playerName))) {
 					tmpPlayer.admin = true
-					server.send(conn.id, 'ch', [
-						-1,
-						'[Server] Welcome, ' +
-							playerName +
-							'! SID: ' +
-							tmpPlayer.sid
-					])
+					rynTell(conn, '[Server] Welcome, ' + playerName + '! SID: ' + tmpPlayer.sid)
 				}
 			}
 		}
@@ -501,10 +513,7 @@ server.addListener('connection', function (conn) {
 			if (!tmpPlayer || !tmpPlayer.alive) return
 
 			if (message === `${PREFIX}sid`) {
-				server.send(conn.id, 'ch', [
-					-1,
-					'[Info] Your SID: ' + tmpPlayer.sid + ' | Name: ' + tmpPlayer.name
-				])
+				rynTell(conn, '[Info] Your SID: ' + tmpPlayer.sid + ' | Name: ' + tmpPlayer.name)
 				return
 			}
 
@@ -541,6 +550,9 @@ server.addListener('connection', function (conn) {
 				} else if (message.startsWith(`${PREFIX}v`)) {
 					var msg = message.replace(PREFIX + 'v ', '')
 					switch (msg) {
+						case 'emerald':
+							tmpPlayer.weaponXP[tmpPlayer.weaponIndex] = 30000
+							break
 						case 'ruby':
 							tmpPlayer.weaponXP[tmpPlayer.weaponIndex] = 12000
 							break
@@ -587,13 +599,10 @@ server.addListener('connection', function (conn) {
 						ais[i].active = false
 						ais[i].alive = false
 					}
-					server.send(conn.id, 'ch', [-1, '[Admin] Mobs off.'])
+					rynTell(conn, '[Admin] Mobs off.')
 				} else if (message === PREFIX + 'mobs on') {
 					config.spawnMobs = true
-					server.send(conn.id, 'ch', [
-						-1,
-						'[Admin] Mobs on. Restart the server for them to spawn.'
-					])
+					rynTell(conn, '[Admin] Mobs on. Restart the server for them to spawn.')
 				} else if (message === PREFIX + 'hostile off') {
 					config.spawnHostile = false
 					const hostileTypes = [2, 3, 4, 9, 10, 13, 14]
@@ -603,10 +612,10 @@ server.addListener('connection', function (conn) {
 							ais[i].alive = false
 						}
 					}
-					server.send(conn.id, 'ch', [-1, '[Admin] Hostile mobs off.'])
+					rynTell(conn, '[Admin] Hostile mobs off.')
 				} else if (message === PREFIX + 'hostile on') {
 					config.spawnHostile = true
-					server.send(conn.id, 'ch', [-1, '[Admin] Hostile mobs on.'])
+					rynTell(conn, '[Admin] Hostile mobs on.')
 				} else if (message === PREFIX + 'bosses off') {
 					config.spawnBosses = false
 					const bossTypes = [6, 7, 8, 11, 13, 14]
@@ -616,16 +625,16 @@ server.addListener('connection', function (conn) {
 							ais[i].alive = false
 						}
 					}
-					server.send(conn.id, 'ch', [-1, '[Admin] Bosses off.'])
+					rynTell(conn, '[Admin] Bosses off.')
 				} else if (message === PREFIX + 'bosses on') {
 					config.spawnBosses = true
-					server.send(conn.id, 'ch', [-1, '[Admin] Bosses on.'])
+					rynTell(conn, '[Admin] Bosses on.')
 				} else if (message === PREFIX + 'players') {
 					var list = players
 						.filter(p => p.alive)
 						.map(p => p.name + '(sid:' + p.sid + ')')
 						.join(', ')
-					server.send(conn.id, 'ch', [-1, '[Admin] Players: ' + (list || 'none')])
+					rynTell(conn, '[Admin] Players: ' + (list || 'none'))
 				} else if (
 					MODE === 'HOCKEY' &&
 					message === PREFIX + 'start' &&
@@ -893,7 +902,15 @@ server.addListener('connection', function (conn) {
 				}
 			}
 		}
-	})
+	}
+	conn.on('message', onMessage)
+	// Ryn's admin panel sends its commands as chat from the owner, without the chat box
+	conn.rynCommand = function (text) {
+		const tmpPlayer = findPlayerByID(conn.id)
+		if (!tmpPlayer || !tmpPlayer.alive) return false
+		onMessage(msgpack.encode([UTILS.OldToNew('ch', 'SEND'), [PREFIX + String(text).replace(/^[!]/, '')]]))
+		return true
+	}
 
 	let tmpA = new Player(
 		conn.id,

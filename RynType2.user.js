@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.4-fix13
+// @version         2.9.4-fix14
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -1649,6 +1649,12 @@ var ais = []
 var players = []
 var gameObjects = []
 var projectiles = []
+// messages to one connection: Ryn's admin panel when it is there, the game's notice otherwise
+function rynTell(conn, text) {
+	if (conn && typeof conn.rynNotice === 'function') conn.rynNotice(String(text))
+	else if (conn) server.send(conn.id, 'ch', [-1, String(text)])
+}
+
 function findPlayerByID(id) {
 	for (let i = 0; i < players.length; ++i) {
 		if (players[i].id === id) {
@@ -1783,7 +1789,18 @@ server.addListener('connection', function (conn) {
 		}
 	})
 
-	conn.on('message', function (message) {
+	// Ryn's admin panel reads the server's state through this
+	conn.rynState = function () {
+		const me = findPlayerByID(conn.id)
+		return {
+			me: me ? { sid: me.sid, name: me.name, alive: me.alive, admin: !!me.admin, god: !!me.rynGod, x: me.x, y: me.y } : null,
+			players: players.map(p => ({ sid: p.sid, name: p.name, alive: p.alive, god: !!p.rynGod, health: Math.round(p.health), maxHealth: p.maxHealth, age: p.age })),
+			world: { mobs: !!config.spawnMobs, hostile: !!config.spawnHostile, bosses: !!config.spawnBosses },
+			mode: MODE
+		}
+	}
+
+	const onMessage = function (message) {
 		let data,
 			parsed,
 			type,
@@ -1827,7 +1844,7 @@ server.addListener('connection', function (conn) {
 		function rynAdminCommand(me, text) {
 			const args = text.trim().split(/\s+/)
 			const cmd = (args.shift() || '').toLowerCase()
-			const tell = msg => server.send(conn.id, 'ch', [-1, msg])
+			const tell = msg => rynTell(conn, msg)
 			const num = v => (v === undefined || v === '' ? NaN : Number(v))
 			const who = v => {
 				if (v === undefined) return me
@@ -1927,7 +1944,8 @@ server.addListener('connection', function (conn) {
 					const amount = num(args[0])
 					if (p && !isNaN(amount)) {
 						for (let type = 0; type < 3; type++) p.addResource(type, amount - p[config.resourceTypes[type]], true)
-						p.addResource(3, amount - p.points, true)
+						p.points = amount
+						server.send(p.id, '9', ['points', Math.round(p.points), 1])
 						tell('[Admin] ' + p.name + ' resources ' + amount)
 					}
 					return true
@@ -2028,13 +2046,7 @@ server.addListener('connection', function (conn) {
 					: ''
 				if (conn.rynOwner || (config.adminNames && config.adminNames.includes(playerName))) {
 					tmpPlayer.admin = true
-					server.send(conn.id, 'ch', [
-						-1,
-						'[Server] Welcome, ' +
-							playerName +
-							'! SID: ' +
-							tmpPlayer.sid
-					])
+					rynTell(conn, '[Server] Welcome, ' + playerName + '! SID: ' + tmpPlayer.sid)
 				}
 			}
 		}
@@ -2122,10 +2134,7 @@ server.addListener('connection', function (conn) {
 			if (!tmpPlayer || !tmpPlayer.alive) return
 
 			if (message === `${PREFIX}sid`) {
-				server.send(conn.id, 'ch', [
-					-1,
-					'[Info] Your SID: ' + tmpPlayer.sid + ' | Name: ' + tmpPlayer.name
-				])
+				rynTell(conn, '[Info] Your SID: ' + tmpPlayer.sid + ' | Name: ' + tmpPlayer.name)
 				return
 			}
 
@@ -2162,6 +2171,9 @@ server.addListener('connection', function (conn) {
 				} else if (message.startsWith(`${PREFIX}v`)) {
 					var msg = message.replace(PREFIX + 'v ', '')
 					switch (msg) {
+						case 'emerald':
+							tmpPlayer.weaponXP[tmpPlayer.weaponIndex] = 30000
+							break
 						case 'ruby':
 							tmpPlayer.weaponXP[tmpPlayer.weaponIndex] = 12000
 							break
@@ -2208,13 +2220,10 @@ server.addListener('connection', function (conn) {
 						ais[i].active = false
 						ais[i].alive = false
 					}
-					server.send(conn.id, 'ch', [-1, '[Admin] Mobs off.'])
+					rynTell(conn, '[Admin] Mobs off.')
 				} else if (message === PREFIX + 'mobs on') {
 					config.spawnMobs = true
-					server.send(conn.id, 'ch', [
-						-1,
-						'[Admin] Mobs on. Restart the server for them to spawn.'
-					])
+					rynTell(conn, '[Admin] Mobs on. Restart the server for them to spawn.')
 				} else if (message === PREFIX + 'hostile off') {
 					config.spawnHostile = false
 					const hostileTypes = [2, 3, 4, 9, 10, 13, 14]
@@ -2224,10 +2233,10 @@ server.addListener('connection', function (conn) {
 							ais[i].alive = false
 						}
 					}
-					server.send(conn.id, 'ch', [-1, '[Admin] Hostile mobs off.'])
+					rynTell(conn, '[Admin] Hostile mobs off.')
 				} else if (message === PREFIX + 'hostile on') {
 					config.spawnHostile = true
-					server.send(conn.id, 'ch', [-1, '[Admin] Hostile mobs on.'])
+					rynTell(conn, '[Admin] Hostile mobs on.')
 				} else if (message === PREFIX + 'bosses off') {
 					config.spawnBosses = false
 					const bossTypes = [6, 7, 8, 11, 13, 14]
@@ -2237,16 +2246,16 @@ server.addListener('connection', function (conn) {
 							ais[i].alive = false
 						}
 					}
-					server.send(conn.id, 'ch', [-1, '[Admin] Bosses off.'])
+					rynTell(conn, '[Admin] Bosses off.')
 				} else if (message === PREFIX + 'bosses on') {
 					config.spawnBosses = true
-					server.send(conn.id, 'ch', [-1, '[Admin] Bosses on.'])
+					rynTell(conn, '[Admin] Bosses on.')
 				} else if (message === PREFIX + 'players') {
 					var list = players
 						.filter(p => p.alive)
 						.map(p => p.name + '(sid:' + p.sid + ')')
 						.join(', ')
-					server.send(conn.id, 'ch', [-1, '[Admin] Players: ' + (list || 'none')])
+					rynTell(conn, '[Admin] Players: ' + (list || 'none'))
 				} else if (
 					MODE === 'HOCKEY' &&
 					message === PREFIX + 'start' &&
@@ -2514,7 +2523,15 @@ server.addListener('connection', function (conn) {
 				}
 			}
 		}
-	})
+	}
+	conn.on('message', onMessage)
+	// Ryn's admin panel sends its commands as chat from the owner, without the chat box
+	conn.rynCommand = function (text) {
+		const tmpPlayer = findPlayerByID(conn.id)
+		if (!tmpPlayer || !tmpPlayer.alive) return false
+		onMessage(msgpack.encode([UTILS.OldToNew('ch', 'SEND'), [PREFIX + String(text).replace(/^[!]/, '')]]))
+		return true
+	}
 
 	let tmpA = new Player(
 		conn.id,
@@ -3651,7 +3668,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 			if (this.arena) {
 				// arena animals stay in the arena; slide along its walls
 				var fits = function (x, y) {
-					return x <= 0 && UTILS.inSecretPool(config, x, y, tmpScale)
+					return x + tmpScale <= 0 && UTILS.inSecretPool(config, x, y, tmpScale)
 				}
 				if (!fits(this.x, this.y)) {
 					if (fits(this.x, startY)) {
@@ -3890,8 +3907,12 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 				var room = this.scale * 0.8 + q.scale
 				if (qd < room) {
 					var qa = qd > 0 ? UTILS.getDirection(q.x, q.y, this.x, this.y) : UTILS.randFloat(-Math.PI, Math.PI)
-					q.x = this.x + room * Math.cos(qa)
-					q.y = this.y + room * Math.sin(qa)
+					var nx = this.x + room * Math.cos(qa)
+					var ny = this.y + room * Math.sin(qa)
+					if (nx - q.scale >= 0 || UTILS.inSecretPool(config, nx, ny, q.scale)) {
+						q.x = nx
+						q.y = ny
+					}
 				}
 			}
 		}
@@ -3952,6 +3973,9 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 			}
 			case "slam":
 				if (c.t <= 0) {
+					for (var a = 0; a < players.length; ++a) {
+						if (players[a].canSee(this)) server.send(players[a].id, "aa", [this.sid])
+					}
 					this.crabHurt(c.x, c.y, c.r, this.dmg, 0.9)
 					this.crabEnd(1400)
 				}
@@ -5954,7 +5978,8 @@ module.exports = function (
 				this.slowMult
 
 			if (!this.zIndex && this.y >= config.mapScale / 2 - config.riverWidth / 2 && this.y <= config.mapScale / 2 + config.riverWidth / 2) {
-				var current = this.x >= 0 ? config.waterCurrent : 0
+				// calm water at the west edge of the river, so the gorge can be walked into
+				var current = !config.secretPool || this.x >= 700 ? config.waterCurrent : 0
 				if (this.skin && this.skin.watrImm) {
 					spdMult *= 0.75
 					this.xVel += current * 0.4 * delta
@@ -7842,6 +7867,17 @@ module.exports.inSecretPool = function (config, x, y, r) {
         stop() {
           for (const id of intervals) clearInterval(id);
           intervals.clear();
+        },
+        catalog() {
+          const store = run("src/store.js");
+          const items = run("src/items.js");
+          const pick = list => list.map(x => ({ id: x.id, name: x.name }));
+          return {
+            hats: pick(store.hats),
+            accessories: pick(store.accessories),
+            weapons: pick(items.weapons),
+            items: pick(items.list)
+          };
         }
       };
     };
@@ -7890,6 +7926,39 @@ module.exports.inSecretPool = function (config, x, y, r) {
       }
     })(),
     engine: null,
+    ownerSocket: null,
+    notes: [],
+    noteListeners: new Set,
+    notice(text) {
+      this.notes.push(String(text));
+      if (this.notes.length > 40) this.notes.shift();
+      for (const fn of this.noteListeners) {
+        try {
+          fn(String(text));
+        } catch (_) {}
+      }
+    },
+    command(text) {
+      const socket = this.ownerSocket;
+      if (!socket || socket.readyState !== 1 || typeof socket._conn.rynCommand !== "function") return false;
+      return socket._conn.rynCommand(text);
+    },
+    state() {
+      const socket = this.ownerSocket;
+      if (!socket || socket.readyState !== 1 || typeof socket._conn.rynState !== "function") return null;
+      try {
+        return socket._conn.rynState();
+      } catch (_) {
+        return null;
+      }
+    },
+    catalog() {
+      try {
+        return this.engine ? this.engine.catalog() : null;
+      } catch (_) {
+        return null;
+      }
+    },
     ping: (() => {
       try {
         const saved = JSON.parse(sessionStorage.getItem("_ryn_private_ping") || "null");
@@ -7986,6 +8055,7 @@ module.exports.inSecretPool = function (config, x, y, r) {
       this._wired = {};
       this._upAt = 0;
       this._downAt = 0;
+      if (owner) RynPrivate.ownerSocket = this;
       const socket = this;
       const listeners = {};
       this._conn = {
@@ -8008,6 +8078,9 @@ module.exports.inSecretPool = function (config, x, y, r) {
         },
         rynSetPing(ms, jitter) {
           RynPrivate.setPing(ms, jitter);
+        },
+        rynNotice(text) {
+          RynPrivate.notice(text);
         },
         _emit(ev, ...args) {
           for (const fn of listeners[ev] || []) {
@@ -8118,6 +8191,591 @@ module.exports.inSecretPool = function (config, x, y, r) {
       value: value
     });
   }
+  const RYN_ADMIN_CSS = `
+#ryn-admin {
+  --ra-ink: 12, 12, 17;
+  --ra-line: rgba(255, 255, 255, 0.08);
+  --ra-line-2: rgba(255, 255, 255, 0.14);
+  --ra-iris: #8e76ce;
+  --ra-iris-hi: #a894e0;
+  --ra-sage: #a6d7b2;
+  --ra-rose: #d9a3ab;
+  --ra-tx-1: #f3f2f7;
+  --ra-tx-2: #aca9ba;
+  --ra-tx-3: #726f80;
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 9999;
+  width: 312px;
+  max-width: calc(100vw - 16px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ra-line);
+  border-radius: 12px;
+  background: rgba(var(--ra-ink), 0.86);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  box-shadow: 0 18px 44px -18px rgba(0, 0, 0, 0.8);
+  font-family: 'Manrope', 'Segoe UI', system-ui, sans-serif;
+  font-size: 12px;
+  color: var(--ra-tx-1);
+  -webkit-user-select: none;
+  user-select: none;
+}
+#ryn-admin.ra-hidden { display: none; }
+#ryn-admin, #ryn-admin * { box-sizing: border-box; }
+#ryn-admin .ra-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 6px 0 12px;
+  border-bottom: 1px solid var(--ra-line);
+  cursor: grab;
+  flex-shrink: 0;
+}
+#ryn-admin.ra-drag .ra-head { cursor: grabbing; }
+#ryn-admin .ra-title { font-family: 'Space Grotesk', 'Manrope', sans-serif; font-weight: 700; font-size: 11px; letter-spacing: 0.16em; color: var(--ra-iris-hi); }
+#ryn-admin .ra-tag { font-size: 9.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ra-tx-3); }
+#ryn-admin .ra-spacer { flex: 1; }
+#ryn-admin .ra-ic {
+  width: 24px; height: 24px; display: grid; place-items: center;
+  border: none; border-radius: 6px; background: none; padding: 0; cursor: pointer;
+  color: var(--ra-tx-3); font: inherit; font-size: 15px; line-height: 1;
+}
+#ryn-admin .ra-ic:hover { color: var(--ra-tx-1); background: rgba(255, 255, 255, 0.07); }
+#ryn-admin .ra-log {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--ra-line);
+  font-size: 11px;
+  color: var(--ra-tx-2);
+  min-height: 27px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  flex-shrink: 0;
+}
+#ryn-admin .ra-log.ra-bad { color: var(--ra-rose); }
+#ryn-admin .ra-loglist { max-height: 140px; overflow-y: auto; padding: 4px 12px 8px; border-bottom: 1px solid var(--ra-line); font-size: 10.5px; color: var(--ra-tx-3); flex-shrink: 0; }
+#ryn-admin .ra-loglist div { padding: 1px 0; overflow-wrap: anywhere; }
+#ryn-admin .ra-body { overflow-y: auto; max-height: min(66vh, 620px); padding: 4px 12px 12px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.16) transparent; }
+#ryn-admin.ra-min .ra-body, #ryn-admin.ra-min .ra-loglist { display: none; }
+#ryn-admin .ra-sec { font-size: 9.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ra-tx-3); margin: 11px 0 5px; }
+#ryn-admin .ra-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 4px 0; }
+#ryn-admin .ra-lbl { width: 54px; flex-shrink: 0; color: var(--ra-tx-2); font-size: 11px; }
+#ryn-admin input, #ryn-admin select {
+  height: 26px;
+  min-width: 0;
+  border: 1px solid var(--ra-line-2);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ra-tx-1);
+  font: inherit;
+  font-size: 11.5px;
+  padding: 0 7px;
+  outline: none;
+  -webkit-user-select: text;
+  user-select: text;
+}
+#ryn-admin input:focus, #ryn-admin select:focus { border-color: var(--ra-iris); }
+#ryn-admin input[type=number] { width: 70px; }
+#ryn-admin select { flex: 1; cursor: pointer; }
+#ryn-admin select option { background: #101016; color: #f3f2f7; }
+#ryn-admin .ra-btn {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--ra-line-2);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--ra-tx-1);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+#ryn-admin .ra-btn:hover { background: rgba(255, 255, 255, 0.09); border-color: rgba(255, 255, 255, 0.24); }
+#ryn-admin .ra-btn:active { transform: translateY(1px); }
+#ryn-admin .ra-btn.ra-go { background: rgba(142, 118, 206, 0.22); border-color: rgba(142, 118, 206, 0.55); }
+#ryn-admin .ra-btn.ra-go:hover { background: rgba(142, 118, 206, 0.34); }
+#ryn-admin .ra-btn.ra-on { background: rgba(166, 215, 178, 0.2); border-color: rgba(166, 215, 178, 0.55); color: var(--ra-sage); }
+#ryn-admin .ra-btn.ra-off { color: var(--ra-tx-3); }
+#ryn-admin .ra-btn.ra-del { color: var(--ra-rose); border-color: rgba(217, 163, 171, 0.35); }
+#ryn-admin .ra-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+#ryn-admin .ra-grid .ra-btn { padding: 0 6px; overflow: hidden; text-overflow: ellipsis; }
+#ryn-admin .ra-key { font-size: 9px; color: var(--ra-tx-3); margin-left: 4px; }
+#ryn-admin .ra-edit { border: 1px solid var(--ra-line); border-radius: 9px; padding: 8px; margin-top: 6px; background: rgba(255, 255, 255, 0.025); }
+#ryn-admin .ra-edit input[type=text] { flex: 1; }
+#ryn-admin .ra-hint { font-size: 10px; color: var(--ra-tx-3); margin-top: 3px; }
+#adminButton.ryn-admin-open { box-shadow: inset 0 0 0 2px rgba(168, 148, 224, 0.75); }
+`;
+  const RYN_ADMIN_ANIMALS = [ [ "cow", "Cow" ], [ "pig", "Pig" ], [ "sheep", "Sheep" ], [ "bull", "Bull" ], [ "bully", "Bully" ], [ "wolf", "Wolf" ], [ "duck", "Quack" ], [ "boar", "Boar" ], [ "yeti", "Yeti" ], [ "moostafa", "MOOSTAFA" ], [ "moofie", "MOOFIE" ], [ "treasure", "Treasure" ], [ "king", "Crab King" ], [ "crab", "Crab" ], [ "crabling", "Crabling" ] ];
+  const RYN_ADMIN_TIERS = [ [ "normal", "Normal" ], [ "gold", "Gold" ], [ "diamond", "Diamond" ], [ "ruby", "Ruby" ], [ "emerald", "Emerald" ] ];
+  const RynAdminPanel = {
+    root: null,
+    icon: null,
+    open: false,
+    target: "",
+    custom: [],
+    editing: null,
+    stateTimer: null,
+    lastState: null,
+    store(key, value) {
+      try {
+        if (value === undefined) return JSON.parse(localStorage.getItem(key) || "null");
+        localStorage.setItem(key, JSON.stringify(value));
+      } catch (_) {}
+      return null;
+    },
+    start() {
+      if (!RynPrivate.on || this.root !== null) return;
+      const custom = this.store("_ryn_admin_buttons");
+      this.custom = Array.isArray(custom) ? custom.filter(b => b && typeof b.label === "string" && typeof b.cmd === "string") : [];
+      window.addEventListener("keydown", e => this.onHotkey(e), true);
+      RynPrivate.noteListeners.add(text => this.say(text));
+      const wait = setInterval(() => {
+        if (!document.body) return;
+        if (this.root === null) this.build();
+        if (this.installIcon()) clearInterval(wait);
+      }, 400);
+    },
+    installIcon() {
+      const button = document.getElementById("adminButton");
+      if (button === null) return false;
+      const style = document.createElement("style");
+      style.textContent = "#adminButton { display: block !important; }";
+      document.head.appendChild(style);
+      button.title = "Admin (Private)";
+      button.addEventListener("click", e => {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        this.toggle();
+      }, true);
+      for (const type of [ "mousedown", "touchstart", "pointerdown" ]) {
+        button.addEventListener(type, e => e.stopPropagation(), true);
+      }
+      this.icon = button;
+      if (this.store("_ryn_admin_open")) this.toggle(true);
+      return true;
+    },
+    el(tag, cls, text) {
+      const node = document.createElement(tag);
+      if (cls) node.className = cls;
+      if (text !== undefined) node.textContent = text;
+      return node;
+    },
+    button(label, onClick, cls = "") {
+      const b = this.el("button", "ra-btn" + (cls ? " " + cls : ""), label);
+      b.type = "button";
+      b.addEventListener("click", e => {
+        e.stopPropagation();
+        onClick(b);
+      });
+      return b;
+    },
+    number(value, step = 1, min = null) {
+      const input = this.el("input");
+      input.type = "number";
+      input.value = String(value);
+      input.step = String(step);
+      if (min !== null) input.min = String(min);
+      return input;
+    },
+    select(options, value) {
+      const s = this.el("select");
+      for (const [v, label] of options) {
+        const o = this.el("option", "", label);
+        o.value = String(v);
+        s.appendChild(o);
+      }
+      if (value !== undefined) s.value = String(value);
+      return s;
+    },
+    row(parent, label, ...children) {
+      const r = this.el("div", "ra-row");
+      if (label) r.appendChild(this.el("span", "ra-lbl", label));
+      for (const c of children) r.appendChild(c);
+      parent.appendChild(r);
+      return r;
+    },
+    section(parent, title) {
+      parent.appendChild(this.el("div", "ra-sec", title));
+    },
+    build() {
+      const style = document.createElement("style");
+      style.textContent = RYN_ADMIN_CSS;
+      document.head.appendChild(style);
+      const root = this.root = this.el("div", "ra-hidden");
+      root.id = "ryn-admin";
+      for (const type of [ "mousedown", "mouseup", "click", "dblclick", "contextmenu", "wheel", "touchstart", "touchend", "pointerdown", "pointerup" ]) {
+        root.addEventListener(type, e => e.stopPropagation());
+      }
+      for (const type of [ "keydown", "keyup", "keypress" ]) {
+        root.addEventListener(type, e => {
+          if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) e.stopPropagation();
+        });
+      }
+      const head = this.el("div", "ra-head");
+      head.appendChild(this.el("span", "ra-title", "ADMIN"));
+      head.appendChild(this.el("span", "ra-tag", "Private"));
+      head.appendChild(this.el("span", "ra-spacer"));
+      const min = this.el("button", "ra-ic", "–");
+      min.type = "button";
+      min.title = "Minimise";
+      min.addEventListener("click", e => {
+        e.stopPropagation();
+        root.classList.toggle("ra-min");
+        this.store("_ryn_admin_min", root.classList.contains("ra-min"));
+      });
+      const close = this.el("button", "ra-ic", "×");
+      close.type = "button";
+      close.title = "Close";
+      close.addEventListener("click", e => {
+        e.stopPropagation();
+        this.toggle(false);
+      });
+      head.appendChild(min);
+      head.appendChild(close);
+      root.appendChild(head);
+      this.makeDraggable(head);
+      this.logLine = this.el("div", "ra-log", "Press Play, then use the buttons below.");
+      this.logList = this.el("div", "ra-loglist");
+      this.logList.style.display = "none";
+      this.logLine.title = "Show the last messages";
+      this.logLine.addEventListener("click", () => {
+        this.logList.style.display = this.logList.style.display === "none" ? "" : "none";
+      });
+      root.appendChild(this.logLine);
+      root.appendChild(this.logList);
+      const body = this.body = this.el("div", "ra-body");
+      root.appendChild(body);
+      if (this.store("_ryn_admin_min")) root.classList.add("ra-min");
+      this.buildTarget(body);
+      this.buildPlayer(body);
+      this.buildGear(body);
+      this.buildSpawn(body);
+      this.buildTravel(body);
+      this.buildWorld(body);
+      this.buildPing(body);
+      this.buildCustom(body);
+      document.body.appendChild(root);
+      const pos = this.store("_ryn_admin_pos");
+      this.place(pos && Number.isFinite(pos.x) ? pos.x : window.innerWidth - 340, pos && Number.isFinite(pos.y) ? pos.y : 90);
+      window.addEventListener("resize", () => this.place(this.x, this.y));
+    },
+    place(x, y) {
+      const root = this.root;
+      const w = root.offsetWidth || 312;
+      const h = root.offsetHeight || 40;
+      this.x = Math.max(0, Math.min(window.innerWidth - Math.min(w, 120), x));
+      this.y = Math.max(0, Math.min(window.innerHeight - Math.min(h, 34), y));
+      root.style.transform = "translate(" + Math.round(this.x) + "px, " + Math.round(this.y) + "px)";
+    },
+    makeDraggable(handle) {
+      let start = null;
+      handle.addEventListener("pointerdown", e => {
+        if (e.button !== 0 || e.target.closest(".ra-ic")) return;
+        start = {
+          id: e.pointerId,
+          dx: e.clientX - this.x,
+          dy: e.clientY - this.y
+        };
+        try {
+          handle.setPointerCapture(e.pointerId);
+        } catch (_) {}
+        this.root.classList.add("ra-drag");
+      });
+      handle.addEventListener("pointermove", e => {
+        if (start === null || e.pointerId !== start.id) return;
+        this.place(e.clientX - start.dx, e.clientY - start.dy);
+      });
+      const end = e => {
+        if (start === null || e.pointerId !== start.id) return;
+        start = null;
+        this.root.classList.remove("ra-drag");
+        this.store("_ryn_admin_pos", {
+          x: this.x,
+          y: this.y
+        });
+      };
+      handle.addEventListener("pointerup", end);
+      handle.addEventListener("pointercancel", end);
+    },
+    toggle(force) {
+      if (this.root === null) return;
+      this.open = force === undefined ? !this.open : !!force;
+      this.root.classList.toggle("ra-hidden", !this.open);
+      if (this.icon) this.icon.classList.toggle("ryn-admin-open", this.open);
+      this.store("_ryn_admin_open", this.open);
+      clearInterval(this.stateTimer);
+      if (this.open) {
+        this.place(this.x, this.y);
+        this.refresh();
+        this.stateTimer = setInterval(() => this.refresh(), 1e3);
+      }
+    },
+    say(text, bad = false) {
+      if (!this.logLine) return;
+      this.logLine.textContent = text;
+      this.logLine.classList.toggle("ra-bad", bad);
+      const line = this.el("div", "", text);
+      this.logList.prepend(line);
+      while (this.logList.childNodes.length > 30) this.logList.lastChild.remove();
+    },
+    run(text) {
+      const parts = String(text).split(/[;\n]/).map(t => t.trim()).filter(Boolean);
+      for (const part of parts) {
+        const cmd = part[0] === "!" ? part : "!" + part;
+        if (!RynPrivate.command(cmd)) {
+          this.say("Spawn into the game first (press Play).", true);
+          return false;
+        }
+      }
+      setTimeout(() => this.refresh(), 60);
+      return true;
+    },
+    done(text, label) {
+      if (label) this.say(label);
+      this.run(text);
+    },
+    sid() {
+      return this.target === "" ? "" : " " + this.target;
+    },
+    refresh() {
+      const state = RynPrivate.state();
+      this.lastState = state;
+      if (state === null) return;
+      const select = this.targetSelect;
+      const current = select.value;
+      const options = [ [ "", "Me" ] ].concat(state.players.filter(p => !state.me || p.sid !== state.me.sid).map(p => [ String(p.sid), p.sid + " · " + (p.name || "unknown") + (p.alive ? "" : " (dead)") ]));
+      const signature = options.map(o => o.join(":")).join("|");
+      if (signature !== this._targetSig) {
+        this._targetSig = signature;
+        select.innerHTML = "";
+        for (const [v, label] of options) {
+          const o = this.el("option", "", label);
+          o.value = v;
+          select.appendChild(o);
+        }
+        select.value = options.some(o => o[0] === current) ? current : "";
+        this.target = select.value;
+      }
+      const who = this.target === "" ? state.me : state.players.find(p => String(p.sid) === this.target);
+      if (this.godButton) {
+        const on = !!(who && who.god);
+        this.godButton.classList.toggle("ra-on", on);
+        this.godButton.textContent = on ? "God: on" : "God: off";
+      }
+      for (const [key, b] of Object.entries(this.worldButtons || {})) {
+        const on = !!(state.world && state.world[key]);
+        b.classList.toggle("ra-on", on);
+        b.classList.toggle("ra-off", !on);
+      }
+      const ping = RynPrivate.ping;
+      if (this.pingNow) this.pingNow.textContent = ping.ms || ping.jitter ? "now " + ping.ms + "ms" + (ping.jitter ? " ±" + ping.jitter : "") : "now off";
+    },
+    buildTarget(body) {
+      this.section(body, "Target");
+      this.targetSelect = this.select([ [ "", "Me" ] ], "");
+      this.targetSelect.addEventListener("change", () => {
+        this.target = this.targetSelect.value;
+        this.refresh();
+      });
+      this.row(body, "Player", this.targetSelect);
+      body.appendChild(this.el("div", "ra-hint", "Health, god, age, resources and gear go to this player. The rest is you."));
+    },
+    buildPlayer(body) {
+      this.section(body, "Player");
+      this.godButton = this.button("God: off", () => this.done("!god" + this.sid()));
+      this.row(body, "", this.godButton, this.button("Heal", () => this.done("!heal" + this.sid())), this.button("Kill", () => this.done(this.target === "" ? "!die" : "!kill" + this.sid(), this.target === "" ? "You died" : "Killed " + this.target)));
+      const hp = this.number(100, 1, 1);
+      this.row(body, "Health", hp, this.button("Set", () => this.done("!hp " + (Number(hp.value) || 1) + this.sid()), "ra-go"));
+      const age = this.number(10, 1, 1);
+      this.row(body, "Age", age, this.button("Set", () => this.done("!age " + (Number(age.value) || 1) + this.sid()), "ra-go"));
+      const res = this.number(10000, 1000, 0);
+      this.row(body, "Resources", res, this.button("Set", () => this.done("!res " + (Number(res.value) || 0) + this.sid()), "ra-go"), this.button("Max", () => this.done("!s", "Resources maxed")));
+      const speed = this.number(1, 0.1, 0.1);
+      this.row(body, "Speed ×", speed, this.button("Set", () => this.done("!speed " + 0.0016 * (Number(speed.value) || 1), "Speed ×" + (Number(speed.value) || 1)), "ra-go"));
+      const dmg = this.number(100, 10, 0);
+      this.row(body, "Damage", dmg, this.button("Set", () => this.done("!dmg " + (Number(dmg.value) || 0), "Hit damage " + (Number(dmg.value) || 0)), "ra-go"), this.button("Normal", () => this.done("!dmg", "Hit damage normal")));
+      const tiers = this.el("div", "ra-row");
+      tiers.appendChild(this.el("span", "ra-lbl", "Weapon"));
+      for (const [v, label] of RYN_ADMIN_TIERS) tiers.appendChild(this.button(label, () => this.done("!v " + v, label + " weapon")));
+      body.appendChild(tiers);
+    },
+    buildGear(body) {
+      this.section(body, "Gear");
+      const catalog = RynPrivate.catalog();
+      const hats = this.select([ [ 0, "No hat" ] ]);
+      const accs = this.select([ [ 0, "No accessory" ] ]);
+      const fill = () => {
+        const c = RynPrivate.catalog();
+        if (c === null) return false;
+        for (const [select, list] of [ [ hats, c.hats ], [ accs, c.accessories ] ]) {
+          for (const item of list) {
+            const o = this.el("option", "", item.id + " · " + item.name);
+            o.value = String(item.id);
+            select.appendChild(o);
+          }
+        }
+        return true;
+      };
+      if (catalog === null || !fill()) {
+        const wait = setInterval(() => {
+          if (fill()) clearInterval(wait);
+        }, 1e3);
+      }
+      this.row(body, "Hat", hats, this.button("Wear", () => this.done("!hat " + hats.value + this.sid()), "ra-go"));
+      this.row(body, "Accessory", accs, this.button("Wear", () => this.done("!acc " + accs.value + this.sid()), "ra-go"));
+    },
+    buildSpawn(body) {
+      this.section(body, "Spawn");
+      const animal = this.select(RYN_ADMIN_ANIMALS, "wolf");
+      const count = this.number(1, 1, 1);
+      count.max = "20";
+      this.row(body, "", animal, count, this.button("Spawn", () => this.done("!spawn " + animal.value + " " + Math.max(1, Math.min(20, Number(count.value) || 1))), "ra-go"));
+    },
+    buildTravel(body) {
+      this.section(body, "Travel");
+      this.row(body, "", this.button("Crab King arena", () => this.done("!arena")), this.button("To target", () => {
+        if (this.target === "") {
+          this.say("Pick a player as the target first.", true);
+          return;
+        }
+        this.done("!tp " + this.target, "Went to " + this.target);
+      }));
+      const x = this.number(7200, 100);
+      const y = this.number(7200, 100);
+      this.row(body, "X / Y", x, y, this.button("Go", () => this.done("!tp " + (Number(x.value) || 0) + " " + (Number(y.value) || 0), "Teleported"), "ra-go"));
+    },
+    buildWorld(body) {
+      this.section(body, "World");
+      this.worldButtons = {};
+      const names = {
+        mobs: "Animals",
+        hostile: "Hostile",
+        bosses: "Bosses"
+      };
+      const r = this.row(body, "");
+      for (const key of [ "mobs", "hostile", "bosses" ]) {
+        const b = this.button(names[key], () => {
+          const on = this.lastState && this.lastState.world && this.lastState.world[key];
+          this.done("!" + key + (on ? " off" : " on"));
+        });
+        this.worldButtons[key] = b;
+        r.appendChild(b);
+      }
+      this.row(body, "", this.button("Clear all buildings", () => this.done("!b", "Buildings cleared"), "ra-del"));
+    },
+    buildPing(body) {
+      this.section(body, "Ping");
+      const ms = this.number(RynPrivate.ping.ms || 100, 10, 0);
+      const jitter = this.number(RynPrivate.ping.jitter || 0, 5, 0);
+      this.pingNow = this.el("span", "ra-hint", "");
+      this.row(body, "ms / ±", ms, jitter, this.button("Apply", () => this.done("!ping " + (Number(ms.value) || 0) + " " + (Number(jitter.value) || 0)), "ra-go"), this.button("Off", () => this.done("!ping 0")));
+      body.appendChild(this.pingNow);
+    },
+    buildCustom(body) {
+      this.section(body, "My buttons");
+      this.customGrid = this.el("div", "ra-grid");
+      body.appendChild(this.customGrid);
+      this.customEditor = this.el("div", "ra-edit");
+      this.customEditor.style.display = "none";
+      body.appendChild(this.customEditor);
+      this.row(body, "", this.button("+ Add button", () => this.edit(null)));
+      body.appendChild(this.el("div", "ra-hint", "Right-click a button to edit it. One button can run several commands: !god; !res 99999; !spawn king"));
+      this.drawCustom();
+    },
+    drawCustom() {
+      const grid = this.customGrid;
+      grid.innerHTML = "";
+      this.custom.forEach((b, i) => {
+        const btn = this.button(b.label, () => this.done(b.cmd, b.label));
+        btn.title = b.cmd + (b.key ? "  [" + this.keyName(b.key) + "]" : "");
+        if (b.key) btn.appendChild(this.el("span", "ra-key", this.keyName(b.key)));
+        btn.addEventListener("contextmenu", e => {
+          e.preventDefault();
+          this.edit(i);
+        });
+        grid.appendChild(btn);
+      });
+      grid.style.display = this.custom.length ? "" : "none";
+    },
+    keyName(code) {
+      if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+      if (/^Digit\d$/.test(code)) return code.slice(5);
+      if (/^Numpad\d$/.test(code)) return "Num" + code.slice(6);
+      return code;
+    },
+    edit(index) {
+      const editor = this.customEditor;
+      const b = index === null ? {
+        label: "",
+        cmd: "",
+        key: ""
+      } : Object.assign({}, this.custom[index]);
+      editor.innerHTML = "";
+      editor.style.display = "";
+      const label = this.el("input");
+      label.type = "text";
+      label.placeholder = "Name";
+      label.value = b.label;
+      const cmd = this.el("input");
+      cmd.type = "text";
+      cmd.placeholder = "!god; !spawn wolf 3";
+      cmd.value = b.cmd;
+      const key = this.button(b.key ? "Key: " + this.keyName(b.key) : "Set key", () => {
+        key.textContent = "Press a key…";
+        const grab = e => {
+          e.preventDefault();
+          e.stopPropagation();
+          window.removeEventListener("keydown", grab, true);
+          b.key = e.code === "Escape" || e.code === "Backspace" ? "" : e.code;
+          key.textContent = b.key ? "Key: " + this.keyName(b.key) : "Set key";
+        };
+        window.addEventListener("keydown", grab, true);
+      });
+      this.row(editor, "Name", label);
+      this.row(editor, "Commands", cmd);
+      const actions = this.row(editor, "", key, this.button("Save", () => {
+        b.label = label.value.trim() || cmd.value.trim().split(/\s/)[0] || "Button";
+        b.cmd = cmd.value.trim();
+        if (!b.cmd) {
+          this.say("Write at least one command.", true);
+          return;
+        }
+        if (index === null) this.custom.push(b); else this.custom[index] = b;
+        this.store("_ryn_admin_buttons", this.custom);
+        editor.style.display = "none";
+        this.drawCustom();
+      }, "ra-go"));
+      if (index !== null) {
+        actions.appendChild(this.button("Delete", () => {
+          this.custom.splice(index, 1);
+          this.store("_ryn_admin_buttons", this.custom);
+          editor.style.display = "none";
+          this.drawCustom();
+        }, "ra-del"));
+      }
+      actions.appendChild(this.button("Cancel", () => {
+        editor.style.display = "none";
+      }));
+      label.focus();
+    },
+    onHotkey(e) {
+      if (!this.custom.length || e.repeat) return;
+      const t = e.target;
+      if (t && (/^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName) || t.isContentEditable)) return;
+      const chat = document.getElementById("chatHolder");
+      if (chat && chat.style.display === "block") return;
+      const b = this.custom.find(x => x.key && x.key === e.code);
+      if (!b) return;
+      e.preventDefault();
+      e.stopPropagation();
+      this.done(b.cmd, b.label);
+    }
+  };
   const rynBotNotice = msg => {
     try {
       console.warn("[RYN BOT] " + msg);
@@ -44393,6 +45051,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
   if (RynPrivate.on) {
     RynPrivate.patchNativeSend();
     RynPrivate.patchJoin();
+    RynAdminPanel.start();
   }
   window.WebSocket = new window.Proxy(window.WebSocket, {
     construct(target, args) {

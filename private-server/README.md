@@ -43,9 +43,10 @@ Checked table by table against the game bundle (parsed statically, nothing run):
 - Emerald weapon tier (30000 XP): poison and 15% lifesteal on melee hits.
 - Weapon and item upgrade prerequisites (`pre`), group sandbox limits, the game's
   view range (1920x1080) and skin colours.
-- The arena west of the map (`config.secretPool`): through the gorge at the river
-  (the current is too strong to swim against without the Flipper hat), five pools
-  and the passage behind the waterfall. Nothing can be built in it.
+- The arena west of the map (`config.secretPool`): through the gorge at the river,
+  five pools and the passage behind the waterfall. The river is calm in its last
+  700 units, so the gorge can be walked into. Nothing can be built in it, and the
+  King's whole body stays west of the map edge.
 
 ## Crab King
 
@@ -72,3 +73,13 @@ The page owner is admin. `!help` lists everything. Added by Ryn:
 Also fixed: `!mobs off`, `!hostile off` and `!bosses off` sent packet `'11'` per
 animal, which is the game's "you died" packet; removed animals now just drop out
 of view.
+
+## Admin panel
+
+In private mode the game's own admin button (`#adminButton`, hidden for normal
+accounts) is shown and opens Ryn's admin panel instead of the game's. The panel
+drives the server through the owner's connection (`conn.rynCommand`, which feeds
+the chat handler; `conn.rynState` for players and world switches), and server
+replies to the owner go to the panel (`conn.rynNotice`) instead of the game's gold
+notice. Everything in `!help` has a button; the panel can be dragged anywhere and
+holds your own buttons (several commands each, optional hotkey).

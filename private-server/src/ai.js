@@ -266,7 +266,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 			if (this.arena) {
 				// arena animals stay in the arena; slide along its walls
 				var fits = function (x, y) {
-					return x <= 0 && UTILS.inSecretPool(config, x, y, tmpScale)
+					return x + tmpScale <= 0 && UTILS.inSecretPool(config, x, y, tmpScale)
 				}
 				if (!fits(this.x, this.y)) {
 					if (fits(this.x, startY)) {
@@ -505,8 +505,12 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 				var room = this.scale * 0.8 + q.scale
 				if (qd < room) {
 					var qa = qd > 0 ? UTILS.getDirection(q.x, q.y, this.x, this.y) : UTILS.randFloat(-Math.PI, Math.PI)
-					q.x = this.x + room * Math.cos(qa)
-					q.y = this.y + room * Math.sin(qa)
+					var nx = this.x + room * Math.cos(qa)
+					var ny = this.y + room * Math.sin(qa)
+					if (nx - q.scale >= 0 || UTILS.inSecretPool(config, nx, ny, q.scale)) {
+						q.x = nx
+						q.y = ny
+					}
 				}
 			}
 		}
@@ -567,6 +571,9 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 			}
 			case "slam":
 				if (c.t <= 0) {
+					for (var a = 0; a < players.length; ++a) {
+						if (players[a].canSee(this)) server.send(players[a].id, "aa", [this.sid])
+					}
 					this.crabHurt(c.x, c.y, c.r, this.dmg, 0.9)
 					this.crabEnd(1400)
 				}

@@ -135,6 +135,17 @@ ${modules}
         stop() {
           for (const id of intervals) clearInterval(id);
           intervals.clear();
+        },
+        catalog() {
+          const store = run("src/store.js");
+          const items = run("src/items.js");
+          const pick = list => list.map(x => ({ id: x.id, name: x.name }));
+          return {
+            hats: pick(store.hats),
+            accessories: pick(store.accessories),
+            weapons: pick(items.weapons),
+            items: pick(items.list)
+          };
         }
       };
     };
