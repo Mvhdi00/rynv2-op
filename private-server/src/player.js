@@ -270,10 +270,10 @@ module.exports = function (
 				this.slowMult *
 				capes.speed(this)
 
-			// the river stops at the map edge: the Crab King's gorge and pools (x < 0) are dry land
-			if (!this.zIndex && (!config.secretPool || this.x >= 0) && this.y >= config.mapScale / 2 - config.riverWidth / 2 && this.y <= config.mapScale / 2 + config.riverWidth / 2) {
-				// calm water at the west edge of the river, so the gorge can be walked into
-				var current = !config.secretPool || this.x >= 700 ? config.waterCurrent : 0
+			// the river runs on into the Crab King's gorge, and it is calm in the game's shallows
+			// (up to x = 320), so the gorge can be walked into
+			if (!this.zIndex && UTILS.inRiver(config, this.x, this.y)) {
+				var current = UTILS.riverCurrent(config, this.x)
 				if (this.skin && this.skin.watrImm) {
 					spdMult *= 0.75
 					this.xVel += current * 0.4 * delta

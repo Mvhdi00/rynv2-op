@@ -306,8 +306,30 @@ module.exports.inSecretPool = function (config, x, y, r) {
 		var c = p.pool[i]
 		if (mathSQRT((x - c[0]) * (x - c[0]) + (y - c[1]) * (y - c[1])) <= c[2] - r) return true
 	}
+	// the passage behind the waterfall runs west to where the game stops drawing it
 	var w = p.waterfall
-	if (w && x <= w.x + r && x >= w.x - 900 && mathABS(y - w.y) <= w.half - r) return true
+	if (w && x <= w.x + r && x >= -7000 + r && mathABS(y - w.y) <= w.half - r) return true
 	return false
+}
+// True when a circle of radius r at (x, y) is inside one of the arena's pools: where the
+// Crab King and its crabs live, and where the game shows the King's health bar.
+module.exports.inArenaPools = function (config, x, y, r) {
+	var p = config.secretPool
+	if (!p) return false
+	for (var i = 0; i < p.pool.length; i++) {
+		var c = p.pool[i]
+		if (mathSQRT((x - c[0]) * (x - c[0]) + (y - c[1]) * (y - c[1])) <= c[2] - r) return true
+	}
+	return false
+}
+// The river reaches into the arena's gorge (the game draws it from x = gorgeX0), and it is
+// calm in the shallows (the game's secretPool.shallows, up to x = 320).
+module.exports.inRiver = function (config, x, y) {
+	if (mathABS(y - config.mapScale / 2) > config.riverWidth / 2) return false
+	return !config.secretPool || x >= config.secretPool.gorgeX0
+}
+module.exports.riverCurrent = function (config, x) {
+	var s = config.secretPool && config.secretPool.shallows
+	return !s || x >= s.length ? config.waterCurrent : 0
 }
 module.exports.PACKETCODE = PACKETCODE

@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.4-fix26
+// @version         2.9.4-fix27
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -3427,6 +3427,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 		if (data.name) this.name = data.name
 		this.weightM = data.weightM
 		this.speed = data.speed
+		this.baseSpeed = data.speed
 		this.killScore = data.killScore
 		this.turnSpeed = data.turnSpeed
 		this.scale = data.scale
@@ -3458,6 +3459,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 		this.minion = false
 		this.owner = null
 		this.minions = []
+		this.emerge = 0
 		this.hitWait = 0
 		this.waitCount = 1000
 		this.moveCount = 0
@@ -3497,37 +3499,53 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 			}
 
 			// BEHAVIOUR:
+			// The Crab King runs the game's own animal code below, like MOOSTAFA. Ryn adds the
+			// rest (who it fights, its dive, charge and ring, its crabs, see kingThink);
+			// config.rynKingExtras = false leaves only the game's code.
 			var isKing = this.index === 11
-			if (isKing) {
+			var extras = this.arena && config.rynKingExtras !== false
+			var special = false
+			if (isKing && extras) {
 				try {
-					this.crabKingUpdate(delta)
+					special = this.kingThink(delta)
 				} catch (e) {
 					this.crab = null
 				}
 			}
+			// crabs that just came out of the water
+			if (this.emerge > 0) {
+				this.emerge -= delta
+				if (this.emerge <= 0) {
+					this.emerge = 0
+					this.state = 0
+				}
+			}
+			// arena animals let go of a player who has left the pools (ours), as if the chase ended
+			if (extras && this.chargeTarget && !this.fighter(this.chargeTarget)) {
+				this.chargeTarget = null
+				this.moveCount = 0
+				this.waitCount = 1500
+			}
 			var charging = false
 			var slowMlt = 1
-			if (
-				!this.arena &&
-				!this.zIndex &&
-				!this.lockMove &&
-				this.y >= config.mapScale / 2 - config.riverWidth / 2 &&
-				this.y <= config.mapScale / 2 + config.riverWidth / 2
-			) {
+			if (!this.zIndex && !this.lockMove && UTILS.inRiver(config, this.x, this.y)) {
 				slowMlt = 0.33
-				this.xVel += config.waterCurrent * delta
+				this.xVel += UTILS.riverCurrent(config, this.x) * delta
 			}
-			if (isKing) {
+			if (special) {
+				// a dive, charge or ring moves or holds the King itself
 			} else if (this.lockMove) {
 				this.xVel = 0
 				this.yVel = 0
 			} else if (this.waitCount > 0) {
 				this.waitCount -= delta
 				if (this.waitCount <= 0) {
-					if (this.chargePlayer) {
+					// the King goes for whoever is in its pools (ours: the game's King has no
+					// chargePlayer, so on its own it only wanders and hits back)
+					if (this.chargePlayer || (isKing && extras)) {
 						var tmpPlayer, bestDst, tmpDist
 						for (let i = 0; i < players.length; ++i) {
-							if (players[i].alive && !(players[i].skin && players[i].skin.bullRepel)) {
+							if (players[i].alive && !(players[i].skin && players[i].skin.bullRepel) && !(extras && !this.fighter(players[i]))) {
 								tmpDist = UTILS.getDistance(this.x, this.y, players[i].x, players[i].y)
 								if (tmpDist <= this.viewRange && (!tmpPlayer || tmpDist < bestDst)) {
 									bestDst = tmpDist
@@ -3552,7 +3570,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 				if (this.runFrom && this.runFrom.active && !(this.runFrom.isPlayer && !this.runFrom.alive)) {
 					this.targetDir = UTILS.getDirection(this.x, this.y, this.runFrom.x, this.runFrom.y)
 					tmpSpd *= 1.42
-				} else if (this.chargeTarget && this.chargeTarget.alive) {
+				} else if (this.chargeTarget && this.chargeTarget.alive && !(extras && !this.fighter(this.chargeTarget))) {
 					this.targetDir = UTILS.getDirection(this.chargeTarget.x, this.chargeTarget.y, this.x, this.y)
 					tmpSpd *= 1.75
 					charging = true
@@ -3606,7 +3624,8 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 
 			// HITTING:
 			var hitting = false
-			if (!isKing && this.hitWait > 0) {
+			var kingHits = null
+			if (this.hitWait > 0) {
 				this.hitWait -= delta
 				if (this.hitWait <= 0) {
 					hitting = true
@@ -3648,7 +3667,8 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 							if (!this.hitWait && tmpDst <= this.hitRange + tmpObj.scale) {
 								if (hitting) {
 									tmpDir = UTILS.getDirection(tmpObj.x, tmpObj.y, this.x, this.y)
-									tmpObj.changeHealth(-this.dmg, null, this)
+									if (isKing) (kingHits || (kingHits = [])).push(tmpObj.sid)
+									tmpObj.changeHealth(-this.dmg * (isKing && extras ? this.kingDamage() : 1), null, this)
 									tmpObj.xVel += 0.6 * Math.cos(tmpDir)
 									tmpObj.yVel += 0.6 * Math.sin(tmpDir)
 									this.runFrom = null
@@ -3667,6 +3687,12 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 				}
 			}
 
+			// the King's own hit: shown before it lands, counted for Ryn's dodge stats
+			if (isKing && extras) {
+				if (hitting) this.kingAttackDone("slam", kingHits || [])
+				this.kingWarnHit()
+			}
+
 			// DECEL:
 			if (this.xVel) {
 				this.xVel *= Math.pow(config.playerDecel, delta)
@@ -3678,9 +3704,10 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 			// MAP BOUNDARIES:
 			var tmpScale = this.scale
 			if (this.arena) {
-				// arena animals stay in the arena; slide along its walls
+				// the King and its crabs stay in the pools, all of their body; they slide
+				// along the edge
 				var fits = function (x, y) {
-					return x + tmpScale <= 0 && UTILS.inSecretPool(config, x, y, tmpScale)
+					return UTILS.inArenaPools(config, x, y, tmpScale)
 				}
 				if (!fits(this.x, this.y)) {
 					if (fits(this.x, startY)) {
@@ -3814,6 +3841,15 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 			if (this.health <= 0 && this.index === 11) {
 				this.state = 0
 				this.crab = null
+				// its crabs go back into the water with it (ours)
+				for (var mi = 0; mi < this.minions.length; mi++) {
+					var mn = this.minions[mi]
+					if (mn.active && mn.minion && mn.owner === this) {
+						mn.active = false
+						mn.alive = false
+					}
+				}
+				this.minions = []
 				if (doer && doer.isPlayer && doer.skins && !doer.skins[61]) {
 					doer.skins[61] = 1
 					server.send(doer.id, "us", [0, 61, 0])
@@ -3845,15 +3881,62 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 	}
 
 	// CRAB KING:
-	// The game draws the King and its warnings but leaves what it does to the server.
-	// It shows the King's state (1 going under, 2 under water, 3 coming up) and
-	// warnings sent as W [kind, x, y, r, ms, x2, y2]: 3 a slam, 4 a charge line,
-	// 1 a ring, 0 a splash where it surfaces. The attacks below are built on those.
-	var CRAB_SLAM = 3
-	var CRAB_LINE = 4
-	var CRAB_RING = 1
-	var CRAB_SPLASH = 0
-	this.crabWarn = function (kind, x, y, r, ms, x2, y2) {
+	// From the game's files: its numbers (aiTypes 11), its arena (config.secretPool), how
+	// the game draws it under water (state 1 going under over 700 ms, 2 under, 3 coming up
+	// over 1650 ms) and its warnings, W [kind, x, y, r, ms, x2, y2]: 3 a hit circle, 4 a
+	// charge line, 1 a ring, anything else a splash. Its hit is the game's own, run by the
+	// animal code above: it holds for hitDelay (700 ms), then everyone within hitRange (400)
+	// takes dmg (45) and a 0.6 push, buildings take 5x, and the game's J animation plays.
+	// Ours, until they can be measured on the real game: who it fights (players in its
+	// pools), when it dives, charges or calls a ring and their sizes and times, its crabs,
+	// and its healing. They are tied to its own numbers and its own pace.
+	var KING_HIT = 3
+	var KING_LINE = 4
+	var KING_RING = 1
+	var KING_SPLASH = 0
+	var GO_UNDER = 700 // the game's animation for state 1
+	var COME_UP = 1650 // and for state 3
+	var UNDER_MAX = 3000
+	var LINE_MAX = 1100
+	var RING_R = 250
+	var RING_MS = 1100
+	var SUMMON_AT = 0.75
+	var SUMMON_EVERY = 30000
+	var MINIONS_MAX = 6
+
+	// a player in the pools: who the King and its crabs fight (and where the game shows
+	// the King's health bar)
+	this.fighter = function (p) {
+		return !!p && p.alive && UTILS.inArenaPools(config, p.x, p.y, 0)
+	}
+	this.nearestFighter = function () {
+		var best = null
+		var bestDst = Infinity
+		for (var i = 0; i < players.length; ++i) {
+			var p = players[i]
+			if (!this.fighter(p) || (p.skin && p.skin.bullRepel)) continue
+			var d = UTILS.getDistance(this.x, this.y, p.x, p.y)
+			if (d <= this.viewRange && d < bestDst) {
+				bestDst = d
+				best = p
+			}
+		}
+		return best
+	}
+	this.kingTune = function () {
+		return config.rynKing || { speed: 1, damage: 1 }
+	}
+	this.kingDamage = function () {
+		var t = this.kingTune()
+		return t.damage === undefined ? 1 : t.damage
+	}
+	// how fast it walks when it chases, per ms, from the game's movement: speed x1.75 every
+	// tick, then the game's slowdown
+	this.kingPace = function (delta) {
+		var q = Math.pow(config.playerDecel, delta)
+		return (this.baseSpeed * 1.75 * delta) / (1 - q)
+	}
+	this.kingWarn = function (kind, x, y, r, ms, x2, y2) {
 		if (x2 === undefined) {
 			x2 = x
 			y2 = y
@@ -3861,13 +3944,18 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 		var probe = { x: (x + x2) / 2, y: (y + y2) / 2, scale: r + Math.abs(x2 - x) / 2 + Math.abs(y2 - y) / 2 }
 		for (var i = 0; i < players.length; ++i) {
 			if (players[i].canSee(probe)) {
-				server.send(players[i].id, "cw", [kind, Math.round(x), Math.round(y), r, ms, Math.round(x2), Math.round(y2)])
+				server.send(players[i].id, "cw", [kind, Math.round(x), Math.round(y), r, Math.round(ms), Math.round(x2), Math.round(y2)])
 			}
 		}
 	}
-	// returns the sids it hit
-	this.crabHurt = function (x, y, r, dmg, knock, hitList) {
+	// the game's hit, at a spot: everyone within r takes its damage and a 0.6 push away
+	this.kingStrike = function (x, y, r, animate, hitList) {
 		var hit = []
+		if (animate) {
+			for (var a = 0; a < players.length; ++a) {
+				if (players[a].canSee(this)) server.send(players[a].id, "aa", [this.sid])
+			}
+		}
 		for (var i = 0; i < players.length; ++i) {
 			var p = players[i]
 			if (!p.alive || (hitList && hitList[p.sid])) continue
@@ -3875,265 +3963,233 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 				if (hitList) hitList[p.sid] = 1
 				hit.push(p.sid)
 				var dir = UTILS.getDirection(p.x, p.y, x, y)
-				p.changeHealth(-dmg, null, this)
-				p.xVel += knock * Math.cos(dir)
-				p.yVel += knock * Math.sin(dir)
+				p.changeHealth(-this.dmg * this.kingDamage(), null, this)
+				p.xVel += 0.6 * Math.cos(dir)
+				p.yVel += 0.6 * Math.sin(dir)
 			}
 		}
 		return hit
 	}
 	// Ryn's dodge counter: did the attack catch the player it was aimed at
-	this.crabDone = function (hit) {
+	this.kingAttackDone = function (kind, hit) {
 		var c = this.crab
-		if (config.rynKingAttack && c && c.victim !== undefined) config.rynKingAttack(this, c.kind, c.victim, hit || [])
+		if (!c) return
+		c.warned = false
+		if (config.rynKingAttack && c.victim !== undefined) config.rynKingAttack(this, kind, c.victim, hit || [])
 	}
-	this.crabTurn = function (dir, delta) {
-		this.dir %= PI2
-		var netAngle = (this.dir - dir + PI2) % PI2
-		var amnt = Math.min(Math.abs(netAngle - PI2), netAngle, this.turnSpeed * delta)
-		var sign = netAngle - Math.PI >= 0 ? 1 : -1
-		this.dir = (this.dir + sign * amnt + PI2) % PI2
+	// the game's hit is shown as it starts holding (hitWait), for as long as it holds
+	this.kingWarnHit = function () {
+		var c = this.crab
+		if (!c) return
+		if (this.hitWait > 0 && !c.warned) {
+			c.warned = true
+			c.victim = this.chargeTarget ? this.chargeTarget.sid : undefined
+			this.kingWarn(KING_HIT, this.x, this.y, this.hitRange, this.hitWait)
+		} else if (!(this.hitWait > 0)) {
+			c.warned = false
+		}
 	}
-	this.crabWalk = function (dir, delta, mult) {
-		this.xVel += this.speed * mult * delta * Math.cos(dir)
-		this.yVel += this.speed * mult * delta * Math.sin(dir)
-	}
-	this.crabEnd = function (rest) {
-		this.crab.phase = "idle"
-		this.crab.next = rest
-		this.state = 0
-	}
-	this.crabSummon = function () {
+	this.kingSummon = function () {
 		this.minions = this.minions.filter(function (m) {
 			return m.active && m.alive && m.minion
 		})
-		var room = 8 - this.minions.length
-		var kinds = [14, 14, 14, 13]
-		for (var i = 0; i < kinds.length && room > 0; i++) {
-			var a = UTILS.randFloat(-Math.PI, Math.PI)
-			var d = this.scale + UTILS.randInt(80, 260)
-			var x = this.x + d * Math.cos(a)
-			var y = this.y + d * Math.sin(a)
-			if (!this.spawnAi || !UTILS.inSecretPool(config, x, y, 40)) continue
+		var kinds = [14, 14, 13]
+		for (var i = 0; i < kinds.length && this.minions.length < MINIONS_MAX && this.spawnAi; i++) {
+			// around the King, wherever there is water for them
+			var a, x, y, found = false
+			for (var tries = 0; tries < 16 && !found; tries++) {
+				a = UTILS.randFloat(-Math.PI, Math.PI)
+				var d = this.scale + UTILS.randInt(100, 300)
+				x = this.x + d * Math.cos(a)
+				y = this.y + d * Math.sin(a)
+				found = UTILS.inArenaPools(config, x, y, 40)
+			}
+			if (!found) continue
 			var m = this.spawnAi(x, y, a, kinds[i])
 			m.minion = true
 			m.owner = this
+			// they come up out of the water
+			m.state = 3
+			m.emerge = COME_UP
+			m.waitCount = COME_UP
 			this.minions.push(m)
-			room--
+			this.kingWarn(KING_SPLASH, x, y, Math.round(m.scale * 1.5), COME_UP)
 		}
 	}
-	// how far the King's facing is from a direction, 0..PI
-	this.crabOff = function (dir) {
-		var d = Math.abs(((dir - this.dir) % PI2 + PI2 + Math.PI) % PI2 - Math.PI)
-		return d
-	}
-	this.crabKingUpdate = function (delta) {
+	this.kingPick = function (target, tune) {
+		var d = UTILS.getDistance(this.x, this.y, target.x, target.y)
+		if (tune.only) {
+			if (tune.only === "slam") return null
+			if (tune.only === "charge") return d <= LINE_MAX ? "charge" : null
+			return tune.only
+		}
+		// close up, its own hit does the work
+		if (d <= this.hitRange + target.scale) return null
+		var fits = { charge: d >= 350 && d <= LINE_MAX, ring: d <= 1500, dive: d >= 500 }
+		var order = ["charge", "ring", "dive"]
 		var c = this.crab
-		if (!c) c = this.crab = { phase: "idle", t: 0, next: 2500, summon: 9000, x: 0, y: 0, r: 0, dir: 0, len: 0, hit: null, alone: 0, travel: 0 }
-		var tune = config.rynKing || { speed: 1, damage: 1 }
-		var dmgMult = tune.damage
-		var target = null
-		var best = Infinity
-		for (var i = 0; i < players.length; ++i) {
-			var p = players[i]
-			if (p.alive && p.x < 0) {
-				var d = UTILS.getDistance(this.x, this.y, p.x, p.y)
-				if (d <= this.viewRange && d < best) {
-					best = d
-					target = p
-				}
+		for (var i = 0; i < order.length; i++) {
+			var k = order[(c.turn + i) % order.length]
+			if (fits[k]) {
+				c.turn = (c.turn + i + 1) % order.length
+				return k
 			}
 		}
-		// it heals under water, and slowly when nobody is around
-		if (this.state === 2) {
-			this.health = Math.min(this.maxHealth, this.health + this.maxHealth * 0.015 * (delta / 1000))
-		}
+		return null
+	}
+	this.kingHold = function () {
+		this.xVel = 0
+		this.yVel = 0
+	}
+	this.kingEnd = function (kind, hit) {
+		var c = this.crab
+		this.kingAttackDone(kind, hit)
+		c.phase = "idle"
+		c.next = UTILS.randInt(6000, 9000)
+		this.state = 0
+		// a rest, as after the game's chase
+		this.chargeTarget = null
+		this.moveCount = 0
+		this.waitCount = 1500
+	}
+	// true while one of its own attacks moves or holds it
+	this.kingThink = function (delta) {
+		var c = this.crab
+		if (!c) c = this.crab = { phase: "idle", t: 0, next: 5000, turn: 0, summon: 0, summoned: false, alone: 0, warned: false, kind: null, victim: undefined }
+		var tune = this.kingTune()
+		this.speed = this.baseSpeed * (tune.speed || 1)
+		var target = this.fighter(this.chargeTarget) ? this.chargeTarget : this.nearestFighter()
+		// back a little under water, and slowly with nobody in its pools
+		if (this.state === 2) this.health = Math.min(this.maxHealth, this.health + this.maxHealth * 0.015 * (delta / 1000))
 		c.alone = target ? 0 : c.alone + delta
-		if (c.alone > 5000) {
-			this.health = Math.min(this.maxHealth, this.health + this.maxHealth * 0.005 * (delta / 1000))
-		}
-		// nobody stands inside the King, except while it is under water
-		if (this.state !== 2) {
-			for (var k = 0; k < players.length; ++k) {
-				var q = players[k]
-				if (!q.alive) continue
-				var qd = UTILS.getDistance(this.x, this.y, q.x, q.y)
-				var room = this.scale * 0.8 + q.scale
-				if (qd < room) {
-					var qa = qd > 0 ? UTILS.getDirection(q.x, q.y, this.x, this.y) : UTILS.randFloat(-Math.PI, Math.PI)
-					var nx = this.x + room * Math.cos(qa)
-					var ny = this.y + room * Math.sin(qa)
-					if (nx - q.scale >= 0 || UTILS.inSecretPool(config, nx, ny, q.scale)) {
-						q.x = nx
-						q.y = ny
-					}
-				}
+		if (c.alone > 5000) this.health = Math.min(this.maxHealth, this.health + this.maxHealth * 0.005 * (delta / 1000))
+		// its crabs: once it is down to 75%, then every 30 s while it fights
+		if (target && this.health <= this.maxHealth * SUMMON_AT) {
+			c.summon -= delta
+			if (!c.summoned || c.summon <= 0) {
+				this.kingSummon()
+				c.summoned = true
+				c.summon = SUMMON_EVERY
 			}
 		}
+		if (c.phase !== "idle") this.hitWait = 0
 		c.t -= delta
+		var v, d
 		switch (c.phase) {
 			case "idle": {
 				this.state = 0
 				if (!target) {
-					c.next = Math.max(c.next, 1500)
-					if (UTILS.getDistance(this.x, this.y, this.startX, this.startY) > 80) {
-						var home = UTILS.getDirection(this.startX, this.startY, this.x, this.y)
-						this.crabTurn(home, delta)
-						// a crab walks where it faces; it turns first
-						if (this.crabOff(home) < 0.6) this.crabWalk(this.dir, delta, tune.speed)
-					}
-					return
+					c.next = Math.max(c.next, 3000)
+					return false
 				}
-				var face = UTILS.getDirection(target.x, target.y, this.x, this.y)
-				this.crabTurn(face, delta)
-				var off = this.crabOff(face)
-				if (best > this.hitRange * 0.7 && off < 0.6) this.crabWalk(this.dir, delta, tune.speed)
-				c.next -= delta
-				c.summon -= delta
-				if (c.summon <= 0) {
-					this.crabSummon()
-					c.summon = 15000
+				c.next -= delta * (this.health < this.maxHealth * 0.4 ? 1.5 : 1)
+				if (c.next > 0 || this.hitWait > 0) return false
+				var pick = this.kingPick(target, tune)
+				if (!pick) {
+					c.next = 1000
+					return false
 				}
-				// it only attacks what it is looking at
-				if (c.next > 0 || off > 0.35) return
-				var low = this.health < this.maxHealth * 0.4
-				var canSlam = best <= this.hitRange + target.scale
-				var canCharge = best <= 1150 && off < 0.25
-				var pick = null
-				if (tune.only) {
-					// Ryn's practice mode: one attack, again and again (the King walks in for slams and charges)
-					if (tune.only === "slam") pick = canSlam ? "slam" : null
-					else if (tune.only === "charge") pick = canCharge ? "charge" : null
-					else pick = tune.only
-				} else if (canSlam) pick = "slam"
-				else if (low && UTILS.randInt(0, 1)) pick = "dive"
-				else if (canCharge && UTILS.randInt(0, 2)) pick = "charge"
-				else if (UTILS.randInt(0, 1)) pick = "ring"
-				else pick = "dive"
-				if (!pick) return
 				c.kind = pick
 				c.victim = target.sid
-				if (pick === "slam") {
-					// slam in front of the King
-					c.phase = "slam"
-					c.t = this.hitDelay
-					c.r = 360
-					c.x = this.x + 160 * Math.cos(this.dir)
-					c.y = this.y + 160 * Math.sin(this.dir)
-					this.crabWarn(CRAB_SLAM, c.x, c.y, c.r, c.t)
+				this.chargeTarget = target
+				this.hitWait = 0
+				this.kingHold()
+				if (pick === "dive") {
+					c.phase = "under1"
+					c.t = GO_UNDER
+					this.state = 1
 				} else if (pick === "charge") {
-					// charge along the line it faces
-					c.phase = "chargeWind"
-					c.t = 900
-					c.dir = this.dir
-					c.len = Math.min(1100, best + 250)
-					c.hit = {}
-					this.crabWarn(CRAB_LINE, this.x, this.y, this.scale, c.t, this.x + c.len * Math.cos(c.dir), this.y + c.len * Math.sin(c.dir))
-				} else if (pick === "ring") {
-					// a ring of water under the target
+					d = UTILS.getDistance(this.x, this.y, target.x, target.y)
+					c.phase = "lineWind"
+					c.t = this.hitDelay
+					c.dir = UTILS.getDirection(target.x, target.y, this.x, this.y)
+					c.len = Math.max(400, Math.min(LINE_MAX, d + 200))
+					this.dir = c.dir
+					this.kingWarn(KING_LINE, this.x, this.y, this.scale, c.t, this.x + c.len * Math.cos(c.dir), this.y + c.len * Math.sin(c.dir))
+				} else {
 					c.phase = "ring"
-					c.t = 1100
-					c.r = 240
+					c.t = RING_MS
 					c.x = target.x
 					c.y = target.y
-					this.crabWarn(CRAB_RING, c.x, c.y, c.r, c.t)
-				} else {
-					// go under and come up beneath the target
-					c.phase = "dive1"
-					c.t = 700
-					this.state = 1
+					this.kingWarn(KING_RING, c.x, c.y, RING_R, c.t)
 				}
-				return
+				return true
 			}
-			case "slam":
-				this.xVel *= 0.5
-				this.yVel *= 0.5
+			case "under1":
+				this.state = 1
+				this.kingHold()
 				if (c.t <= 0) {
-					for (var a = 0; a < players.length; ++a) {
-						if (players[a].canSee(this)) server.send(players[a].id, "aa", [this.sid])
-					}
-					this.crabDone(this.crabHurt(c.x, c.y, c.r, this.dmg * dmgMult, 0.9))
-					this.crabEnd(1400)
+					c.phase = "under2"
+					c.t = UNDER_MAX
+					this.state = 2
 				}
-				return
-			case "chargeWind":
-				// it holds the line it showed
-				this.xVel = 0
-				this.yVel = 0
+				return true
+			case "under2":
+				this.state = 2
+				d = target ? UTILS.getDistance(this.x, this.y, target.x, target.y) : 0
+				if (target && d > 60 && c.t > 0) {
+					v = Math.min(this.kingPace(delta) * 1.5, d / delta)
+					this.dir = UTILS.getDirection(target.x, target.y, this.x, this.y)
+					this.xVel = v * Math.cos(this.dir)
+					this.yVel = v * Math.sin(this.dir)
+					return true
+				}
+				c.phase = "up"
+				c.t = COME_UP
+				this.state = 3
+				this.kingHold()
+				this.kingWarn(KING_SPLASH, this.x, this.y, this.hitRange, COME_UP)
+				return true
+			case "up":
+				this.state = 3
+				this.kingHold()
+				if (c.t <= 0) this.kingEnd("dive", this.kingStrike(this.x, this.y, this.hitRange, true))
+				return true
+			case "lineWind":
+				this.dir = c.dir
+				this.kingHold()
 				if (c.t <= 0) {
-					c.phase = "charge"
+					c.phase = "line"
+					c.t = 4000
 					c.travel = 0
-					this.dir = c.dir
+					c.lx = this.x
+					c.ly = this.y
+					c.hit = {}
+					c.hits = []
 				}
-				return
-			case "charge": {
-				var v = 0.6 * tune.speed
+				return true
+			case "line": {
+				var moved = UTILS.getDistance(this.x, this.y, c.lx, c.ly)
+				c.travel += moved
+				c.lx = this.x
+				c.ly = this.y
+				c.hits = c.hits.concat(this.kingStrike(this.x, this.y, this.scale, false, c.hit))
+				v = this.kingPace(delta) * 2
+				var stuck = c.travel > 0 && moved < v * delta * 0.25
+				if (c.travel >= c.len || c.t <= 0 || stuck) {
+					this.kingHold()
+					this.kingEnd("charge", c.hits)
+					return true
+				}
 				this.dir = c.dir
 				this.xVel = v * Math.cos(c.dir)
 				this.yVel = v * Math.sin(c.dir)
-				c.travel += v * delta
-				this.crabHurt(this.x, this.y, this.scale * 0.8, this.dmg * dmgMult, 1.1, c.hit)
-				if (c.travel >= c.len) {
-					this.xVel = 0
-					this.yVel = 0
-					this.crabDone(Object.keys(c.hit).map(Number))
-					this.crabEnd(1800)
-				}
-				return
+				return true
 			}
 			case "ring":
-				if (c.t <= 0) {
-					this.crabDone(this.crabHurt(c.x, c.y, c.r, 30 * dmgMult, 0.6))
-					this.crabEnd(1200)
-				}
-				return
-			case "dive1":
-				this.state = 1
-				this.xVel = 0
-				this.yVel = 0
-				if (c.t <= 0) {
-					c.phase = "dive2"
-					c.t = 1600
-					c.travel = 0
-					this.state = 2
-					c.x = target ? target.x : this.x
-					c.y = target ? target.y : this.y
-				}
-				return
-			case "dive2": {
-				this.state = 2
+				this.kingHold()
 				if (target) {
-					c.x = target.x
-					c.y = target.y
+					var face = UTILS.getDirection(target.x, target.y, this.x, this.y)
+					this.dir %= PI2
+					var net = (this.dir - face + PI2) % PI2
+					var amnt = Math.min(Math.abs(net - PI2), net, this.turnSpeed * delta)
+					this.dir = (this.dir + (net - Math.PI >= 0 ? 1 : -1) * amnt + PI2) % PI2
 				}
-				var gap = UTILS.getDistance(this.x, this.y, c.x, c.y)
-				var go = UTILS.getDirection(c.x, c.y, this.x, this.y)
-				var sv = Math.min(0.4 * tune.speed, gap / Math.max(delta, 1))
-				if (c.travel >= 900) sv = 0
-				this.xVel = sv * Math.cos(go)
-				this.yVel = sv * Math.sin(go)
-				c.travel += sv * delta
-				if (gap > 1) this.dir = go
-				if (c.t <= 0 || gap < 40) {
-					c.phase = "dive3"
-					c.t = 1650
-					this.state = 3
-					this.xVel = 0
-					this.yVel = 0
-					this.crabWarn(CRAB_SPLASH, this.x, this.y, 330, c.t)
-				}
-				return
-			}
-			case "dive3":
-				this.state = 3
-				this.xVel = 0
-				this.yVel = 0
-				if (c.t <= 0) {
-					this.crabDone(this.crabHurt(this.x, this.y, 330, 60 * dmgMult, 1.2))
-					this.crabEnd(2200)
-				}
-				return
+				if (c.t <= 0) this.kingEnd("ring", this.kingStrike(c.x, c.y, RING_R, false))
+				return true
 		}
+		c.phase = "idle"
+		return false
 	}
 }
     },
@@ -6185,10 +6241,10 @@ module.exports = function (
 				this.slowMult *
 				capes.speed(this)
 
-			// the river stops at the map edge: the Crab King's gorge and pools (x < 0) are dry land
-			if (!this.zIndex && (!config.secretPool || this.x >= 0) && this.y >= config.mapScale / 2 - config.riverWidth / 2 && this.y <= config.mapScale / 2 + config.riverWidth / 2) {
-				// calm water at the west edge of the river, so the gorge can be walked into
-				var current = !config.secretPool || this.x >= 700 ? config.waterCurrent : 0
+			// the river runs on into the Crab King's gorge, and it is calm in the game's shallows
+			// (up to x = 320), so the gorge can be walked into
+			if (!this.zIndex && UTILS.inRiver(config, this.x, this.y)) {
+				var current = UTILS.riverCurrent(config, this.x)
 				if (this.skin && this.skin.watrImm) {
 					spdMult *= 0.75
 					this.xVel += current * 0.4 * delta
@@ -7657,7 +7713,7 @@ module.exports = function (ctx) {
 				break
 			}
 			case 'crab':
-				moveTo(me, -900, config.mapScale / 2)
+				moveTo(me, -1650, config.mapScale / 2)
 				break
 		}
 		return true
@@ -8205,7 +8261,8 @@ module.exports = function (ctx) {
 				return true
 			}
 			case 'arena':
-				moveTo(me, -900, config.mapScale / 2)
+				// in the first pool past the gorge, where the King fights
+				moveTo(me, -1650, config.mapScale / 2)
 				tell('[Admin] Crab King arena')
 				return true
 			case 'dummy': {
@@ -9481,9 +9538,31 @@ module.exports.inSecretPool = function (config, x, y, r) {
 		var c = p.pool[i]
 		if (mathSQRT((x - c[0]) * (x - c[0]) + (y - c[1]) * (y - c[1])) <= c[2] - r) return true
 	}
+	// the passage behind the waterfall runs west to where the game stops drawing it
 	var w = p.waterfall
-	if (w && x <= w.x + r && x >= w.x - 900 && mathABS(y - w.y) <= w.half - r) return true
+	if (w && x <= w.x + r && x >= -7000 + r && mathABS(y - w.y) <= w.half - r) return true
 	return false
+}
+// True when a circle of radius r at (x, y) is inside one of the arena's pools: where the
+// Crab King and its crabs live, and where the game shows the King's health bar.
+module.exports.inArenaPools = function (config, x, y, r) {
+	var p = config.secretPool
+	if (!p) return false
+	for (var i = 0; i < p.pool.length; i++) {
+		var c = p.pool[i]
+		if (mathSQRT((x - c[0]) * (x - c[0]) + (y - c[1]) * (y - c[1])) <= c[2] - r) return true
+	}
+	return false
+}
+// The river reaches into the arena's gorge (the game draws it from x = gorgeX0), and it is
+// calm in the shallows (the game's secretPool.shallows, up to x = 320).
+module.exports.inRiver = function (config, x, y) {
+	if (mathABS(y - config.mapScale / 2) > config.riverWidth / 2) return false
+	return !config.secretPool || x >= config.secretPool.gorgeX0
+}
+module.exports.riverCurrent = function (config, x) {
+	var s = config.secretPool && config.secretPool.shallows
+	return !s || x >= s.length ? config.waterCurrent : 0
 }
 module.exports.PACKETCODE = PACKETCODE
     }

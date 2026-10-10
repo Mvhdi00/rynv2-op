@@ -44,10 +44,10 @@ Checked table by table against the game bundle (parsed statically, nothing run):
 - Weapon and item upgrade prerequisites (`pre`), group sandbox limits, the game's
   view range (1920x1080) and skin colours.
 - The arena west of the map (`config.secretPool`): through the gorge at the river,
-  five pools and the passage behind the waterfall. The river is calm in its last
-  700 units, so the gorge can be walked into, and the river stops at the map edge:
-  the arena is dry land, so you move at normal speed there. Nothing can be built in
-  it, and the King's whole body stays west of the map edge.
+  five pools and the passage behind the waterfall (to x = -7000, where the game stops
+  drawing it). The river runs on into the gorge as the game draws it, and it is calm
+  in the game's shallows (`secretPool.shallows`, up to x = 320), so the gorge can be
+  walked into. Nothing can be built in the arena.
 
 ## Checked against the game's own logic
 
@@ -142,19 +142,39 @@ store, upgrades, Windmill Hat and leaderboard through real packets.
 
 ## Crab King
 
-The game only draws the King: its state (1 going under, 2 under water, 3 coming up)
-and warnings sent as `W [kind, x, y, r, ms, x2, y2]` - 3 a slam, 4 a charge line,
-1 a ring, anything else a splash where it surfaces. Its behaviour here is built on
-those and is ours, not moomoo's: slam when you are close, charge along a line, a
-ring under you, dive and come up under you, and crabs every 15 seconds (eight at
-most). It cannot be hurt under water and comes back 3 minutes after it dies.
+Rebuilt in fix27 on the game's own animal code, the code MOOSTAFA runs. From the game's
+files, and checked against them (`tools/server-parity.js`):
 
-It turns before it walks and walks where it faces; it only attacks what it is
-facing, and the slam lands in front of it. A charge holds the line it showed and
-moves at 0.6 px/ms; under water it moves at 0.4 px/ms and at most 900 units. Under
-water it heals 1.5% of its health a second, and 0.5% a second after 5 seconds with
-nobody near; below 40% it dives more often. `!king speed` and `!king damage` scale
-all of this.
+- Its numbers (aiTypes 11): speed 0.00045, turn 0.0007, hitRange 400, hitDelay 700,
+  dmg 45, health 480000. It walks and turns with the game's movement: chasing, about
+  18 units a tick, half a player's speed.
+- Its hit is the game's: it holds for 700 ms (shown as warning 3, a circle of 400 around
+  it), then everyone within 400 takes 45 and a 0.6 push, buildings take 5x, and the
+  game's `J` animation plays. Hurt, it may hit back after 500 ms, and sometimes again.
+- With Ryn's extras off (`config.rynKingExtras = false`) it is the game's code alone, and
+  the parity tool compares it with the game tick by tick, packets included.
+- It and its crabs stay inside the pools, all of their body (the game shows the King's
+  health bar only to players in the pools).
+- Under water: going under is drawn over 700 ms (state 1), coming up over 1650 ms
+  (state 3); it cannot be hurt under water (state 2). Its crabs come up out of the
+  water too: the game draws crabs as divers.
+
+Ours, until it can be measured on the real game (`kingThink` in `src/ai.js`):
+
+- It fights players in its pools and lets go of anyone who leaves them.
+- Every 6-9 s (faster below 40% health) one of its own attacks, in turn: a charge along
+  a line (warning 4, its body's width, held 700 ms, at twice its chase pace), a ring
+  of 250 under you (warning 1, 1.1 s), or a dive (it comes up under you, at 1.5x its
+  pace, with a splash, warning 0, and its hit). Close up, its own hit does the work.
+  Each does its damage (45) and the game's 0.6 push.
+- Its crabs: none until it is down to 75% health, then two Crablings and a Crab, again
+  every 30 s while it fights, six at most; they go when it dies.
+- It heals 1.5% a second under water, 0.5% a second after 5 s with nobody in its pools,
+  and comes back 3 minutes after it dies.
+
+`!king speed` and `!king damage` scale all of this; `!king only slam|charge|ring|dive`
+practises one attack. `node tools/panel-test.js --king 90` fights it in the page and
+checks what the game receives: the pools, its pace, its warnings, dives and crabs.
 
 ## Admin commands
 

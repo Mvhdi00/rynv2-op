@@ -686,7 +686,7 @@ module.exports = function (ctx) {
 				break
 			}
 			case 'crab':
-				moveTo(me, -900, config.mapScale / 2)
+				moveTo(me, -1650, config.mapScale / 2)
 				break
 		}
 		return true
@@ -1234,7 +1234,8 @@ module.exports = function (ctx) {
 				return true
 			}
 			case 'arena':
-				moveTo(me, -900, config.mapScale / 2)
+				// in the first pool past the gorge, where the King fights
+				moveTo(me, -1650, config.mapScale / 2)
 				tell('[Admin] Crab King arena')
 				return true
 			case 'dummy': {

@@ -548,9 +548,9 @@ for (const it of game.items.list) {
 heading("Every animal: near a player, and attacked");
 const animalTypes = game.config && new game.AiManager([], game.AI, [], game.items, null, game.config, game.utils, () => {}, null).aiTypes;
 for (const type of animalTypes) {
-  // the Crab King's behaviour is ours (see the README); its crabs are kept to the arena,
-  // so here they run with the arena walls off, like the game's
-  if (type.id === 11) continue;
+  // the Crab King and its crabs live in the arena, with Ryn's extras on top of the game's
+  // code; here they run on open ground with the arena (and so the extras) off, which
+  // leaves the game's code alone
   const free = (w, a) => {
     if (w.kind === "server") a.arena = false;
   };
@@ -786,6 +786,128 @@ effect("the crown (kill leader, the Skull Cape's target) goes to the most kills"
   const icons = players.map(p => p.iconIndex);
   return { ok: JSON.stringify(icons) === "[0,1,0,0]", why: "kills 1, 5, 9 (dead), 3 -> crowns " + icons.join(",") };
 });
+// ---- the Crab King in its arena: the game's code plus Ryn's extras ----
+heading("Crab King in its arena (server only)");
+const pools = srv.config.secretPool.pool;
+const kingFight = (opts = {}) => {
+  const w = sworld();
+  const attacks = [];
+  const was = srv.config.rynKingAttack, tune = srv.config.rynKing;
+  srv.config.rynKingAttack = (k, kind, victim, hit) => attacks.push([ kind, victim, hit.slice() ]);
+  srv.config.rynKing = Object.assign({ speed: 1, damage: 1 }, opts.tune || {});
+  const king = w.aiManager.spawn(pools[0][0], pools[0][1], Math.PI, 11);
+  const fighters = (opts.players || [ [ pools[0][0] + 600, pools[0][1] ] ]).map((xy, i) => w.addPlayer(i + 1, xy[0], xy[1]));
+  const frames = [];
+  try {
+    for (let t = 0; t < (opts.ticks || 1080); t++) {
+      w.sent.length = 0;
+      // nobody dies: every tick starts at full health, so what a tick took is 100 - health
+      for (const p of fighters) p.health = 100;
+      if (opts.each) opts.each(w, t, king, fighters);
+      const before = [ king.x, king.y ];
+      w.tick();
+      frames.push({ t, x: king.x, y: king.y, step: Math.hypot(king.x - before[0], king.y - before[1]), state: king.state, phase: king.crab ? king.crab.phase : "idle", sent: w.sent.slice(), health: fighters.map(p => p.health), vel: fighters.map(p => [ p.xVel, p.yVel ]), ais: w.ais.filter(a => a.active && a.alive && !a.spawnCounter).map(a => [ a.index, a.x, a.y, a.scale, a.state ]) });
+    }
+  } finally {
+    srv.config.rynKingAttack = was;
+    srv.config.rynKing = tune;
+  }
+  return { w, king, fighters, frames, attacks };
+};
+const wander = (w, t, king, fighters) => {
+  // the players keep moving around the pools
+  if (t % 25 === 0) for (const p of fighters) p.moveDir = Math.random() * Math.PI * 2;
+};
+const inPools = (x, y, r) => pools.some(c => Math.hypot(x - c[0], y - c[1]) <= c[2] - r + 1e-6);
+const pace = (() => {
+  const q = Math.pow(srv.config.playerDecel, TICK);
+  return 0.00045 * 1.75 * TICK / (1 - q) * TICK;
+})();
+const effectK = (name, fn) => effect(name, () => {
+  srv.config.storeEffects = false;
+  return fn();
+});
+effectK("stays in its pools, its crabs too, through a 2 minute fight", () => {
+  const f = kingFight({ players: [ [ -2500, 6700 ], [ -3300, 6750 ], [ -1700, 7550 ] ], each: wander });
+  let out = 0, crabsOut = 0;
+  for (const fr of f.frames) {
+    if (!inPools(fr.x, fr.y, 280)) out++;
+    for (const a of fr.ais) if (a[0] !== 11 && !inPools(a[1], a[2], a[3])) crabsOut++;
+  }
+  return { ok: out === 0 && crabsOut === 0, why: "ticks outside the pools: King " + out + ", crabs " + crabsOut };
+});
+effectK("its pace: chases at the game's speed, never more than twice it", () => {
+  const f = kingFight({ players: [ [ -2500, 6700 ], [ -3200, 7750 ] ], each: wander });
+  const chase = Math.max(...f.frames.filter(fr => fr.phase === "idle").map(fr => fr.step));
+  const most = Math.max(...f.frames.map(fr => fr.step));
+  return { ok: chase <= pace + 0.5 && most <= pace * 2 + 0.5, why: "game chase pace " + fmt(pace) + "/tick; chasing " + fmt(chase) + ", fastest " + fmt(most) + " (it was 67)" };
+});
+effectK("its hit is the game's: shown for 700 ms, 400 around it, 45 damage, a 0.6 push, the J animation", () => {
+  const f = kingFight({ tune: { only: "slam" }, players: [ [ pools[0][0] + 300, pools[0][1] ] ], ticks: 60 });
+  const warn = f.frames.flatMap(fr => fr.sent.filter(m => m[1] === "cw").map(m => [ fr.t ].concat(m[2]))).find(m => m[1] === 3);
+  const lost = f.frames.map(fr => 100 - fr.health[0]);
+  const hitAt = lost.findIndex(x => x > 0);
+  const anim = f.frames[hitAt] && f.frames[hitAt].sent.some(m => m[1] === "aa");
+  const push = f.frames[hitAt] ? Math.hypot(...f.frames[hitAt].vel[0]) : 0;
+  return { ok: !!warn && warn[4] === 400 && warn[5] === 700 && lost[hitAt] === 45 && anim && hitAt - warn[0] === 7, why: "warning " + JSON.stringify(warn) + ", hit " + (hitAt - (warn ? warn[0] : 0)) + " ticks later for " + lost[hitAt] + ", J " + anim + ", push left " + fmt(push) };
+});
+effectK("its dive: 700 ms going under, under water, 1650 ms coming up with a splash, its hit there", () => {
+  const f = kingFight({ tune: { only: "dive" }, players: [ [ pools[1][0], pools[1][1] ] ], ticks: 120 });
+  const states = [];
+  for (const fr of f.frames) {
+    if (!states.length || states[states.length - 1][0] !== fr.state) states.push([ fr.state, fr.t ]);
+  }
+  const ms = i => states[i + 1] ? Math.round((states[i + 1][1] - states[i][1]) * TICK) : null;
+  const up = states.findIndex(s => s[0] === 3);
+  const splash = f.frames.some(fr => fr.sent.some(m => m[1] === "cw" && m[2][0] === 0 && m[2][3] === 400 && m[2][4] === 1650));
+  const seq = states.slice(0, 5).map(s => s[0]).join(",");
+  const dive = f.attacks.find(a => a[0] === "dive");
+  return { ok: seq.startsWith("0,1,2,3,0") && Math.abs(ms(1) - 700) <= TICK && Math.abs(ms(up) - 1650) <= TICK && splash && !!dive, why: "states " + seq + ": under in " + ms(1) + " ms, up in " + ms(up) + " ms, splash " + splash + ", hit " + (dive ? JSON.stringify(dive[2]) : "none") };
+});
+effectK("under water nothing hurts it", () => {
+  const f = kingFight({ tune: { only: "dive" }, players: [ [ pools[1][0], pools[1][1] ] ], ticks: 30, each: (w, t, king) => {
+    if (king.state === 2) king.changeHealth(-1000, w.players[0], w.players[0]);
+  } });
+  return { ok: f.king.health === f.king.maxHealth, why: "health " + f.king.health + "/" + f.king.maxHealth };
+});
+effectK("all its attacks come up in a fight: its hit, the charge, the ring and the dive", () => {
+  const f = kingFight({ players: [ [ -2500, 6700 ], [ -3300, 6750 ], [ -1700, 7550 ] ], each: wander, ticks: 1620 });
+  const kinds = {};
+  for (const a of f.attacks) kinds[a[0]] = (kinds[a[0]] || 0) + 1;
+  return { ok: [ "slam", "charge", "ring", "dive" ].every(k => kinds[k] > 0), why: "in 3 minutes: " + JSON.stringify(kinds) };
+});
+effectK("its crabs: none above 75% health, then 3 out of the water, never more than 6", () => {
+  const f = kingFight({ players: [ [ -2500, 6700 ] ], ticks: 1200, each: (w, t, king) => {
+    if (t === 0) king.health = king.maxHealth * 0.8;
+    if (t === 100) king.health = king.maxHealth * 0.7;
+  } });
+  const crabs = fr => fr.ais.filter(a => a[0] !== 11);
+  const before = Math.max(...f.frames.slice(0, 100).map(fr => crabs(fr).length));
+  const first = f.frames[101] ? crabs(f.frames[101]) : [];
+  const most = Math.max(...f.frames.map(fr => crabs(fr).length));
+  const came = first.every(a => a[4] === 3);
+  return { ok: before === 0 && first.length === 3 && came && most <= 6, why: "above 75%: " + before + "; at 70%: " + first.map(a => a[0]).join(",") + (came ? " coming up" : "") + "; most at once " + most };
+});
+effectK("it lets go of a player who leaves its pools", () => {
+  const f = kingFight({ players: [ [ pools[0][0] + 500, pools[0][1] ] ], ticks: 200, each: (w, t, king, fighters) => {
+    if (t === 60) fighters[0].x = -800, fighters[0].y = 7200;
+  } });
+  const late = f.frames.slice(120);
+  const chased = late.some(fr => fr.phase !== "idle") || f.king.chargeTarget;
+  return { ok: !chased, why: chased ? "still after them" : "back to wandering once they were in the gorge" };
+});
+effectK("its death takes its crabs with it, and gives the Crab Shell", () => {
+  const f = kingFight({ players: [ [ pools[0][0] + 300, pools[0][1] ] ], ticks: 3, each: (w, t, king, fighters) => {
+    if (t === 0) {
+      king.health = king.maxHealth * 0.7;
+      king.kingSummon();
+    }
+    if (t === 1) king.changeHealth(-king.maxHealth, fighters[0], fighters[0]);
+  } });
+  const crabs = f.w.ais.filter(a => a.index !== 11 && a.active).length;
+  return { ok: crabs === 0 && !!f.fighters[0].skins[61], why: "crabs left " + crabs + ", Crab Shell " + !!f.fighters[0].skins[61] };
+});
+
 effect("switched off (config.storeEffects = false), capes do nothing", () => {
   srv.config.storeEffects = false;
   const r = walked(5, 5000) / walked(0, 5000);

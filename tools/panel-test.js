@@ -6,6 +6,8 @@
 //   node tools/panel-test.js --soak <seconds>     12 bots on a 150±80 ms fake ping, page errors counted
 //   node tools/panel-test.js --server-checks      the store, upgrades, Windmill Hat and leaderboard,
 //                                                 through real packets to the in-page server
+//   node tools/panel-test.js --king <seconds>     a fight with the Crab King: its pools, pace,
+//                                                 warnings, dives, crabs, as the page receives them
 //
 // The page is a stub moomoo.io (nothing reaches the network) with the HUD the panel
 // needs (#adminButton, #chatHolder, the game canvas). The userscript is injected at
@@ -49,6 +51,8 @@ const FAST = args.includes("--fast") ? (args.splice(args.indexOf("--fast"), 1), 
 const SOAK = Number(flag("--soak", 0)) || 0;
 // --server-checks: only the in-page server's rules (store, upgrades, leaderboard) through real packets
 const SERVER_CHECKS = args.includes("--server-checks") ? (args.splice(args.indexOf("--server-checks"), 1), true) : false;
+// --king <seconds>: fight the Crab King in its arena and check what the page receives
+const KING = Number(flag("--king", 0)) || 0;
 const SCRIPT = path.resolve(args[0] || path.join(__dirname, "..", "RynType2.user.js"));
 fs.mkdirSync(OUT, { recursive: true });
 
@@ -259,6 +263,99 @@ async function main() {
     report.checks.push({ name, ok: !!ok, detail: detail === undefined ? "" : detail });
     console.log((ok ? "  ok   " : "  FAIL ") + name + (detail ? "  — " + (typeof detail === "string" ? detail : JSON.stringify(detail)) : ""));
   };
+
+  if (KING) {
+    const { page: pk, errors: ek } = await boot(context);
+    const r = await pk.evaluate(async seconds => {
+      const R = window.__ryn, H = window.__harness;
+      const sleep = ms => new Promise(res => setTimeout(res, ms));
+      const dec = R.client.PacketManager.Decoder;
+      const warns = [], kingRows = [], crabRows = [];
+      let anims = 0, hurt = 0, lastHealth = null, ticks = 0;
+      H.sock.addEventListener("message", ev => {
+        let m;
+        try {
+          m = dec.decode(new Uint8Array(ev.data));
+        } catch (_) {
+          return;
+        }
+        if (m[0] === "W") warns.push(m[1]);
+        if (m[0] === "J") anims++;
+        if (m[0] === "I") {
+          ticks++;
+          const rows = m[1][0] || [];
+          for (let i = 0; i + 7 < rows.length; i += 8) {
+            if (rows[i + 1] === 11) kingRows.push([ rows[i + 2], rows[i + 3], rows[i + 7] || 0, rows[i + 5], ticks ]);
+            if (rows[i + 1] === 13 || rows[i + 1] === 14) crabRows.push([ rows[i + 1], rows[i + 2], rows[i + 3], rows[i + 7] || 0 ]);
+          }
+        }
+        if (m[0] === "O" && m[1][0] === H.me().sid) {
+          if (lastHealth !== null && m[1][1] < lastHealth) hurt++;
+          lastHealth = m[1][1];
+        }
+      });
+      R.priv.command("!arena");
+      await sleep(300);
+      R.priv.command("!king respawn");
+      await sleep(300);
+      const half = seconds * 500;
+      // walk around the pools; halfway, the King drops to 60% (its crabs come)
+      const keys = [ "w", "a", "s", "d" ];
+      const t0 = Date.now();
+      let healed = 0;
+      while (Date.now() - t0 < seconds * 1000) {
+        const me = H.me();
+        if (me && me.alive) {
+          // keep standing in the pools: head back towards the big pool when near an edge
+          const dir = Math.atan2(7200 - me.y, -2500 - me.x) + (Math.random() - 0.5) * 2.4;
+          H.sock.send(H.enc([ "9", [ dir ] ]));
+        } else {
+          H.spawn();
+          await sleep(500);
+          R.priv.command("!arena");
+        }
+        if (Date.now() - t0 > half && !healed) {
+          healed = 1;
+          R.priv.command("!king hp 288000");
+          // and one dive for sure
+          R.priv.command("!king only dive");
+          R.priv.command("!king attack");
+          await sleep(7000);
+          R.priv.command("!king only all");
+        }
+        R.priv.command("!heal");
+        await sleep(400);
+      }
+      const pools = [ [ -2500, 7200, 1150 ], [ -3300, 6750, 750 ], [ -3200, 7750, 700 ], [ -1700, 6900, 600 ], [ -1800, 7550, 600 ] ];
+      const inPools = (x, y, r) => pools.some(c => Math.hypot(x - c[0], y - c[1]) <= c[2] - r + 1);
+      let fastest = 0;
+      // from one server tick to the next only
+      for (let i = 1; i < kingRows.length; i++) {
+        if (kingRows[i][4] === kingRows[i - 1][4] + 1) fastest = Math.max(fastest, Math.hypot(kingRows[i][0] - kingRows[i - 1][0], kingRows[i][1] - kingRows[i - 1][1]));
+      }
+      return {
+        kingSeen: kingRows.length,
+        kingOut: kingRows.filter(k => !inPools(k[0], k[1], 280)).length,
+        states: [ ...new Set(kingRows.map(k => k[2])) ].sort(),
+        fastest: Math.round(fastest),
+        warnKinds: warns.reduce((o, w) => (o[w[0]] = (o[w[0]] || 0) + 1, o), {}),
+        hitWarn: warns.filter(w => w[0] === 3).slice(0, 2),
+        crabs: crabRows.length ? [ ...new Set(crabRows.map(c => c[0])) ] : [],
+        crabsOut: crabRows.filter(c => !inPools(c[1], c[2], c[0] === 13 ? 78 : 39)).length,
+        anims, hurt
+      };
+    }, KING);
+    console.log(JSON.stringify(r));
+    check("the King stays in its pools", r.kingSeen > 100 && r.kingOut === 0, r.kingOut + " of " + r.kingSeen);
+    check("its moves, at its pace (at most twice the game's chase, 36 a tick)", r.fastest <= 40, r.fastest);
+    check("its attacks are shown: its hit (400 around it), charge, ring, dive", r.warnKinds[3] > 0 && r.warnKinds[4] > 0 && r.warnKinds[1] > 0 && r.warnKinds[0] > 0 && r.hitWarn.every(w => w[3] === 400), r.warnKinds);
+    check("under water and back (states 1, 2, 3)", [ 1, 2, 3 ].every(s => r.states.includes(s)), r.states);
+    check("its crabs come once it is hurt, and stay in the pools", r.crabs.length > 0 && r.crabsOut === 0, r.crabs);
+    check("its hits land (J animation, health lost)", r.anims > 0 && r.hurt > 0, { J: r.anims, hurt: r.hurt });
+    check("no page errors", ek.length === 0, ek);
+    await browser.close();
+    process.exit(report.checks.some(c => !c.ok) ? 1 : 0);
+  }
 
   if (SERVER_CHECKS) {
     const { page: pc, errors: ec } = await boot(context);
