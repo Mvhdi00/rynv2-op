@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.4-fix11
+// @version         2.9.4-fix12
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -7254,6 +7254,29 @@ module.exports.NewToOld = function (packetCode, type) {
       };
       send._rynPrivate = true;
       proto.send = send;
+    },
+    patchJoin() {
+      const nativeFetch = window.fetch;
+      if (typeof nativeFetch !== "function" || nativeFetch._rynPrivate) return;
+      const fetchPrivate = function(input, init) {
+        try {
+          const url = String(typeof input === "string" ? input : input && input.url || input);
+          const method = String(init && init.method || input && input.method || "GET").toUpperCase();
+          if (method === "POST" && /^https?:\/\/api[\w.-]*\.moomoo\.io\/join(?:[?#]|$)/i.test(url)) {
+            return Promise.resolve(new Response(JSON.stringify({
+              ticket: "ryn-private"
+            }), {
+              status: 200,
+              headers: {
+                "Content-Type": "application/json"
+              }
+            }));
+          }
+        } catch (_) {}
+        return nativeFetch.apply(this, arguments);
+      };
+      fetchPrivate._rynPrivate = true;
+      window.fetch = fetchPrivate;
     }
   };
   class RynPrivateSocket extends EventTarget {
@@ -43664,6 +43687,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
   });
   if (RynPrivate.on) {
     RynPrivate.patchNativeSend();
+    RynPrivate.patchJoin();
   }
   window.WebSocket = new window.Proxy(window.WebSocket, {
     construct(target, args) {

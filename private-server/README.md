@@ -4,6 +4,10 @@ kookywarrior's moomoo.io private server (MIT, see `LICENSE`), run by Ryn Type 2
 inside the page instead of as a Node program. Lobby → Mode → **Private** reloads the
 tab into it; Play and Ryn's bots then connect to it instead of moomoo's servers.
 
+In private mode the game's join step (`POST api…moomoo.io/join`) is answered by Ryn
+itself, for guests and signed-in players alike, so nothing reaches moomoo's join
+server and a refusal there does not keep you out of your own server.
+
 `tools/build-private-server.js` wraps these files into the `RynPrivateServer` block
 in `RynType2.user.js` and swaps the Node-only modules (`ws`, `http`, `inquirer`,
 `node-fetch`, `dotenv`) for in-page shims. Edit here, then:
