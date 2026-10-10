@@ -904,11 +904,21 @@ function gameTick() {
 	delta = now - lastUpdate
 	lastUpdate = now
 
-	// Ryn's time control: paused, stepped or slowed ticks still send the world
-	const rynTick = ryn.beginTick(delta)
+	// Ryn's time control: paused, stepped or slowed ticks still send the world.
+	// Nothing Ryn adds may stop a tick, so each of its steps is fenced off.
+	let rynTick = { run: true, delta: delta }
+	try {
+		rynTick = ryn.beginTick(delta)
+	} catch (e) {
+		console.log('ryn beginTick', e)
+	}
 	delta = rynTick.delta
 	if (rynTick.run) {
-	ryn.thinkDummies(delta)
+	try {
+		ryn.thinkDummies(delta)
+	} catch (e) {
+		console.log('ryn dummies', e)
+	}
 	for (let i = 0; i < players.length; ++i) {
 		let tmpObj = players[i]
 		if (tmpObj) {
@@ -1046,7 +1056,11 @@ function gameTick() {
 	for (let i = 0; i < projectiles.length; i++) {
 		projectiles[i].update(delta)
 	}
-	ryn.endTick()
+	try {
+		ryn.endTick()
+	} catch (e) {
+		console.log('ryn endTick', e)
+	}
 	}
 
 	for (let j = 0; j < players.length; j++) {

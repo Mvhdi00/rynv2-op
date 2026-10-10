@@ -90,7 +90,13 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 
 			// BEHAVIOUR:
 			var isKing = this.index === 11
-			if (isKing) this.crabKingUpdate(delta)
+			if (isKing) {
+				try {
+					this.crabKingUpdate(delta)
+				} catch (e) {
+					this.crab = null
+				}
+			}
 			var charging = false
 			var slowMlt = 1
 			if (

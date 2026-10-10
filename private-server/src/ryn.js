@@ -82,7 +82,15 @@ module.exports = function (ctx) {
 	// knockback probes: where a hit player was, then where the next ticks moved it
 	const probes = []
 	const physics = []
+	// a failure in Ryn's bookkeeping must never change or stop a hit
 	config.rynHealth = function (target, amount, doer, src) {
+		try {
+			return rynHealth(target, amount, doer, src)
+		} catch (e) {
+			return amount
+		}
+	}
+	const rynHealth = function (target, amount, doer, src) {
 		if (amount < 0 && doer && doer.isPlayer && doer !== target && rules.dmgMult !== 1) amount *= rules.dmgMult
 		if (amount !== 0) {
 			const s = sourceOf(doer, src)

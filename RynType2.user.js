@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.4-fix16
+// @version         2.9.4-fix17
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -2542,11 +2542,21 @@ function gameTick() {
 	delta = now - lastUpdate
 	lastUpdate = now
 
-	// Ryn's time control: paused, stepped or slowed ticks still send the world
-	const rynTick = ryn.beginTick(delta)
+	// Ryn's time control: paused, stepped or slowed ticks still send the world.
+	// Nothing Ryn adds may stop a tick, so each of its steps is fenced off.
+	let rynTick = { run: true, delta: delta }
+	try {
+		rynTick = ryn.beginTick(delta)
+	} catch (e) {
+		console.log('ryn beginTick', e)
+	}
 	delta = rynTick.delta
 	if (rynTick.run) {
-	ryn.thinkDummies(delta)
+	try {
+		ryn.thinkDummies(delta)
+	} catch (e) {
+		console.log('ryn dummies', e)
+	}
 	for (let i = 0; i < players.length; ++i) {
 		let tmpObj = players[i]
 		if (tmpObj) {
@@ -2684,7 +2694,11 @@ function gameTick() {
 	for (let i = 0; i < projectiles.length; i++) {
 		projectiles[i].update(delta)
 	}
-	ryn.endTick()
+	try {
+		ryn.endTick()
+	} catch (e) {
+		console.log('ryn endTick', e)
+	}
 	}
 
 	for (let j = 0; j < players.length; j++) {
@@ -3476,7 +3490,13 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 
 			// BEHAVIOUR:
 			var isKing = this.index === 11
-			if (isKing) this.crabKingUpdate(delta)
+			if (isKing) {
+				try {
+					this.crabKingUpdate(delta)
+				} catch (e) {
+					this.crab = null
+				}
+			}
 			var charging = false
 			var slowMlt = 1
 			if (
@@ -6861,7 +6881,15 @@ module.exports = function (ctx) {
 	// knockback probes: where a hit player was, then where the next ticks moved it
 	const probes = []
 	const physics = []
+	// a failure in Ryn's bookkeeping must never change or stop a hit
 	config.rynHealth = function (target, amount, doer, src) {
+		try {
+			return rynHealth(target, amount, doer, src)
+		} catch (e) {
+			return amount
+		}
+	}
+	const rynHealth = function (target, amount, doer, src) {
 		if (amount < 0 && doer && doer.isPlayer && doer !== target && rules.dmgMult !== 1) amount *= rules.dmgMult
 		if (amount !== 0) {
 			const s = sourceOf(doer, src)
@@ -9394,11 +9422,13 @@ module.exports.PACKETCODE = PACKETCODE
       }
     },
     catalog() {
+      if (this._catalog) return this._catalog;
       try {
-        return this.engine ? this.engine.catalog() : null;
+        this._catalog = this.engine ? this.engine.catalog() : null;
       } catch (_) {
-        return null;
+        this._catalog = null;
       }
+      return this._catalog;
     },
     ping: (() => {
       try {
@@ -9869,6 +9899,7 @@ module.exports.PACKETCODE = PACKETCODE
         }
       }, true);
       setInterval(() => this.autoTick(), 5e3);
+      this.startOverlay();
       const wait = setInterval(() => {
         if (!document.body) return;
         if (this.root === null) this.build();
@@ -11148,34 +11179,86 @@ module.exports.PACKETCODE = PACKETCODE
       setTimeout(() => URL.revokeObjectURL(a.href), 3e3);
       this.say("Saved " + a.download);
     },
-    drawOverlay(ctx) {
-      if (!RynPrivate.on || this.root === null) return;
-      const L = this.layers;
-      const needWorld = L.truth || L.ranges || L.shots;
-      const needMe = L.shame || L.desync || this.open && this.tab === "stats";
-      if (!needWorld && !needMe && !this.editMode) return;
-      if (!ctx || typeof ctx.arc !== "function" || typeof ctx.save !== "function") return;
-      const me = needWorld || needMe ? RynPrivate.call("me") : null;
+    // The overlays draw on a canvas of their own over the game, in their own frame
+    // loop, and never touch the game's canvas or its renderer.
+    overlayCanvas: null,
+    overlayDirty: false,
+    startOverlay() {
+      const loop = () => {
+        try {
+          this.drawOverlay();
+        } catch (_) {}
+        requestAnimationFrame(loop);
+      };
+      requestAnimationFrame(loop);
+    },
+    overlayContext() {
+      let cv = this.overlayCanvas;
+      if (!cv || !cv.isConnected) {
+        if (!document.body) return null;
+        cv = this.overlayCanvas = document.createElement("canvas");
+        cv.id = "ryn-admin-overlay";
+        cv.style.cssText = "position:fixed;left:0;top:0;width:100vw;height:100vh;pointer-events:none;z-index:47;";
+        document.body.appendChild(cv);
+        try {
+          Renderer._keepMenusAbove(47);
+        } catch (_) {}
+      }
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.round(window.innerWidth * dpr);
+      const H = Math.round(window.innerHeight * dpr);
+      if (cv.width !== W || cv.height !== H) {
+        cv.width = W;
+        cv.height = H;
+      }
+      return cv.getContext("2d");
+    },
+    drawOverlay() {
+      const L = this.layers || {};
+      const needWorld = !!(L.truth || L.ranges || L.shots);
+      const needMe = !!(L.shame || L.desync || this.open && this.tab === "stats");
+      const active = RynPrivate.on && this.root !== null && RynPrivate.ownerSocket !== null && (needWorld || needMe || this.editMode);
+      if (!active) {
+        if (this.overlayDirty && this.overlayCanvas) {
+          this.overlayCanvas.getContext("2d").clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+          this.overlayDirty = false;
+        }
+        return;
+      }
+      const me = RynPrivate.call("me");
       if (needMe) this.trackDesync(me);
-      const off = RYN._offset;
-      ctx.save();
+      const ctx = this.overlayContext();
+      if (ctx === null) return;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      this.overlayDirty = true;
+      if (!me || !me.alive) return;
+      let view;
       try {
-        ctx.translate(-off.x, -off.y);
-        const dash = typeof ctx.setLineDash === "function";
-        const w = needWorld ? RynPrivate.world() : null;
-        if (w !== null) {
-          if (L.ranges) this.drawRanges(ctx, w, me, dash);
-          if (L.shots) this.drawShots(ctx, w);
-          if (L.truth) this.drawTruth(ctx, w, me, dash);
-        }
-        if (me && me.alive) {
-          if (L.desync && this.desyncNow) this.drawDesync(ctx, me);
-          if (L.shame) this.drawShameMark(ctx, me);
-        }
-        if (this.editMode && this.mouse) this.drawEditPreview(ctx);
-      } catch (_) {}
-      if (typeof ctx.setLineDash === "function") ctx.setLineDash([]);
-      ctx.restore();
+        const {_w: w, _h: h} = ZoomHandler_default._scale.current;
+        const off = RYN._offset;
+        view = {
+          scale: Math.max(window.innerWidth / w, window.innerHeight / h),
+          cx: off.x + w / 2,
+          cy: off.y + h / 2
+        };
+      } catch (_) {
+        return;
+      }
+      if (!Number.isFinite(view.scale) || !Number.isFinite(view.cx) || !Number.isFinite(view.cy)) return;
+      // world coordinates, the same mapping as the cursor (worldAt)
+      const dpr = window.devicePixelRatio || 1;
+      ctx.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * (window.innerWidth / 2 - view.cx * view.scale), dpr * (window.innerHeight / 2 - view.cy * view.scale));
+      const w = needWorld ? RynPrivate.world() : null;
+      if (w !== null) {
+        if (L.ranges) this.drawRanges(ctx, w, me, true);
+        if (L.shots) this.drawShots(ctx, w);
+        if (L.truth) this.drawTruth(ctx, w, me, true);
+      }
+      ctx.setLineDash([]);
+      if (L.desync && this.desyncNow) this.drawDesync(ctx, me);
+      if (L.shame) this.drawShameMark(ctx, me);
+      if (this.editMode && this.mouse) this.drawEditPreview(ctx);
     },
     drawTruth(ctx, w, me, dash) {
       ctx.lineWidth = 3;
@@ -18992,7 +19075,6 @@ module.exports.PACKETCODE = PACKETCODE
         }
         this._setSmoothing(ctx, true);
       }
-      if (RynPrivate.on) RynAdminPanel.drawOverlay(ctx);
     }
     _setSmoothing(ctx, on) {
       if (Settings_default._renderOptimization && this._smoothingState === on) {
