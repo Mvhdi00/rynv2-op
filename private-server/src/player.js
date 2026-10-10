@@ -517,6 +517,8 @@ module.exports = function (
 			server.send(doer.id, "9", ["kills", doer.kills, 1])
 		}
 		this.alive = false
+		// Ryn's private log: who killed you
+		if (config.rynDied) config.rynDied(this, doer)
 		server.send(this.id, "11")
 		iconCallback()
 	}

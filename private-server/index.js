@@ -140,6 +140,10 @@ const ryn = require('./src/ryn.js')({
 		if (i !== -1) playersSid.splice(i, 1)
 	},
 	updateLeaderboard: () => updateLeaderboard(),
+	debug(p, text) {
+		const conn = connection[p.id]
+		if (conn && typeof conn.rynDebug === 'function') conn.rynDebug(text)
+	},
 	iconCallback: () => iconCallback(),
 	setTickRate(rate) {
 		config.serverUpdateRate = rate
@@ -323,6 +327,7 @@ server.addListener('connection', function (conn) {
 					data.skin
 				])
 				server.send(conn.id, '1', [tmpPlayer.sid])
+				if (typeof conn.rynDebug === 'function') conn.rynDebug('spawned at ' + Math.round(location[0]) + ', ' + Math.round(location[1]) + ' (' + players.length + ' players on the server)')
 				updateLeaderboard()
 
 				var playerName = data.name

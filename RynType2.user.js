@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.4-fix17
+// @version         2.9.4-fix18
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -1778,6 +1778,10 @@ const ryn = require('./src/ryn.js')({
 		if (i !== -1) playersSid.splice(i, 1)
 	},
 	updateLeaderboard: () => updateLeaderboard(),
+	debug(p, text) {
+		const conn = connection[p.id]
+		if (conn && typeof conn.rynDebug === 'function') conn.rynDebug(text)
+	},
 	iconCallback: () => iconCallback(),
 	setTickRate(rate) {
 		config.serverUpdateRate = rate
@@ -1961,6 +1965,7 @@ server.addListener('connection', function (conn) {
 					data.skin
 				])
 				server.send(conn.id, '1', [tmpPlayer.sid])
+				if (typeof conn.rynDebug === 'function') conn.rynDebug('spawned at ' + Math.round(location[0]) + ', ' + Math.round(location[1]) + ' (' + players.length + ' players on the server)')
 				updateLeaderboard()
 
 				var playerName = data.name
@@ -6304,6 +6309,8 @@ module.exports = function (
 			server.send(doer.id, "9", ["kills", doer.kills, 1])
 		}
 		this.alive = false
+		// Ryn's private log: who killed you
+		if (config.rynDied) config.rynDied(this, doer)
 		server.send(this.id, "11")
 		iconCallback()
 	}
@@ -6893,6 +6900,7 @@ module.exports = function (ctx) {
 		if (amount < 0 && doer && doer.isPlayer && doer !== target && rules.dmgMult !== 1) amount *= rules.dmgMult
 		if (amount !== 0) {
 			const s = sourceOf(doer, src)
+			if (amount < 0 && !target.isAI) target.rynLastHit = s.name || (s.kind ? s.kind : 'something')
 			// the test bench: a guarded player is left on 1 health instead of dying, and that counts as a death
 			if (amount < 0 && !target.isAI && bench.guard[target.sid] && target.health + amount <= 0) {
 				if (!target.rynRevive) bench.events.push({ tick: time.tick, kind: 'death', sid: target.sid, by: s.from })
@@ -7418,6 +7426,12 @@ module.exports = function (ctx) {
 			survival: { on: survival.on, wave: survival.wave, left: survival.on ? survivalLeft() : 0, best: survival.best, last: survival.last },
 			spawners: spawners.map(sp => ({ id: sp.id, kind: sp.name, every: sp.every / 1000, max: sp.max, alive: sp.mobs.length }))
 		}
+	}
+
+	// ---- the private log: tell the owner's page why a player died ----
+	config.rynDied = function (p, doer) {
+		const by = doer && doer !== p ? doer.name || 'someone' : p.rynLastHit || 'unknown'
+		if (ctx.debug) ctx.debug(p, 'died, killed by ' + by + ' (health ' + Math.round(p.health) + ')')
 	}
 
 	// ---- test bench support ----
@@ -9463,6 +9477,41 @@ module.exports.PACKETCODE = PACKETCODE
       try {
         console.debug("[RYN private]", ...args);
       } catch (_) {}
+      try {
+        this.dbg("server: " + args.map(a => a && a.stack ? String(a.stack).split("\n").slice(0, 3).join(" | ") : String(a)).join(" "));
+      } catch (_) {}
+    },
+    // the private log: what happened to the connection, kept across reloads (this tab only)
+    debugLog: (() => {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem("_ryn_private_log") || "[]");
+        return Array.isArray(saved) ? saved : [];
+      } catch (_) {
+        return [];
+      }
+    })(),
+    dbg(text) {
+      const d = new Date;
+      const pad = n => String(n).padStart(2, "0");
+      this.debugLog.push(pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds()) + " " + String(text).slice(0, 400));
+      while (this.debugLog.length > 120) this.debugLog.shift();
+      try {
+        sessionStorage.setItem("_ryn_private_log", JSON.stringify(this.debugLog));
+      } catch (_) {}
+      for (const fn of this.debugListeners) {
+        try {
+          fn();
+        } catch (_) {}
+      }
+    },
+    debugListeners: new Set,
+    caller() {
+      try {
+        const lines = String(new Error().stack || "").split("\n").slice(3, 6).map(l => l.trim().replace(/^at /, "")).filter(Boolean);
+        return lines.join(" < ").slice(0, 300);
+      } catch (_) {
+        return "";
+      }
     },
     server() {
       if (this.engine === null) {
@@ -9526,7 +9575,9 @@ module.exports.PACKETCODE = PACKETCODE
       this._wired = {};
       this._upAt = 0;
       this._downAt = 0;
+      this._who = owner ? "you" : "a bot";
       if (owner) RynPrivate.ownerSocket = this;
+      if (owner) RynPrivate.dbg("you: connecting to the private server");
       const socket = this;
       const listeners = {};
       this._conn = {
@@ -9545,7 +9596,11 @@ module.exports.PACKETCODE = PACKETCODE
           socket._fromServer(bytes);
         },
         close() {
+          RynPrivate.dbg(socket._who + ": the private server closed the connection (" + RynPrivate.caller() + ")");
           socket._shut(1000, "");
+        },
+        rynDebug(text) {
+          if (owner) RynPrivate.dbg("you: " + text);
         },
         rynSetPing(ms, jitter) {
           RynPrivate.setPing(ms, jitter);
@@ -9580,6 +9635,7 @@ module.exports.PACKETCODE = PACKETCODE
           return;
         }
         this.readyState = 1;
+        if (owner) RynPrivate.dbg("you: connected");
         this.dispatchEvent(new Event("open"));
         server.accept(this._conn);
       });
@@ -9610,6 +9666,7 @@ module.exports.PACKETCODE = PACKETCODE
       setTimeout(fn, at - now);
     }
     close(code = 1000, reason = "") {
+      if (this.readyState < 2 && this._who === "you") RynPrivate.dbg("you: the game closed its connection (" + code + (reason ? " " + reason : "") + ") from " + RynPrivate.caller());
       this._shut(code, reason);
     }
     _fromServer(bytes) {
@@ -9875,7 +9932,7 @@ module.exports.PACKETCODE = PACKETCODE
         ranges: false,
         shots: false,
         desync: false,
-        shame: true
+        shame: false
       };
       const wave = this.store("_ryn_ping_wave");
       this.pingWave = wave && typeof wave === "object" ? wave : {
@@ -10020,7 +10077,7 @@ module.exports.PACKETCODE = PACKETCODE
       const body = this.body = this.el("div", "ra-body");
       root.appendChild(body);
       if (this.store("_ryn_admin_min")) root.classList.add("ra-min");
-      const pages = [ [ "me", "Me", [ "buildTarget", "buildPlayer", "buildShame", "buildGear", "buildGive", "buildLoadouts" ] ], [ "players", "Players", [ "buildPlayers", "buildBots" ] ], [ "test", "Test", [ "buildDummies", "buildScenarios", "buildSurvival", "buildTime", "buildSpawn" ] ], [ "world", "World", [ "buildEditor", "buildStamps", "buildMaps", "buildSpawners", "buildSaves", "buildRules", "buildKing", "buildWorld", "buildTravel" ] ], [ "stats", "Stats", [ "buildStats" ] ], [ "lab", "Lab", [ "buildBench", "buildReplay", "buildPackets" ] ], [ "mine", "Mine", [ "buildCustom", "buildPing" ] ] ];
+      const pages = [ [ "me", "Me", [ "buildTarget", "buildPlayer", "buildShame", "buildGear", "buildGive", "buildLoadouts" ] ], [ "players", "Players", [ "buildPlayers", "buildBots" ] ], [ "test", "Test", [ "buildDummies", "buildScenarios", "buildSurvival", "buildTime", "buildSpawn" ] ], [ "world", "World", [ "buildEditor", "buildStamps", "buildMaps", "buildSpawners", "buildSaves", "buildRules", "buildKing", "buildWorld", "buildTravel" ] ], [ "stats", "Stats", [ "buildStats" ] ], [ "lab", "Lab", [ "buildBench", "buildReplay", "buildPackets" ] ], [ "mine", "Mine", [ "buildCustom", "buildPing", "buildPrivateLog" ] ] ];
       for (const [id, label, parts] of pages) {
         const page = this.el("div", "ra-page");
         page.dataset.tab = id;
@@ -11936,6 +11993,33 @@ module.exports.PACKETCODE = PACKETCODE
       }
       this.packetLines.innerHTML = "";
       for (const l of shown) this.packetLines.appendChild(this.el("div", "", l));
+    },
+    buildPrivateLog(body) {
+      this.section(body, "Private log");
+      const lines = this.el("div", "ra-lines");
+      lines.style.maxHeight = "220px";
+      body.appendChild(lines);
+      const draw = () => {
+        lines.innerHTML = "";
+        for (const l of RynPrivate.debugLog.slice(-60).reverse()) lines.appendChild(this.el("div", /closed|died|error|did not start/i.test(l) ? "ra-hurt" : "", l));
+      };
+      RynPrivate.debugListeners.add(draw);
+      draw();
+      this.row(body, "", this.button("Copy", () => {
+        const text = RynPrivate.debugLog.join("\n");
+        try {
+          navigator.clipboard.writeText(text).then(() => this.say("Private log copied"), () => this.say("Could not copy", true));
+        } catch (_) {
+          this.say("Could not copy", true);
+        }
+      }), this.button("Clear", () => {
+        RynPrivate.debugLog.length = 0;
+        try {
+          sessionStorage.removeItem("_ryn_private_log");
+        } catch (_) {}
+        draw();
+      }, "ra-del"));
+      body.appendChild(this.el("div", "ra-hint", "When you get sent back to the lobby, this says why: who closed the connection, or who killed you. It survives a refresh of this tab. Copy it and send it if something goes wrong."));
     },
     startPingWave() {
       clearInterval(this.pingWaveTimer);

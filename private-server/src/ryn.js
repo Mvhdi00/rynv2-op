@@ -94,6 +94,7 @@ module.exports = function (ctx) {
 		if (amount < 0 && doer && doer.isPlayer && doer !== target && rules.dmgMult !== 1) amount *= rules.dmgMult
 		if (amount !== 0) {
 			const s = sourceOf(doer, src)
+			if (amount < 0 && !target.isAI) target.rynLastHit = s.name || (s.kind ? s.kind : 'something')
 			// the test bench: a guarded player is left on 1 health instead of dying, and that counts as a death
 			if (amount < 0 && !target.isAI && bench.guard[target.sid] && target.health + amount <= 0) {
 				if (!target.rynRevive) bench.events.push({ tick: time.tick, kind: 'death', sid: target.sid, by: s.from })
@@ -619,6 +620,12 @@ module.exports = function (ctx) {
 			survival: { on: survival.on, wave: survival.wave, left: survival.on ? survivalLeft() : 0, best: survival.best, last: survival.last },
 			spawners: spawners.map(sp => ({ id: sp.id, kind: sp.name, every: sp.every / 1000, max: sp.max, alive: sp.mobs.length }))
 		}
+	}
+
+	// ---- the private log: tell the owner's page why a player died ----
+	config.rynDied = function (p, doer) {
+		const by = doer && doer !== p ? doer.name || 'someone' : p.rynLastHit || 'unknown'
+		if (ctx.debug) ctx.debug(p, 'died, killed by ' + by + ' (health ' + Math.round(p.health) + ')')
 	}
 
 	// ---- test bench support ----
