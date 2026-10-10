@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.4-fix15
+// @version         2.9.4-fix16
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -1752,6 +1752,9 @@ const ryn = require('./src/ryn.js')({
 	get gameObjects() {
 		return gameObjects
 	},
+	get projectiles() {
+		return projectiles
+	},
 	get objectManager() {
 		return objectManager
 	},
@@ -1786,6 +1789,8 @@ const ryn = require('./src/ryn.js')({
 var connection = {}
 server.send = function (id, type, data = []) {
 	if (connection[id]) {
+		// Ryn's packet inspector
+		if (connection[id].rynTap) connection[id].rynTap(1, UTILS.OldToNew(type, 'RECEIVE'), data)
 		connection[id].send(
 			new Uint8Array(
 				Array.from(msgpack.encode([UTILS.OldToNew(type, 'RECEIVE'), data]))
@@ -1858,7 +1863,7 @@ server.addListener('connection', function (conn) {
 	conn.rynState = function () {
 		const me = findPlayerByID(conn.id)
 		return {
-			me: me ? { sid: me.sid, name: me.name, alive: me.alive, admin: !!me.admin, god: !!me.rynGod, x: me.x, y: me.y, weapons: (me.weapons || []).slice(), xp: (me.weapons || []).map(w => (me.weaponXP && me.weaponXP[w]) || 0), hat: me.skinIndex || 0, acc: me.tailIndex || 0 } : null,
+			me: me ? { sid: me.sid, name: me.name, alive: me.alive, admin: !!me.admin, god: !!me.rynGod, x: me.x, y: me.y, weapons: (me.weapons || []).slice(), xp: (me.weapons || []).map(w => (me.weaponXP && me.weaponXP[w]) || 0), hat: me.skinIndex || 0, acc: me.tailIndex || 0, shame: me.shameCount || 0, shameTimer: Math.max(0, Math.round(me.shameTimer || 0)) } : null,
 			players: players.map(p => ({ sid: p.sid, name: p.name, alive: p.alive, god: !!p.rynGod, health: Math.round(p.health), maxHealth: p.maxHealth, age: p.age, dummy: !!p.rynDummy, x: Math.round(p.x), y: Math.round(p.y) })),
 			world: { mobs: !!config.spawnMobs, hostile: !!config.spawnHostile, bosses: !!config.spawnBosses },
 			mode: MODE
@@ -1875,6 +1880,7 @@ server.addListener('connection', function (conn) {
 			parsed = msgpack.decode(data)
 			type = UTILS.NewToOld(parsed[0], 'SEND')
 			data = parsed[1]
+			if (conn.rynTap) conn.rynTap(0, parsed[0], data)
 		} catch (e) {
 			error = true
 			conn.close()
@@ -2447,13 +2453,36 @@ server.addListener('connection', function (conn) {
 	conn.on('message', onMessage)
 	// the rest of what Ryn's panel reads and does without chat
 	conn.rynWorld = function () {
-		return ryn.world()
+		return ryn.world(findPlayerByID(conn.id))
 	}
 	conn.rynCall = function (name, arg) {
 		const me = findPlayerByID(conn.id)
+		const alive = me && me.alive ? me : null
 		switch (name) {
+			case 'me':
+				return me ? { sid: me.sid, alive: me.alive, x: me.x, y: me.y, health: me.health, shame: me.shameCount || 0, shameTimer: Math.max(0, Math.round(me.shameTimer || 0)) } : null
 			case 'panel':
-				return ryn.panelState()
+				return ryn.panelState(me)
+			case 'series':
+				return ryn.series(me)
+			case 'replay':
+				return ryn.replay()
+			case 'benchGuard':
+				return ryn.benchGuard(me, !!arg)
+			case 'benchEvents':
+				return ryn.benchEvents(arg)
+			case 'placeMany':
+				return alive ? ryn.placeMany(me, arg.what, arg.owner, arg.points) : null
+			case 'removeAt':
+				return ryn.removeAt(arg.x, arg.y, arg.r)
+			case 'removeSids':
+				return ryn.removeSids(arg)
+			case 'restoreObjs':
+				return ryn.restoreObjs(arg)
+			case 'copyBase':
+				return alive ? ryn.copyBase(me, arg) : null
+			case 'pasteBase':
+				return alive ? ryn.pasteBase(me, arg.stamp, arg.rotate) : null
 			case 'stats':
 				return ryn.stats(me)
 			case 'log':
@@ -2655,6 +2684,7 @@ function gameTick() {
 	for (let i = 0; i < projectiles.length; i++) {
 		projectiles[i].update(delta)
 	}
+	ryn.endTick()
 	}
 
 	for (let j = 0; j < players.length; j++) {
@@ -3791,18 +3821,27 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 			}
 		}
 	}
+	// returns the sids it hit
 	this.crabHurt = function (x, y, r, dmg, knock, hitList) {
+		var hit = []
 		for (var i = 0; i < players.length; ++i) {
 			var p = players[i]
 			if (!p.alive || (hitList && hitList[p.sid])) continue
 			if (UTILS.getDistance(x, y, p.x, p.y) <= r + p.scale) {
 				if (hitList) hitList[p.sid] = 1
+				hit.push(p.sid)
 				var dir = UTILS.getDirection(p.x, p.y, x, y)
 				p.changeHealth(-dmg, null, this)
 				p.xVel += knock * Math.cos(dir)
 				p.yVel += knock * Math.sin(dir)
 			}
 		}
+		return hit
+	}
+	// Ryn's dodge counter: did the attack catch the player it was aimed at
+	this.crabDone = function (hit) {
+		var c = this.crab
+		if (config.rynKingAttack && c && c.victim !== undefined) config.rynKingAttack(this, c.kind, c.victim, hit || [])
 	}
 	this.crabTurn = function (dir, delta) {
 		this.dir %= PI2
@@ -3914,7 +3953,23 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 				// it only attacks what it is looking at
 				if (c.next > 0 || off > 0.35) return
 				var low = this.health < this.maxHealth * 0.4
-				if (best <= this.hitRange + target.scale) {
+				var canSlam = best <= this.hitRange + target.scale
+				var canCharge = best <= 1150 && off < 0.25
+				var pick = null
+				if (tune.only) {
+					// Ryn's practice mode: one attack, again and again (the King walks in for slams and charges)
+					if (tune.only === "slam") pick = canSlam ? "slam" : null
+					else if (tune.only === "charge") pick = canCharge ? "charge" : null
+					else pick = tune.only
+				} else if (canSlam) pick = "slam"
+				else if (low && UTILS.randInt(0, 1)) pick = "dive"
+				else if (canCharge && UTILS.randInt(0, 2)) pick = "charge"
+				else if (UTILS.randInt(0, 1)) pick = "ring"
+				else pick = "dive"
+				if (!pick) return
+				c.kind = pick
+				c.victim = target.sid
+				if (pick === "slam") {
 					// slam in front of the King
 					c.phase = "slam"
 					c.t = this.hitDelay
@@ -3922,12 +3977,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 					c.x = this.x + 160 * Math.cos(this.dir)
 					c.y = this.y + 160 * Math.sin(this.dir)
 					this.crabWarn(CRAB_SLAM, c.x, c.y, c.r, c.t)
-				} else if (low && UTILS.randInt(0, 1)) {
-					// hurt: it goes under more, where it heals
-					c.phase = "dive1"
-					c.t = 700
-					this.state = 1
-				} else if (best <= 1150 && off < 0.25 && UTILS.randInt(0, 2)) {
+				} else if (pick === "charge") {
 					// charge along the line it faces
 					c.phase = "chargeWind"
 					c.t = 900
@@ -3935,7 +3985,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 					c.len = Math.min(1100, best + 250)
 					c.hit = {}
 					this.crabWarn(CRAB_LINE, this.x, this.y, this.scale, c.t, this.x + c.len * Math.cos(c.dir), this.y + c.len * Math.sin(c.dir))
-				} else if (UTILS.randInt(0, 1)) {
+				} else if (pick === "ring") {
 					// a ring of water under the target
 					c.phase = "ring"
 					c.t = 1100
@@ -3958,7 +4008,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 					for (var a = 0; a < players.length; ++a) {
 						if (players[a].canSee(this)) server.send(players[a].id, "aa", [this.sid])
 					}
-					this.crabHurt(c.x, c.y, c.r, this.dmg * dmgMult, 0.9)
+					this.crabDone(this.crabHurt(c.x, c.y, c.r, this.dmg * dmgMult, 0.9))
 					this.crabEnd(1400)
 				}
 				return
@@ -3982,13 +4032,14 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 				if (c.travel >= c.len) {
 					this.xVel = 0
 					this.yVel = 0
+					this.crabDone(Object.keys(c.hit).map(Number))
 					this.crabEnd(1800)
 				}
 				return
 			}
 			case "ring":
 				if (c.t <= 0) {
-					this.crabHurt(c.x, c.y, c.r, 30 * dmgMult, 0.6)
+					this.crabDone(this.crabHurt(c.x, c.y, c.r, 30 * dmgMult, 0.6))
 					this.crabEnd(1200)
 				}
 				return
@@ -4034,7 +4085,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 				this.xVel = 0
 				this.yVel = 0
 				if (c.t <= 0) {
-					this.crabHurt(this.x, this.y, 330, 60 * dmgMult, 1.2)
+					this.crabDone(this.crabHurt(this.x, this.y, 330, 60 * dmgMult, 1.2))
 					this.crabEnd(2200)
 				}
 				return
@@ -6785,6 +6836,7 @@ module.exports = function (ctx) {
 				time.tick++
 				time.clock += step
 				stepProbes()
+				reviveGuarded()
 				return { run: true, delta: step }
 			}
 			return { run: false, delta: 0 }
@@ -6793,6 +6845,7 @@ module.exports = function (ctx) {
 		time.tick++
 		time.clock += scaled
 		stepProbes()
+		reviveGuarded()
 		return { run: true, delta: scaled }
 	}
 
@@ -6812,6 +6865,15 @@ module.exports = function (ctx) {
 		if (amount < 0 && doer && doer.isPlayer && doer !== target && rules.dmgMult !== 1) amount *= rules.dmgMult
 		if (amount !== 0) {
 			const s = sourceOf(doer, src)
+			// the test bench: a guarded player is left on 1 health instead of dying, and that counts as a death
+			if (amount < 0 && !target.isAI && bench.guard[target.sid] && target.health + amount <= 0) {
+				if (!target.rynRevive) bench.events.push({ tick: time.tick, kind: 'death', sid: target.sid, by: s.from })
+				amount = Math.min(0, 1 - target.health)
+				target.rynRevive = 2
+			}
+			if (amount < 0 && s.from !== null && !s.ai) tickSums.dealt[s.from] = (tickSums.dealt[s.from] || 0) - amount
+			if (amount < 0 && !target.isAI) tickSums.taken[target.sid] = (tickSums.taken[target.sid] || 0) - amount
+			if (target.isAI && target.index === 11 && amount < 0 && doer && doer.isPlayer) kingFight(target, doer, amount)
 			log.push({
 				tick: time.tick,
 				at: time.clock,
@@ -7030,6 +7092,10 @@ module.exports = function (ctx) {
 	function thinkDummy(d, delta) {
 		const p = d.p
 		if (!p.alive) {
+			if (d.opts.noRespawn) {
+				removeDummy(d)
+				return
+			}
 			d.deadFor += delta
 			if (d.deadFor >= 3000) {
 				d.deadFor = 0
@@ -7102,6 +7168,9 @@ module.exports = function (ctx) {
 		const reach = items.weapons[primary].range + target.scale
 		if (b.instaWait > 0) b.instaWait -= 1
 		if (b.insta === 0) {
+			// a weapon only reloads while it is held, so hold whichever still needs it
+			if (p.reloads[secondary] > 0) p.weaponIndex = secondary
+			else p.weaponIndex = primary
 			const ready = !(p.reloads[primary] > 0) && !(p.reloads[secondary] > 0)
 			if (ready && b.instaWait <= 0 && dist <= reach) {
 				p.skin = hatById(7)
@@ -7110,6 +7179,8 @@ module.exports = function (ctx) {
 				p.mouseState = 1
 				p.gathering = 1
 				b.insta = 1
+				bench.events.push({ tick: time.tick, kind: 'insta', sid: target.sid, by: p.sid })
+				if (bench.events.length > 500) bench.events.splice(0, 100)
 			}
 		} else if (b.insta === 1) {
 			p.weaponIndex = secondary
@@ -7121,11 +7192,13 @@ module.exports = function (ctx) {
 			p.skin = hatById(d.restHat)
 			p.skinIndex = p.skin ? d.restHat : 0
 			b.insta = 0
-			b.instaWait = 8
+			b.instaWait = d.opts.instaGap || 8
 		}
 	}
 	api.thinkDummies = function (delta) {
-		for (const d of dummies) thinkDummy(d, delta)
+		for (const d of dummies.slice()) thinkDummy(d, delta)
+		thinkSurvival(delta)
+		thinkSpawners(delta)
 	}
 	api.dummyCount = () => dummies.length
 
@@ -7294,21 +7367,368 @@ module.exports = function (ctx) {
 	api.kings = () => kings().map(k => ({ sid: k.sid, health: Math.round(k.health), maxHealth: k.maxHealth, state: k.state || 0, phase: k.crab ? k.crab.phase : 'idle', dead: !!k.spawnCounter, respawnIn: k.spawnCounter ? Math.round(k.spawnCounter / 1000) : 0 }))
 
 	// ---- state for the panel ----
-	api.world = function () {
+	api.world = function (me) {
+		const near = (o, r) => !me || Math.abs(o.x - me.x) <= r && Math.abs(o.y - me.y) <= r
 		return {
 			tick: time.tick,
-			players: players().filter(p => p.alive).map(p => [p.sid, p.x, p.y, p.scale, p.dir, p.health, p.maxHealth]),
-			ais: ctx.ais.filter(a => a.active && a.alive && !a.spawnCounter).map(a => [a.sid, a.index, a.x, a.y, a.scale, a.health, a.maxHealth, a.state || 0])
+			players: players().filter(p => p.alive).map(p => [p.sid, p.x, p.y, p.scale, p.dir, p.health, p.maxHealth, p.weaponIndex, p.skinIndex, !!p.rynDummy]),
+			ais: ctx.ais.filter(a => a.active && a.alive && !a.spawnCounter).map(a => [a.sid, a.index, a.x, a.y, a.scale, a.health, a.maxHealth, a.state || 0]),
+			// what can hurt: spikes (dmg) and turrets (shootRange) near me
+			danger: ctx.gameObjects.filter(o => o.active && (o.dmg || o.shootRange) && near(o, 1400)).map(o => [o.sid, o.x, o.y, o.scale, o.dmg ? 'spike' : 'turret', o.shootRange || 0, o.owner ? o.owner.sid : -1]),
+			shots: (ctx.projectiles || []).filter(q => q.active && near(q, 2000)).map(q => [q.sid, q.x, q.y, q.dir, q.indx, q.owner ? q.owner.sid : -1]),
+			spawners: spawners.map(sp => [sp.id, sp.x, sp.y, sp.name, sp.every, sp.max, sp.mobs.length])
 		}
 	}
-	api.panelState = function () {
+	api.panelState = function (me) {
 		return {
 			time: { paused: time.paused, scale: time.scale, tick: time.tick },
 			rules: Object.assign({ sandbox: !!config.inSandbox, tickRate: config.serverUpdateRate }, rules),
 			king: Object.assign({}, king),
 			kings: api.kings(),
-			dummies: dummies.length
+			kingStats: me ? kingStatsOf(me) : null,
+			dummies: dummies.length,
+			survival: { on: survival.on, wave: survival.wave, left: survival.on ? survivalLeft() : 0, best: survival.best, last: survival.last },
+			spawners: spawners.map(sp => ({ id: sp.id, kind: sp.name, every: sp.every / 1000, max: sp.max, alive: sp.mobs.length }))
 		}
+	}
+
+	// ---- test bench support ----
+	const bench = { guard: {}, events: [] }
+	function reviveGuarded() {
+		for (const p of players()) {
+			if (!p.rynRevive) continue
+			p.rynRevive--
+			if (p.rynRevive === 0 && p.alive) {
+				p.dmgOverTime = {}
+				setHealth(p, p.maxHealth)
+			}
+		}
+	}
+	api.benchGuard = function (me, on) {
+		if (!me) return false
+		if (on) bench.guard[me.sid] = true
+		else delete bench.guard[me.sid]
+		return true
+	}
+	api.benchEvents = function (since) {
+		return bench.events.filter(e => e.tick >= (since || 0))
+	}
+
+	// ---- per-tick sums, health/damage series and the replay buffer ----
+	const tickSums = { dealt: {}, taken: {} }
+	const series = {}
+	const replay = { frames: [], base: new Map(), seen: new Map() }
+	const objRec = o => [o.sid, Math.round(o.x), Math.round(o.y), o.scale, o.type, o.id === undefined ? -1 : o.id, o.owner ? o.owner.sid : -1, Math.round(o.dir * 100) / 100]
+	api.endTick = function () {
+		keepOriginal()
+		const ps = players()
+		// series for real players: health and what they dealt and took this tick
+		for (const p of ps) {
+			if (p.rynDummy) continue
+			const list = series[p.sid] || (series[p.sid] = [])
+			list.push([time.tick, Math.round(time.clock), p.alive ? Math.round(p.health) : 0, Math.round(tickSums.dealt[p.sid] || 0), Math.round(tickSums.taken[p.sid] || 0)])
+			if (list.length > config.serverUpdateRate * 60) list.shift()
+		}
+		// replay: everything near a real player, and buildings as changes
+		const real = ps.filter(p => p.alive && !p.rynDummy)
+		const close = o => real.some(p => Math.abs(o.x - p.x) <= 2200 && Math.abs(o.y - p.y) <= 2200)
+		const now = new Map()
+		for (const o of ctx.gameObjects) if (o.active) now.set(o.sid, o)
+		const add = []
+		const del = []
+		for (const [sid, o] of now) {
+			if (replay.seen.get(sid) !== o || o.rynSeenX !== o.x || o.rynSeenY !== o.y) {
+				add.push(objRec(o))
+				o.rynSeenX = o.x
+				o.rynSeenY = o.y
+			}
+		}
+		for (const sid of replay.seen.keys()) if (!now.has(sid)) del.push(sid)
+		replay.seen = now
+		const hits = []
+		for (let i = log.length - 1; i >= 0 && log[i].tick === time.tick; i--) hits.push([log[i].from, log[i].fromName, log[i].to, log[i].toName, log[i].amount, log[i].kind, log[i].ai])
+		replay.frames.push({
+			tick: time.tick,
+			at: Math.round(time.clock),
+			players: ps.filter(p => p.alive).map(p => [p.sid, Math.round(p.x), Math.round(p.y), Math.round(p.dir * 100) / 100, Math.round(p.health), p.maxHealth, p.weaponIndex, p.skinIndex, p.buildIndex, p.scale, p.name, !!p.rynDummy]),
+			ais: ctx.ais.filter(a => a.active && a.alive && !a.spawnCounter && close(a)).map(a => [a.sid, a.index, Math.round(a.x), Math.round(a.y), Math.round(a.dir * 100) / 100, Math.round(a.health), a.maxHealth, a.scale, a.state || 0]),
+			shots: (ctx.projectiles || []).filter(q => q.active && close(q)).map(q => [q.sid, Math.round(q.x), Math.round(q.y), q.dir, q.indx]),
+			add: add,
+			del: del,
+			hits: hits
+		})
+		while (replay.frames.length > config.serverUpdateRate * 30) {
+			const f = replay.frames.shift()
+			for (const r of f.add) replay.base.set(r[0], r)
+			for (const sid of f.del) replay.base.delete(sid)
+		}
+		tickSums.dealt = {}
+		tickSums.taken = {}
+	}
+	api.series = me => (me && series[me.sid] ? series[me.sid].slice() : [])
+	api.replay = function () {
+		return { rate: config.serverUpdateRate, base: [...replay.base.values()], frames: replay.frames.slice() }
+	}
+
+	// ---- survival: waves of dummies and animals until you die ----
+	const survival = { on: false, wave: 0, best: 0, last: null, me: null, mobs: [], dummies: [], rest: 0, tell: null }
+	const survivalLeft = () => survival.dummies.filter(d => dummies.includes(d)).length + survival.mobs.filter(m => m.active && m.alive).length
+	function survivalWave() {
+		const me = survival.me
+		const w = ++survival.wave
+		const tiers = ['normal', 'normal', 'gold', 'gold', 'diamond', 'diamond', 'ruby', 'ruby', 'emerald']
+		const tier = tiers[Math.min(tiers.length - 1, w - 1)]
+		const primaries = [5, 3, 4, 1, 7]
+		const nd = Math.min(6, 1 + Math.floor(w / 2))
+		survival.dummies = []
+		for (let i = 0; i < nd; i++) {
+			const a = UTILS.randFloat(-Math.PI, Math.PI)
+			const insta = w >= 4 && i === 0
+			const d = addDummy(me.x + 650 * Math.cos(a), me.y + 650 * Math.sin(a), {
+				name: 'Wave ' + w,
+				behavior: insta ? 'insta' : 'attack',
+				primary: insta ? 5 : primaries[(w + i) % primaries.length],
+				secondary: insta ? 15 : null,
+				tier: tier,
+				hat: w >= 3 ? 6 : 0,
+				heal: w >= 3,
+				healDelay: Math.max(60, 260 - w * 20),
+				instaGap: 20,
+				noRespawn: true
+			})
+			if (d) survival.dummies.push(d)
+		}
+		const kinds = w >= 3 ? [4, 2, 3] : [4, 2]
+		survival.mobs = []
+		for (let i = 0; i < Math.min(8, w); i++) {
+			const a = UTILS.randFloat(-Math.PI, Math.PI)
+			const m = ctx.aiManager.spawn(me.x + 800 * Math.cos(a), me.y + 800 * Math.sin(a), a + Math.PI, kinds[i % kinds.length])
+			m.minion = true
+			m.chargeTarget = me
+			m.waitCount = 0
+			m.moveCount = 8000
+			survival.mobs.push(m)
+		}
+		if (survival.tell) survival.tell('[Admin] Wave ' + w + ': ' + nd + ' dummies, ' + survival.mobs.length + ' animals')
+	}
+	function survivalEnd(why) {
+		const reached = Math.max(0, survival.wave - 1)
+		survival.best = Math.max(survival.best, reached)
+		survival.last = { waves: reached, why: why }
+		survival.on = false
+		for (const d of survival.dummies) if (dummies.includes(d)) removeDummy(d)
+		for (const m of survival.mobs) {
+			if (m.active) {
+				m.active = false
+				m.alive = false
+			}
+		}
+		survival.dummies = []
+		survival.mobs = []
+		ctx.updateLeaderboard()
+		if (survival.tell) survival.tell('[Admin] Survival over: ' + reached + ' wave' + (reached === 1 ? '' : 's') + ' cleared (best ' + survival.best + ')')
+	}
+	function thinkSurvival(delta) {
+		if (!survival.on) return
+		const me = survival.me
+		if (!me || !me.alive || !players().includes(me)) return survivalEnd('you died')
+		if (survival.rest > 0) {
+			survival.rest -= delta
+			if (survival.rest <= 0) survivalWave()
+			return
+		}
+		if (survivalLeft() === 0) {
+			setHealth(me, me.maxHealth)
+			survival.rest = 3000
+			if (survival.tell) survival.tell('[Admin] Wave ' + survival.wave + ' cleared, next in 3s')
+		}
+	}
+
+	// ---- animal spawners ----
+	const spawners = []
+	let spawnerId = 0
+	function thinkSpawners(delta) {
+		for (const sp of spawners) {
+			sp.mobs = sp.mobs.filter(m => m.active && m.alive)
+			sp.t -= delta
+			if (sp.t > 0 || sp.mobs.length >= sp.max) continue
+			sp.t = sp.every
+			const m = ctx.aiManager.spawn(sp.x + UTILS.randInt(-80, 80), sp.y + UTILS.randInt(-80, 80), UTILS.randFloat(-Math.PI, Math.PI), sp.kind)
+			m.minion = true
+			sp.mobs.push(m)
+		}
+	}
+
+	// ---- Crab King: dodges and kill times ----
+	const kingStats = {}
+	const kingFights = {}
+	config.rynKingAttack = function (k, kind, victim, hit) {
+		const st = kingStats[victim] || (kingStats[victim] = { dodged: 0, hit: 0, kinds: {} })
+		const got = hit.includes(victim)
+		const kk = st.kinds[kind] || (st.kinds[kind] = [0, 0])
+		if (got) {
+			st.hit++
+			kk[1]++
+		} else {
+			st.dodged++
+			kk[0]++
+		}
+	}
+	function kingFight(k, doer, amount) {
+		let f = kingFights[k.sid]
+		if (!f || time.clock - f.last > 60000 || f.done) f = kingFights[k.sid] = { start: time.clock, last: time.clock, by: {}, done: false }
+		f.last = time.clock
+		f.by[doer.sid] = 1
+		if (k.health + amount <= 0) {
+			f.done = true
+			const ms = Math.round(time.clock - f.start)
+			for (const sid of Object.keys(f.by)) {
+				const st = kingStats[sid] || (kingStats[sid] = { dodged: 0, hit: 0, kinds: {} })
+				st.lastKill = ms
+				st.bestKill = st.bestKill ? Math.min(st.bestKill, ms) : ms
+			}
+		}
+	}
+	const kingStatsOf = me => {
+		const st = kingStats[me.sid] || { dodged: 0, hit: 0, kinds: {} }
+		const f = Object.values(kingFights).find(x => !x.done && x.by[me.sid] && time.clock - x.last <= 60000)
+		return { dodged: st.dodged, hit: st.hit, kinds: st.kinds, lastKill: st.lastKill || null, bestKill: st.bestKill || null, fighting: f ? Math.round(time.clock - f.start) : null }
+	}
+	api.resetKingStats = me => {
+		if (me) delete kingStats[me.sid]
+	}
+
+	// ---- map presets ----
+	let original = null
+	const isNature = o => o.active && !o.owner && o.id === undefined
+	const keepOriginal = () => {
+		if (!original) original = ctx.gameObjects.filter(isNature).map(o => [o.x, o.y, o.dir, o.scale, o.type])
+	}
+	function scatter(me, kind, count, rMin, rMax, made) {
+		const n = NATURE[kind]
+		const scales = n[1] ? config[n[1]] : null
+		for (let i = 0, tries = 0; i < count && tries < count * 20; tries++) {
+			const a = UTILS.randFloat(-Math.PI, Math.PI)
+			const r = UTILS.randFloat(rMin, rMax)
+			const x = me.x + r * Math.cos(a)
+			const y = me.y + r * Math.sin(a)
+			const scale = scales ? scales[UTILS.randInt(0, scales.length - 1)] : 74
+			if (x < scale || y < scale || x > config.mapScale - scale || y > config.mapScale - scale) continue
+			if (made.some(m => UTILS.getDistance(x, y, m[0], m[1]) < scale + m[2] + 20)) continue
+			ctx.objectManager.add(ctx.objectManager.objects.length, x, y, UTILS.randFloat(-Math.PI, Math.PI), scale, n[0], null, false, null)
+			made.push([x, y, scale])
+			i++
+		}
+	}
+	api.mapPreset = function (me, name) {
+		keepOriginal()
+		const clearNature = r => {
+			for (const o of ctx.gameObjects) if (isNature(o) && UTILS.getDistance(me.x, me.y, o.x, o.y) <= r) removeObject(o)
+		}
+		const made = []
+		switch (name) {
+			case 'empty':
+				clearNature(1600)
+				return true
+			case 'forest':
+				clearNature(1600)
+				scatter(me, 'tree', 45, 260, 1600, made)
+				scatter(me, 'bush', 25, 260, 1600, made)
+				return true
+			case 'rocks':
+				clearNature(1600)
+				scatter(me, 'stone', 22, 260, 1600, made)
+				scatter(me, 'gold', 8, 260, 1600, made)
+				return true
+			case 'duel': {
+				clearArea(me.x, me.y, 1000, true)
+				const n = 16
+				for (let i = 0; i < n; i++) {
+					const a = (i / n) * Math.PI * 2
+					ctx.objectManager.add(ctx.objectManager.objects.length, me.x + 950 * Math.cos(a), me.y + 950 * Math.sin(a), a, config.rockScales[1], 2, null, false, null)
+				}
+				return true
+			}
+			case 'reset':
+				for (const o of ctx.gameObjects) if (isNature(o)) removeObject(o)
+				for (const [x, y, dir, scale, type] of original) ctx.objectManager.add(ctx.objectManager.objects.length, x, y, dir, scale, type, null, false, null)
+				return true
+		}
+		return false
+	}
+
+	// ---- editor helpers for the panel: many points, removal with undo, base stamps ----
+	const ownerOf = (me, owner) => (owner === 'none' ? null : owner === 'me' || owner === undefined ? me : ctx.findPlayerBySID(Number(owner)) || me)
+	api.placeMany = function (me, what, owner, points) {
+		const kind = String(what || '').toLowerCase()
+		const o = ownerOf(me, owner)
+		const sids = []
+		let name = null
+		for (const [x, y] of points || []) {
+			if (NATURE[kind]) {
+				const obj = placeNature(kind, x, y)
+				if (obj) sids.push(obj.sid)
+				name = kind
+			} else {
+				const item = itemByName(kind)
+				if (!item || item.consume) return { name: null, sids: sids }
+				sids.push(placeItem(item, x, y, 0, o).sid)
+				name = item.name
+			}
+		}
+		return { name: name, sids: sids }
+	}
+	api.removeAt = function (x, y, r) {
+		let best = null
+		let bestD = r || 90
+		for (const o of ctx.gameObjects) {
+			if (!o.active) continue
+			const d = UTILS.getDistance(x, y, o.x, o.y) - o.scale
+			if (d < bestD) {
+				bestD = d
+				best = o
+			}
+		}
+		if (!best) return null
+		const rec = objRec(best)
+		removeObject(best)
+		return rec
+	}
+	api.removeSids = function (sids) {
+		let n = 0
+		const want = new Set(sids || [])
+		for (const o of ctx.gameObjects) {
+			if (o.active && want.has(o.sid)) {
+				removeObject(o)
+				n++
+			}
+		}
+		return n
+	}
+	api.restoreObjs = function (recs) {
+		const sids = []
+		for (const [, x, y, scale, type, id, ownerSid, dir] of recs || []) {
+			if (id >= 0 && items.list[id]) sids.push(placeItem(items.list[id], x, y, dir || 0, ownerSid >= 0 ? ctx.findPlayerBySID(ownerSid) : null).sid)
+			else sids.push(ctx.objectManager.add(ctx.objectManager.objects.length, x, y, dir || 0, scale, type, null, false, null).sid)
+		}
+		return sids
+	}
+	api.copyBase = function (me, r) {
+		const list = ctx.gameObjects.filter(o => o.active && o.owner === me && UTILS.getDistance(me.x, me.y, o.x, o.y) <= (r || 600))
+		return { v: 1, dir: me.dir, items: list.map(o => [Math.round(o.x - me.x), Math.round(o.y - me.y), Math.round(o.dir * 100) / 100, o.id]) }
+	}
+	api.pasteBase = function (me, stamp, rotate) {
+		if (!stamp || !Array.isArray(stamp.items)) return []
+		const turn = rotate ? me.dir - (stamp.dir || 0) : 0
+		const c = Math.cos(turn)
+		const sn = Math.sin(turn)
+		const sids = []
+		for (const [dx, dy, dir, id] of stamp.items) {
+			const item = items.list[id]
+			if (!item) continue
+			sids.push(placeItem(item, me.x + dx * c - dy * sn, me.y + dx * sn + dy * c, dir + turn, me).sid)
+		}
+		return sids
 	}
 
 	// ---- chat commands (also what the panel sends) ----
@@ -7330,7 +7750,8 @@ module.exports = function (ctx) {
 						'!dummy clear | remove <sid> | set <sid> <kind>',
 					'!place <item|tree|bush|stone|gold> [count]  !remove  !clearnear <r>',
 					'!time pause|play|step [n]|speed <x>  !scenario <name>  !rules dmg|gather|sandbox|tick <v>',
-					'!king respawn|attack|hp <n>|speed <x>|damage <x>  !bring <sid>  !arena  !tp <sid>|<x> <y>',
+					'!king respawn|attack|hp <n>|speed <x>|damage <x>|only <slam|charge|ring|dive|all>|stats  !bring <sid>  !arena  !tp <sid>|<x> <y>',
+						'!survival start|stop  !spawner <animal> [every s] [max] | clear  !map empty|forest|rocks|duel|reset  !killmobs [r]',
 					'!s  !speed <n>  !v <tier>  !dmg [n]  !upgrade <n>  !kill <sid>  !die  !b  !mobs|hostile|bosses on|off'
 				].forEach(tell)
 				return true
@@ -7522,6 +7943,7 @@ module.exports = function (ctx) {
 					else if (k === 'delay' && !isNaN(num(v))) opts.healDelay = Math.max(0, Math.min(2000, num(v)))
 					else if (k === 'god') opts.god = v === '1' || v === 'on'
 					else if (k === 'food') opts.food = v
+					else if (k === 'gap' && !isNaN(num(v))) opts.instaGap = Math.max(2, Math.min(100, num(v)))
 				}
 				let made = 0
 				for (let i = 0; i < count; i++) {
@@ -7592,9 +8014,99 @@ module.exports = function (ctx) {
 				tell('[Admin] Damage x' + rules.dmgMult + ', gather x' + rules.gatherMult + ', ' + (config.inSandbox ? 'sandbox' : 'normal costs') + ', ' + config.serverUpdateRate + ' ticks/s')
 				return true
 			}
+			case 'survival': {
+				const sub = (args[0] || 'start').toLowerCase()
+				if (sub === 'stop') {
+					if (survival.on) survivalEnd('stopped')
+					else tell('[Admin] Survival is not running')
+				} else if (!survival.on) {
+					api.clearDummies()
+					survival.on = true
+					survival.wave = 0
+					survival.me = me
+					survival.tell = tell
+					survival.rest = 0
+					setHealth(me, me.maxHealth)
+					survivalWave()
+				} else tell('[Admin] Survival: wave ' + survival.wave + ', ' + survivalLeft() + ' left')
+				return true
+			}
+			case 'spawner': {
+				const sub = (args[0] || '').toLowerCase()
+				if (sub === 'clear') {
+					tell('[Admin] Removed ' + spawners.length + ' spawners')
+					spawners.length = 0
+					return true
+				}
+				if (sub === 'remove') {
+					const i = spawners.findIndex(sp => sp.id === num(args[1]))
+					if (i >= 0) spawners.splice(i, 1)
+					tell(i >= 0 ? '[Admin] Spawner ' + args[1] + ' removed' : '[Admin] No spawner ' + args[1])
+					return true
+				}
+				const kind = ANIMALS[sub]
+				if (kind === undefined) {
+					tell('[Admin] !spawner <animal> [every seconds] [max]  |  !spawner clear | remove <id>')
+					return true
+				}
+				const arena = kind === 11 || kind === 13 || kind === 14
+				if (arena && !(me.x < 0 && UTILS.inSecretPool(config, me.x, me.y, 100))) {
+					tell('[Admin] Crabs and the King only spawn in the arena')
+					return true
+				}
+				const every = Math.max(1, Math.min(600, num(args[1]) || 10)) * 1000
+				const max = Math.max(1, Math.min(kind === 11 ? 1 : 20, num(args[2]) || 3))
+				const sp = { id: ++spawnerId, name: sub, x: Math.round(me.x), y: Math.round(me.y), kind: kind, every: every, max: max, t: 0, mobs: [] }
+				spawners.push(sp)
+				tell('[Admin] Spawner ' + sp.id + ': ' + args[0] + ' every ' + every / 1000 + 's, up to ' + max)
+				return true
+			}
+			case 'killmobs': {
+				// animals near you go away: summoned ones for good, wild ones respawn elsewhere
+				const r = Math.max(100, Math.min(20000, num(args[0]) || 1500))
+				let n = 0
+				for (const a of ctx.ais) {
+					if (!a.active || !a.alive || a.spawnCounter || a.index === 11 || UTILS.getDistance(me.x, me.y, a.x, a.y) > r) continue
+					if (a.minion) {
+						a.active = false
+						a.alive = false
+					} else {
+						a.x = a.startX || UTILS.randInt(0, config.mapScale)
+						a.y = a.startY || (a.index === 10 ? UTILS.randInt(0, config.snowBiomeTop) : UTILS.randInt(0, config.mapScale))
+						a.health = a.maxHealth
+						a.chargeTarget = null
+						a.runFrom = null
+					}
+					n++
+				}
+				tell('[Admin] Sent away ' + n + ' animals')
+				return true
+			}
+			case 'map': {
+				const name = (args[0] || '').toLowerCase()
+				if (!api.mapPreset(me, name)) tell('[Admin] Maps: empty forest rocks duel reset')
+				else tell('[Admin] Map: ' + name)
+				return true
+			}
 			case 'king': {
 				const sub = (args[0] || '').toLowerCase()
 				const list = kings()
+				if (sub === 'only') {
+					const a = (args[1] || 'all').toLowerCase()
+					king.only = ['slam', 'charge', 'ring', 'dive'].includes(a) ? a : ''
+					tell('[Admin] Crab King attacks: ' + (king.only || 'all'))
+					return true
+				}
+				if (sub === 'stats') {
+					const st = kingStatsOf(me)
+					tell('[Admin] Dodged ' + st.dodged + ', hit ' + st.hit + (st.bestKill ? ', best kill ' + (st.bestKill / 1000).toFixed(1) + 's' : ''))
+					return true
+				}
+				if (sub === 'resetstats') {
+					api.resetKingStats(me)
+					tell('[Admin] Crab King stats reset')
+					return true
+				}
 				if (sub === 'respawn') {
 					if (!list.length) {
 						const home = config.secretPool.pool[0]
@@ -8666,6 +9178,7 @@ module.exports.inSecretPool = function (config, x, y, r) {
 	if (w && x <= w.x + r && x >= w.x - 900 && mathABS(y - w.y) <= w.half - r) return true
 	return false
 }
+module.exports.PACKETCODE = PACKETCODE
     }
     };
     const create = (options = {}) => {
@@ -8780,7 +9293,13 @@ module.exports.inSecretPool = function (config, x, y, r) {
             hats: pick(store.hats),
             accessories: pick(store.accessories),
             weapons: items.weapons.map(x => ({ id: x.id, name: x.name, type: x.type })),
-            items: items.list.map(x => ({ id: x.id, name: x.name, consume: !!x.consume }))
+            items: items.list.map(x => ({ id: x.id, name: x.name, consume: !!x.consume, scale: x.scale })),
+            weaponRange: items.weapons.map(x => x.range || 0),
+            packets: (() => {
+              const codes = run("src/utils.js").PACKETCODE;
+              const flip = o => Object.fromEntries(Object.entries(o).map(([name, code]) => [code, name]));
+              return { in: flip(codes.RECEIVE), out: flip(codes.SEND) };
+            })()
           };
         }
       };
@@ -9232,7 +9751,7 @@ module.exports.inSecretPool = function (config, x, y, r) {
 #ryn-admin .ra-hint { font-size: 10px; color: var(--ra-tx-3); margin-top: 3px; }
 #adminButton.ryn-admin-open { box-shadow: inset 0 0 0 2px rgba(168, 148, 224, 0.75); }
 #ryn-admin .ra-tabs { display: flex; gap: 2px; padding: 4px 8px 0; border-bottom: 1px solid var(--ra-line); flex-shrink: 0; }
-#ryn-admin .ra-tab { flex: 1; height: 27px; border: none; border-bottom: 2px solid transparent; background: none; color: var(--ra-tx-3); font: inherit; font-size: 10.5px; font-weight: 700; letter-spacing: 0.03em; cursor: pointer; padding: 0 2px; }
+#ryn-admin .ra-tab { flex: 1; height: 27px; border: none; border-bottom: 2px solid transparent; background: none; color: var(--ra-tx-3); font: inherit; font-size: 10px; font-weight: 700; letter-spacing: 0; cursor: pointer; padding: 0 1px; }
 #ryn-admin .ra-tab:hover { color: var(--ra-tx-1); }
 #ryn-admin .ra-tab.ra-cur { color: var(--ra-iris-hi); border-bottom-color: var(--ra-iris); }
 #ryn-admin.ra-min .ra-tabs { display: none; }
@@ -9255,6 +9774,11 @@ module.exports.inSecretPool = function (config, x, y, r) {
 #ryn-admin .ra-lines .ra-hurt { color: var(--ra-rose); }
 #ryn-admin .ra-lines .ra-heal { color: var(--ra-sage); }
 #ryn-admin .ra-edit-on { outline: 2px solid var(--ra-sage); outline-offset: -2px; }
+#ryn-admin .ra-lines div { white-space: pre-line; }
+#ryn-admin.ra-wide { width: 660px; }
+#ryn-admin canvas.ra-canvas { display: block; width: 100%; height: auto; border: 1px solid var(--ra-line); border-radius: 8px; background: #0e1410; margin-top: 4px; }
+#ryn-admin input[type=range] { width: 100%; height: 20px; padding: 0; border: none; background: none; accent-color: var(--ra-iris); }
+#ryn-admin .ra-pl-top .ra-btn { height: 22px; padding: 0 7px; font-size: 10.5px; }
 `;
   const RYN_ADMIN_ANIMALS = [ [ "cow", "Cow" ], [ "pig", "Pig" ], [ "sheep", "Sheep" ], [ "bull", "Bull" ], [ "bully", "Bully" ], [ "wolf", "Wolf" ], [ "duck", "Quack" ], [ "boar", "Boar" ], [ "yeti", "Yeti" ], [ "moostafa", "MOOSTAFA" ], [ "moofie", "MOOFIE" ], [ "treasure", "Treasure" ], [ "king", "Crab King" ], [ "crab", "Crab" ], [ "crabling", "Crabling" ] ];
   const RYN_ADMIN_TIERS = [ [ "normal", "Normal" ], [ "gold", "Gold" ], [ "diamond", "Diamond" ], [ "ruby", "Ruby" ], [ "emerald", "Emerald" ] ];
@@ -9298,7 +9822,7 @@ module.exports.inSecretPool = function (config, x, y, r) {
     tab: "me",
     pages: {},
     tabButtons: {},
-    overlay: false,
+    layers: {},
     editMode: "",
     mouse: null,
     autoRestored: false,
@@ -9315,7 +9839,22 @@ module.exports.inSecretPool = function (config, x, y, r) {
       this.custom = Array.isArray(custom) ? custom.filter(b => b && typeof b.label === "string" && typeof b.cmd === "string") : [];
       window.addEventListener("keydown", e => this.onHotkey(e), true);
       RynPrivate.noteListeners.add(text => this.say(text));
-      this.overlay = !!this.store("_ryn_admin_overlay");
+      const layers = this.store("_ryn_admin_layers");
+      this.layers = layers && typeof layers === "object" ? layers : {
+        truth: !!this.store("_ryn_admin_overlay"),
+        ranges: false,
+        shots: false,
+        desync: false,
+        shame: true
+      };
+      const wave = this.store("_ryn_ping_wave");
+      this.pingWave = wave && typeof wave === "object" ? wave : {
+        on: false,
+        min: 60,
+        max: 250,
+        every: 5
+      };
+      this.startPingWave();
       window.addEventListener("mousemove", e => {
         this.mouse = {
           x: e.clientX,
@@ -9450,7 +9989,7 @@ module.exports.inSecretPool = function (config, x, y, r) {
       const body = this.body = this.el("div", "ra-body");
       root.appendChild(body);
       if (this.store("_ryn_admin_min")) root.classList.add("ra-min");
-      const pages = [ [ "me", "Me", [ "buildTarget", "buildPlayer", "buildGear", "buildGive", "buildLoadouts" ] ], [ "players", "Players", [ "buildPlayers", "buildBots" ] ], [ "test", "Test", [ "buildDummies", "buildScenarios", "buildTime", "buildSpawn" ] ], [ "world", "World", [ "buildEditor", "buildSaves", "buildRules", "buildKing", "buildWorld", "buildTravel" ] ], [ "stats", "Stats", [ "buildStats" ] ], [ "mine", "Mine", [ "buildCustom", "buildPing" ] ] ];
+      const pages = [ [ "me", "Me", [ "buildTarget", "buildPlayer", "buildShame", "buildGear", "buildGive", "buildLoadouts" ] ], [ "players", "Players", [ "buildPlayers", "buildBots" ] ], [ "test", "Test", [ "buildDummies", "buildScenarios", "buildSurvival", "buildTime", "buildSpawn" ] ], [ "world", "World", [ "buildEditor", "buildStamps", "buildMaps", "buildSpawners", "buildSaves", "buildRules", "buildKing", "buildWorld", "buildTravel" ] ], [ "stats", "Stats", [ "buildStats" ] ], [ "lab", "Lab", [ "buildBench", "buildReplay", "buildPackets" ] ], [ "mine", "Mine", [ "buildCustom", "buildPing" ] ] ];
       for (const [id, label, parts] of pages) {
         const page = this.el("div", "ra-page");
         page.dataset.tab = id;
@@ -9526,6 +10065,8 @@ module.exports.inSecretPool = function (config, x, y, r) {
     },
     say(text, bad = false) {
       if (!this.logLine) return;
+      // the test bench sends many commands; their replies would bury its own lines
+      if (this.benchRunning && /^\[Admin\]/.test(text)) return;
       this.logLine.textContent = text;
       this.logLine.classList.toggle("ra-bad", bad);
       const line = this.el("div", "", text);
@@ -9593,8 +10134,11 @@ module.exports.inSecretPool = function (config, x, y, r) {
         this.freezeButton.classList.toggle("ra-on", frozen);
         this.freezeButton.textContent = frozen ? "Frozen: on" : "Frozen: off";
       }
+      this.drawShame(state.me);
+      if (this.tapOn && this.tapConn !== (RynPrivate.ownerSocket && RynPrivate.ownerSocket._conn)) this.installTap();
       if (this.tab === "players") this.drawPlayers(state);
       if (this.tab === "stats") this.drawStats(state);
+      if (this.tab === "lab") this.drawPackets();
     },
     showTab(id) {
       this.tab = id;
@@ -9671,7 +10215,11 @@ module.exports.inSecretPool = function (config, x, y, r) {
         }
         if (this.kingSpeed && document.activeElement !== this.kingSpeed) this.kingSpeed.value = String(panel.king.speed);
         if (this.kingDamage && document.activeElement !== this.kingDamage) this.kingDamage.value = String(panel.king.damage);
+        if (this.kingOnly && document.activeElement !== this.kingOnly) this.kingOnly.value = panel.king.only || "all";
       }
+      this.drawKingStats(panel.kingStats);
+      this.drawSurvival(panel.survival);
+      this.drawSpawners(panel.spawners || []);
     },
     buildGive(body) {
       this.section(body, "Give");
@@ -9898,11 +10446,21 @@ module.exports.inSecretPool = function (config, x, y, r) {
         for (const it of c.items) if (!it.consume) this.option(what, it.id, it.name);
       });
       this.editOwner = this.select([ [ "me", "Owner: me" ], [ "none", "Owner: nobody" ] ], "me");
+      this.editShape = this.select([ [ "point", "One" ], [ "line", "Line" ], [ "circle", "Circle" ], [ "square", "Square" ] ], "point");
+      this.editSize = this.number(220, 20, 40);
+      this.editCount = this.number(8, 1, 2);
+      this.editSize.style.width = this.editCount.style.width = "58px";
+      this.editSize.title = "Circle radius or square side";
+      this.editCount.title = "How many go on a circle";
+      this.editShape.addEventListener("change", () => {
+        this.editStart = null;
+      });
       this.placeButton = this.button("Place", () => this.setEdit(this.editMode === "place" ? "" : "place"));
       this.deleteButton = this.button("Delete", () => this.setEdit(this.editMode === "delete" ? "" : "delete"));
       this.row(body, "", what, this.editOwner);
-      this.row(body, "", this.placeButton, this.deleteButton, this.button("Clear near me", () => this.done("!clearnear 600"), "ra-del"));
-      body.appendChild(this.el("div", "ra-hint", "Turn on Place or Delete and click the map; Esc stops. With a dummy as owner, its spikes and traps work against you."));
+      this.row(body, "Shape", this.editShape, this.editSize, this.editCount);
+      this.row(body, "", this.placeButton, this.deleteButton, this.button("Undo", () => this.undo()), this.button("Clear near me", () => this.done("!clearnear 600"), "ra-del"));
+      body.appendChild(this.el("div", "ra-hint", "Turn on Place or Delete and click the map; Esc stops, Ctrl+Z undoes. Line: click the start, then the end. Size is the circle's radius or the square's side, count is how many go on a circle. With a dummy as owner, its spikes and traps work against you."));
     },
     drawEditorOwners(state) {
       const select = this.editOwner;
@@ -9920,6 +10478,7 @@ module.exports.inSecretPool = function (config, x, y, r) {
     },
     setEdit(mode) {
       this.editMode = mode;
+      this.editStart = null;
       if (this.placeButton) this.placeButton.classList.toggle("ra-on", mode === "place");
       if (this.deleteButton) this.deleteButton.classList.toggle("ra-on", mode === "delete");
       if (mode) this.say(mode === "place" ? "Click the map to place. Esc stops." : "Click something to delete it. Esc stops.");
@@ -9942,20 +10501,254 @@ module.exports.inSecretPool = function (config, x, y, r) {
       const t = e.target;
       return !!t && t.tagName === "CANVAS" && t.id !== "mapDisplay";
     },
+    spacingOf(what) {
+      const nature = {
+        tree: 300,
+        bush: 170,
+        stone: 210,
+        gold: 160
+      };
+      if (nature[what]) return nature[what];
+      const c = RynPrivate.catalog();
+      const it = c && c.items.find(i => String(i.id) === String(what));
+      return it && it.scale ? it.scale * 2 + 2 : 100;
+    },
+    shapePoints(shape, at) {
+      const gap = this.spacingOf(this.editWhat.value);
+      const size = Math.max(40, Number(this.editSize.value) || 220);
+      const pts = [];
+      if (shape === "line" && this.editStart) {
+        const s = this.editStart;
+        const len = Math.hypot(at.x - s.x, at.y - s.y);
+        const a = Math.atan2(at.y - s.y, at.x - s.x);
+        const n = Math.min(60, Math.floor(len / gap) + 1);
+        for (let i = 0; i < n; i++) pts.push([ s.x + gap * i * Math.cos(a), s.y + gap * i * Math.sin(a) ]);
+      } else if (shape === "circle") {
+        const n = Math.max(2, Math.min(40, Number(this.editCount.value) || 8));
+        for (let i = 0; i < n; i++) {
+          const a = i / n * Math.PI * 2;
+          pts.push([ at.x + size * Math.cos(a), at.y + size * Math.sin(a) ]);
+        }
+      } else if (shape === "square") {
+        const h = size / 2;
+        const per = Math.max(1, Math.min(15, Math.round(size / gap)));
+        const c = [ [ -h, -h ], [ h, -h ], [ h, h ], [ -h, h ] ];
+        for (let i = 0; i < 4; i++) {
+          const [x1, y1] = c[i];
+          const [x2, y2] = c[(i + 1) % 4];
+          for (let k = 0; k < per; k++) pts.push([ at.x + x1 + (x2 - x1) * k / per, at.y + y1 + (y2 - y1) * k / per ]);
+        }
+      } else {
+        pts.push([ at.x, at.y ]);
+      }
+      return pts.map(([x, y]) => [ Math.round(x), Math.round(y) ]);
+    },
     onEditPointer(e) {
       if (!this.editTarget(e)) return;
       e.preventDefault();
       e.stopImmediatePropagation();
       const at = this.worldAt(e.clientX, e.clientY);
       if (at === null) return;
-      const x = Math.round(at.x);
-      const y = Math.round(at.y);
       if (this.editMode === "delete") {
-        this.run("!removeat " + x + " " + y);
+        const rec = RynPrivate.call("removeAt", {
+          x: at.x,
+          y: at.y,
+          r: 90
+        });
+        if (rec) {
+          this.pushUndo({
+            recs: [ rec ]
+          });
+          this.say("Removed " + this.objName(rec));
+        } else {
+          this.say("Nothing there", true);
+        }
         return;
       }
+      const shape = this.editShape.value;
+      if (shape === "line" && !this.editStart) {
+        this.editStart = at;
+        this.say("Now click where the line ends.");
+        return;
+      }
+      const points = this.shapePoints(shape, at);
+      this.editStart = null;
       const o = this.editOwner.value;
-      this.run("!placeat " + this.editWhat.value + " " + x + " " + y + (o === "none" ? " none" : o === "me" ? "" : " " + o.slice(1)));
+      const r = RynPrivate.call("placeMany", {
+        what: this.editWhat.value,
+        owner: o === "none" || o === "me" ? o : o.slice(1),
+        points: points
+      });
+      if (!r || !r.sids.length) {
+        this.say(r ? "That can't be placed" : "Spawn into the game first (press Play).", true);
+        return;
+      }
+      this.pushUndo({
+        sids: r.sids
+      });
+      this.say("Placed " + r.sids.length + " " + r.name);
+    },
+    pushUndo(entry) {
+      const stack = this.undoStack || (this.undoStack = []);
+      stack.push(entry);
+      if (stack.length > 40) stack.shift();
+    },
+    undo() {
+      const e = (this.undoStack || []).pop();
+      if (!e) {
+        this.say("Nothing to undo", true);
+        return;
+      }
+      if (e.sids) this.say("Undone: took away " + (RynPrivate.call("removeSids", e.sids) || 0)); else if (e.recs) {
+        RynPrivate.call("restoreObjs", e.recs);
+        this.say("Undone: put back " + e.recs.map(r => this.objName(r)).join(", "));
+      }
+    },
+    objName(rec) {
+      if (rec[5] >= 0) {
+        const c = RynPrivate.catalog();
+        const it = c && c.items.find(i => i.id === rec[5]);
+        return it ? it.name : "item";
+      }
+      return [ "tree", "bush", "stone", "gold" ][rec[4]] || "object";
+    },
+    drawEditPreview(ctx) {
+      const at = this.worldAt(this.mouse.x, this.mouse.y);
+      if (at === null) return;
+      ctx.lineWidth = 3;
+      if (this.editMode === "delete") {
+        ctx.strokeStyle = "rgba(217, 163, 171, 0.95)";
+        ctx.beginPath();
+        ctx.arc(at.x, at.y, 90, 0, Math.PI * 2);
+        ctx.stroke();
+        return;
+      }
+      ctx.strokeStyle = "rgba(166, 215, 178, 0.95)";
+      const shape = this.editShape.value;
+      if (shape === "line" && this.editStart) {
+        ctx.beginPath();
+        ctx.moveTo(this.editStart.x, this.editStart.y);
+        ctx.lineTo(at.x, at.y);
+        ctx.stroke();
+      }
+      const pts = shape === "line" && !this.editStart ? [ [ at.x, at.y ] ] : this.shapePoints(shape, at);
+      const r = Math.max(20, this.spacingOf(this.editWhat.value) / 2 - 4);
+      for (const [x, y] of pts) {
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    },
+    stamps() {
+      const all = this.store("_ryn_stamps");
+      return Array.isArray(all) ? all.filter(s => s && s.stamp && Array.isArray(s.stamp.items)) : [];
+    },
+    buildStamps(body) {
+      this.section(body, "Base stamps");
+      const name = this.el("input");
+      name.type = "text";
+      name.placeholder = "Name";
+      name.style.flex = "1";
+      const radius = this.select([ [ "400", "400 around" ], [ "600", "600 around" ], [ "900", "900 around" ] ], "600");
+      this.row(body, "", name, radius);
+      this.row(body, "", this.button("Copy my base", () => {
+        const stamp = RynPrivate.call("copyBase", Number(radius.value));
+        if (!stamp) {
+          this.say("Spawn into the game first (press Play).", true);
+          return;
+        }
+        if (!stamp.items.length) {
+          this.say("No buildings of yours around you", true);
+          return;
+        }
+        const all = this.stamps();
+        const label = name.value.trim() || "Base " + (all.length + 1);
+        all.push({
+          name: label,
+          stamp: stamp
+        });
+        this.store("_ryn_stamps", all);
+        name.value = "";
+        this.drawStamps();
+        this.say("Copied " + label + ": " + stamp.items.length + " buildings");
+      }, "ra-go"), this.toggleButton("Turn with me", () => !!this.store("_ryn_stamp_turn"), v => this.store("_ryn_stamp_turn", v)));
+      this.stampList = this.el("div", "ra-plist");
+      body.appendChild(this.stampList);
+      body.appendChild(this.el("div", "ra-hint", "Copies your own buildings around you. Stamp puts them around where you stand; Turn with me turns them to where you look."));
+      this.drawStamps();
+    },
+    drawStamps() {
+      const list = this.stampList;
+      if (!list) return;
+      list.innerHTML = "";
+      this.stamps().forEach((s, i) => {
+        const card = this.el("div", "ra-pl");
+        const top = this.el("div", "ra-pl-top");
+        top.appendChild(this.el("span", "ra-pl-name", s.name));
+        top.appendChild(this.el("span", "ra-chip", s.stamp.items.length + " items"));
+        card.appendChild(top);
+        const r = this.row(card, "", this.button("Stamp", () => {
+          const sids = RynPrivate.call("pasteBase", {
+            stamp: s.stamp,
+            rotate: !!this.store("_ryn_stamp_turn")
+          });
+          if (!sids) {
+            this.say("Spawn into the game first (press Play).", true);
+            return;
+          }
+          this.pushUndo({
+            sids: sids
+          });
+          this.say("Stamped " + s.name + " (" + sids.length + ")");
+        }, "ra-go"), this.button("Delete", () => {
+          const all = this.stamps();
+          all.splice(i, 1);
+          this.store("_ryn_stamps", all);
+          this.drawStamps();
+        }, "ra-del"));
+        r.style.marginTop = "5px";
+        list.appendChild(card);
+      });
+    },
+    buildMaps(body) {
+      this.section(body, "Map");
+      const grid = this.el("div", "ra-grid");
+      for (const [id, label] of [ [ "empty", "Empty" ], [ "forest", "Forest" ], [ "rocks", "Rocks" ], [ "duel", "Duel ring" ], [ "reset", "Original" ] ]) {
+        grid.appendChild(this.button(label, () => this.done("!map " + id)));
+      }
+      body.appendChild(grid);
+      body.appendChild(this.el("div", "ra-hint", "Changes the 1600 around you; Duel ring clears 1000 around you, buildings too, inside a ring of stones. Original puts the whole map back the way the server made it."));
+    },
+    buildSpawners(body) {
+      this.section(body, "Spawners");
+      const animal = this.select(RYN_ADMIN_ANIMALS, "wolf");
+      const every = this.number(10, 1, 1);
+      const max = this.number(3, 1, 1);
+      every.style.width = max.style.width = "58px";
+      every.title = "Seconds between animals";
+      max.title = "Most alive at once";
+      this.row(body, "Animal", animal);
+      this.row(body, "Every / max", every, max, this.button("Add here", () => this.done("!spawner " + animal.value + " " + (Number(every.value) || 10) + " " + (Number(max.value) || 3)), "ra-go"));
+      this.spawnerList = this.el("div", "ra-plist");
+      body.appendChild(this.spawnerList);
+      this.row(body, "", this.button("Remove all", () => this.done("!spawner clear"), "ra-del"), this.button("Send animals away", () => this.done("!killmobs 2000")));
+    },
+    drawSpawners(list) {
+      const box = this.spawnerList;
+      if (!box) return;
+      const sig = list.map(s => [ s.id, s.alive, s.max ].join(":")).join("|");
+      if (sig === this._spawnSig) return;
+      this._spawnSig = sig;
+      box.innerHTML = "";
+      for (const s of list) {
+        const card = this.el("div", "ra-pl");
+        const top = this.el("div", "ra-pl-top");
+        top.appendChild(this.el("span", "ra-pl-name", "#" + s.id + " " + s.kind + " · every " + s.every + "s"));
+        top.appendChild(this.el("span", "ra-chip", s.alive + "/" + s.max));
+        top.appendChild(this.button("Remove", () => this.done("!spawner remove " + s.id), "ra-del"));
+        card.appendChild(top);
+        box.appendChild(card);
+      }
     },
     saves() {
       const all = this.store("_ryn_admin_saves");
@@ -10070,6 +10863,74 @@ module.exports.inSecretPool = function (config, x, y, r) {
       this.kingDamage.addEventListener("change", () => this.done("!king damage " + this.kingDamage.value));
       this.row(body, "Speed", this.kingSpeed);
       this.row(body, "Damage", this.kingDamage);
+      this.kingOnly = this.select([ [ "all", "All attacks" ], [ "slam", "Slam only" ], [ "charge", "Charge only" ], [ "ring", "Ring only" ], [ "dive", "Dive only" ] ], "all");
+      this.kingOnly.addEventListener("change", () => this.done("!king only " + this.kingOnly.value));
+      this.row(body, "Practice", this.kingOnly);
+      this.kingDodge = this.el("div", "ra-hint", "");
+      body.appendChild(this.kingDodge);
+      this.row(body, "", this.button("Reset counts", () => this.done("!king resetstats")));
+    },
+    drawKingStats(st) {
+      if (!this.kingDodge || !st) return;
+      const names = {
+        slam: "slam",
+        charge: "charge",
+        ring: "ring",
+        dive: "dive"
+      };
+      const kinds = Object.entries(st.kinds).map(([k, [d, h]]) => names[k] + " " + d + "/" + (d + h)).join(", ");
+      let best = Number(this.store("_ryn_king_best")) || null;
+      if (st.bestKill && (!best || st.bestKill < best)) {
+        best = st.bestKill;
+        this.store("_ryn_king_best", best);
+      }
+      const s = ms => (ms / 1e3).toFixed(1) + "s";
+      this.kingDodge.textContent = "Dodged " + st.dodged + " of " + (st.dodged + st.hit) + (kinds ? " (" + kinds + ")" : "") + ". Kill time: " + (st.fighting !== null ? "now " + s(st.fighting) + ", " : "") + "last " + (st.lastKill ? s(st.lastKill) : "–") + ", best " + (best ? s(best) : "–") + ".";
+    },
+    buildShame(body) {
+      this.section(body, "Shame");
+      const card = this.el("div", "ra-pl");
+      const top = this.el("div", "ra-pl-top");
+      this.shameText = this.el("span", "ra-pl-name", "0 / 8");
+      this.shameNote = this.el("span", "ra-hint", "");
+      this.shameNote.style.margin = "0";
+      top.appendChild(this.shameText);
+      top.appendChild(this.shameNote);
+      card.appendChild(top);
+      this.shameBar = this.el("div", "ra-bar");
+      this.shameFill = this.el("i");
+      this.shameBar.appendChild(this.shameFill);
+      card.appendChild(this.shameBar);
+      body.appendChild(card);
+      body.appendChild(this.el("div", "ra-hint", "Eating within 120ms of a hit adds 1; a later heal takes 2 off. At 8 you wear the clown hat for 30s and cannot heal. From 3 it also shows under you on screen (Stats, On screen, Shame)."));
+    },
+    drawShame(me) {
+      if (!this.shameText || !me) return;
+      const n = me.shame || 0;
+      const clown = me.shameTimer > 0;
+      this.shameText.textContent = clown ? "Clown" : n + " / 8";
+      this.shameNote.textContent = clown ? Math.ceil(me.shameTimer / 1e3) + "s left" : n >= 6 ? "careful" : "";
+      this.shameFill.style.width = (clown ? 100 : n / 8 * 100) + "%";
+      this.shameBar.classList.toggle("ra-low", clown || n >= 5);
+    },
+    buildSurvival(body) {
+      this.section(body, "Survival");
+      this.survivalButton = this.button("Start", () => this.done(this.lastPanel && this.lastPanel.survival.on ? "!survival stop" : "!survival start"), "ra-go");
+      this.survivalText = this.el("span", "ra-hint", "");
+      this.survivalText.style.margin = "0";
+      this.row(body, "", this.survivalButton, this.survivalText);
+      body.appendChild(this.el("div", "ra-hint", "Waves of dummies and animals around you, harder each wave. Clear a wave and you get healed and 3s to rest. It ends when you die."));
+    },
+    drawSurvival(sv) {
+      if (!this.survivalButton || !sv) return;
+      let best = Number(this.store("_ryn_survival_best")) || 0;
+      if (sv.best > best) {
+        best = sv.best;
+        this.store("_ryn_survival_best", best);
+      }
+      this.survivalButton.textContent = sv.on ? "Stop" : "Start";
+      this.survivalButton.classList.toggle("ra-on", sv.on);
+      this.survivalText.textContent = sv.on ? "Wave " + sv.wave + " · " + sv.left + " left · best " + best : (sv.last ? "Last: " + sv.last.waves + " waves (" + sv.last.why + ") · " : "") + "best " + best;
     },
     buildStats(body) {
       this.section(body, "Your fight");
@@ -10084,14 +10945,29 @@ module.exports.inSecretPool = function (config, x, y, r) {
         this.statCells[key] = value;
       }
       body.appendChild(grid);
-      this.row(body, "", this.toggleButton("Server overlay", () => this.overlay, v => {
-        this.overlay = v;
-        this.store("_ryn_admin_overlay", v);
-      }), this.button("Reset", () => {
+      this.row(body, "", this.button("Reset", () => {
         RynPrivate.call("clearLog");
         this.refresh();
-      }));
-      body.appendChild(this.el("div", "ra-hint", "Server overlay draws where the server has every player and animal (dashed) over what you see, with the server tick under you."));
+      }), this.button("Export", () => this.exportFight(false)), this.button("Copy", () => this.exportFight(true)));
+      this.section(body, "On screen");
+      const layers = this.el("div", "ra-grid");
+      for (const [key, label] of [ [ "truth", "Truth" ], [ "ranges", "Ranges" ], [ "shots", "Shots" ], [ "desync", "Desync" ], [ "shame", "Shame" ] ]) {
+        layers.appendChild(this.toggleButton(label, () => !!this.layers[key], v => {
+          this.layers[key] = v;
+          this.store("_ryn_admin_layers", this.layers);
+        }));
+      }
+      body.appendChild(layers);
+      body.appendChild(this.el("div", "ra-hint", "Truth: where the server has everyone (dashed), the server tick under you and spawners. Ranges: weapon reach, spikes and turrets. Shots: projectile paths. Desync: a line from where Ryn predicts you to where the server has you. Shame: your shame count under you."));
+      this.section(body, "Last 60 seconds");
+      this.graph = this.el("canvas", "ra-canvas");
+      this.graph.width = 576;
+      this.graph.height = 220;
+      body.appendChild(this.graph);
+      body.appendChild(this.el("div", "ra-hint", "Green your health, purple your damage per second, red damage you took per second."));
+      this.section(body, "Desync");
+      this.desyncText = this.el("div", "ra-hint", "Needs you in the game.");
+      body.appendChild(this.desyncText);
       this.section(body, "Combat log");
       this.combatLines = this.el("div", "ra-lines");
       body.appendChild(this.combatLines);
@@ -10105,6 +10981,16 @@ module.exports.inSecretPool = function (config, x, y, r) {
       if (kind[0] === "w" && /^w\d+$/.test(kind)) return this.weaponName(Number(kind.slice(1)));
       return kind;
     },
+    fmtLog(e) {
+      const from = e.fromName || (e.kind ? this.kindName(e.kind) : "world");
+      const how = e.kind && e.fromName ? " · " + this.kindName(e.kind) : "";
+      return "t" + e.tick + "  " + (e.amount < 0 ? from + " → " + e.toName : e.toName + " healed") + "  " + (e.amount > 0 ? "+" : "") + e.amount + how + "  hp " + e.hp;
+    },
+    mineFilter(state) {
+      const me = state && state.me ? state.me.sid : -1;
+      const dummies = new Set((state ? state.players : []).filter(p => p.dummy).map(p => p.sid));
+      return e => !e.ai && (e.to === me || dummies.has(e.to)) || !e.fromAi && (e.from === me || dummies.has(e.from));
+    },
     drawStats(state) {
       const s = RynPrivate.call("stats");
       if (!s || !this.statCells) return;
@@ -10117,18 +11003,10 @@ module.exports.inSecretPool = function (config, x, y, r) {
       const kill = s.kills[s.kills.length - 1];
       c.ttk.textContent = kill ? kill.ms + "ms" : "–";
       if (kill) c.ttk.title = kill.name;
-      const me = state.me ? state.me.sid : -1;
-      const dummies = new Set(state.players.filter(p => p.dummy).map(p => p.sid));
-      const mine = e => !e.ai && (e.to === me || dummies.has(e.to)) || !e.fromAi && (e.from === me || dummies.has(e.from));
-      const log = (RynPrivate.call("log", 120) || []).filter(mine).slice(-16).reverse();
+      const log = (RynPrivate.call("log", 120) || []).filter(this.mineFilter(state)).slice(-16).reverse();
       const lines = this.combatLines;
       lines.innerHTML = "";
-      for (const e of log) {
-        const from = e.fromName || (e.kind ? this.kindName(e.kind) : "world");
-        const how = e.kind && e.fromName ? " · " + this.kindName(e.kind) : "";
-        const d = this.el("div", e.amount < 0 ? "ra-hurt" : "ra-heal", "t" + e.tick + "  " + (e.amount < 0 ? from + " → " + e.toName : e.toName + " healed") + "  " + (e.amount > 0 ? "+" : "") + e.amount + how + "  hp " + e.hp);
-        lines.appendChild(d);
-      }
+      for (const e of log) lines.appendChild(this.el("div", e.amount < 0 ? "ra-hurt" : "ra-heal", this.fmtLog(e)));
       const phys = RynPrivate.call("physics") || [];
       const pl = this.physLines;
       pl.innerHTML = "";
@@ -10136,59 +11014,858 @@ module.exports.inSecretPool = function (config, x, y, r) {
         const same = p.ryn !== null && Math.abs(p.first - p.ryn) <= 3;
         pl.appendChild(this.el("div", same ? "ra-heal" : p.ryn === null ? "" : "ra-hurt", "t" + p.tick + "  " + p.name + " · " + this.kindName(p.kind) + ": " + p.first + "px" + (p.ryn === null ? "" : ", Ryn " + p.ryn + "px" + (same ? " ✓" : "")) + ", total " + p.total + "px"));
       }
+      this.drawGraph();
+      this.drawDesyncText();
+    },
+    drawGraph() {
+      const cv = this.graph;
+      if (!cv) return;
+      const ctx = cv.getContext("2d");
+      const W = cv.width;
+      const H = cv.height;
+      ctx.clearRect(0, 0, W, H);
+      ctx.font = "18px sans-serif";
+      const data = RynPrivate.call("series") || [];
+      if (data.length < 2) {
+        ctx.fillStyle = "#726f80";
+        ctx.fillText("No data yet", 14, 30);
+        return;
+      }
+      const t1 = data[data.length - 1][1];
+      const t0 = t1 - 6e4;
+      const perSecond = col => {
+        const out = [];
+        let sum = 0;
+        let j = 0;
+        for (let i = 0; i < data.length; i++) {
+          sum += data[i][col];
+          while (data[i][1] - data[j][1] > 1e3) sum -= data[j++][col];
+          out.push(sum);
+        }
+        return out;
+      };
+      const dealt = perSecond(3);
+      const taken = perSecond(4);
+      const top = Math.max(100, ...dealt, ...taken);
+      const X = at => (at - t0) / 6e4 * W;
+      const Y = (v, max) => H - 8 - v / max * (H - 16);
+      ctx.strokeStyle = "rgba(255,255,255,0.07)";
+      ctx.lineWidth = 1;
+      for (const f of [ .25, .5, .75 ]) {
+        ctx.beginPath();
+        ctx.moveTo(0, Y(f * 100, 100));
+        ctx.lineTo(W, Y(f * 100, 100));
+        ctx.stroke();
+      }
+      const line = (values, max, color) => {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        data.forEach((row, i) => {
+          const x = X(row[1]);
+          const y = Y(values[i], max);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      };
+      line(data.map(r => r[2]), 100, "#a6d7b2");
+      line(taken, top, "#d9a3ab");
+      line(dealt, top, "#a894e0");
+      ctx.fillStyle = "#aca9ba";
+      ctx.fillText("max " + Math.round(top) + "/s", W - 130, 24);
+    },
+    trackDesync(me) {
+      let pl = null;
+      try {
+        pl = client.myPlayer;
+      } catch (_) {}
+      if (!me || !me.alive || !pl || !pl.pos || !pl.pos.current || !pl.pos.future) {
+        this.desyncNow = null;
+        return;
+      }
+      const cur = pl.pos.current;
+      const fut = pl.pos.future;
+      const shown = Math.hypot(cur.x - me.x, cur.y - me.y);
+      const pred = Math.hypot(fut.x - me.x, fut.y - me.y);
+      const now = performance.now();
+      this.desyncNow = {
+        shown: shown,
+        pred: pred,
+        fx: fut.x,
+        fy: fut.y
+      };
+      const hist = this.desyncHist || (this.desyncHist = []);
+      hist.push([ now, pred ]);
+      while (hist.length && now - hist[0][0] > 5e3) hist.shift();
+      if (pred > 60) {
+        this.desyncBad = (this.desyncBad || 0) + 1;
+        if (this.desyncBad === 3) this.desyncWarn = (this.desyncWarn || 0) + 1;
+      } else {
+        this.desyncBad = 0;
+      }
+    },
+    drawDesyncText() {
+      if (!this.desyncText) return;
+      const d = this.desyncNow;
+      if (!d) {
+        this.desyncText.textContent = "Needs you in the game.";
+        return;
+      }
+      const peak = Math.max(0, ...(this.desyncHist || []).map(h => h[1]));
+      this.desyncText.textContent = "Ryn shows you " + Math.round(d.shown) + "px from where the server has you; its prediction is " + Math.round(d.pred) + "px off (worst in 5s: " + Math.round(peak) + "px). Over 60px for 3 frames: " + (this.desyncWarn || 0) + " times.";
+    },
+    exportFight(copy) {
+      const state = RynPrivate.state();
+      const s = RynPrivate.call("stats");
+      if (!state || !s) {
+        this.say("Spawn into the game first (press Play).", true);
+        return;
+      }
+      const log = (RynPrivate.call("log", 400) || []).filter(this.mineFilter(state));
+      const phys = RynPrivate.call("physics") || [];
+      let version = "?";
+      try {
+        version = GM_info.script.version;
+      } catch (_) {}
+      const lines = [ "Ryn fight export", new Date().toString(), "Ryn " + version + " · ping " + RynPrivate.ping.ms + "ms ±" + RynPrivate.ping.jitter + " · tick " + s.tick, "", "DPS " + s.dps + " · best tick " + s.burst + " · taken (5s) " + s.taken + " · insta kills " + s.instaKills + "/" + s.instaTries + " · heal after hit " + (s.healAvg === null ? "-" : s.healAvg + "ms") + " · shame " + s.shame, "Kills: " + (s.kills.map(k => k.name + " in " + k.ms + "ms").join(", ") || "-"), "Heals: " + (s.heals.map(h => h.ms + "ms/" + h.ticks + "t").join(", ") || "-"), "", "Combat log:" ].concat(log.map(e => this.fmtLog(e)), [ "", "Knockback (server first tick / Ryn / total):" ], phys.map(p => "t" + p.tick + " " + p.name + " " + this.kindName(p.kind) + ": " + p.first + " / " + (p.ryn === null ? "-" : p.ryn) + " / " + p.total));
+      const text = lines.join("\n");
+      if (copy) {
+        try {
+          navigator.clipboard.writeText(text).then(() => this.say("Fight copied"), () => this.say("Could not copy", true));
+        } catch (_) {
+          this.say("Could not copy", true);
+        }
+        return;
+      }
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([ text ], {
+        type: "text/plain"
+      }));
+      a.download = "ryn-fight-" + new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + ".txt";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 3e3);
+      this.say("Saved " + a.download);
     },
     drawOverlay(ctx) {
-      if (!RynPrivate.on || !this.overlay && !this.editMode) return;
+      if (!RynPrivate.on || this.root === null) return;
+      const L = this.layers;
+      const needWorld = L.truth || L.ranges || L.shots;
+      const needMe = L.shame || L.desync || this.open && this.tab === "stats";
+      if (!needWorld && !needMe && !this.editMode) return;
       if (!ctx || typeof ctx.arc !== "function" || typeof ctx.save !== "function") return;
+      const me = needWorld || needMe ? RynPrivate.call("me") : null;
+      if (needMe) this.trackDesync(me);
       const off = RYN._offset;
       ctx.save();
       try {
         ctx.translate(-off.x, -off.y);
         const dash = typeof ctx.setLineDash === "function";
-        if (this.overlay) {
-          const w = RynPrivate.world();
-          if (w !== null) {
-            ctx.lineWidth = 3;
-            if (dash) ctx.setLineDash([ 10, 8 ]);
-            ctx.strokeStyle = "rgba(120, 220, 255, 0.9)";
-            for (const p of w.players) {
-              ctx.beginPath();
-              ctx.arc(p[1], p[2], p[3], 0, Math.PI * 2);
-              ctx.stroke();
-            }
-            ctx.strokeStyle = "rgba(255, 170, 90, 0.9)";
-            for (const a of w.ais) {
-              ctx.beginPath();
-              ctx.arc(a[2], a[3], a[4], 0, Math.PI * 2);
-              ctx.stroke();
-            }
-            if (dash) ctx.setLineDash([]);
-            ctx.font = "bold 15px sans-serif";
-            ctx.textAlign = "center";
-            ctx.fillStyle = "rgba(120, 220, 255, 0.95)";
-            const me = this.lastState && this.lastState.me;
-            const mine = me ? w.players.find(p => p[0] === me.sid) : null;
-            if (mine) ctx.fillText("server tick " + w.tick, mine[1], mine[2] + mine[3] + 62);
-            const king = w.ais.find(a => a[1] === 11);
-            const k = this.lastPanel && this.lastPanel.kings[0];
-            if (king && k) {
-              ctx.fillStyle = "rgba(255, 170, 90, 0.95)";
-              ctx.fillText(RYN_ADMIN_PHASES[k.phase] || k.phase, king[2], king[3] - king[4] - 30);
-            }
-          }
+        const w = needWorld ? RynPrivate.world() : null;
+        if (w !== null) {
+          if (L.ranges) this.drawRanges(ctx, w, me, dash);
+          if (L.shots) this.drawShots(ctx, w);
+          if (L.truth) this.drawTruth(ctx, w, me, dash);
         }
-        if (this.editMode && this.mouse) {
-          const at = this.worldAt(this.mouse.x, this.mouse.y);
-          if (at !== null) {
-            ctx.lineWidth = 3;
-            ctx.strokeStyle = this.editMode === "delete" ? "rgba(217, 163, 171, 0.95)" : "rgba(166, 215, 178, 0.95)";
-            ctx.beginPath();
-            ctx.arc(at.x, at.y, this.editMode === "delete" ? 90 : 45, 0, Math.PI * 2);
-            ctx.stroke();
-          }
+        if (me && me.alive) {
+          if (L.desync && this.desyncNow) this.drawDesync(ctx, me);
+          if (L.shame) this.drawShameMark(ctx, me);
         }
+        if (this.editMode && this.mouse) this.drawEditPreview(ctx);
       } catch (_) {}
+      if (typeof ctx.setLineDash === "function") ctx.setLineDash([]);
       ctx.restore();
+    },
+    drawTruth(ctx, w, me, dash) {
+      ctx.lineWidth = 3;
+      if (dash) ctx.setLineDash([ 10, 8 ]);
+      ctx.strokeStyle = "rgba(120, 220, 255, 0.9)";
+      for (const p of w.players) {
+        ctx.beginPath();
+        ctx.arc(p[1], p[2], p[3], 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = "rgba(255, 170, 90, 0.9)";
+      for (const a of w.ais) {
+        ctx.beginPath();
+        ctx.arc(a[2], a[3], a[4], 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      if (dash) ctx.setLineDash([]);
+      ctx.font = "bold 15px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(120, 220, 255, 0.95)";
+      const mine = me ? w.players.find(p => p[0] === me.sid) : null;
+      if (mine) ctx.fillText("server tick " + w.tick, mine[1], mine[2] + mine[3] + 62);
+      const king = w.ais.find(a => a[1] === 11);
+      const k = this.lastPanel && this.lastPanel.kings[0];
+      if (king && k) {
+        ctx.fillStyle = "rgba(255, 170, 90, 0.95)";
+        ctx.fillText(RYN_ADMIN_PHASES[k.phase] || k.phase, king[2], king[3] - king[4] - 30);
+      }
+      for (const [id, x, y, kind, every, max, alive] of w.spawners || []) {
+        ctx.strokeStyle = "rgba(166, 215, 178, 0.9)";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(x, y, 80, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = "rgba(166, 215, 178, 0.95)";
+        ctx.fillText("#" + id + " " + kind + " " + alive + "/" + max, x, y - 92);
+      }
+    },
+    drawRanges(ctx, w, me, dash) {
+      const c = RynPrivate.catalog();
+      const ranges = c && c.weaponRange || [];
+      for (const d of w.danger || []) {
+        const [, x, y, scale, kind, range, owner] = d;
+        const mine = me && owner === me.sid;
+        if (kind === "spike") {
+          ctx.fillStyle = mine ? "rgba(127, 179, 255, 0.10)" : "rgba(230, 90, 90, 0.16)";
+          ctx.beginPath();
+          ctx.arc(x, y, scale + 35, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.strokeStyle = mine ? "rgba(127, 179, 255, 0.5)" : "rgba(255, 170, 90, 0.6)";
+          ctx.lineWidth = 2;
+          if (dash) ctx.setLineDash([ 4, 10 ]);
+          ctx.beginPath();
+          ctx.arc(x, y, range, 0, Math.PI * 2);
+          ctx.stroke();
+          if (dash) ctx.setLineDash([]);
+        }
+      }
+      for (const p of w.players) {
+        const r = ranges[p[7]] || 0;
+        if (!r) continue;
+        const mine = me && p[0] === me.sid;
+        ctx.strokeStyle = mine ? "rgba(127, 179, 255, 0.85)" : "rgba(230, 120, 120, 0.8)";
+        ctx.lineWidth = 2;
+        if (dash) ctx.setLineDash([ 6, 6 ]);
+        ctx.beginPath();
+        ctx.arc(p[1], p[2], r + 35, 0, Math.PI * 2);
+        ctx.stroke();
+        if (dash) ctx.setLineDash([]);
+      }
+    },
+    drawShots(ctx, w) {
+      const now = performance.now();
+      const trails = this.trails || (this.trails = new Map);
+      for (const [sid, x, y] of w.shots || []) {
+        let t = trails.get(sid);
+        const last = t && t.pts[t.pts.length - 1];
+        if (!t || last && Math.hypot(x - last.x, y - last.y) > 400) {
+          t = {
+            pts: [],
+            seen: now
+          };
+          trails.set(sid, t);
+        }
+        if (!last || last.x !== x || last.y !== y) t.pts.push({
+          x: x,
+          y: y,
+          at: now
+        });
+        t.seen = now;
+      }
+      ctx.lineWidth = 3;
+      for (const [sid, t] of trails) {
+        t.pts = t.pts.filter(p => now - p.at < 900);
+        if (!t.pts.length) {
+          if (now - t.seen > 900) trails.delete(sid);
+          continue;
+        }
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.75)";
+        ctx.beginPath();
+        t.pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+        ctx.stroke();
+        const head = t.pts[t.pts.length - 1];
+        ctx.fillStyle = "rgba(255, 230, 120, 0.95)";
+        ctx.beginPath();
+        ctx.arc(head.x, head.y, 7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    },
+    drawDesync(ctx, me) {
+      const d = this.desyncNow;
+      const color = d.pred < 25 ? "rgba(166, 215, 178, 0.95)" : d.pred < 60 ? "rgba(240, 210, 110, 0.95)" : "rgba(230, 100, 100, 0.95)";
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(me.x, me.y);
+      ctx.lineTo(d.fx, d.fy);
+      ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(d.fx, d.fy, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.font = "bold 14px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(Math.round(d.pred) + "px", me.x, me.y - 70);
+    },
+    drawShameMark(ctx, me) {
+      const n = me.shame || 0;
+      const clown = me.shameTimer > 0;
+      if (!clown && n < 3) return;
+      ctx.font = "bold 16px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillStyle = clown || n >= 6 ? "rgba(230, 100, 100, 0.95)" : "rgba(240, 210, 110, 0.95)";
+      ctx.fillText(clown ? "CLOWN " + Math.ceil(me.shameTimer / 1e3) + "s" : "shame " + n + "/8", me.x, me.y + 115);
+    },
+    benchTests() {
+      return [ {
+        id: "insta",
+        name: "Anti-insta ×10",
+        high: true
+      }, {
+        id: "trap",
+        name: "Trapped + insta ×5",
+        high: true
+      }, {
+        id: "surround",
+        name: "Surrounded 20s",
+        high: false
+      }, {
+        id: "kill",
+        name: "Kill a trapped enemy",
+        high: false
+      }, {
+        id: "duel",
+        name: "Duel 30s",
+        high: true
+      } ];
+    },
+    benchName(id) {
+      const t = this.benchTests().find(x => x.id === id);
+      return t ? t.name : id;
+    },
+    buildBench(body) {
+      this.section(body, "Test bench");
+      this.benchSelect = this.select(this.benchTests().map(t => [ t.id, t.name ]), "insta");
+      this.row(body, "", this.benchSelect, this.button("Run", () => this.benchRun([ this.benchSelect.value ]), "ra-go"));
+      this.row(body, "", this.button("Run all", () => this.benchRun(this.benchTests().map(t => t.id), true), "ra-go"), this.button("Stop", () => {
+        this.benchStop = true;
+      }, "ra-del"));
+      this.benchSetting = this.select([]);
+      try {
+        const keys = Object.keys(Settings_default).filter(k => typeof Settings_default[k] === "boolean" && /heal|insta|anti|soldier|sync|spike|trap|push|break|plac|gear|velocity|dash|turret|safe|predict|retrap|emp|tail|hat|kb/i.test(k) && !/^_bot|^_chat|render|hitbox|color|bar|ring|frozen|migrated/i.test(k));
+        for (const k of keys.sort()) this.option(this.benchSetting, k, k.replace(/^_/, ""));
+      } catch (_) {}
+      this.row(body, "A/B", this.benchSetting, this.button("Compare", () => this.benchAB(), "ra-go"));
+      this.benchStatus = this.el("div", "ra-hint", "");
+      body.appendChild(this.benchStatus);
+      this.benchLines = this.el("div", "ra-lines");
+      body.appendChild(this.benchLines);
+      body.appendChild(this.el("div", "ra-hint", "Tests your Ryn as it is set now; you can just stand there. A hit that would kill you counts as a death and heals you. A/B runs the test, flips the setting, runs it again and puts it back. Run all saves a report and compares it with the one before."));
+      this.drawBenchHistory();
+    },
+    benchLine(text, cls) {
+      if (!this.benchLines) return;
+      this.benchLines.prepend(this.el("div", cls || "", text));
+      while (this.benchLines.childNodes.length > 40) this.benchLines.lastChild.remove();
+    },
+    async benchWait(ms) {
+      const end = Date.now() + ms;
+      while (Date.now() < end) {
+        if (this.benchStop) throw new Error("stopped");
+        const st = RynPrivate.state();
+        if (!st || !st.me || !st.me.alive) throw new Error("you left the game");
+        await new Promise(r => setTimeout(r, Math.min(100, end - Date.now())));
+      }
+    },
+    benchCmd(list) {
+      for (const c of list) RynPrivate.command(c);
+    },
+    benchTick() {
+      const p = RynPrivate.call("panel");
+      return p ? p.time.tick : 0;
+    },
+    async benchSetup() {
+      const st = RynPrivate.state();
+      const cmds = [];
+      if (st.me.x < 0) cmds.push("!tp 7200 3000");
+      if (st.me.god) cmds.push("!god");
+      cmds.push("!survival stop", "!dummy clear", "!killmobs 2500", "!clearnear 800", "!time play", "!time speed 1", "!heal");
+      this.benchCmd(cmds);
+      RynPrivate.call("benchGuard", true);
+      await this.benchWait(500);
+      return this.benchTick();
+    },
+    async benchOne(id) {
+      const me = RynPrivate.state().me.sid;
+      const t0 = await this.benchSetup();
+      const events = () => (RynPrivate.call("benchEvents", t0) || []).filter(e => e.sid === me);
+      const deathsIn = (a, b) => events().filter(e => e.kind === "death" && e.tick >= a && e.tick <= b).length;
+      const status = text => {
+        if (this.benchStatus) this.benchStatus.textContent = text;
+      };
+      const sumSince = (a, col) => (RynPrivate.call("series") || []).filter(r => r[0] >= a).reduce((s, r) => s + r[col], 0);
+      status("Running " + this.benchName(id) + "…");
+      if (id === "insta") {
+        this.benchCmd([ "!dummy insta 1 p=5 s=15 tier=ruby hat=7 gap=18" ]);
+        const end = Date.now() + 12e4;
+        const instas = () => events().filter(e => e.kind === "insta");
+        while (Date.now() < end && instas().length < 10) {
+          await this.benchWait(300);
+          status("Anti-insta: " + instas().length + "/10");
+        }
+        await this.benchWait(600);
+        const list = instas().slice(0, 10);
+        const failed = list.filter(e => deathsIn(e.tick, e.tick + 3) > 0).length;
+        const ok = list.length - failed;
+        return {
+          value: list.length ? ok / list.length : 0,
+          text: ok + "/" + list.length + " instas survived"
+        };
+      }
+      if (id === "trap") {
+        let ok = 0;
+        for (let round = 1; round <= 5; round++) {
+          status("Trapped + insta: round " + round + "/5");
+          this.benchCmd([ "!dummy clear", "!clearnear 450", "!heal", "!scenario metrapped" ]);
+          const a = this.benchTick();
+          await this.benchWait(5e3);
+          if (deathsIn(a, this.benchTick()) === 0) ok++;
+        }
+        return {
+          value: ok / 5,
+          text: ok + "/5 rounds survived"
+        };
+      }
+      if (id === "surround") {
+        this.benchCmd([ "!scenario surrounded" ]);
+        const a = this.benchTick();
+        for (let s = 20; s > 0; s--) {
+          status("Surrounded: " + s + "s");
+          await this.benchWait(1e3);
+        }
+        const deaths = deathsIn(a, this.benchTick());
+        const taken = sumSince(a, 4);
+        return {
+          value: deaths * 1e4 + taken,
+          text: deaths + " deaths, " + taken + " damage taken"
+        };
+      }
+      if (id === "kill") {
+        this.benchCmd([ "!scenario trapped" ]);
+        await this.benchWait(300);
+        const dummy = RynPrivate.state().players.find(p => p.dummy);
+        if (!dummy) return {
+          value: 99999,
+          text: "no enemy"
+        };
+        const a = this.benchTick();
+        const start = Date.now();
+        let ms = null;
+        while (Date.now() - start < 25e3) {
+          await this.benchWait(200);
+          status("Kill a trapped enemy: " + ((Date.now() - start) / 1e3).toFixed(0) + "s");
+          if ((RynPrivate.call("log", 200) || []).some(e => !e.ai && e.to === dummy.sid && e.hp <= 0 && e.tick >= a)) {
+            ms = Date.now() - start;
+            break;
+          }
+        }
+        return {
+          value: ms === null ? 99999 : ms,
+          text: ms === null ? "no kill in 25s" : "killed in " + (ms / 1e3).toFixed(1) + "s"
+        };
+      }
+      if (id === "duel") {
+        this.benchCmd([ "!scenario duel" ]);
+        const a = this.benchTick();
+        for (let s = 30; s > 0; s--) {
+          status("Duel: " + s + "s");
+          await this.benchWait(1e3);
+        }
+        const log = (RynPrivate.call("log", 400) || []).filter(e => e.tick >= a && !e.ai);
+        const kills = log.filter(e => e.from === me && !e.fromAi && e.to !== me && e.hp <= 0 && e.amount < 0).length;
+        const deaths = deathsIn(a, this.benchTick());
+        return {
+          value: kills - deaths,
+          text: kills + " kills, " + deaths + " deaths, dealt " + sumSince(a, 3) + ", took " + sumSince(a, 4)
+        };
+      }
+      return {
+        value: 0,
+        text: "unknown test"
+      };
+    },
+    async benchCleanup() {
+      RynPrivate.call("benchGuard", false);
+      this.benchCmd([ "!dummy clear", "!clearnear 800", "!heal" ]);
+    },
+    async benchRun(ids, report) {
+      if (this.benchRunning) {
+        this.say("A test is already running", true);
+        return null;
+      }
+      const st = RynPrivate.state();
+      if (!st || !st.me || !st.me.alive) {
+        this.say("Spawn into the game first (press Play).", true);
+        return null;
+      }
+      this.benchRunning = true;
+      this.benchStop = false;
+      const results = {};
+      try {
+        for (const id of ids) {
+          results[id] = await this.benchOne(id);
+          this.benchLine(this.benchName(id) + ": " + results[id].text);
+        }
+      } catch (e) {
+        this.benchLine("Stopped: " + (e && e.message || e), "ra-hurt");
+      } finally {
+        await this.benchCleanup();
+        this.benchRunning = false;
+        if (this.benchStatus) this.benchStatus.textContent = this.benchStop ? "Stopped" : "Done";
+      }
+      if (report && Object.keys(results).length === ids.length) {
+        let version = "?";
+        try {
+          version = GM_info.script.version;
+        } catch (_) {}
+        const runs = this.store("_ryn_bench_runs");
+        const all = Array.isArray(runs) ? runs : [];
+        all.push({
+          at: Date.now(),
+          version: version,
+          ping: RynPrivate.ping.ms,
+          results: results
+        });
+        while (all.length > 10) all.shift();
+        this.store("_ryn_bench_runs", all);
+        this.drawBenchHistory();
+      }
+      return results;
+    },
+    async benchAB() {
+      const key = this.benchSetting && this.benchSetting.value;
+      if (!key) {
+        this.say("Pick a setting to compare", true);
+        return;
+      }
+      const id = this.benchSelect.value;
+      const before = Settings_default[key];
+      const label = key.replace(/^_/, "");
+      this.benchLine("A/B " + label + " on " + this.benchName(id));
+      try {
+        const a = await this.benchRun([ id ]);
+        if (!a || !a[id] || this.benchStop) return;
+        Settings_default[key] = !before;
+        const b = await this.benchRun([ id ]);
+        if (!b || !b[id]) return;
+        this.benchLine("A/B " + label + ": " + (before ? "on" : "off") + " → " + a[id].text + " | " + (before ? "off" : "on") + " → " + b[id].text, "ra-heal");
+      } finally {
+        Settings_default[key] = before;
+      }
+    },
+    drawBenchHistory() {
+      const runs = this.store("_ryn_bench_runs");
+      if (!Array.isArray(runs) || !runs.length || !this.benchLines) return;
+      const last = runs[runs.length - 1];
+      const prev = runs[runs.length - 2];
+      const tests = this.benchTests();
+      const lines = [];
+      for (const t of tests) {
+        const r = last.results[t.id];
+        if (!r) continue;
+        let mark = "";
+        const p = prev && prev.results[t.id];
+        if (p) mark = r.value === p.value ? " =" : (r.value > p.value) === t.high ? " ▲ better" : " ▼ worse";
+        lines.push(t.name + ": " + r.text + mark);
+      }
+      this.benchLine("Report " + new Date(last.at).toLocaleString() + " · Ryn " + last.version + (prev ? " (vs " + prev.version + ")" : "") + "\n" + lines.join("\n"));
+    },
+    buildReplay(body) {
+      this.section(body, "Replay");
+      this.replayFocus = this.select([ [ "me", "Follow me" ] ], "me");
+      this.replayZoom = this.select([ [ "0.6", "×0.6" ], [ "1", "×1" ], [ "1.5", "×1.5" ], [ "2", "×2" ] ], "1");
+      this.row(body, "", this.button("Grab last 30s", () => this.grabReplay(), "ra-go"), this.replayFocus, this.replayZoom);
+      this.replayCanvas = this.el("canvas", "ra-canvas");
+      this.replayCanvas.width = 576;
+      this.replayCanvas.height = 400;
+      body.appendChild(this.replayCanvas);
+      this.replaySlider = this.el("input");
+      this.replaySlider.type = "range";
+      this.replaySlider.min = "0";
+      this.replaySlider.max = "0";
+      this.replaySlider.value = "0";
+      this.replaySlider.addEventListener("input", () => this.drawReplay());
+      body.appendChild(this.replaySlider);
+      this.replayPlay = this.button("Play", () => this.toggleReplay());
+      this.replaySpeed = this.select([ [ "0.25", "×0.25" ], [ "0.5", "×0.5" ], [ "1", "×1" ] ], "1");
+      const step = n => () => {
+        this.stopReplay();
+        this.replaySlider.value = String(Math.max(0, Math.min(Number(this.replaySlider.max), Number(this.replaySlider.value) + n)));
+        this.drawReplay();
+      };
+      this.row(body, "", this.button("|<", step(-1e4)), this.button("<", step(-1)), this.replayPlay, this.button(">", step(1)), this.button(">|", step(1e4)), this.replaySpeed, this.button("Big", () => {
+        this.root.classList.toggle("ra-wide");
+        this.place(this.x, this.y);
+      }));
+      for (const s of [ this.replayFocus, this.replayZoom ]) s.addEventListener("change", () => this.drawReplay());
+      this.replayInfo = this.el("div", "ra-hint", "Grab to see the last 30 seconds tick by tick.");
+      body.appendChild(this.replayInfo);
+      this.replayHits = this.el("div", "ra-lines");
+      body.appendChild(this.replayHits);
+    },
+    grabReplay() {
+      const r = RynPrivate.call("replay");
+      if (!r || !r.frames.length) {
+        this.say("Nothing recorded yet. Press Play first.", true);
+        return;
+      }
+      this.stopReplay();
+      this.replay = {
+        rate: r.rate,
+        base: r.base,
+        frames: r.frames,
+        k: -1,
+        objs: null
+      };
+      const names = new Map;
+      for (const f of r.frames) for (const p of f.players) names.set(p[0], p[10] + (p[11] ? " (dummy)" : ""));
+      const current = this.replayFocus.value;
+      this.replayFocus.innerHTML = "";
+      this.option(this.replayFocus, "me", "Follow me");
+      for (const [sid, name] of names) this.option(this.replayFocus, sid, "Follow " + sid + " · " + name);
+      this.replayFocus.value = [ ...this.replayFocus.options ].some(o => o.value === current) ? current : "me";
+      this.replaySlider.max = String(r.frames.length - 1);
+      this.replaySlider.value = String(r.frames.length - 1);
+      this.drawReplay();
+      this.say("Grabbed " + (r.frames.length / r.rate).toFixed(1) + "s");
+    },
+    replayObjects(k) {
+      const R = this.replay;
+      if (!R.objs || k < R.k) {
+        R.objs = new Map(R.base.map(o => [ o[0], o ]));
+        R.k = -1;
+      }
+      for (let i = R.k + 1; i <= k; i++) {
+        const f = R.frames[i];
+        for (const o of f.add) R.objs.set(o[0], o);
+        for (const sid of f.del) R.objs.delete(sid);
+      }
+      R.k = k;
+      return R.objs;
+    },
+    toggleReplay() {
+      if (this.replayTimer) {
+        this.stopReplay();
+        return;
+      }
+      if (!this.replay) return;
+      if (Number(this.replaySlider.value) >= Number(this.replaySlider.max)) this.replaySlider.value = "0";
+      this.replayPlay.textContent = "Pause";
+      const tick = () => {
+        const k = Number(this.replaySlider.value) + 1;
+        if (k > Number(this.replaySlider.max)) {
+          this.stopReplay();
+          return;
+        }
+        this.replaySlider.value = String(k);
+        this.drawReplay();
+        this.replayTimer = setTimeout(tick, 1e3 / this.replay.rate / Number(this.replaySpeed.value));
+      };
+      this.replayTimer = setTimeout(tick, 0);
+    },
+    stopReplay() {
+      clearTimeout(this.replayTimer);
+      this.replayTimer = null;
+      if (this.replayPlay) this.replayPlay.textContent = "Play";
+    },
+    drawReplay() {
+      const R = this.replay;
+      const cv = this.replayCanvas;
+      if (!R || !cv) return;
+      const k = Math.max(0, Math.min(R.frames.length - 1, Number(this.replaySlider.value) || 0));
+      const f = R.frames[k];
+      const objs = this.replayObjects(k);
+      const ctx = cv.getContext("2d");
+      const W = cv.width;
+      const H = cv.height;
+      const focusSid = this.replayFocus.value === "me" ? this.lastState && this.lastState.me ? this.lastState.me.sid : -1 : Number(this.replayFocus.value);
+      const focus = f.players.find(p => p[0] === focusSid) || f.players[0];
+      if (focus) this.replayCenter = {
+        x: focus[1],
+        y: focus[2]
+      };
+      const c = this.replayCenter || {
+        x: 7200,
+        y: 7200
+      };
+      const s = W / (1800 / (Number(this.replayZoom.value) || 1));
+      const X = x => (x - c.x) * s + W / 2;
+      const Y = y => (y - c.y) * s + H / 2;
+      const visible = (x, y, r) => Math.abs(X(x) - W / 2) <= W / 2 + r * s && Math.abs(Y(y) - H / 2) <= H / 2 + r * s;
+      ctx.fillStyle = "#24331f";
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "#2c4a63";
+      ctx.fillRect(X(0), Y(7200 - 362), W * 99, 724 * s);
+      ctx.fillStyle = "rgba(230, 238, 242, 0.12)";
+      ctx.fillRect(0, 0, W, Math.max(0, Y(2400)));
+      ctx.fillStyle = "#111";
+      if (X(0) > 0) ctx.fillRect(0, 0, X(0), H);
+      const natural = [ "#3f7a35", "#2f5f27", "#7d7d7d", "#c9a536", "#4f8f3f" ];
+      for (const o of objs.values()) {
+        const [, x, y, scale, type, id, owner] = o;
+        if (!visible(x, y, scale)) continue;
+        ctx.globalAlpha = type === 0 && id < 0 ? .55 : .95;
+        ctx.fillStyle = id >= 0 ? owner === focusSid ? "#6f9fe8" : owner === -1 ? "#a9a9a9" : "#d97b7b" : natural[type] || "#777";
+        ctx.beginPath();
+        ctx.arc(X(x), Y(y), Math.max(2, scale * s), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      const bar = (x, y, r, hp, max) => {
+        const w = Math.max(24, r * 2 * s);
+        ctx.fillStyle = "rgba(0,0,0,0.6)";
+        ctx.fillRect(X(x) - w / 2, Y(y) + r * s + 4, w, 5);
+        ctx.fillStyle = hp / max < .4 ? "#d9a3ab" : "#a6d7b2";
+        ctx.fillRect(X(x) - w / 2, Y(y) + r * s + 4, w * Math.max(0, hp / max), 5);
+      };
+      for (const a of f.ais) {
+        const [, index, x, y, , hp, max, scale] = a;
+        if (!visible(x, y, scale)) continue;
+        ctx.fillStyle = index === 11 ? "#d9534f" : "#e89a4c";
+        ctx.beginPath();
+        ctx.arc(X(x), Y(y), Math.max(4, scale * s), 0, Math.PI * 2);
+        ctx.fill();
+        bar(x, y, scale, hp, max);
+      }
+      ctx.fillStyle = "#fff4b0";
+      for (const sh of f.shots) {
+        ctx.beginPath();
+        ctx.arc(X(sh[1]), Y(sh[2]), 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      const cat = RynPrivate.catalog();
+      ctx.font = "15px sans-serif";
+      ctx.textAlign = "center";
+      for (const p of f.players) {
+        const [sid, x, y, dir, hp, max, weapon, hat, , scale, name, dummy] = p;
+        if (!visible(x, y, scale)) continue;
+        ctx.fillStyle = sid === focusSid ? "#8e76ce" : dummy ? "#d9a3ab" : "#e8d36a";
+        ctx.beginPath();
+        ctx.arc(X(x), Y(y), Math.max(5, scale * s), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(X(x), Y(y));
+        ctx.lineTo(X(x + (scale + 25) * Math.cos(dir)), Y(y + (scale + 25) * Math.sin(dir)));
+        ctx.stroke();
+        bar(x, y, scale, hp, max);
+        ctx.fillStyle = "#f3f2f7";
+        ctx.fillText(name, X(x), Y(y) - scale * s - 8);
+        const hatName = hat && cat ? (cat.hats.find(h => h.id === hat) || {}).name : "";
+        ctx.fillStyle = "#aca9ba";
+        ctx.fillText(this.weaponName(weapon) + (hatName ? " · " + hatName : ""), X(x), Y(y) + scale * s + 24);
+      }
+      const hitLines = [];
+      ctx.lineWidth = 3;
+      for (const [from, fromName, to, toName, amount, kind, ai] of f.hits) {
+        const t = ai ? f.ais.find(a => a[0] === to) : f.players.find(p => p[0] === to);
+        if (t) {
+          const tx = ai ? t[2] : t[1];
+          const ty = ai ? t[3] : t[2];
+          const ts = ai ? t[7] : t[9];
+          ctx.strokeStyle = amount < 0 ? "#ff5a5a" : "#a6d7b2";
+          ctx.beginPath();
+          ctx.arc(X(tx), Y(ty), ts * s + 6, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = amount < 0 ? "#ff8a8a" : "#a6d7b2";
+          ctx.fillText((amount > 0 ? "+" : "") + amount, X(tx), Y(ty) - ts * s - 26);
+        }
+        hitLines.push((fromName || (kind ? this.kindName(kind) : "world")) + " → " + toName + "  " + amount + (kind && fromName ? " · " + this.kindName(kind) : ""));
+      }
+      const last = R.frames[R.frames.length - 1];
+      this.replayInfo.textContent = "Tick " + f.tick + " · " + ((f.at - last.at) / 1e3).toFixed(2) + "s · frame " + (k + 1) + "/" + R.frames.length;
+      this.replayHits.innerHTML = "";
+      for (const l of hitLines) this.replayHits.appendChild(this.el("div", "ra-hurt", l));
+    },
+    buildPackets(body) {
+      this.section(body, "Packets");
+      this.packets = [];
+      this.hideSpam = true;
+      this.row(body, "", this.toggleButton("Record", () => !!this.tapOn, v => {
+        this.tapOn = v;
+        this.installTap();
+      }), this.toggleButton("Hide spam", () => this.hideSpam, v => {
+        this.hideSpam = v;
+        this.drawPackets();
+      }), this.button("Clear", () => {
+        this.packets = [];
+        this.drawPackets();
+      }));
+      this.packetFilter = this.el("input");
+      this.packetFilter.type = "text";
+      this.packetFilter.placeholder = "Filter: code or name";
+      this.packetFilter.style.flex = "1";
+      this.packetFilter.addEventListener("input", () => this.drawPackets());
+      this.row(body, "", this.packetFilter);
+      this.packetRate = this.el("div", "ra-hint", "");
+      body.appendChild(this.packetRate);
+      this.packetLines = this.el("div", "ra-lines");
+      this.packetLines.style.maxHeight = "260px";
+      body.appendChild(this.packetLines);
+      body.appendChild(this.el("div", "ra-hint", "↓ the server to you, ↑ you to the server. Hide spam leaves out what comes every tick (a, I, H, 0, 7, G and your D)."));
+    },
+    installTap() {
+      const sock = RynPrivate.ownerSocket;
+      const conn = sock && sock._conn;
+      if (this.tapConn && this.tapConn !== conn) this.tapConn.rynTap = null;
+      this.tapConn = conn || null;
+      if (!conn) return;
+      conn.rynTap = this.tapOn ? (dir, code, data) => {
+        this.packets.push([ performance.now(), dir, code, data ]);
+        if (this.packets.length > 1e3) this.packets.splice(0, 250);
+      } : null;
+    },
+    drawPackets() {
+      if (!this.packetLines) return;
+      const cat = RynPrivate.catalog();
+      const names = cat && cat.packets || {
+        in: {},
+        out: {}
+      };
+      const spam = {
+        1: new Set([ "a", "I", "H", "0", "7", "G" ]),
+        0: new Set([ "0", "D" ])
+      };
+      const q = (this.packetFilter.value || "").trim().toLowerCase();
+      const now = performance.now();
+      const counts = {};
+      for (const [t, dir, code] of this.packets) if (now - t <= 1e3) counts[(dir ? "↓" : "↑") + code] = (counts[(dir ? "↓" : "↑") + code] || 0) + 1;
+      this.packetRate.textContent = this.tapOn ? "Last second: " + (Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, n]) => k + " " + n).join(", ") || "nothing") : "Press Record to start.";
+      const shown = [];
+      for (let i = this.packets.length - 1; i >= 0 && shown.length < 80; i--) {
+        const [t, dir, code, data] = this.packets[i];
+        if (this.hideSpam && spam[dir].has(code)) continue;
+        const name = (dir ? names.in : names.out)[code] || "";
+        if (q && code.toLowerCase() !== q && !name.toLowerCase().includes(q)) continue;
+        let text = "";
+        try {
+          text = JSON.stringify(data);
+        } catch (_) {}
+        if (text.length > 140) text = text.slice(0, 140) + "…";
+        shown.push(((t - this.packets[0][0]) / 1e3).toFixed(3) + " " + (dir ? "↓ " : "↑ ") + code + " " + name + " " + text);
+      }
+      this.packetLines.innerHTML = "";
+      for (const l of shown) this.packetLines.appendChild(this.el("div", "", l));
+    },
+    startPingWave() {
+      clearInterval(this.pingWaveTimer);
+      this.pingWaveTimer = null;
+      const w = this.pingWave;
+      if (!w || !w.on) return;
+      const jump = () => {
+        const lo = Math.min(w.min, w.max);
+        const hi = Math.max(w.min, w.max);
+        RynPrivate.setPing(Math.round(lo + Math.random() * (hi - lo)), RynPrivate.ping.jitter);
+      };
+      jump();
+      this.pingWaveTimer = setInterval(jump, Math.max(1, w.every) * 1e3);
     },
     buildTarget(body) {
       this.section(body, "Target");
@@ -10290,6 +11967,32 @@ module.exports.inSecretPool = function (config, x, y, r) {
       this.pingNow = this.el("span", "ra-hint", "");
       this.row(body, "ms / ±", ms, jitter, this.button("Apply", () => this.done("!ping " + (Number(ms.value) || 0) + " " + (Number(jitter.value) || 0)), "ra-go"), this.button("Off", () => this.done("!ping 0")));
       body.appendChild(this.pingNow);
+      const w = this.pingWave;
+      const lo = this.number(w.min, 10, 0);
+      const hi = this.number(w.max, 10, 0);
+      const every = this.number(w.every, 1, 1);
+      lo.style.width = hi.style.width = every.style.width = "58px";
+      lo.title = "Lowest ping (ms)";
+      hi.title = "Highest ping (ms)";
+      every.title = "Change every (seconds)";
+      const save = () => {
+        this.pingWave = {
+          on: !!this.pingWave.on,
+          min: Math.max(0, Number(lo.value) || 0),
+          max: Math.max(0, Number(hi.value) || 0),
+          every: Math.max(1, Number(every.value) || 5)
+        };
+        this.store("_ryn_ping_wave", this.pingWave);
+        this.startPingWave();
+      };
+      for (const i of [ lo, hi, every ]) i.addEventListener("change", save);
+      this.row(body, "Changing", lo, hi, every);
+      this.row(body, "", this.toggleButton("Changing ping", () => !!this.pingWave.on, v => {
+        if (v) this.pingBase = Object.assign({}, RynPrivate.ping); else if (this.pingBase) RynPrivate.setPing(this.pingBase.ms, this.pingBase.jitter);
+        this.pingWave.on = v;
+        save();
+      }));
+      body.appendChild(this.el("div", "ra-hint", "Lowest ms, highest ms, every seconds: the ping jumps to a random value in between, so you get used to lag that moves. Turning it off puts your ping back."));
     },
     buildCustom(body) {
       this.section(body, "My buttons");
@@ -10382,6 +12085,12 @@ module.exports.inSecretPool = function (config, x, y, r) {
       if (e.code === "Escape" && this.editMode) {
         this.setEdit("");
         this.say("Editing off");
+        return;
+      }
+      if (this.editMode && (e.ctrlKey || e.metaKey) && e.code === "KeyZ") {
+        e.preventDefault();
+        e.stopPropagation();
+        this.undo();
         return;
       }
       if (!this.custom.length || e.repeat) return;

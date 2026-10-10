@@ -144,7 +144,13 @@ ${modules}
             hats: pick(store.hats),
             accessories: pick(store.accessories),
             weapons: items.weapons.map(x => ({ id: x.id, name: x.name, type: x.type })),
-            items: items.list.map(x => ({ id: x.id, name: x.name, consume: !!x.consume }))
+            items: items.list.map(x => ({ id: x.id, name: x.name, consume: !!x.consume, scale: x.scale })),
+            weaponRange: items.weapons.map(x => x.range || 0),
+            packets: (() => {
+              const codes = run("src/utils.js").PACKETCODE;
+              const flip = o => Object.fromEntries(Object.entries(o).map(([name, code]) => [code, name]));
+              return { in: flip(codes.RECEIVE), out: flip(codes.SEND) };
+            })()
           };
         }
       };

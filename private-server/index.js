@@ -114,6 +114,9 @@ const ryn = require('./src/ryn.js')({
 	get gameObjects() {
 		return gameObjects
 	},
+	get projectiles() {
+		return projectiles
+	},
 	get objectManager() {
 		return objectManager
 	},
@@ -148,6 +151,8 @@ const ryn = require('./src/ryn.js')({
 var connection = {}
 server.send = function (id, type, data = []) {
 	if (connection[id]) {
+		// Ryn's packet inspector
+		if (connection[id].rynTap) connection[id].rynTap(1, UTILS.OldToNew(type, 'RECEIVE'), data)
 		connection[id].send(
 			new Uint8Array(
 				Array.from(msgpack.encode([UTILS.OldToNew(type, 'RECEIVE'), data]))
@@ -220,7 +225,7 @@ server.addListener('connection', function (conn) {
 	conn.rynState = function () {
 		const me = findPlayerByID(conn.id)
 		return {
-			me: me ? { sid: me.sid, name: me.name, alive: me.alive, admin: !!me.admin, god: !!me.rynGod, x: me.x, y: me.y, weapons: (me.weapons || []).slice(), xp: (me.weapons || []).map(w => (me.weaponXP && me.weaponXP[w]) || 0), hat: me.skinIndex || 0, acc: me.tailIndex || 0 } : null,
+			me: me ? { sid: me.sid, name: me.name, alive: me.alive, admin: !!me.admin, god: !!me.rynGod, x: me.x, y: me.y, weapons: (me.weapons || []).slice(), xp: (me.weapons || []).map(w => (me.weaponXP && me.weaponXP[w]) || 0), hat: me.skinIndex || 0, acc: me.tailIndex || 0, shame: me.shameCount || 0, shameTimer: Math.max(0, Math.round(me.shameTimer || 0)) } : null,
 			players: players.map(p => ({ sid: p.sid, name: p.name, alive: p.alive, god: !!p.rynGod, health: Math.round(p.health), maxHealth: p.maxHealth, age: p.age, dummy: !!p.rynDummy, x: Math.round(p.x), y: Math.round(p.y) })),
 			world: { mobs: !!config.spawnMobs, hostile: !!config.spawnHostile, bosses: !!config.spawnBosses },
 			mode: MODE
@@ -237,6 +242,7 @@ server.addListener('connection', function (conn) {
 			parsed = msgpack.decode(data)
 			type = UTILS.NewToOld(parsed[0], 'SEND')
 			data = parsed[1]
+			if (conn.rynTap) conn.rynTap(0, parsed[0], data)
 		} catch (e) {
 			error = true
 			conn.close()
@@ -809,13 +815,36 @@ server.addListener('connection', function (conn) {
 	conn.on('message', onMessage)
 	// the rest of what Ryn's panel reads and does without chat
 	conn.rynWorld = function () {
-		return ryn.world()
+		return ryn.world(findPlayerByID(conn.id))
 	}
 	conn.rynCall = function (name, arg) {
 		const me = findPlayerByID(conn.id)
+		const alive = me && me.alive ? me : null
 		switch (name) {
+			case 'me':
+				return me ? { sid: me.sid, alive: me.alive, x: me.x, y: me.y, health: me.health, shame: me.shameCount || 0, shameTimer: Math.max(0, Math.round(me.shameTimer || 0)) } : null
 			case 'panel':
-				return ryn.panelState()
+				return ryn.panelState(me)
+			case 'series':
+				return ryn.series(me)
+			case 'replay':
+				return ryn.replay()
+			case 'benchGuard':
+				return ryn.benchGuard(me, !!arg)
+			case 'benchEvents':
+				return ryn.benchEvents(arg)
+			case 'placeMany':
+				return alive ? ryn.placeMany(me, arg.what, arg.owner, arg.points) : null
+			case 'removeAt':
+				return ryn.removeAt(arg.x, arg.y, arg.r)
+			case 'removeSids':
+				return ryn.removeSids(arg)
+			case 'restoreObjs':
+				return ryn.restoreObjs(arg)
+			case 'copyBase':
+				return alive ? ryn.copyBase(me, arg) : null
+			case 'pasteBase':
+				return alive ? ryn.pasteBase(me, arg.stamp, arg.rotate) : null
 			case 'stats':
 				return ryn.stats(me)
 			case 'log':
@@ -1017,6 +1046,7 @@ function gameTick() {
 	for (let i = 0; i < projectiles.length; i++) {
 		projectiles[i].update(delta)
 	}
+	ryn.endTick()
 	}
 
 	for (let j = 0; j < players.length; j++) {

@@ -310,3 +310,4 @@ module.exports.inSecretPool = function (config, x, y, r) {
 	if (w && x <= w.x + r && x >= w.x - 900 && mathABS(y - w.y) <= w.half - r) return true
 	return false
 }
+module.exports.PACKETCODE = PACKETCODE

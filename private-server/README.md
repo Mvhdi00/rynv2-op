@@ -86,6 +86,11 @@ The page owner is admin. `!help` lists everything. Added by Ryn:
 | `!scenario <name>` | `trapped push metrapped surrounded duel crab`, built around you |
 | `!rules dmg\|gather\|sandbox\|tick <v>` | player damage and gather multipliers, free building, ticks per second |
 | `!king respawn\|attack\|hp <n>\|speed <x>\|damage <x>` | the Crab King |
+| `!king only slam\|charge\|ring\|dive\|all`, `!king stats`, `!king resetstats` | practise one attack; dodges and kill times |
+| `!survival start\|stop` | waves of dummies and animals until you die |
+| `!spawner <animal> [every s] [max]`, `!spawner clear\|remove <id>` | a point that keeps spawning animals |
+| `!map empty\|forest\|rocks\|duel\|reset` | reshape the land around you, or put the original map back |
+| `!killmobs [r]` | send the animals near you away |
 
 These live in `src/ryn.js`, which also keeps a combat log (every health change with
 its tick and source), fight stats (DPS, best tick, damage taken, insta kills, time
@@ -93,6 +98,14 @@ from a hit to your heal, time to kill) and knockback probes: for every hit on a
 player it records how far the next server ticks moved them, next to Ryn's model
 (push x 111 ms for the first tick). Dummies are real `Player`s with no connection;
 the game tick moves them and skips sending to them.
+
+`ryn.endTick()` runs after every server tick and keeps the last 30 seconds for the
+replay (players, animals, shots, hits, and buildings as changes), each real
+player's health and damage per tick for the graph, and the test bench's events:
+a guarded player is left on 1 health instead of dying and the server records a
+death; insta dummies record each insta they start. The Crab King reports every
+attack (`config.rynKingAttack`) with the player it was aimed at and who it hit.
+`conn.rynTap` sees every packet both ways for the packet inspector.
 
 Also fixed: `!mobs off`, `!hostile off` and `!bosses off` sent packet `'11'` per
 animal, which is the game's "you died" packet; removed animals now just drop out
@@ -108,7 +121,7 @@ replies to the owner go to the panel (`conn.rynNotice`) instead of the game's go
 notice. Everything in `!help` has a button; the panel can be dragged anywhere and
 holds your own buttons (several commands each, optional hotkey).
 
-The panel has six tabs: **Me** (health, god, age, resources, gear, give weapons and
+The panel has seven tabs (the Lab tab and the extras below came later): **Me** (health, god, age, resources, gear, give weapons and
 items, loadouts), **Players** (live health of everyone with heal, god, kill, bring,
 go to; add, freeze or remove your Ryn bots), **Test** (dummies, scenarios, time
 control, animals), **World** (a map editor that places or deletes where you click,
@@ -118,3 +131,12 @@ server vs Ryn, and a server overlay that draws where the server has every player
 and animal over what you see, with the server tick) and **Mine** (your buttons and
 fake ping). It reads the server through `conn.rynState`, `conn.rynCall` and
 `conn.rynWorld`.
+
+Later additions: a shame meter (Me); survival (Test); editor shapes (line, circle,
+square) with undo, base stamps, map presets, spawners, Crab King practice with
+dodge counts and kill times (World); on-screen layers for weapon ranges, spikes and
+turrets, shot paths, desync between Ryn's predicted position and the server, and
+shame; a 60 second health/damage graph; fight export (Stats); a test bench that
+runs scenarios against your Ryn and scores them, with A/B of one setting and
+saved reports compared run to run; a 30 second replay you can scrub tick by tick;
+a packet inspector (Lab); and a ping that keeps changing between two values (Mine).

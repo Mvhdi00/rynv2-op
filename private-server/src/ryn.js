@@ -57,6 +57,7 @@ module.exports = function (ctx) {
 				time.tick++
 				time.clock += step
 				stepProbes()
+				reviveGuarded()
 				return { run: true, delta: step }
 			}
 			return { run: false, delta: 0 }
@@ -65,6 +66,7 @@ module.exports = function (ctx) {
 		time.tick++
 		time.clock += scaled
 		stepProbes()
+		reviveGuarded()
 		return { run: true, delta: scaled }
 	}
 
@@ -84,6 +86,15 @@ module.exports = function (ctx) {
 		if (amount < 0 && doer && doer.isPlayer && doer !== target && rules.dmgMult !== 1) amount *= rules.dmgMult
 		if (amount !== 0) {
 			const s = sourceOf(doer, src)
+			// the test bench: a guarded player is left on 1 health instead of dying, and that counts as a death
+			if (amount < 0 && !target.isAI && bench.guard[target.sid] && target.health + amount <= 0) {
+				if (!target.rynRevive) bench.events.push({ tick: time.tick, kind: 'death', sid: target.sid, by: s.from })
+				amount = Math.min(0, 1 - target.health)
+				target.rynRevive = 2
+			}
+			if (amount < 0 && s.from !== null && !s.ai) tickSums.dealt[s.from] = (tickSums.dealt[s.from] || 0) - amount
+			if (amount < 0 && !target.isAI) tickSums.taken[target.sid] = (tickSums.taken[target.sid] || 0) - amount
+			if (target.isAI && target.index === 11 && amount < 0 && doer && doer.isPlayer) kingFight(target, doer, amount)
 			log.push({
 				tick: time.tick,
 				at: time.clock,
@@ -302,6 +313,10 @@ module.exports = function (ctx) {
 	function thinkDummy(d, delta) {
 		const p = d.p
 		if (!p.alive) {
+			if (d.opts.noRespawn) {
+				removeDummy(d)
+				return
+			}
 			d.deadFor += delta
 			if (d.deadFor >= 3000) {
 				d.deadFor = 0
@@ -374,6 +389,9 @@ module.exports = function (ctx) {
 		const reach = items.weapons[primary].range + target.scale
 		if (b.instaWait > 0) b.instaWait -= 1
 		if (b.insta === 0) {
+			// a weapon only reloads while it is held, so hold whichever still needs it
+			if (p.reloads[secondary] > 0) p.weaponIndex = secondary
+			else p.weaponIndex = primary
 			const ready = !(p.reloads[primary] > 0) && !(p.reloads[secondary] > 0)
 			if (ready && b.instaWait <= 0 && dist <= reach) {
 				p.skin = hatById(7)
@@ -382,6 +400,8 @@ module.exports = function (ctx) {
 				p.mouseState = 1
 				p.gathering = 1
 				b.insta = 1
+				bench.events.push({ tick: time.tick, kind: 'insta', sid: target.sid, by: p.sid })
+				if (bench.events.length > 500) bench.events.splice(0, 100)
 			}
 		} else if (b.insta === 1) {
 			p.weaponIndex = secondary
@@ -393,11 +413,13 @@ module.exports = function (ctx) {
 			p.skin = hatById(d.restHat)
 			p.skinIndex = p.skin ? d.restHat : 0
 			b.insta = 0
-			b.instaWait = 8
+			b.instaWait = d.opts.instaGap || 8
 		}
 	}
 	api.thinkDummies = function (delta) {
-		for (const d of dummies) thinkDummy(d, delta)
+		for (const d of dummies.slice()) thinkDummy(d, delta)
+		thinkSurvival(delta)
+		thinkSpawners(delta)
 	}
 	api.dummyCount = () => dummies.length
 
@@ -566,21 +588,368 @@ module.exports = function (ctx) {
 	api.kings = () => kings().map(k => ({ sid: k.sid, health: Math.round(k.health), maxHealth: k.maxHealth, state: k.state || 0, phase: k.crab ? k.crab.phase : 'idle', dead: !!k.spawnCounter, respawnIn: k.spawnCounter ? Math.round(k.spawnCounter / 1000) : 0 }))
 
 	// ---- state for the panel ----
-	api.world = function () {
+	api.world = function (me) {
+		const near = (o, r) => !me || Math.abs(o.x - me.x) <= r && Math.abs(o.y - me.y) <= r
 		return {
 			tick: time.tick,
-			players: players().filter(p => p.alive).map(p => [p.sid, p.x, p.y, p.scale, p.dir, p.health, p.maxHealth]),
-			ais: ctx.ais.filter(a => a.active && a.alive && !a.spawnCounter).map(a => [a.sid, a.index, a.x, a.y, a.scale, a.health, a.maxHealth, a.state || 0])
+			players: players().filter(p => p.alive).map(p => [p.sid, p.x, p.y, p.scale, p.dir, p.health, p.maxHealth, p.weaponIndex, p.skinIndex, !!p.rynDummy]),
+			ais: ctx.ais.filter(a => a.active && a.alive && !a.spawnCounter).map(a => [a.sid, a.index, a.x, a.y, a.scale, a.health, a.maxHealth, a.state || 0]),
+			// what can hurt: spikes (dmg) and turrets (shootRange) near me
+			danger: ctx.gameObjects.filter(o => o.active && (o.dmg || o.shootRange) && near(o, 1400)).map(o => [o.sid, o.x, o.y, o.scale, o.dmg ? 'spike' : 'turret', o.shootRange || 0, o.owner ? o.owner.sid : -1]),
+			shots: (ctx.projectiles || []).filter(q => q.active && near(q, 2000)).map(q => [q.sid, q.x, q.y, q.dir, q.indx, q.owner ? q.owner.sid : -1]),
+			spawners: spawners.map(sp => [sp.id, sp.x, sp.y, sp.name, sp.every, sp.max, sp.mobs.length])
 		}
 	}
-	api.panelState = function () {
+	api.panelState = function (me) {
 		return {
 			time: { paused: time.paused, scale: time.scale, tick: time.tick },
 			rules: Object.assign({ sandbox: !!config.inSandbox, tickRate: config.serverUpdateRate }, rules),
 			king: Object.assign({}, king),
 			kings: api.kings(),
-			dummies: dummies.length
+			kingStats: me ? kingStatsOf(me) : null,
+			dummies: dummies.length,
+			survival: { on: survival.on, wave: survival.wave, left: survival.on ? survivalLeft() : 0, best: survival.best, last: survival.last },
+			spawners: spawners.map(sp => ({ id: sp.id, kind: sp.name, every: sp.every / 1000, max: sp.max, alive: sp.mobs.length }))
 		}
+	}
+
+	// ---- test bench support ----
+	const bench = { guard: {}, events: [] }
+	function reviveGuarded() {
+		for (const p of players()) {
+			if (!p.rynRevive) continue
+			p.rynRevive--
+			if (p.rynRevive === 0 && p.alive) {
+				p.dmgOverTime = {}
+				setHealth(p, p.maxHealth)
+			}
+		}
+	}
+	api.benchGuard = function (me, on) {
+		if (!me) return false
+		if (on) bench.guard[me.sid] = true
+		else delete bench.guard[me.sid]
+		return true
+	}
+	api.benchEvents = function (since) {
+		return bench.events.filter(e => e.tick >= (since || 0))
+	}
+
+	// ---- per-tick sums, health/damage series and the replay buffer ----
+	const tickSums = { dealt: {}, taken: {} }
+	const series = {}
+	const replay = { frames: [], base: new Map(), seen: new Map() }
+	const objRec = o => [o.sid, Math.round(o.x), Math.round(o.y), o.scale, o.type, o.id === undefined ? -1 : o.id, o.owner ? o.owner.sid : -1, Math.round(o.dir * 100) / 100]
+	api.endTick = function () {
+		keepOriginal()
+		const ps = players()
+		// series for real players: health and what they dealt and took this tick
+		for (const p of ps) {
+			if (p.rynDummy) continue
+			const list = series[p.sid] || (series[p.sid] = [])
+			list.push([time.tick, Math.round(time.clock), p.alive ? Math.round(p.health) : 0, Math.round(tickSums.dealt[p.sid] || 0), Math.round(tickSums.taken[p.sid] || 0)])
+			if (list.length > config.serverUpdateRate * 60) list.shift()
+		}
+		// replay: everything near a real player, and buildings as changes
+		const real = ps.filter(p => p.alive && !p.rynDummy)
+		const close = o => real.some(p => Math.abs(o.x - p.x) <= 2200 && Math.abs(o.y - p.y) <= 2200)
+		const now = new Map()
+		for (const o of ctx.gameObjects) if (o.active) now.set(o.sid, o)
+		const add = []
+		const del = []
+		for (const [sid, o] of now) {
+			if (replay.seen.get(sid) !== o || o.rynSeenX !== o.x || o.rynSeenY !== o.y) {
+				add.push(objRec(o))
+				o.rynSeenX = o.x
+				o.rynSeenY = o.y
+			}
+		}
+		for (const sid of replay.seen.keys()) if (!now.has(sid)) del.push(sid)
+		replay.seen = now
+		const hits = []
+		for (let i = log.length - 1; i >= 0 && log[i].tick === time.tick; i--) hits.push([log[i].from, log[i].fromName, log[i].to, log[i].toName, log[i].amount, log[i].kind, log[i].ai])
+		replay.frames.push({
+			tick: time.tick,
+			at: Math.round(time.clock),
+			players: ps.filter(p => p.alive).map(p => [p.sid, Math.round(p.x), Math.round(p.y), Math.round(p.dir * 100) / 100, Math.round(p.health), p.maxHealth, p.weaponIndex, p.skinIndex, p.buildIndex, p.scale, p.name, !!p.rynDummy]),
+			ais: ctx.ais.filter(a => a.active && a.alive && !a.spawnCounter && close(a)).map(a => [a.sid, a.index, Math.round(a.x), Math.round(a.y), Math.round(a.dir * 100) / 100, Math.round(a.health), a.maxHealth, a.scale, a.state || 0]),
+			shots: (ctx.projectiles || []).filter(q => q.active && close(q)).map(q => [q.sid, Math.round(q.x), Math.round(q.y), q.dir, q.indx]),
+			add: add,
+			del: del,
+			hits: hits
+		})
+		while (replay.frames.length > config.serverUpdateRate * 30) {
+			const f = replay.frames.shift()
+			for (const r of f.add) replay.base.set(r[0], r)
+			for (const sid of f.del) replay.base.delete(sid)
+		}
+		tickSums.dealt = {}
+		tickSums.taken = {}
+	}
+	api.series = me => (me && series[me.sid] ? series[me.sid].slice() : [])
+	api.replay = function () {
+		return { rate: config.serverUpdateRate, base: [...replay.base.values()], frames: replay.frames.slice() }
+	}
+
+	// ---- survival: waves of dummies and animals until you die ----
+	const survival = { on: false, wave: 0, best: 0, last: null, me: null, mobs: [], dummies: [], rest: 0, tell: null }
+	const survivalLeft = () => survival.dummies.filter(d => dummies.includes(d)).length + survival.mobs.filter(m => m.active && m.alive).length
+	function survivalWave() {
+		const me = survival.me
+		const w = ++survival.wave
+		const tiers = ['normal', 'normal', 'gold', 'gold', 'diamond', 'diamond', 'ruby', 'ruby', 'emerald']
+		const tier = tiers[Math.min(tiers.length - 1, w - 1)]
+		const primaries = [5, 3, 4, 1, 7]
+		const nd = Math.min(6, 1 + Math.floor(w / 2))
+		survival.dummies = []
+		for (let i = 0; i < nd; i++) {
+			const a = UTILS.randFloat(-Math.PI, Math.PI)
+			const insta = w >= 4 && i === 0
+			const d = addDummy(me.x + 650 * Math.cos(a), me.y + 650 * Math.sin(a), {
+				name: 'Wave ' + w,
+				behavior: insta ? 'insta' : 'attack',
+				primary: insta ? 5 : primaries[(w + i) % primaries.length],
+				secondary: insta ? 15 : null,
+				tier: tier,
+				hat: w >= 3 ? 6 : 0,
+				heal: w >= 3,
+				healDelay: Math.max(60, 260 - w * 20),
+				instaGap: 20,
+				noRespawn: true
+			})
+			if (d) survival.dummies.push(d)
+		}
+		const kinds = w >= 3 ? [4, 2, 3] : [4, 2]
+		survival.mobs = []
+		for (let i = 0; i < Math.min(8, w); i++) {
+			const a = UTILS.randFloat(-Math.PI, Math.PI)
+			const m = ctx.aiManager.spawn(me.x + 800 * Math.cos(a), me.y + 800 * Math.sin(a), a + Math.PI, kinds[i % kinds.length])
+			m.minion = true
+			m.chargeTarget = me
+			m.waitCount = 0
+			m.moveCount = 8000
+			survival.mobs.push(m)
+		}
+		if (survival.tell) survival.tell('[Admin] Wave ' + w + ': ' + nd + ' dummies, ' + survival.mobs.length + ' animals')
+	}
+	function survivalEnd(why) {
+		const reached = Math.max(0, survival.wave - 1)
+		survival.best = Math.max(survival.best, reached)
+		survival.last = { waves: reached, why: why }
+		survival.on = false
+		for (const d of survival.dummies) if (dummies.includes(d)) removeDummy(d)
+		for (const m of survival.mobs) {
+			if (m.active) {
+				m.active = false
+				m.alive = false
+			}
+		}
+		survival.dummies = []
+		survival.mobs = []
+		ctx.updateLeaderboard()
+		if (survival.tell) survival.tell('[Admin] Survival over: ' + reached + ' wave' + (reached === 1 ? '' : 's') + ' cleared (best ' + survival.best + ')')
+	}
+	function thinkSurvival(delta) {
+		if (!survival.on) return
+		const me = survival.me
+		if (!me || !me.alive || !players().includes(me)) return survivalEnd('you died')
+		if (survival.rest > 0) {
+			survival.rest -= delta
+			if (survival.rest <= 0) survivalWave()
+			return
+		}
+		if (survivalLeft() === 0) {
+			setHealth(me, me.maxHealth)
+			survival.rest = 3000
+			if (survival.tell) survival.tell('[Admin] Wave ' + survival.wave + ' cleared, next in 3s')
+		}
+	}
+
+	// ---- animal spawners ----
+	const spawners = []
+	let spawnerId = 0
+	function thinkSpawners(delta) {
+		for (const sp of spawners) {
+			sp.mobs = sp.mobs.filter(m => m.active && m.alive)
+			sp.t -= delta
+			if (sp.t > 0 || sp.mobs.length >= sp.max) continue
+			sp.t = sp.every
+			const m = ctx.aiManager.spawn(sp.x + UTILS.randInt(-80, 80), sp.y + UTILS.randInt(-80, 80), UTILS.randFloat(-Math.PI, Math.PI), sp.kind)
+			m.minion = true
+			sp.mobs.push(m)
+		}
+	}
+
+	// ---- Crab King: dodges and kill times ----
+	const kingStats = {}
+	const kingFights = {}
+	config.rynKingAttack = function (k, kind, victim, hit) {
+		const st = kingStats[victim] || (kingStats[victim] = { dodged: 0, hit: 0, kinds: {} })
+		const got = hit.includes(victim)
+		const kk = st.kinds[kind] || (st.kinds[kind] = [0, 0])
+		if (got) {
+			st.hit++
+			kk[1]++
+		} else {
+			st.dodged++
+			kk[0]++
+		}
+	}
+	function kingFight(k, doer, amount) {
+		let f = kingFights[k.sid]
+		if (!f || time.clock - f.last > 60000 || f.done) f = kingFights[k.sid] = { start: time.clock, last: time.clock, by: {}, done: false }
+		f.last = time.clock
+		f.by[doer.sid] = 1
+		if (k.health + amount <= 0) {
+			f.done = true
+			const ms = Math.round(time.clock - f.start)
+			for (const sid of Object.keys(f.by)) {
+				const st = kingStats[sid] || (kingStats[sid] = { dodged: 0, hit: 0, kinds: {} })
+				st.lastKill = ms
+				st.bestKill = st.bestKill ? Math.min(st.bestKill, ms) : ms
+			}
+		}
+	}
+	const kingStatsOf = me => {
+		const st = kingStats[me.sid] || { dodged: 0, hit: 0, kinds: {} }
+		const f = Object.values(kingFights).find(x => !x.done && x.by[me.sid] && time.clock - x.last <= 60000)
+		return { dodged: st.dodged, hit: st.hit, kinds: st.kinds, lastKill: st.lastKill || null, bestKill: st.bestKill || null, fighting: f ? Math.round(time.clock - f.start) : null }
+	}
+	api.resetKingStats = me => {
+		if (me) delete kingStats[me.sid]
+	}
+
+	// ---- map presets ----
+	let original = null
+	const isNature = o => o.active && !o.owner && o.id === undefined
+	const keepOriginal = () => {
+		if (!original) original = ctx.gameObjects.filter(isNature).map(o => [o.x, o.y, o.dir, o.scale, o.type])
+	}
+	function scatter(me, kind, count, rMin, rMax, made) {
+		const n = NATURE[kind]
+		const scales = n[1] ? config[n[1]] : null
+		for (let i = 0, tries = 0; i < count && tries < count * 20; tries++) {
+			const a = UTILS.randFloat(-Math.PI, Math.PI)
+			const r = UTILS.randFloat(rMin, rMax)
+			const x = me.x + r * Math.cos(a)
+			const y = me.y + r * Math.sin(a)
+			const scale = scales ? scales[UTILS.randInt(0, scales.length - 1)] : 74
+			if (x < scale || y < scale || x > config.mapScale - scale || y > config.mapScale - scale) continue
+			if (made.some(m => UTILS.getDistance(x, y, m[0], m[1]) < scale + m[2] + 20)) continue
+			ctx.objectManager.add(ctx.objectManager.objects.length, x, y, UTILS.randFloat(-Math.PI, Math.PI), scale, n[0], null, false, null)
+			made.push([x, y, scale])
+			i++
+		}
+	}
+	api.mapPreset = function (me, name) {
+		keepOriginal()
+		const clearNature = r => {
+			for (const o of ctx.gameObjects) if (isNature(o) && UTILS.getDistance(me.x, me.y, o.x, o.y) <= r) removeObject(o)
+		}
+		const made = []
+		switch (name) {
+			case 'empty':
+				clearNature(1600)
+				return true
+			case 'forest':
+				clearNature(1600)
+				scatter(me, 'tree', 45, 260, 1600, made)
+				scatter(me, 'bush', 25, 260, 1600, made)
+				return true
+			case 'rocks':
+				clearNature(1600)
+				scatter(me, 'stone', 22, 260, 1600, made)
+				scatter(me, 'gold', 8, 260, 1600, made)
+				return true
+			case 'duel': {
+				clearArea(me.x, me.y, 1000, true)
+				const n = 16
+				for (let i = 0; i < n; i++) {
+					const a = (i / n) * Math.PI * 2
+					ctx.objectManager.add(ctx.objectManager.objects.length, me.x + 950 * Math.cos(a), me.y + 950 * Math.sin(a), a, config.rockScales[1], 2, null, false, null)
+				}
+				return true
+			}
+			case 'reset':
+				for (const o of ctx.gameObjects) if (isNature(o)) removeObject(o)
+				for (const [x, y, dir, scale, type] of original) ctx.objectManager.add(ctx.objectManager.objects.length, x, y, dir, scale, type, null, false, null)
+				return true
+		}
+		return false
+	}
+
+	// ---- editor helpers for the panel: many points, removal with undo, base stamps ----
+	const ownerOf = (me, owner) => (owner === 'none' ? null : owner === 'me' || owner === undefined ? me : ctx.findPlayerBySID(Number(owner)) || me)
+	api.placeMany = function (me, what, owner, points) {
+		const kind = String(what || '').toLowerCase()
+		const o = ownerOf(me, owner)
+		const sids = []
+		let name = null
+		for (const [x, y] of points || []) {
+			if (NATURE[kind]) {
+				const obj = placeNature(kind, x, y)
+				if (obj) sids.push(obj.sid)
+				name = kind
+			} else {
+				const item = itemByName(kind)
+				if (!item || item.consume) return { name: null, sids: sids }
+				sids.push(placeItem(item, x, y, 0, o).sid)
+				name = item.name
+			}
+		}
+		return { name: name, sids: sids }
+	}
+	api.removeAt = function (x, y, r) {
+		let best = null
+		let bestD = r || 90
+		for (const o of ctx.gameObjects) {
+			if (!o.active) continue
+			const d = UTILS.getDistance(x, y, o.x, o.y) - o.scale
+			if (d < bestD) {
+				bestD = d
+				best = o
+			}
+		}
+		if (!best) return null
+		const rec = objRec(best)
+		removeObject(best)
+		return rec
+	}
+	api.removeSids = function (sids) {
+		let n = 0
+		const want = new Set(sids || [])
+		for (const o of ctx.gameObjects) {
+			if (o.active && want.has(o.sid)) {
+				removeObject(o)
+				n++
+			}
+		}
+		return n
+	}
+	api.restoreObjs = function (recs) {
+		const sids = []
+		for (const [, x, y, scale, type, id, ownerSid, dir] of recs || []) {
+			if (id >= 0 && items.list[id]) sids.push(placeItem(items.list[id], x, y, dir || 0, ownerSid >= 0 ? ctx.findPlayerBySID(ownerSid) : null).sid)
+			else sids.push(ctx.objectManager.add(ctx.objectManager.objects.length, x, y, dir || 0, scale, type, null, false, null).sid)
+		}
+		return sids
+	}
+	api.copyBase = function (me, r) {
+		const list = ctx.gameObjects.filter(o => o.active && o.owner === me && UTILS.getDistance(me.x, me.y, o.x, o.y) <= (r || 600))
+		return { v: 1, dir: me.dir, items: list.map(o => [Math.round(o.x - me.x), Math.round(o.y - me.y), Math.round(o.dir * 100) / 100, o.id]) }
+	}
+	api.pasteBase = function (me, stamp, rotate) {
+		if (!stamp || !Array.isArray(stamp.items)) return []
+		const turn = rotate ? me.dir - (stamp.dir || 0) : 0
+		const c = Math.cos(turn)
+		const sn = Math.sin(turn)
+		const sids = []
+		for (const [dx, dy, dir, id] of stamp.items) {
+			const item = items.list[id]
+			if (!item) continue
+			sids.push(placeItem(item, me.x + dx * c - dy * sn, me.y + dx * sn + dy * c, dir + turn, me).sid)
+		}
+		return sids
 	}
 
 	// ---- chat commands (also what the panel sends) ----
@@ -602,7 +971,8 @@ module.exports = function (ctx) {
 						'!dummy clear | remove <sid> | set <sid> <kind>',
 					'!place <item|tree|bush|stone|gold> [count]  !remove  !clearnear <r>',
 					'!time pause|play|step [n]|speed <x>  !scenario <name>  !rules dmg|gather|sandbox|tick <v>',
-					'!king respawn|attack|hp <n>|speed <x>|damage <x>  !bring <sid>  !arena  !tp <sid>|<x> <y>',
+					'!king respawn|attack|hp <n>|speed <x>|damage <x>|only <slam|charge|ring|dive|all>|stats  !bring <sid>  !arena  !tp <sid>|<x> <y>',
+						'!survival start|stop  !spawner <animal> [every s] [max] | clear  !map empty|forest|rocks|duel|reset  !killmobs [r]',
 					'!s  !speed <n>  !v <tier>  !dmg [n]  !upgrade <n>  !kill <sid>  !die  !b  !mobs|hostile|bosses on|off'
 				].forEach(tell)
 				return true
@@ -794,6 +1164,7 @@ module.exports = function (ctx) {
 					else if (k === 'delay' && !isNaN(num(v))) opts.healDelay = Math.max(0, Math.min(2000, num(v)))
 					else if (k === 'god') opts.god = v === '1' || v === 'on'
 					else if (k === 'food') opts.food = v
+					else if (k === 'gap' && !isNaN(num(v))) opts.instaGap = Math.max(2, Math.min(100, num(v)))
 				}
 				let made = 0
 				for (let i = 0; i < count; i++) {
@@ -864,9 +1235,99 @@ module.exports = function (ctx) {
 				tell('[Admin] Damage x' + rules.dmgMult + ', gather x' + rules.gatherMult + ', ' + (config.inSandbox ? 'sandbox' : 'normal costs') + ', ' + config.serverUpdateRate + ' ticks/s')
 				return true
 			}
+			case 'survival': {
+				const sub = (args[0] || 'start').toLowerCase()
+				if (sub === 'stop') {
+					if (survival.on) survivalEnd('stopped')
+					else tell('[Admin] Survival is not running')
+				} else if (!survival.on) {
+					api.clearDummies()
+					survival.on = true
+					survival.wave = 0
+					survival.me = me
+					survival.tell = tell
+					survival.rest = 0
+					setHealth(me, me.maxHealth)
+					survivalWave()
+				} else tell('[Admin] Survival: wave ' + survival.wave + ', ' + survivalLeft() + ' left')
+				return true
+			}
+			case 'spawner': {
+				const sub = (args[0] || '').toLowerCase()
+				if (sub === 'clear') {
+					tell('[Admin] Removed ' + spawners.length + ' spawners')
+					spawners.length = 0
+					return true
+				}
+				if (sub === 'remove') {
+					const i = spawners.findIndex(sp => sp.id === num(args[1]))
+					if (i >= 0) spawners.splice(i, 1)
+					tell(i >= 0 ? '[Admin] Spawner ' + args[1] + ' removed' : '[Admin] No spawner ' + args[1])
+					return true
+				}
+				const kind = ANIMALS[sub]
+				if (kind === undefined) {
+					tell('[Admin] !spawner <animal> [every seconds] [max]  |  !spawner clear | remove <id>')
+					return true
+				}
+				const arena = kind === 11 || kind === 13 || kind === 14
+				if (arena && !(me.x < 0 && UTILS.inSecretPool(config, me.x, me.y, 100))) {
+					tell('[Admin] Crabs and the King only spawn in the arena')
+					return true
+				}
+				const every = Math.max(1, Math.min(600, num(args[1]) || 10)) * 1000
+				const max = Math.max(1, Math.min(kind === 11 ? 1 : 20, num(args[2]) || 3))
+				const sp = { id: ++spawnerId, name: sub, x: Math.round(me.x), y: Math.round(me.y), kind: kind, every: every, max: max, t: 0, mobs: [] }
+				spawners.push(sp)
+				tell('[Admin] Spawner ' + sp.id + ': ' + args[0] + ' every ' + every / 1000 + 's, up to ' + max)
+				return true
+			}
+			case 'killmobs': {
+				// animals near you go away: summoned ones for good, wild ones respawn elsewhere
+				const r = Math.max(100, Math.min(20000, num(args[0]) || 1500))
+				let n = 0
+				for (const a of ctx.ais) {
+					if (!a.active || !a.alive || a.spawnCounter || a.index === 11 || UTILS.getDistance(me.x, me.y, a.x, a.y) > r) continue
+					if (a.minion) {
+						a.active = false
+						a.alive = false
+					} else {
+						a.x = a.startX || UTILS.randInt(0, config.mapScale)
+						a.y = a.startY || (a.index === 10 ? UTILS.randInt(0, config.snowBiomeTop) : UTILS.randInt(0, config.mapScale))
+						a.health = a.maxHealth
+						a.chargeTarget = null
+						a.runFrom = null
+					}
+					n++
+				}
+				tell('[Admin] Sent away ' + n + ' animals')
+				return true
+			}
+			case 'map': {
+				const name = (args[0] || '').toLowerCase()
+				if (!api.mapPreset(me, name)) tell('[Admin] Maps: empty forest rocks duel reset')
+				else tell('[Admin] Map: ' + name)
+				return true
+			}
 			case 'king': {
 				const sub = (args[0] || '').toLowerCase()
 				const list = kings()
+				if (sub === 'only') {
+					const a = (args[1] || 'all').toLowerCase()
+					king.only = ['slam', 'charge', 'ring', 'dive'].includes(a) ? a : ''
+					tell('[Admin] Crab King attacks: ' + (king.only || 'all'))
+					return true
+				}
+				if (sub === 'stats') {
+					const st = kingStatsOf(me)
+					tell('[Admin] Dodged ' + st.dodged + ', hit ' + st.hit + (st.bestKill ? ', best kill ' + (st.bestKill / 1000).toFixed(1) + 's' : ''))
+					return true
+				}
+				if (sub === 'resetstats') {
+					api.resetKingStats(me)
+					tell('[Admin] Crab King stats reset')
+					return true
+				}
 				if (sub === 'respawn') {
 					if (!list.length) {
 						const home = config.secretPool.pool[0]

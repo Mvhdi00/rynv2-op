@@ -435,18 +435,27 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 			}
 		}
 	}
+	// returns the sids it hit
 	this.crabHurt = function (x, y, r, dmg, knock, hitList) {
+		var hit = []
 		for (var i = 0; i < players.length; ++i) {
 			var p = players[i]
 			if (!p.alive || (hitList && hitList[p.sid])) continue
 			if (UTILS.getDistance(x, y, p.x, p.y) <= r + p.scale) {
 				if (hitList) hitList[p.sid] = 1
+				hit.push(p.sid)
 				var dir = UTILS.getDirection(p.x, p.y, x, y)
 				p.changeHealth(-dmg, null, this)
 				p.xVel += knock * Math.cos(dir)
 				p.yVel += knock * Math.sin(dir)
 			}
 		}
+		return hit
+	}
+	// Ryn's dodge counter: did the attack catch the player it was aimed at
+	this.crabDone = function (hit) {
+		var c = this.crab
+		if (config.rynKingAttack && c && c.victim !== undefined) config.rynKingAttack(this, c.kind, c.victim, hit || [])
 	}
 	this.crabTurn = function (dir, delta) {
 		this.dir %= PI2
@@ -558,7 +567,23 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 				// it only attacks what it is looking at
 				if (c.next > 0 || off > 0.35) return
 				var low = this.health < this.maxHealth * 0.4
-				if (best <= this.hitRange + target.scale) {
+				var canSlam = best <= this.hitRange + target.scale
+				var canCharge = best <= 1150 && off < 0.25
+				var pick = null
+				if (tune.only) {
+					// Ryn's practice mode: one attack, again and again (the King walks in for slams and charges)
+					if (tune.only === "slam") pick = canSlam ? "slam" : null
+					else if (tune.only === "charge") pick = canCharge ? "charge" : null
+					else pick = tune.only
+				} else if (canSlam) pick = "slam"
+				else if (low && UTILS.randInt(0, 1)) pick = "dive"
+				else if (canCharge && UTILS.randInt(0, 2)) pick = "charge"
+				else if (UTILS.randInt(0, 1)) pick = "ring"
+				else pick = "dive"
+				if (!pick) return
+				c.kind = pick
+				c.victim = target.sid
+				if (pick === "slam") {
 					// slam in front of the King
 					c.phase = "slam"
 					c.t = this.hitDelay
@@ -566,12 +591,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 					c.x = this.x + 160 * Math.cos(this.dir)
 					c.y = this.y + 160 * Math.sin(this.dir)
 					this.crabWarn(CRAB_SLAM, c.x, c.y, c.r, c.t)
-				} else if (low && UTILS.randInt(0, 1)) {
-					// hurt: it goes under more, where it heals
-					c.phase = "dive1"
-					c.t = 700
-					this.state = 1
-				} else if (best <= 1150 && off < 0.25 && UTILS.randInt(0, 2)) {
+				} else if (pick === "charge") {
 					// charge along the line it faces
 					c.phase = "chargeWind"
 					c.t = 900
@@ -579,7 +599,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 					c.len = Math.min(1100, best + 250)
 					c.hit = {}
 					this.crabWarn(CRAB_LINE, this.x, this.y, this.scale, c.t, this.x + c.len * Math.cos(c.dir), this.y + c.len * Math.sin(c.dir))
-				} else if (UTILS.randInt(0, 1)) {
+				} else if (pick === "ring") {
 					// a ring of water under the target
 					c.phase = "ring"
 					c.t = 1100
@@ -602,7 +622,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 					for (var a = 0; a < players.length; ++a) {
 						if (players[a].canSee(this)) server.send(players[a].id, "aa", [this.sid])
 					}
-					this.crabHurt(c.x, c.y, c.r, this.dmg * dmgMult, 0.9)
+					this.crabDone(this.crabHurt(c.x, c.y, c.r, this.dmg * dmgMult, 0.9))
 					this.crabEnd(1400)
 				}
 				return
@@ -626,13 +646,14 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 				if (c.travel >= c.len) {
 					this.xVel = 0
 					this.yVel = 0
+					this.crabDone(Object.keys(c.hit).map(Number))
 					this.crabEnd(1800)
 				}
 				return
 			}
 			case "ring":
 				if (c.t <= 0) {
-					this.crabHurt(c.x, c.y, c.r, 30 * dmgMult, 0.6)
+					this.crabDone(this.crabHurt(c.x, c.y, c.r, 30 * dmgMult, 0.6))
 					this.crabEnd(1200)
 				}
 				return
@@ -678,7 +699,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 				this.xVel = 0
 				this.yVel = 0
 				if (c.t <= 0) {
-					this.crabHurt(this.x, this.y, 330, 60 * dmgMult, 1.2)
+					this.crabDone(this.crabHurt(this.x, this.y, 330, 60 * dmgMult, 1.2))
 					this.crabEnd(2200)
 				}
 				return
