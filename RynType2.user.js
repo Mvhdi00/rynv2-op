@@ -4,11 +4,19 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.4-fix9
+// @version         2.9.4-fix27
 // @run-at          document-start
 // @grant           none
 // @license         MIT
 // ==/UserScript==
+
+(function resetDeviceId() {
+    try {
+        if (typeof localStorage === "undefined") return;
+        localStorage.removeItem("moo_did");
+        localStorage.removeItem("_ryn_bot_dids");
+    } catch (e) {}
+})();
 
 const RYN_FAVICON_URL = "https://i.postimg.cc/1t4HB4W1/ryntype2.png";
 
@@ -1237,7 +1245,24 @@ window.grbtp = 35;
   }
 
   const RYN_FLEET_CAP = 40;
-  function _rynSpawnBatch() {
+  function _rynSetBotsFrozen(owner, frozen) {
+    if (!owner || !owner.isOwner) return false;
+    Settings_default._botsFrozen = frozen;
+    if (!frozen) return true;
+    for (const bot of owner.clients) {
+      const mh = bot._ModuleHandler;
+      if (!mh) continue;
+      mh.move_dir = null;
+      mh.startMovement(null, true);
+      bot.PacketManager.move(null);
+      try {
+        const mov = mh.modules && mh.modules.find(m => m.moduleName === "movement");
+        if (mov) mov.isStopped = true;
+      } catch (_) {}
+    }
+    return true;
+  }
+  function _rynSpawnBatch(limit) {
     const doc = UI_default.frame && UI_default.frame.document;
     if (!doc) {
       return 0;
@@ -1253,11 +1278,13 @@ window.grbtp = 35;
     try {
       ready = TokenPool.size;
     } catch (_) {}
+    // the in-page server needs no Cloudflare tokens: a count from the admin panel is made in full
+    if (RynPrivate.on && limit > 0) ready = Infinity;
     let room = RYN_FLEET_CAP;
     try {
       room = Math.max(0, RYN_FLEET_CAP - client.clients.size);
     } catch (_) {}
-    const want = Math.max(1, Math.min(ready, room));
+    const want = Math.max(1, Math.min(ready, room, limit > 0 ? limit : Infinity));
     const rndNum = () => String(Math.floor(Math.random() * 999) + 1);
     let made = 0;
     for (let i = 0; i < want; i++) {
@@ -1607,7 +1634,11903 @@ window.grbtp = 35;
       if (TokenPool._inGame()) RynCF.warm();
     } catch (_) {}
   }, TURNSTILE_KEEPER_MS);
+  // The player's own Cloudflare check. The game draws its widget inside #verifyDialog, which the lobby moves around the
+  // page; a moved Turnstile frame reloads and never answers, so playing as a guest stalled on an empty dialog. Bots never
+  // hit this because RynCF draws their checks in containers that stay put, so the player gets the same treatment.
+  // While the lobby is up a hidden check keeps the game holding a fresh token, so Play joins without waiting; the visible
+  // check in the dialog is only the fallback for when Cloudflare wants a click.
+  (function rynPlayerCheck() {
+    const EARLY_TIMEOUT_MS = 3e4;
+    let host = null;
+    let widget = null;
+    let api = null;
+    let loading = false;
+    let heldAt = 0;
+    let early = null;
+    let earlyHoldUntil = 0;
+    const give = token => {
+      try {
+        if (typeof window.onGotTurnstileToken === "function") window.onGotTurnstileToken(token);
+      } catch (_) {}
+    };
+    const drop = () => {
+      try {
+        if (widget !== null && api && typeof api.remove === "function") api.remove(widget);
+      } catch (_) {}
+      widget = null;
+      if (host !== null) {
+        try {
+          host.remove();
+        } catch (_) {}
+        host = null;
+      }
+    };
+    const dropEarly = () => {
+      const was = early;
+      if (was === null) return;
+      early = null;
+      clearTimeout(was.timer);
+      try {
+        if (was.widget != null && typeof was.api.remove === "function") was.api.remove(was.widget);
+      } catch (_) {}
+      try {
+        was.host.remove();
+      } catch (_) {}
+    };
+    const holdEarly = ms => {
+      dropEarly();
+      earlyHoldUntil = Date.now() + ms;
+    };
+    const signedIn = () => {
+      try {
+        const auth = window.FRVR && window.FRVR.auth;
+        return !!(auth && typeof auth.isLoggedIn === "function" && auth.isLoggedIn());
+      } catch (_) {
+        return false;
+      }
+    };
+    const inLobby = () => {
+      if (document.documentElement.classList.contains("ryn-in-lobby")) return true;
+      const menu = document.getElementById("mainMenu");
+      return menu !== null && menu.style.display !== "none" && !TokenPool._inGame();
+    };
+    const prefetch = () => {
+      if (early !== null || Date.now() < earlyHoldUntil) return;
+      // Only once the game has loaded Cloudflare itself: loading it from here could race the game's own copy onto the page
+      const ts = RynCF.api();
+      if (!ts) return;
+      const mine = {
+        host: document.createElement("div"),
+        widget: null,
+        api: ts,
+        timer: 0
+      };
+      mine.host.style.cssText = "position:fixed;left:-10000px;top:0;width:300px;height:65px;pointer-events:none;";
+      (document.body || document.documentElement).appendChild(mine.host);
+      early = mine;
+      mine.timer = setTimeout(() => {
+        if (early === mine) holdEarly(1e4);
+      }, EARLY_TIMEOUT_MS);
+      try {
+        mine.widget = ts.render(mine.host, {
+          sitekey: rynSitekey(),
+          appearance: "interaction-only",
+          callback: token => {
+            if (early !== mine) return;
+            dropEarly();
+            if (typeof token !== "string" || !token) return;
+            heldAt = Date.now();
+            give(token);
+          },
+          "before-interactive-callback": () => {
+            if (early === mine) holdEarly(6e4);
+          },
+          "error-callback": () => {
+            if (early === mine) holdEarly(1.5e4);
+            return true;
+          }
+        });
+      } catch (_) {}
+      if (early === mine && mine.widget == null) holdEarly(1.5e4);
+    };
+    const tick = () => {
+      try {
+        if (!inLobby()) {
+          heldAt = 0;
+          dropEarly();
+          return;
+        }
+        if (document.hidden || signedIn()) return;
+        if (heldAt !== 0 && Date.now() - heldAt < TURNSTILE_TTL_MS) return;
+        heldAt = 0;
+        prefetch();
+      } catch (_) {}
+    };
+    setInterval(tick, 1e3);
+    const gameAsking = () => {
+      const own = document.getElementById("turnstileWidget");
+      const frame = own && own.querySelector("iframe");
+      return !!(frame && frame.offsetHeight > 0);
+    };
+    const start = dialog => {
+      if (loading || host !== null) return;
+      const pooled = TokenPool.take();
+      if (pooled !== null) {
+        give(pooled);
+        return;
+      }
+      if (gameAsking()) return;
+      loading = true;
+      RynCF.load().then(ts => {
+        loading = false;
+        if (!dialog.classList.contains("showing") || host !== null) return;
+        api = ts;
+        host = document.createElement("div");
+        host.id = "ryn-player-check";
+        const own = dialog.querySelector("#turnstileWidget");
+        if (own !== null) own.insertAdjacentElement("afterend", host);
+        else dialog.appendChild(host);
+        try {
+          widget = ts.render(host, {
+            sitekey: rynSitekey(),
+            theme: "dark",
+            appearance: "always",
+            callback: token => {
+              if (typeof token !== "string" || !token) return;
+              drop();
+              heldAt = Date.now();
+              give(token);
+            },
+            "error-callback": code => {
+              try {
+                console.warn("[RYN] your Cloudflare check: " + rynCfErrorText(code));
+              } catch (_) {}
+            }
+          });
+        } catch (e) {
+          try {
+            console.warn("[RYN] your Cloudflare check could not be drawn:", e);
+          } catch (_) {}
+          drop();
+        }
+      }, error => {
+        loading = false;
+        try {
+          console.warn("[RYN] your Cloudflare check: " + (error && error.message || error));
+        } catch (_) {}
+      });
+    };
+    const watch = () => {
+      const dialog = document.getElementById("verifyDialog");
+      if (dialog === null) return false;
+      const sync = () => {
+        if (dialog.classList.contains("showing")) start(dialog);
+        else drop();
+      };
+      new MutationObserver(sync).observe(dialog, {
+        attributes: true,
+        attributeFilter: [ "class" ]
+      });
+      sync();
+      return true;
+    };
+    if (!watch()) document.addEventListener("DOMContentLoaded", watch, {
+      once: true
+    });
+  })();
+  // ==RynPrivateServer== generated by tools/build-private-server.js from private-server/ - edit there and rebuild
+  const RynPrivateServer = (() => {
+    const sources = {
+    "msgpack.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
+// msgpack codec from the game's own vendor bundle (vendor-a3a301f0.js, msgpack-javascript),
+// so the in-page server encodes and decodes exactly the way the game does.
+module.exports = (function () {
+var v=4294967295;function Z(i,e,t){var s=t/4294967296,r=t;i.setUint32(e,s),i.setUint32(e+4,r)}function N(i,e,t){var s=Math.floor(t/4294967296),r=t;i.setUint32(e,s),i.setUint32(e+4,r)}function X(i,e){var t=i.getInt32(e),s=i.getUint32(e+4);return t*4294967296+s}function ee(i,e){var t=i.getUint32(e),s=i.getUint32(e+4);return t*4294967296+s}var D,F,C,M=(typeof process>"u"||((D=process==null?void 0:process.env)===null||D===void 0?void 0:D.TEXT_ENCODING)!=="never")&&typeof TextEncoder<"u"&&typeof TextDecoder<"u";function W(i){for(var e=i.length,t=0,s=0;s<e;){var r=i.charCodeAt(s++);if(r&4294967168)if(!(r&4294965248))t+=2;else{if(r>=55296&&r<=56319&&s<e){var n=i.charCodeAt(s);(n&64512)===56320&&(++s,r=((r&1023)<<10)+(n&1023)+65536)}r&4294901760?t+=4:t+=3}else{t++;continue}}return t}function te(i,e,t){for(var s=i.length,r=t,n=0;n<s;){var o=i.charCodeAt(n++);if(o&4294967168)if(!(o&4294965248))e[r++]=o>>6&31|192;else{if(o>=55296&&o<=56319&&n<s){var c=i.charCodeAt(n);(c&64512)===56320&&(++n,o=((o&1023)<<10)+(c&1023)+65536)}o&4294901760?(e[r++]=o>>18&7|240,e[r++]=o>>12&63|128,e[r++]=o>>6&63|128):(e[r++]=o>>12&15|224,e[r++]=o>>6&63|128)}else{e[r++]=o;continue}e[r++]=o&63|128}}var z=M?new TextEncoder:void 0,ie=M?typeof process<"u"&&((F=process==null?void 0:process.env)===null||F===void 0?void 0:F.TEXT_ENCODING)!=="force"?200:0:v;function se(i,e,t){e.set(z.encode(i),t)}function re(i,e,t){z.encodeInto(i,e.subarray(t))}var ne=z?.encodeInto?re:se,oe=4096;function q(i,e,t){for(var s=e,r=s+t,n=[],o="";s<r;){var c=i[s++];if(!(c&128))n.push(c);else if((c&224)===192){var u=i[s++]&63;n.push((c&31)<<6|u)}else if((c&240)===224){var u=i[s++]&63,a=i[s++]&63;n.push((c&31)<<12|u<<6|a)}else if((c&248)===240){var u=i[s++]&63,a=i[s++]&63,h=i[s++]&63,d=(c&7)<<18|u<<12|a<<6|h;d>65535&&(d-=65536,n.push(d>>>10&1023|55296),d=56320|d&1023),n.push(d)}else n.push(c);n.length>=oe&&(o+=String.fromCharCode.apply(String,n),n.length=0)}return n.length>0&&(o+=String.fromCharCode.apply(String,n)),o}var ae=M?new TextDecoder:null,ce=M?typeof process<"u"&&((C=process==null?void 0:process.env)===null||C===void 0?void 0:C.TEXT_DECODER)!=="force"?200:0:v;function ue(i,e,t){var s=i.subarray(e,e+t);return ae.decode(s)}var _=function(){function i(e,t){this.type=e,this.data=t}return i}(),fe=globalThis&&globalThis.__extends||function(){var i=function(e,t){return i=Object.setPrototypeOf||{__proto__:[]}instanceof Array&&function(s,r){s.__proto__=r}||function(s,r){for(var n in r)Object.prototype.hasOwnProperty.call(r,n)&&(s[n]=r[n])},i(e,t)};return function(e,t){if(typeof t!="function"&&t!==null)throw new TypeError("Class extends value "+String(t)+" is not a constructor or null");i(e,t);function s(){this.constructor=e}e.prototype=t===null?Object.create(t):(s.prototype=t.prototype,new s)}}(),g=function(i){fe(e,i);function e(t){var s=i.call(this,t)||this,r=Object.create(e.prototype);return Object.setPrototypeOf(s,r),Object.defineProperty(s,"name",{configurable:!0,enumerable:!1,value:e.name}),s}return e}(Error),he=-1,le=4294967296-1,ke=17179869184-1;function de(i){var e=i.sec,t=i.nsec;if(e>=0&&t>=0&&e<=ke)if(t===0&&e<=le){var s=new Uint8Array(4),r=new DataView(s.buffer);return r.setUint32(0,e),s}else{var n=e/4294967296,o=e&4294967295,s=new Uint8Array(8),r=new DataView(s.buffer);return r.setUint32(0,t<<2|n&3),r.setUint32(4,o),s}else{var s=new Uint8Array(12),r=new DataView(s.buffer);return r.setUint32(0,t),N(r,4,e),s}}function pe(i){var e=i.getTime(),t=Math.floor(e/1e3),s=(e-t*1e3)*1e6,r=Math.floor(s/1e9);return{sec:t+r,nsec:s-r*1e9}}function ge(i){if(i instanceof Date){var e=pe(i);return de(e)}else return null}function me(i){var e=new DataView(i.buffer,i.byteOffset,i.byteLength);switch(i.byteLength){case 4:{var t=e.getUint32(0),s=0;return{sec:t,nsec:s}}case 8:{var r=e.getUint32(0),n=e.getUint32(4),t=(r&3)*4294967296+n,s=r>>>2;return{sec:t,nsec:s}}case 12:{var t=X(e,4),s=e.getUint32(0);return{sec:t,nsec:s}}default:throw new g("Unrecognized data size for timestamp (expected 4, 8, or 12): ".concat(i.length))}}function we(i){var e=me(i);return new Date(e.sec*1e3+e.nsec/1e6)}var ye={type:he,encode:ge,decode:we},G=function(){function i(){this.builtInEncoders=[],this.builtInDecoders=[],this.encoders=[],this.decoders=[],this.register(ye)}return i.prototype.register=function(e){var t=e.type,s=e.encode,r=e.decode;if(t>=0)this.encoders[t]=s,this.decoders[t]=r;else{var n=1+t;this.builtInEncoders[n]=s,this.builtInDecoders[n]=r}},i.prototype.tryToEncode=function(e,t){for(var s=0;s<this.builtInEncoders.length;s++){var r=this.builtInEncoders[s];if(r!=null){var n=r(e,t);if(n!=null){var o=-1-s;return new _(o,n)}}}for(var s=0;s<this.encoders.length;s++){var r=this.encoders[s];if(r!=null){var n=r(e,t);if(n!=null){var o=s;return new _(o,n)}}}return e instanceof _?e:null},i.prototype.decode=function(e,t,s){var r=t<0?this.builtInDecoders[-1-t]:this.decoders[t];return r?r(e,t,s):new _(t,e)},i.defaultCodec=new i,i}();function I(i){return i instanceof Uint8Array?i:ArrayBuffer.isView(i)?new Uint8Array(i.buffer,i.byteOffset,i.byteLength):i instanceof ArrayBuffer?new Uint8Array(i):Uint8Array.from(i)}function be(i){if(i instanceof ArrayBuffer)return new DataView(i);var e=I(i);return new DataView(e.buffer,e.byteOffset,e.byteLength)}var ve=100,xe=2048,Ne=function(){function i(e,t,s,r,n,o,c,u){e===void 0&&(e=G.defaultCodec),t===void 0&&(t=void 0),s===void 0&&(s=ve),r===void 0&&(r=xe),n===void 0&&(n=!1),o===void 0&&(o=!1),c===void 0&&(c=!1),u===void 0&&(u=!1),this.extensionCodec=e,this.context=t,this.maxDepth=s,this.initialBufferSize=r,this.sortKeys=n,this.forceFloat32=o,this.ignoreUndefined=c,this.forceIntegerToFloat=u,this.pos=0,this.view=new DataView(new ArrayBuffer(this.initialBufferSize)),this.bytes=new Uint8Array(this.view.buffer)}return i.prototype.reinitializeState=function(){this.pos=0},i.prototype.encodeSharedRef=function(e){return this.reinitializeState(),this.doEncode(e,1),this.bytes.subarray(0,this.pos)},i.prototype.encode=function(e){return this.reinitializeState(),this.doEncode(e,1),this.bytes.slice(0,this.pos)},i.prototype.doEncode=function(e,t){if(t>this.maxDepth)throw new Error("Too deep objects in depth ".concat(t));e==null?this.encodeNil():typeof e=="boolean"?this.encodeBoolean(e):typeof e=="number"?this.encodeNumber(e):typeof e=="string"?this.encodeString(e):this.encodeObject(e,t)},i.prototype.ensureBufferSizeToWrite=function(e){var t=this.pos+e;this.view.byteLength<t&&this.resizeBuffer(t*2)},i.prototype.resizeBuffer=function(e){var t=new ArrayBuffer(e),s=new Uint8Array(t),r=new DataView(t);s.set(this.bytes),this.view=r,this.bytes=s},i.prototype.encodeNil=function(){this.writeU8(192)},i.prototype.encodeBoolean=function(e){e===!1?this.writeU8(194):this.writeU8(195)},i.prototype.encodeNumber=function(e){Number.isSafeInteger(e)&&!this.forceIntegerToFloat?e>=0?e<128?this.writeU8(e):e<256?(this.writeU8(204),this.writeU8(e)):e<65536?(this.writeU8(205),this.writeU16(e)):e<4294967296?(this.writeU8(206),this.writeU32(e)):(this.writeU8(207),this.writeU64(e)):e>=-32?this.writeU8(224|e+32):e>=-128?(this.writeU8(208),this.writeI8(e)):e>=-32768?(this.writeU8(209),this.writeI16(e)):e>=-2147483648?(this.writeU8(210),this.writeI32(e)):(this.writeU8(211),this.writeI64(e)):this.forceFloat32?(this.writeU8(202),this.writeF32(e)):(this.writeU8(203),this.writeF64(e))},i.prototype.writeStringHeader=function(e){if(e<32)this.writeU8(160+e);else if(e<256)this.writeU8(217),this.writeU8(e);else if(e<65536)this.writeU8(218),this.writeU16(e);else if(e<4294967296)this.writeU8(219),this.writeU32(e);else throw new Error("Too long string: ".concat(e," bytes in UTF-8"))},i.prototype.encodeString=function(e){var t=5,s=e.length;if(s>ie){var r=W(e);this.ensureBufferSizeToWrite(t+r),this.writeStringHeader(r),ne(e,this.bytes,this.pos),this.pos+=r}else{var r=W(e);this.ensureBufferSizeToWrite(t+r),this.writeStringHeader(r),te(e,this.bytes,this.pos),this.pos+=r}},i.prototype.encodeObject=function(e,t){var s=this.extensionCodec.tryToEncode(e,this.context);if(s!=null)this.encodeExtension(s);else if(Array.isArray(e))this.encodeArray(e,t);else if(ArrayBuffer.isView(e))this.encodeBinary(e);else if(typeof e=="object")this.encodeMap(e,t);else throw new Error("Unrecognized object: ".concat(Object.prototype.toString.apply(e)))},i.prototype.encodeBinary=function(e){var t=e.byteLength;if(t<256)this.writeU8(196),this.writeU8(t);else if(t<65536)this.writeU8(197),this.writeU16(t);else if(t<4294967296)this.writeU8(198),this.writeU32(t);else throw new Error("Too large binary: ".concat(t));var s=I(e);this.writeU8a(s)},i.prototype.encodeArray=function(e,t){var s=e.length;if(s<16)this.writeU8(144+s);else if(s<65536)this.writeU8(220),this.writeU16(s);else if(s<4294967296)this.writeU8(221),this.writeU32(s);else throw new Error("Too large array: ".concat(s));for(var r=0,n=e;r<n.length;r++){var o=n[r];this.doEncode(o,t+1)}},i.prototype.countWithoutUndefined=function(e,t){for(var s=0,r=0,n=t;r<n.length;r++){var o=n[r];e[o]!==void 0&&s++}return s},i.prototype.encodeMap=function(e,t){var s=Object.keys(e);this.sortKeys&&s.sort();var r=this.ignoreUndefined?this.countWithoutUndefined(e,s):s.length;if(r<16)this.writeU8(128+r);else if(r<65536)this.writeU8(222),this.writeU16(r);else if(r<4294967296)this.writeU8(223),this.writeU32(r);else throw new Error("Too large map object: ".concat(r));for(var n=0,o=s;n<o.length;n++){var c=o[n],u=e[c];this.ignoreUndefined&&u===void 0||(this.encodeString(c),this.doEncode(u,t+1))}},i.prototype.encodeExtension=function(e){var t=e.data.length;if(t===1)this.writeU8(212);else if(t===2)this.writeU8(213);else if(t===4)this.writeU8(214);else if(t===8)this.writeU8(215);else if(t===16)this.writeU8(216);else if(t<256)this.writeU8(199),this.writeU8(t);else if(t<65536)this.writeU8(200),this.writeU16(t);else if(t<4294967296)this.writeU8(201),this.writeU32(t);else throw new Error("Too large extension object: ".concat(t));this.writeI8(e.type),this.writeU8a(e.data)},i.prototype.writeU8=function(e){this.ensureBufferSizeToWrite(1),this.view.setUint8(this.pos,e),this.pos++},i.prototype.writeU8a=function(e){var t=e.length;this.ensureBufferSizeToWrite(t),this.bytes.set(e,this.pos),this.pos+=t},i.prototype.writeI8=function(e){this.ensureBufferSizeToWrite(1),this.view.setInt8(this.pos,e),this.pos++},i.prototype.writeU16=function(e){this.ensureBufferSizeToWrite(2),this.view.setUint16(this.pos,e),this.pos+=2},i.prototype.writeI16=function(e){this.ensureBufferSizeToWrite(2),this.view.setInt16(this.pos,e),this.pos+=2},i.prototype.writeU32=function(e){this.ensureBufferSizeToWrite(4),this.view.setUint32(this.pos,e),this.pos+=4},i.prototype.writeI32=function(e){this.ensureBufferSizeToWrite(4),this.view.setInt32(this.pos,e),this.pos+=4},i.prototype.writeF32=function(e){this.ensureBufferSizeToWrite(4),this.view.setFloat32(this.pos,e),this.pos+=4},i.prototype.writeF64=function(e){this.ensureBufferSizeToWrite(8),this.view.setFloat64(this.pos,e),this.pos+=8},i.prototype.writeU64=function(e){this.ensureBufferSizeToWrite(8),Z(this.view,this.pos,e),this.pos+=8},i.prototype.writeI64=function(e){this.ensureBufferSizeToWrite(8),N(this.view,this.pos,e),this.pos+=8},i}();function L(i){return"".concat(i<0?"-":"","0x").concat(Math.abs(i).toString(16).padStart(2,"0"))}var Ue=16,Ee=16,Te=function(){function i(e,t){e===void 0&&(e=Ue),t===void 0&&(t=Ee),this.maxKeyLength=e,this.maxLengthPerKey=t,this.hit=0,this.miss=0,this.caches=[];for(var s=0;s<this.maxKeyLength;s++)this.caches.push([])}return i.prototype.canBeCached=function(e){return e>0&&e<=this.maxKeyLength},i.prototype.find=function(e,t,s){var r=this.caches[s-1];e:for(var n=0,o=r;n<o.length;n++){for(var c=o[n],u=c.bytes,a=0;a<s;a++)if(u[a]!==e[t+a])continue e;return c.str}return null},i.prototype.store=function(e,t){var s=this.caches[e.length-1],r={bytes:e,str:t};s.length>=this.maxLengthPerKey?s[Math.random()*s.length|0]=r:s.push(r)},i.prototype.decode=function(e,t,s){var r=this.find(e,t,s);if(r!=null)return this.hit++,r;this.miss++;var n=q(e,t,s),o=Uint8Array.prototype.slice.call(e,t,t+s);return this.store(o,n),n},i}(),ze=globalThis&&globalThis.__awaiter||function(i,e,t,s){function r(n){return n instanceof t?n:new t(function(o){o(n)})}return new(t||(t=Promise))(function(n,o){function c(h){try{a(s.next(h))}catch(d){o(d)}}function u(h){try{a(s.throw(h))}catch(d){o(d)}}function a(h){h.done?n(h.value):r(h.value).then(c,u)}a((s=s.apply(i,e||[])).next())})},P=globalThis&&globalThis.__generator||function(i,e){var t={label:0,sent:function(){if(n[0]&1)throw n[1];return n[1]},trys:[],ops:[]},s,r,n,o;return o={next:c(0),throw:c(1),return:c(2)},typeof Symbol=="function"&&(o[Symbol.iterator]=function(){return this}),o;function c(a){return function(h){return u([a,h])}}function u(a){if(s)throw new TypeError("Generator is already executing.");for(;t;)try{if(s=1,r&&(n=a[0]&2?r.return:a[0]?r.throw||((n=r.return)&&n.call(r),0):r.next)&&!(n=n.call(r,a[1])).done)return n;switch(r=0,n&&(a=[a[0]&2,n.value]),a[0]){case 0:case 1:n=a;break;case 4:return t.label++,{value:a[1],done:!1};case 5:t.label++,r=a[1],a=[0];continue;case 7:a=t.ops.pop(),t.trys.pop();continue;default:if(n=t.trys,!(n=n.length>0&&n[n.length-1])&&(a[0]===6||a[0]===2)){t=0;continue}if(a[0]===3&&(!n||a[1]>n[0]&&a[1]<n[3])){t.label=a[1];break}if(a[0]===6&&t.label<n[1]){t.label=n[1],n=a;break}if(n&&t.label<n[2]){t.label=n[2],t.ops.push(a);break}n[2]&&t.ops.pop(),t.trys.pop();continue}a=e.call(i,t)}catch(h){a=[6,h],r=0}finally{s=n=0}if(a[0]&5)throw a[1];return{value:a[0]?a[1]:void 0,done:!0}}},V=globalThis&&globalThis.__asyncValues||function(i){if(!Symbol.asyncIterator)throw new TypeError("Symbol.asyncIterator is not defined.");var e=i[Symbol.asyncIterator],t;return e?e.call(i):(i=typeof __values=="function"?__values(i):i[Symbol.iterator](),t={},s("next"),s("throw"),s("return"),t[Symbol.asyncIterator]=function(){return this},t);function s(n){t[n]=i[n]&&function(o){return new Promise(function(c,u){o=i[n](o),r(c,u,o.done,o.value)})}}function r(n,o,c,u){Promise.resolve(u).then(function(a){n({value:a,done:c})},o)}},U=globalThis&&globalThis.__await||function(i){return this instanceof U?(this.v=i,this):new U(i)},Se=globalThis&&globalThis.__asyncGenerator||function(i,e,t){if(!Symbol.asyncIterator)throw new TypeError("Symbol.asyncIterator is not defined.");var s=t.apply(i,e||[]),r,n=[];return r={},o("next"),o("throw"),o("return"),r[Symbol.asyncIterator]=function(){return this},r;function o(l){s[l]&&(r[l]=function(f){return new Promise(function(p,S){n.push([l,f,p,S])>1||c(l,f)})})}function c(l,f){try{u(s[l](f))}catch(p){d(n[0][3],p)}}function u(l){l.value instanceof U?Promise.resolve(l.value.v).then(a,h):d(n[0][2],l)}function a(l){c("next",l)}function h(l){c("throw",l)}function d(l,f){l(f),n.shift(),n.length&&c(n[0][0],n[0][1])}},_e=function(i){var e=typeof i;return e==="string"||e==="number"},T=-1,j=new DataView(new ArrayBuffer(0)),Ae=new Uint8Array(j.buffer),B=function(){try{j.getInt8(0)}catch(i){return i.constructor}throw new Error("never reached")}(),H=new B("Insufficient data"),Ie=new Te,Xe=function(){function i(e,t,s,r,n,o,c,u){e===void 0&&(e=G.defaultCodec),t===void 0&&(t=void 0),s===void 0&&(s=v),r===void 0&&(r=v),n===void 0&&(n=v),o===void 0&&(o=v),c===void 0&&(c=v),u===void 0&&(u=Ie),this.extensionCodec=e,this.context=t,this.maxStrLength=s,this.maxBinLength=r,this.maxArrayLength=n,this.maxMapLength=o,this.maxExtLength=c,this.keyDecoder=u,this.totalPos=0,this.pos=0,this.view=j,this.bytes=Ae,this.headByte=T,this.stack=[]}return i.prototype.reinitializeState=function(){this.totalPos=0,this.headByte=T,this.stack.length=0},i.prototype.setBuffer=function(e){this.bytes=I(e),this.view=be(this.bytes),this.pos=0},i.prototype.appendBuffer=function(e){if(this.headByte===T&&!this.hasRemaining(1))this.setBuffer(e);else{var t=this.bytes.subarray(this.pos),s=I(e),r=new Uint8Array(t.length+s.length);r.set(t),r.set(s,t.length),this.setBuffer(r)}},i.prototype.hasRemaining=function(e){return this.view.byteLength-this.pos>=e},i.prototype.createExtraByteError=function(e){var t=this,s=t.view,r=t.pos;return new RangeError("Extra ".concat(s.byteLength-r," of ").concat(s.byteLength," byte(s) found at buffer[").concat(e,"]"))},i.prototype.decode=function(e){this.reinitializeState(),this.setBuffer(e);var t=this.doDecodeSync();if(this.hasRemaining(1))throw this.createExtraByteError(this.pos);return t},i.prototype.decodeMulti=function(e){return P(this,function(t){switch(t.label){case 0:this.reinitializeState(),this.setBuffer(e),t.label=1;case 1:return this.hasRemaining(1)?[4,this.doDecodeSync()]:[3,3];case 2:return t.sent(),[3,1];case 3:return[2]}})},i.prototype.decodeAsync=function(e){var t,s,r,n;return ze(this,void 0,void 0,function(){var o,c,u,a,h,d,l,f;return P(this,function(p){switch(p.label){case 0:o=!1,p.label=1;case 1:p.trys.push([1,6,7,12]),t=V(e),p.label=2;case 2:return[4,t.next()];case 3:if(s=p.sent(),!!s.done)return[3,5];if(u=s.value,o)throw this.createExtraByteError(this.totalPos);this.appendBuffer(u);try{c=this.doDecodeSync(),o=!0}catch(S){if(!(S instanceof B))throw S}this.totalPos+=this.pos,p.label=4;case 4:return[3,2];case 5:return[3,12];case 6:return a=p.sent(),r={error:a},[3,12];case 7:return p.trys.push([7,,10,11]),s&&!s.done&&(n=t.return)?[4,n.call(t)]:[3,9];case 8:p.sent(),p.label=9;case 9:return[3,11];case 10:if(r)throw r.error;return[7];case 11:return[7];case 12:if(o){if(this.hasRemaining(1))throw this.createExtraByteError(this.totalPos);return[2,c]}throw h=this,d=h.headByte,l=h.pos,f=h.totalPos,new RangeError("Insufficient data in parsing ".concat(L(d)," at ").concat(f," (").concat(l," in the current buffer)"))}})})},i.prototype.decodeArrayStream=function(e){return this.decodeMultiAsync(e,!0)},i.prototype.decodeStream=function(e){return this.decodeMultiAsync(e,!1)},i.prototype.decodeMultiAsync=function(e,t){return Se(this,arguments,function(){var r,n,o,c,u,a,h,d,l;return P(this,function(f){switch(f.label){case 0:r=t,n=-1,f.label=1;case 1:f.trys.push([1,13,14,19]),o=V(e),f.label=2;case 2:return[4,U(o.next())];case 3:if(c=f.sent(),!!c.done)return[3,12];if(u=c.value,t&&n===0)throw this.createExtraByteError(this.totalPos);this.appendBuffer(u),r&&(n=this.readArraySize(),r=!1,this.complete()),f.label=4;case 4:f.trys.push([4,9,,10]),f.label=5;case 5:return[4,U(this.doDecodeSync())];case 6:return[4,f.sent()];case 7:return f.sent(),--n===0?[3,8]:[3,5];case 8:return[3,10];case 9:if(a=f.sent(),!(a instanceof B))throw a;return[3,10];case 10:this.totalPos+=this.pos,f.label=11;case 11:return[3,2];case 12:return[3,19];case 13:return h=f.sent(),d={error:h},[3,19];case 14:return f.trys.push([14,,17,18]),c&&!c.done&&(l=o.return)?[4,U(l.call(o))]:[3,16];case 15:f.sent(),f.label=16;case 16:return[3,18];case 17:if(d)throw d.error;return[7];case 18:return[7];case 19:return[2]}})})},i.prototype.doDecodeSync=function(){e:for(;;){var e=this.readHeadByte(),t=void 0;if(e>=224)t=e-256;else if(e<192)if(e<128)t=e;else if(e<144){var s=e-128;if(s!==0){this.pushMapState(s),this.complete();continue e}else t={}}else if(e<160){var s=e-144;if(s!==0){this.pushArrayState(s),this.complete();continue e}else t=[]}else{var r=e-160;t=this.decodeUtf8String(r,0)}else if(e===192)t=null;else if(e===194)t=!1;else if(e===195)t=!0;else if(e===202)t=this.readF32();else if(e===203)t=this.readF64();else if(e===204)t=this.readU8();else if(e===205)t=this.readU16();else if(e===206)t=this.readU32();else if(e===207)t=this.readU64();else if(e===208)t=this.readI8();else if(e===209)t=this.readI16();else if(e===210)t=this.readI32();else if(e===211)t=this.readI64();else if(e===217){var r=this.lookU8();t=this.decodeUtf8String(r,1)}else if(e===218){var r=this.lookU16();t=this.decodeUtf8String(r,2)}else if(e===219){var r=this.lookU32();t=this.decodeUtf8String(r,4)}else if(e===220){var s=this.readU16();if(s!==0){this.pushArrayState(s),this.complete();continue e}else t=[]}else if(e===221){var s=this.readU32();if(s!==0){this.pushArrayState(s),this.complete();continue e}else t=[]}else if(e===222){var s=this.readU16();if(s!==0){this.pushMapState(s),this.complete();continue e}else t={}}else if(e===223){var s=this.readU32();if(s!==0){this.pushMapState(s),this.complete();continue e}else t={}}else if(e===196){var s=this.lookU8();t=this.decodeBinary(s,1)}else if(e===197){var s=this.lookU16();t=this.decodeBinary(s,2)}else if(e===198){var s=this.lookU32();t=this.decodeBinary(s,4)}else if(e===212)t=this.decodeExtension(1,0);else if(e===213)t=this.decodeExtension(2,0);else if(e===214)t=this.decodeExtension(4,0);else if(e===215)t=this.decodeExtension(8,0);else if(e===216)t=this.decodeExtension(16,0);else if(e===199){var s=this.lookU8();t=this.decodeExtension(s,1)}else if(e===200){var s=this.lookU16();t=this.decodeExtension(s,2)}else if(e===201){var s=this.lookU32();t=this.decodeExtension(s,4)}else throw new g("Unrecognized type byte: ".concat(L(e)));this.complete();for(var n=this.stack;n.length>0;){var o=n[n.length-1];if(o.type===0)if(o.array[o.position]=t,o.position++,o.position===o.size)n.pop(),t=o.array;else continue e;else if(o.type===1){if(!_e(t))throw new g("The type of key must be string or number but "+typeof t);if(t==="__proto__")throw new g("The key __proto__ is not allowed");o.key=t,o.type=2;continue e}else if(o.map[o.key]=t,o.readCount++,o.readCount===o.size)n.pop(),t=o.map;else{o.key=null,o.type=1;continue e}}return t}},i.prototype.readHeadByte=function(){return this.headByte===T&&(this.headByte=this.readU8()),this.headByte},i.prototype.complete=function(){this.headByte=T},i.prototype.readArraySize=function(){var e=this.readHeadByte();switch(e){case 220:return this.readU16();case 221:return this.readU32();default:{if(e<160)return e-144;throw new g("Unrecognized array type byte: ".concat(L(e)))}}},i.prototype.pushMapState=function(e){if(e>this.maxMapLength)throw new g("Max length exceeded: map length (".concat(e,") > maxMapLengthLength (").concat(this.maxMapLength,")"));this.stack.push({type:1,size:e,key:null,readCount:0,map:{}})},i.prototype.pushArrayState=function(e){if(e>this.maxArrayLength)throw new g("Max length exceeded: array length (".concat(e,") > maxArrayLength (").concat(this.maxArrayLength,")"));this.stack.push({type:0,size:e,array:new Array(e),position:0})},i.prototype.decodeUtf8String=function(e,t){var s;if(e>this.maxStrLength)throw new g("Max length exceeded: UTF-8 byte length (".concat(e,") > maxStrLength (").concat(this.maxStrLength,")"));if(this.bytes.byteLength<this.pos+t+e)throw H;var r=this.pos+t,n;return this.stateIsMapKey()&&(!((s=this.keyDecoder)===null||s===void 0)&&s.canBeCached(e))?n=this.keyDecoder.decode(this.bytes,r,e):e>ce?n=ue(this.bytes,r,e):n=q(this.bytes,r,e),this.pos+=t+e,n},i.prototype.stateIsMapKey=function(){if(this.stack.length>0){var e=this.stack[this.stack.length-1];return e.type===1}return!1},i.prototype.decodeBinary=function(e,t){if(e>this.maxBinLength)throw new g("Max length exceeded: bin length (".concat(e,") > maxBinLength (").concat(this.maxBinLength,")"));if(!this.hasRemaining(e+t))throw H;var s=this.pos+t,r=this.bytes.subarray(s,s+e);return this.pos+=t+e,r},i.prototype.decodeExtension=function(e,t){if(e>this.maxExtLength)throw new g("Max length exceeded: ext length (".concat(e,") > maxExtLength (").concat(this.maxExtLength,")"));var s=this.view.getInt8(this.pos+t),r=this.decodeBinary(e,t+1);return this.extensionCodec.decode(r,s,this.context)},i.prototype.lookU8=function(){return this.view.getUint8(this.pos)},i.prototype.lookU16=function(){return this.view.getUint16(this.pos)},i.prototype.lookU32=function(){return this.view.getUint32(this.pos)},i.prototype.readU8=function(){var e=this.view.getUint8(this.pos);return this.pos++,e},i.prototype.readI8=function(){var e=this.view.getInt8(this.pos);return this.pos++,e},i.prototype.readU16=function(){var e=this.view.getUint16(this.pos);return this.pos+=2,e},i.prototype.readI16=function(){var e=this.view.getInt16(this.pos);return this.pos+=2,e},i.prototype.readU32=function(){var e=this.view.getUint32(this.pos);return this.pos+=4,e},i.prototype.readI32=function(){var e=this.view.getInt32(this.pos);return this.pos+=4,e},i.prototype.readU64=function(){var e=ee(this.view,this.pos);return this.pos+=8,e},i.prototype.readI64=function(){var e=X(this.view,this.pos);return this.pos+=8,e},i.prototype.readF32=function(){var e=this.view.getFloat32(this.pos);return this.pos+=4,e},i.prototype.readF64=function(){var e=this.view.getFloat64(this.pos);return this.pos+=8,e},i}();
+return { Encoder: Ne, Decoder: Xe };
+})();
+    },
+    "index.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
+require('dotenv').config()
+const WebSocket = require('ws')
+const msgpack = require('msgpack-lite')
+const http = require('http')
+const url = require('url')
+const inquirer = require('inquirer')
+const fetch = require('node-fetch')
+const pkg = require('./package.json')
+
+async function checkLatest() {
+	const response = await fetch(
+		'https://raw.githubusercontent.com/kookywarrior/moomooio-private-server/main/package.json'
+	)
+	const data = await response.json()
+	return data.version === pkg.version
+}
+
+var MODE = process.env.MODE
+var PASSWORD = process.env.PASSWORD
+var PREFIX = process.env.PREFIX
+const PORT = process.env.PORT || 1234
+var server = new WebSocket.Server({ noServer: true })
+
+let delta,
+	now,
+	lastUpdate = Date.now()
+var ais = []
+var players = []
+var gameObjects = []
+var projectiles = []
+// messages to one connection: Ryn's admin panel when it is there, the game's notice otherwise
+function rynTell(conn, text) {
+	if (conn && typeof conn.rynNotice === 'function') conn.rynNotice(String(text))
+	else if (conn) server.send(conn.id, 'ch', [-1, String(text)])
+}
+
+function findPlayerByID(id) {
+	for (let i = 0; i < players.length; ++i) {
+		if (players[i].id === id) {
+			return players[i]
+		}
+	}
+	return null
+}
+function findPlayerBySID(sid) {
+	for (let i = 0; i < players.length; ++i) {
+		if (players[i].sid === sid) {
+			return players[i]
+		}
+	}
+	return null
+}
+const UTILS = require('./src/utils')
+let config = require('./src/config')
+let GameObject = require('./src/gameObject.js')
+let items = require('./src/items.js')
+let ObjectManager = require('./src/objectManager.js')
+let Player = require('./src/player.js')
+let store = require('./src/store.js')
+let Projectile = require('./src/projectile.js')
+let ProjectileManager = require('./src/projectileManager.js')
+let AiManager = require('./src/aiManager.js')
+let AI = require('./src/ai.js')
+let TribeManager = require('./src/tribeManager.js')
+let Tribe = require('./src/tribe.js')
+let objectManager = new ObjectManager(
+	GameObject,
+	gameObjects,
+	UTILS,
+	config,
+	players,
+	server
+)
+let aiManager = new AiManager(
+	ais,
+	AI,
+	players,
+	items,
+	objectManager,
+	config,
+	UTILS,
+	scoreCallback,
+	server
+)
+let projectileManager = new ProjectileManager(
+	Projectile,
+	projectiles,
+	players,
+	ais,
+	objectManager,
+	items,
+	config,
+	UTILS,
+	server
+)
+let tribeManager = new TribeManager(Tribe, findPlayerBySID, server)
+let hats = store.hats,
+	accessories = store.accessories
+
+// Ryn's admin tools (src/ryn.js); the getters follow setupServer's new arrays
+const ryn = require('./src/ryn.js')({
+	UTILS,
+	config,
+	items,
+	hats,
+	accessories,
+	server,
+	get players() {
+		return players
+	},
+	get ais() {
+		return ais
+	},
+	get gameObjects() {
+		return gameObjects
+	},
+	get projectiles() {
+		return projectiles
+	},
+	get objectManager() {
+		return objectManager
+	},
+	get aiManager() {
+		return aiManager
+	},
+	findPlayerBySID,
+	newPlayer: (id, sid) =>
+		new Player(id, sid, config, UTILS, projectileManager, objectManager, players, ais, items, hats, accessories, server, scoreCallback, iconCallback, MODE),
+	allocSid() {
+		for (let sid = 1; sid < 1000; sid++) {
+			if (!playersSid.includes(sid)) {
+				playersSid.push(sid)
+				return sid
+			}
+		}
+		return 0
+	},
+	freeSid(sid) {
+		const i = playersSid.indexOf(sid)
+		if (i !== -1) playersSid.splice(i, 1)
+	},
+	updateLeaderboard: () => updateLeaderboard(),
+	debug(p, text) {
+		const conn = connection[p.id]
+		if (conn && typeof conn.rynDebug === 'function') conn.rynDebug(text)
+	},
+	iconCallback: () => iconCallback(),
+	setTickRate(rate) {
+		config.serverUpdateRate = rate
+		tickDue = Date.now() + 1000 / rate
+	}
+})
+
+var connection = {}
+server.send = function (id, type, data = []) {
+	if (connection[id]) {
+		// Ryn's packet inspector
+		if (connection[id].rynTap) connection[id].rynTap(1, UTILS.OldToNew(type, 'RECEIVE'), data)
+		connection[id].send(
+			new Uint8Array(
+				Array.from(msgpack.encode([UTILS.OldToNew(type, 'RECEIVE'), data]))
+			)
+		)
+	}
+}
+server.sendAll = function (type, data = []) {
+	for (let i = 0; i < players.length; i++) {
+		let tmpPlayer = players[i]
+		if (tmpPlayer) {
+			server.send(tmpPlayer.id, type, data)
+		}
+	}
+}
+
+let playersSid = []
+server.addListener('connection', function (conn) {
+	while (true) {
+		conn.id = UTILS.randomString(10)
+		let returnvalue = true
+		for (let i = 0; i < players.length; i++) {
+			if (conn.id === players[i].id) {
+				returnvalue = false
+				break
+			}
+		}
+		if (returnvalue) break
+	}
+
+	conn.sid = 1
+	while (true) {
+		if (!playersSid.includes(conn.sid)) {
+			playersSid.push(conn.sid)
+			break
+		}
+		conn.sid++
+	}
+
+	connection[conn.id] = conn
+	conn.on('error', console.log)
+	conn.on('close', function () {
+		let tmpPlayer = findPlayerByID(conn.id)
+		if (!tmpPlayer) return
+		if (tmpPlayer.team && MODE !== 'HOCKEY') {
+			if (tmpPlayer.isLeader) {
+				server.sendAll('ad', [tmpPlayer.team])
+				tribeManager.deleteTribe(tmpPlayer.team)
+			} else {
+				tribeManager.getTribe(tmpPlayer.team).removePlayer(tmpPlayer)
+			}
+		}
+		server.sendAll('4', [conn.id])
+		objectManager.removeAllItems(tmpPlayer.sid, server)
+		for (let i = 0; i < players.length; ++i) {
+			if (players[i].id == conn.id) {
+				players.splice(i, 1)
+				const tmpIndex = playersSid.indexOf(conn.sid)
+				if (tmpIndex !== -1) {
+					playersSid.splice(tmpIndex, 1)
+				}
+				updateLeaderboard()
+				iconCallback()
+				break
+			}
+		}
+	})
+
+	// Ryn's admin panel reads the server's state through this
+	conn.rynState = function () {
+		const me = findPlayerByID(conn.id)
+		return {
+			me: me ? { sid: me.sid, name: me.name, alive: me.alive, admin: !!me.admin, god: !!me.rynGod, x: me.x, y: me.y, weapons: (me.weapons || []).slice(), xp: (me.weapons || []).map(w => (me.weaponXP && me.weaponXP[w]) || 0), hat: me.skinIndex || 0, acc: me.tailIndex || 0, shame: me.shameCount || 0, shameTimer: Math.max(0, Math.round(me.shameTimer || 0)) } : null,
+			players: players.map(p => ({ sid: p.sid, name: p.name, alive: p.alive, god: !!p.rynGod, health: Math.round(p.health), maxHealth: p.maxHealth, age: p.age, dummy: !!p.rynDummy, x: Math.round(p.x), y: Math.round(p.y) })),
+			world: { mobs: !!config.spawnMobs, hostile: !!config.spawnHostile, bosses: !!config.spawnBosses },
+			mode: MODE
+		}
+	}
+
+	const onMessage = function (message) {
+		let data,
+			parsed,
+			type,
+			error = false
+		try {
+			data = new Uint8Array(message)
+			parsed = msgpack.decode(data)
+			type = UTILS.NewToOld(parsed[0], 'SEND')
+			data = parsed[1]
+			if (conn.rynTap) conn.rynTap(0, parsed[0], data)
+		} catch (e) {
+			error = true
+			conn.close()
+		}
+		if (error) return
+		const events = {
+			pp: pingSocket,
+			sp: enterGame,
+			rmd: resetMoveDir,
+			c: sendAtckState,
+			33: sendMoveDir,
+			2: sendDir,
+			5: selectToBuild,
+			6: sendUpgrade,
+			7: sendLockGather,
+			ch: sendMessage,
+			'13c': storeFunction,
+			8: createAllaince,
+			9: leaveAlliance,
+			10: sendJoinRequest,
+			11: decideJoinRequest,
+			12: kickFromClan,
+			14: sendMapPing
+		}
+		if (events[type]) {
+			try {
+				events[type].apply(undefined, data)
+			} catch (error) {}
+		}
+
+		function pingSocket() {
+			server.send(conn.id, 'pp')
+		}
+
+		function enterGame(data) {
+			if (MODE === 'HOCKEY' && config.isStarted) return
+			let tmpPlayer = findPlayerByID(conn.id)
+			if (tmpPlayer) {
+				tmpPlayer.spawn(data.moofoll)
+				tmpPlayer.visible = false
+
+				let location = objectManager.fetchSpawnObj(tmpPlayer.sid)
+				if (!location) {
+					const alivePlayers = players.filter(
+						p => p.alive && p.sid !== tmpPlayer.sid
+					)
+					if (alivePlayers.length > 0) {
+						const ref = alivePlayers[UTILS.randInt(0, alivePlayers.length - 1)]
+						const angle = UTILS.randFloat(-Math.PI, Math.PI)
+						const dist = UTILS.randInt(100, 500)
+						let spawnX = Math.min(
+							config.mapScale - 50,
+							Math.max(50, ref.x + dist * Math.cos(angle))
+						)
+						let spawnY = Math.min(
+							config.mapScale - 50,
+							Math.max(50, ref.y + dist * Math.sin(angle))
+						)
+						location = [spawnX, spawnY]
+					} else {
+						location = [
+							UTILS.randInt(0, config.mapScale),
+							UTILS.randInt(0, config.mapScale)
+						]
+					}
+				}
+
+				tmpPlayer.setData([
+					tmpPlayer.id,
+					tmpPlayer.sid,
+					data.name,
+					location[0],
+					location[1],
+					0,
+					100,
+					100,
+					config.playerScale,
+					data.skin
+				])
+				server.send(conn.id, '1', [tmpPlayer.sid])
+				if (typeof conn.rynDebug === 'function') conn.rynDebug('spawned at ' + Math.round(location[0]) + ', ' + Math.round(location[1]) + ' (' + players.length + ' players on the server)')
+				// Ryn's lobby worlds load into the server when you first spawn in them
+				if (typeof conn.rynSpawned === 'function') {
+					try {
+						conn.rynSpawned()
+					} catch (e) {
+						console.log('ryn world load', e)
+					}
+				}
+				updateLeaderboard()
+
+				var playerName = data.name
+					? (data.name + '')
+							.slice(0, config.maxNameLength)
+							.replace(/[^\w:\(\)\/? -]+/gim, ' ')
+							.replace(/[^\x00-\x7F]/g, ' ')
+							.trim()
+					: ''
+				if (conn.rynOwner || (config.adminNames && config.adminNames.includes(playerName))) {
+					tmpPlayer.admin = true
+					rynTell(conn, '[Server] Welcome, ' + playerName + '! SID: ' + tmpPlayer.sid)
+				}
+			}
+		}
+
+		function resetMoveDir() {
+			let tmpPlayer = findPlayerByID(conn.id)
+			if (tmpPlayer && tmpPlayer.alive) {
+				tmpPlayer.resetMoveDir()
+			}
+		}
+
+		function sendAtckState(mouseState, dir) {
+			let tmpPlayer = findPlayerByID(conn.id)
+			if (tmpPlayer && tmpPlayer.alive) {
+				// an angle of 0 (aiming east) is an angle too
+				if (typeof dir === 'number' && isFinite(dir)) {
+					tmpPlayer.dir = dir
+				}
+				tmpPlayer.mouseState = mouseState
+				if (mouseState) {
+					if (tmpPlayer.buildIndex >= 0) {
+						for (let i = 0; i < items.list.length; i++) {
+							if (i === tmpPlayer.buildIndex) {
+								tmpPlayer.buildItem(items.list[i])
+								break
+							}
+						}
+					} else {
+						tmpPlayer.gathering = mouseState
+					}
+				}
+			}
+		}
+
+		function sendMoveDir(newMoveDir) {
+			let tmpPlayer = findPlayerByID(conn.id)
+			if (tmpPlayer && tmpPlayer.alive) {
+				tmpPlayer.moveDir = newMoveDir
+			}
+		}
+
+		function sendDir(newDir) {
+			let tmpPlayer = findPlayerByID(conn.id)
+			if (tmpPlayer && tmpPlayer.alive) {
+				tmpPlayer.dir = newDir
+			}
+		}
+
+		function selectToBuild(index, wpn) {
+			if (MODE === 'HOCKEY') return
+			let tmpPlayer = findPlayerByID(conn.id)
+			if (tmpPlayer && tmpPlayer.alive) {
+				if (wpn) {
+					tmpPlayer.buildIndex = -1
+					tmpPlayer.weaponIndex = index
+				} else {
+					var canbuild = true
+					for (let i = 0; i < items.list.length; i++) {
+						if (i === index) {
+							canbuild = tmpPlayer.canBuild(items.list[i])
+							break
+						}
+					}
+					if (!canbuild || tmpPlayer.buildIndex === index) {
+						tmpPlayer.buildIndex = -1
+					} else {
+						tmpPlayer.buildIndex = index
+					}
+				}
+			}
+		}
+
+		function sendLockGather(type) {
+			let tmpPlayer = findPlayerByID(conn.id)
+			if (tmpPlayer && tmpPlayer.alive) {
+				if (type === 0) {
+					tmpPlayer.lockDir = tmpPlayer.lockDir ? 0 : 1
+				} else if (type === 1) {
+					tmpPlayer.autoGather = tmpPlayer.autoGather ? 0 : 1
+				}
+			}
+		}
+
+		function sendMessage(message) {
+			let tmpPlayer = findPlayerByID(conn.id)
+			if (!tmpPlayer || !tmpPlayer.alive) return
+
+			if (message === `${PREFIX}sid`) {
+				rynTell(conn, '[Info] Your SID: ' + tmpPlayer.sid + ' | Name: ' + tmpPlayer.name)
+				return
+			}
+
+			if (message.startsWith(PREFIX) && tmpPlayer.admin) {
+				if (ryn.command(conn, tmpPlayer, message.slice(PREFIX.length), msg => rynTell(conn, msg))) return
+				if (message === `${PREFIX}s`) {
+					for (let i = 0; i < 9; i++) {
+						tmpPlayer.addResource(3, 999999, true)
+					}
+					tmpPlayer.addResource(2, 999999, true)
+					tmpPlayer.addResource(1, 999999, true)
+					tmpPlayer.addResource(0, 999999, true)
+				} else if (message.startsWith(`${PREFIX}speed`)) {
+					var speedmlt = message.replace(PREFIX + 'speed ', '')
+					if (UTILS.isNumber(parseFloat(speedmlt))) {
+						tmpPlayer.speed = parseFloat(speedmlt)
+					}
+				} else if (message.startsWith(`${PREFIX}tp`)) {
+					var tmpArgs = message.replace(PREFIX + 'tp ', '').split(' ')
+					if (tmpArgs[1] == null) {
+						var tmpObj = findPlayerBySID(parseInt(tmpArgs[0]))
+						if (tmpObj) {
+							tmpPlayer.x = tmpObj.x
+							tmpPlayer.y = tmpObj.y
+						}
+					} else {
+						const tmpX = parseInt(tmpArgs[0])
+						const tmpY = parseInt(tmpArgs[1])
+						if (UTILS.isNumber(tmpX) && UTILS.isNumber(tmpY)) {
+							tmpPlayer.x = tmpX
+							tmpPlayer.y = tmpY
+						}
+					}
+				} else if (message.startsWith(`${PREFIX}v`)) {
+					var msg = message.replace(PREFIX + 'v ', '')
+					switch (msg) {
+						case 'emerald':
+							tmpPlayer.weaponXP[tmpPlayer.weaponIndex] = 30000
+							break
+						case 'ruby':
+							tmpPlayer.weaponXP[tmpPlayer.weaponIndex] = 12000
+							break
+						case 'diamond':
+							tmpPlayer.weaponXP[tmpPlayer.weaponIndex] = 7000
+							break
+						case 'gold':
+							tmpPlayer.weaponXP[tmpPlayer.weaponIndex] = 3000
+							break
+						case 'normal':
+							tmpPlayer.weaponXP[tmpPlayer.weaponIndex] = 0
+							break
+					}
+				} else if (message === PREFIX + 'die') {
+					tmpPlayer.kill(tmpPlayer)
+				} else if (message.startsWith(`${PREFIX}upgrade`)) {
+					var msg = message.replace(PREFIX + 'upgrade ', '')
+					sendUpgrade(parseInt(msg))
+				} else if (message.startsWith(PREFIX + 'dmg')) {
+					if (message === PREFIX + 'dmg') {
+						tmpPlayer.customDmg = null
+					} else {
+						var dmg = message.replace(PREFIX + 'dmg ', '')
+						if (UTILS.isNumber(parseFloat(dmg))) {
+							tmpPlayer.customDmg = parseFloat(dmg)
+						}
+					}
+				} else if (message === PREFIX + 'b') {
+					for (let i = 0; i < players.length; i++) {
+						objectManager.removeAllItems(players[i].sid, server)
+						for (let j = 0; j < items.groups.length; j++) {
+							players[i].changeItemAllCount(j, 0)
+						}
+					}
+				} else if (message.startsWith(PREFIX + 'kill ')) {
+					var killSid = parseInt(message.replace(PREFIX + 'kill ', ''))
+					var killTarget = findPlayerBySID(killSid)
+					if (killTarget && killTarget.alive) {
+						killTarget.kill(null)
+					}
+				} else if (message === PREFIX + 'mobs off') {
+					config.spawnMobs = false
+					for (let i = 0; i < ais.length; i++) {
+						ais[i].active = false
+						ais[i].alive = false
+					}
+					rynTell(conn, '[Admin] Mobs off.')
+				} else if (message === PREFIX + 'mobs on') {
+					config.spawnMobs = true
+					rynTell(conn, '[Admin] Mobs on. Restart the server for them to spawn.')
+				} else if (message === PREFIX + 'hostile off') {
+					config.spawnHostile = false
+					const hostileTypes = [2, 3, 4, 9, 10, 13, 14]
+					for (let i = 0; i < ais.length; i++) {
+						if (hostileTypes.includes(ais[i].index)) {
+							ais[i].active = false
+							ais[i].alive = false
+						}
+					}
+					rynTell(conn, '[Admin] Hostile mobs off.')
+				} else if (message === PREFIX + 'hostile on') {
+					config.spawnHostile = true
+					rynTell(conn, '[Admin] Hostile mobs on.')
+				} else if (message === PREFIX + 'bosses off') {
+					config.spawnBosses = false
+					const bossTypes = [6, 7, 8, 11, 13, 14]
+					for (let i = 0; i < ais.length; i++) {
+						if (bossTypes.includes(ais[i].index)) {
+							ais[i].active = false
+							ais[i].alive = false
+						}
+					}
+					rynTell(conn, '[Admin] Bosses off.')
+				} else if (message === PREFIX + 'bosses on') {
+					config.spawnBosses = true
+					rynTell(conn, '[Admin] Bosses on.')
+				} else if (message === PREFIX + 'players') {
+					var list = players
+						.filter(p => p.alive)
+						.map(p => p.name + '(sid:' + p.sid + ')')
+						.join(', ')
+					rynTell(conn, '[Admin] Players: ' + (list || 'none'))
+				} else if (
+					MODE === 'HOCKEY' &&
+					message === PREFIX + 'start' &&
+					!config.isStarted
+				) {
+					var tmpObj = findPlayerBySID(1)
+					if (tmpObj) {
+						tmpObj.spawn(false)
+						tmpObj.visible = false
+						tmpObj.setData([
+							tmpObj.id,
+							tmpObj.sid,
+							' ',
+							(3000 + 43 + (40 - 2) * 43 * 2 + (3000 + 43)) / 2,
+							(3000 + 43 + (20 - 2) * 43 * 2 + (3000 + 43)) / 2,
+							Math.PI / 2,
+							0,
+							100,
+							config.playerScale,
+							4
+						])
+						tmpObj.weaponIndex = 11
+						const teams = UTILS.randTeam(
+							players.slice(1),
+							(players.length - 1) / 2
+						)
+						Array.from(teams[0]).forEach(tmpppl => {
+							if (tmpppl) {
+								tmpppl.team = 'Team 1'
+								tmpppl.x = 3000 + 43
+								tmpppl.y = UTILS.randFloat(
+									3000 + 43,
+									3000 + 43 + (20 - 2) * 43 * 2
+								)
+							}
+						})
+						if (teams[1]) {
+							Array.from(teams[1]).forEach(tmpppl => {
+								if (tmpppl) {
+									tmpppl.team = 'Team 2'
+									tmpppl.x = 3000 + 43 + (40 - 2) * 43 * 2
+									tmpppl.y = UTILS.randFloat(
+										3000 + 43,
+										3000 + 43 + (20 - 2) * 43 * 2
+									)
+								}
+							})
+						}
+						config.isStarted = true
+					}
+				}
+			} else {
+				server.sendAll('ch', [tmpPlayer.sid, message.toString()])
+			}
+		}
+
+		// only what the game's upgrade bar offers: with a point left, of the age being
+		// picked, and after the weapon or item it upgrades (pre)
+		function sendUpgrade(index) {
+			index = Number(index)
+			if (!Number.isInteger(index) || index < 0 || index >= items.weapons.length + items.list.length) return
+
+			let tmpPlayer = findPlayerByID(conn.id)
+			if (!tmpPlayer || !tmpPlayer.alive || !(tmpPlayer.upgradePoints > 0)) return
+			const isWeapon = index < items.weapons.length
+			const tmpObj = isWeapon ? items.weapons[index] : items.list[index - items.weapons.length]
+			if (!tmpObj || tmpObj.age != tmpPlayer.upgrAge) return
+			if (tmpObj.pre != null && (isWeapon ? tmpPlayer.weapons : tmpPlayer.items).indexOf(tmpObj.pre) < 0) return
+			if (isWeapon) {
+				// held a weapon of the same slot: now holding the new one
+				if (items.weapons[tmpPlayer.weaponIndex].type === tmpObj.type) {
+					tmpPlayer.weaponIndex = index
+				}
+				tmpPlayer.weapons[tmpObj.type] = index
+				server.send(conn.id, '17', [tmpPlayer.weapons, 1])
+			} else {
+				tmpPlayer.addItem(index - items.weapons.length)
+				server.send(conn.id, '17', [tmpPlayer.items])
+			}
+			tmpPlayer.upgrAge++
+			tmpPlayer.upgradePoints--
+			server.send(conn.id, '16', [tmpPlayer.upgradePoints, tmpPlayer.upgrAge])
+		}
+
+		function storeFunction(type, id, index) {
+			if (MODE === 'HOCKEY') return
+
+			try {
+				type = parseInt(type)
+				id = parseInt(id)
+				index = parseInt(index)
+			} catch (error) {
+				return
+			}
+
+			if (isNaN(type) || isNaN(id)) return
+			index = index ? 1 : 0
+			let tmpPlayer = findPlayerByID(conn.id)
+			if (!tmpPlayer || !tmpPlayer.alive) return
+			const owned = index ? tmpPlayer.tails : tmpPlayer.skins
+			const wear = function (obj) {
+				if (index) {
+					tmpPlayer.tail = obj
+					tmpPlayer.tailIndex = id
+				} else {
+					tmpPlayer.skin = obj
+					tmpPlayer.skinIndex = id
+				}
+				server.send(conn.id, 'us', [1, id, index])
+			}
+			// 0 takes it off
+			if (id === 0) {
+				if (!type) wear(null)
+				return
+			}
+			const list = index ? accessories : hats
+			let tmpObj = null
+			for (let i = 0; i < list.length; ++i) {
+				if (list[i].id === id) {
+					tmpObj = list[i]
+					break
+				}
+			}
+			if (!tmpObj) return
+			if (type) {
+				// buy: not twice, and not what is only given (Shame!, the Crab Shell)
+				if (owned[id] || tmpObj.dontSell || tmpObj.earned) return
+				if (tmpObj.price <= tmpPlayer.points) {
+					tmpPlayer.addResource(3, -tmpObj.price)
+					owned[id] = 1
+					server.send(conn.id, 'us', [0, id, index])
+				}
+			} else if (owned[id]) {
+				wear(tmpObj)
+			}
+		}
+
+		function createAllaince(name) {
+			if (MODE === 'HOCKEY') return
+			if (typeof name !== 'string' || name.length <= 0) return
+
+			let tmpPlayer = findPlayerByID(conn.id)
+			if (tmpPlayer && tmpPlayer.alive) {
+				if (tribeManager.getTribe(name) == null) {
+					const tmpClan = tribeManager.createTribe(name, tmpPlayer)
+					server.sendAll('ac', [tmpClan.getData()])
+					server.send(conn.id, 'st', [name, 1])
+				}
+			}
+		}
+
+		function leaveAlliance() {
+			if (MODE === 'HOCKEY') return
+			let tmpPlayer = findPlayerByID(conn.id)
+			if (tmpPlayer && tmpPlayer.alive) {
+				if (tmpPlayer.isLeader) {
+					server.sendAll('ad', [tmpPlayer.team])
+					tribeManager.deleteTribe(tmpPlayer.team)
+				} else {
+					tribeManager.getTribe(tmpPlayer.team).removePlayer(tmpPlayer)
+					server.send(conn.id, 'st', [null, 0])
+				}
+			}
+		}
+
+		function kickFromClan(sid) {
+			if (MODE === 'HOCKEY') return
+			let tmpPlayer = findPlayerByID(conn.id)
+			if (tmpPlayer && tmpPlayer.alive && tmpPlayer.isLeader) {
+				const tmpObj = findPlayerBySID(sid)
+				if (tmpObj) {
+					tribeManager.getTribe(tmpPlayer.team).removePlayer(tmpObj)
+					server.send(tmpObj.id, 'st', [null, 0])
+				}
+			}
+		}
+
+		function sendJoinRequest(sid) {
+			let tmpPlayer = findPlayerByID(conn.id)
+			if (tmpPlayer && tmpPlayer.alive) {
+				const tmpClan = tribeManager.getTribe(sid)
+				if (tmpClan) {
+					let isRequestSent = false
+					for (let i = 0; i < tmpClan.joinQueue.length; i++) {
+						if (tmpClan.joinQueue[i][1] === conn.id) {
+							isRequestSent = true
+							break
+						}
+					}
+
+					if (!isRequestSent) {
+						tmpClan.joinQueue.push([tmpPlayer.sid, tmpPlayer.id])
+						server.send(findPlayerBySID(tmpClan.ownerID).id, 'an', [
+							tmpPlayer.sid,
+							tmpPlayer.name
+						])
+					}
+				}
+			}
+		}
+
+		function decideJoinRequest(sid, join) {
+			let tmpPlayer = findPlayerByID(conn.id)
+			if (tmpPlayer && tmpPlayer.alive && tmpPlayer.isLeader) {
+				const tmpObj = findPlayerBySID(sid)
+				const tmpClan = tribeManager.getTribe(tmpPlayer.team)
+				if (tmpClan && tmpObj) {
+					let queue = tmpClan.joinQueue.shift()
+					if (queue[1] !== tmpObj.id) return
+					if (join && tmpObj.team == null) {
+						tmpClan.addPlayer(tmpObj)
+						server.send(tmpObj.id, 'st', [tmpPlayer.team, 0])
+					}
+				}
+			}
+		}
+
+		function sendMapPing(type) {
+			if (type) {
+				let tmpPlayer = findPlayerByID(conn.id)
+				if (tmpPlayer && tmpPlayer.alive) {
+					if (tmpPlayer.team) {
+						for (let i = 0; i < players.length; i++) {
+							if (players[i] && players[i].team === tmpPlayer.team) {
+								server.send(players[i].id, 'p', [tmpPlayer.x, tmpPlayer.y])
+							}
+						}
+					} else {
+						server.send(conn.id, 'p', [tmpPlayer.x, tmpPlayer.y])
+					}
+				}
+			}
+		}
+	}
+	conn.on('message', onMessage)
+	// the rest of what Ryn's panel reads and does without chat
+	conn.rynWorld = function () {
+		return ryn.world(findPlayerByID(conn.id))
+	}
+	conn.rynCall = function (name, arg) {
+		const me = findPlayerByID(conn.id)
+		const alive = me && me.alive ? me : null
+		switch (name) {
+			case 'me':
+				return me ? { sid: me.sid, alive: me.alive, x: me.x, y: me.y, health: me.health, shame: me.shameCount || 0, shameTimer: Math.max(0, Math.round(me.shameTimer || 0)) } : null
+			case 'panel':
+				return ryn.panelState(me)
+			case 'series':
+				return ryn.series(me)
+			case 'replay':
+				return ryn.replay()
+			case 'benchGuard':
+				return ryn.benchGuard(me, !!arg)
+			case 'benchEvents':
+				return ryn.benchEvents(arg)
+			case 'placeMany':
+				return alive ? ryn.placeMany(me, arg.what, arg.owner, arg.points) : null
+			case 'removeAt':
+				return ryn.removeAt(arg.x, arg.y, arg.r)
+			case 'removeSids':
+				return ryn.removeSids(arg)
+			case 'restoreObjs':
+				return ryn.restoreObjs(arg)
+			case 'copyBase':
+				return alive ? ryn.copyBase(me, arg) : null
+			case 'pasteBase':
+				return alive ? ryn.pasteBase(me, arg.stamp, arg.rotate) : null
+			case 'playerState':
+				return ryn.playerState(me)
+			case 'applyPlayer':
+				return ryn.applyPlayer(me, arg)
+			case 'newWorld':
+				return ryn.newWorld()
+			case 'stats':
+				return ryn.stats(me)
+			case 'log':
+				return ryn.log(arg)
+			case 'clearLog':
+				return ryn.clearLog()
+			case 'snapshot':
+				return ryn.snapshot(me)
+			case 'restore':
+				return ryn.restore(me, arg)
+			case 'scenarios':
+				return ryn.scenarios()
+			case 'physics':
+				return ryn.physics()
+		}
+		return null
+	}
+	// Ryn's admin panel sends its commands as chat from the owner, without the chat box
+	conn.rynCommand = function (text) {
+		const tmpPlayer = findPlayerByID(conn.id)
+		if (!tmpPlayer || !tmpPlayer.alive) return false
+		onMessage(msgpack.encode([UTILS.OldToNew('ch', 'SEND'), [PREFIX + String(text).replace(/^[!]/, '')]]))
+		return true
+	}
+
+	let tmpA = new Player(
+		conn.id,
+		conn.sid,
+		config,
+		UTILS,
+		projectileManager,
+		objectManager,
+		players,
+		ais,
+		items,
+		hats,
+		accessories,
+		server,
+		scoreCallback,
+		iconCallback,
+		MODE
+	)
+	players.push(tmpA)
+	tmpA.visible = false
+
+	server.send(conn.id, 'io-init', [conn.id])
+	let teamsData = []
+	for (const key in tribeManager.tribes) {
+		teamsData.push(tribeManager.tribes[key].getData())
+	}
+	server.send(conn.id, 'id', [{ teams: teamsData }])
+})
+
+// GAME TICK
+// The game's server runs one tick every 1000/9 ms. A page's timers drift and jitter (a
+// busy frame holds them back), and movement is not time-step independent: a long tick
+// moves everyone further than two short ones. So every tick is exactly one step long;
+// a late timer catches up, and a long stall (a hidden tab) is skipped, not replayed.
+var tickDue = Date.now()
+function tickLoop() {
+	const step = 1000 / config.serverUpdateRate
+	const at = Date.now()
+	if (at - tickDue > 1000) tickDue = at
+	for (let runs = 0; at >= tickDue && runs < 3; runs++) {
+		tickDue += step
+		gameTick(step)
+	}
+}
+
+function gameTick(step) {
+	now = Date.now()
+	delta = step
+	lastUpdate = now
+
+	// Ryn's time control: paused, stepped or slowed ticks still send the world.
+	// Nothing Ryn adds may stop a tick, so each of its steps is fenced off.
+	let rynTick = { run: true, delta: delta }
+	try {
+		rynTick = ryn.beginTick(delta)
+	} catch (e) {
+		console.log('ryn beginTick', e)
+	}
+	delta = rynTick.delta
+	if (rynTick.run) {
+	try {
+		ryn.thinkDummies(delta)
+	} catch (e) {
+		console.log('ryn dummies', e)
+	}
+	for (let i = 0; i < players.length; ++i) {
+		let tmpObj = players[i]
+		if (tmpObj) {
+			tmpObj.update(delta)
+		}
+	}
+
+	for (let i = 0; i < ais.length; i++) {
+		let tmpObj = ais[i]
+		if (tmpObj) {
+			tmpObj.update(delta)
+		}
+	}
+
+	for (let i = 0; i < players.length; ++i) {
+		let tmpObj = players[i]
+		if (tmpObj && tmpObj.alive) {
+			if (tmpObj.shootCount > 0) {
+				tmpObj.shootCount -= delta
+			} else if (tmpObj.skin && tmpObj.skin.turret) {
+				var tmpPlayer, bestDst, tmpDist
+				for (let i = 0; i < players.length; ++i) {
+					if (
+						players[i].alive &&
+						!(players[i].skin && players[i].skin.antiTurret) &&
+						players[i].sid !== tmpObj.sid &&
+						!(tmpObj.team && tmpObj.team == players[i].team)
+					) {
+						tmpDist = UTILS.getDistance(
+							tmpObj.x,
+							tmpObj.y,
+							players[i].x,
+							players[i].y
+						)
+						if (
+							tmpDist <= tmpObj.skin.turret.range &&
+							(!tmpPlayer || tmpDist < bestDst)
+						) {
+							bestDst = tmpDist
+							tmpPlayer = players[i]
+						}
+					}
+				}
+				for (let i = 0; i < ais.length; ++i) {
+					if (ais[i].alive && ais[i].hostile) {
+						tmpDist = UTILS.getDistance(tmpObj.x, tmpObj.y, ais[i].x, ais[i].y)
+						if (
+							tmpDist <= tmpObj.skin.turret.range &&
+							(!tmpPlayer || tmpDist < bestDst)
+						) {
+							bestDst = tmpDist
+							tmpPlayer = ais[i]
+						}
+					}
+				}
+				if (tmpPlayer) {
+					tmpObj.shootCount = tmpObj.skin.turret.rate
+					projectileManager.addProjectile(
+						tmpObj.x,
+						tmpObj.y,
+						UTILS.getDirection(tmpPlayer.x, tmpPlayer.y, tmpObj.x, tmpObj.y),
+						tmpObj.skin.turret.range,
+						1.5,
+						tmpObj.skin.turret.proj,
+						tmpObj
+					)
+				}
+			}
+		}
+	}
+
+	for (let i = 0; i < objectManager.updateObjects.length; i++) {
+		let tmpObj = objectManager.updateObjects[i]
+		if (tmpObj.shootCount > 0) {
+			tmpObj.shootCount -= delta
+		} else {
+			var tmpPlayer, bestDst, tmpDist
+			for (let i = 0; i < players.length; ++i) {
+				if (
+					players[i].alive &&
+					!(players[i].skin && players[i].skin.antiTurret) &&
+					players[i].sid !== tmpObj.owner.sid &&
+					!(tmpObj.owner.team && tmpObj.owner.team == players[i].team)
+				) {
+					tmpDist = UTILS.getDistance(
+						tmpObj.x,
+						tmpObj.y,
+						players[i].x,
+						players[i].y
+					)
+					if (
+						tmpDist <= tmpObj.shootRange &&
+						(!tmpPlayer || tmpDist < bestDst)
+					) {
+						bestDst = tmpDist
+						tmpPlayer = players[i]
+					}
+				}
+			}
+			for (let i = 0; i < ais.length; ++i) {
+				if (ais[i].alive && ais[i].hostile) {
+					tmpDist = UTILS.getDistance(tmpObj.x, tmpObj.y, ais[i].x, ais[i].y)
+					if (
+						tmpDist <= tmpObj.shootRange &&
+						(!tmpPlayer || tmpDist < bestDst)
+					) {
+						bestDst = tmpDist
+						tmpPlayer = ais[i]
+					}
+				}
+			}
+			if (tmpPlayer) {
+				tmpObj.dir = UTILS.getDirection(
+					tmpPlayer.x,
+					tmpPlayer.y,
+					tmpObj.x,
+					tmpObj.y
+				)
+				tmpObj.shootCount = tmpObj.shootRate
+				projectileManager.addProjectile(
+					tmpObj.x,
+					tmpObj.y,
+					tmpObj.dir,
+					tmpObj.shootRange,
+					1.5,
+					tmpObj.projectile,
+					tmpObj.owner,
+					tmpObj.sid
+				)
+				server.sendAll('sp', [tmpObj.sid, tmpObj.dir])
+			}
+		}
+	}
+
+	for (let i = 0; i < projectiles.length; i++) {
+		projectiles[i].update(delta)
+	}
+	payPointsPerSecond(delta)
+	try {
+		ryn.endTick()
+	} catch (e) {
+		console.log('ryn endTick', e)
+	}
+	}
+
+	for (let j = 0; j < players.length; j++) {
+		let tmpPlayer = players[j]
+		// Ryn's dummies have nobody to send to
+		if (tmpPlayer && !tmpPlayer.rynDummy) {
+			const tmpPlayersData = []
+			for (let i = 0; i < players.length; ++i) {
+				let tmpObj = players[i]
+				if (tmpObj && tmpPlayer.canSee(tmpObj)) {
+					if (!tmpObj.sentTo[tmpPlayer.id]) {
+						tmpObj.sentTo[tmpPlayer.id] = 1
+						// the player's own data, rounded the way the game rounds it
+						server.send(tmpPlayer.id, '2', [tmpObj.getData(), tmpObj.id === tmpPlayer.id])
+					}
+					if (tmpObj.alive) {
+						tmpPlayersData.push(
+							tmpObj.sid,
+							tmpObj.x,
+							tmpObj.y,
+							tmpObj.dir,
+							tmpObj.buildIndex,
+							tmpObj.weaponIndex,
+							config.fetchVariant(tmpObj).id,
+							tmpObj.team,
+							tmpObj.isLeader ? 1 : 0,
+							tmpObj.shameTimer > 0 ? 45 : tmpObj.skinIndex,
+							tmpObj.tailIndex,
+							tmpObj.iconIndex,
+							tmpObj.zIndex
+						)
+					}
+				}
+			}
+			// The current game reads players as [positions, looks, gone]: positions are
+			// sid, x, y, dir*100; looks are sid + the nine look fields; gone lists the sids
+			// that left this player's view since the last update.
+			const posData = []
+			const lookData = []
+			const seenPlayers = new Set()
+			for (let i = 0; i < tmpPlayersData.length; i += 13) {
+				const sid = tmpPlayersData[i]
+				seenPlayers.add(sid)
+				posData.push(sid, tmpPlayersData[i + 1], tmpPlayersData[i + 2], Math.round(tmpPlayersData[i + 3] * 100))
+				lookData.push(sid)
+				for (let k = 4; k < 13; k++) lookData.push(tmpPlayersData[i + k])
+			}
+			const gonePlayers = []
+			if (tmpPlayer.rynSeenPlayers) {
+				for (const sid of tmpPlayer.rynSeenPlayers) if (!seenPlayers.has(sid)) gonePlayers.push(sid)
+			}
+			tmpPlayer.rynSeenPlayers = seenPlayers
+			server.send(tmpPlayer.id, '33', [posData, lookData, gonePlayers])
+
+			const tmpAiData = []
+			for (let i = 0; i < ais.length; ++i) {
+				let tmpObj = ais[i]
+				if (tmpObj && tmpObj.alive && tmpPlayer.canSee(tmpObj)) {
+					tmpAiData.push(
+						tmpObj.sid,
+						tmpObj.index,
+						tmpObj.x,
+						tmpObj.y,
+						Math.round(tmpObj.dir * 100),
+						tmpObj.health,
+						tmpObj.nameIndex,
+						tmpObj.state || 0
+					)
+				}
+			}
+			const seenAi = new Set()
+			for (let i = 0; i < tmpAiData.length; i += 8) seenAi.add(tmpAiData[i])
+			const goneAi = []
+			if (tmpPlayer.rynSeenAi) {
+				for (const sid of tmpPlayer.rynSeenAi) if (!seenAi.has(sid)) goneAi.push(sid)
+			}
+			tmpPlayer.rynSeenAi = seenAi
+			server.send(tmpPlayer.id, 'a', [tmpAiData, goneAi])
+
+			const tmpObjectsData = []
+			for (let i = 0; i < gameObjects.length; i++) {
+				let tmpObj = gameObjects[i]
+				if (
+					tmpObj &&
+					tmpObj.active &&
+					tmpPlayer.canSee(tmpObj) &&
+					tmpObj.visibleToPlayer(tmpPlayer) &&
+					!tmpObj.sentTo[tmpPlayer.id]
+				) {
+					tmpObj.sentTo[tmpPlayer.id] = 1
+					tmpObjectsData.push(
+						tmpObj.sid,
+						tmpObj.x,
+						tmpObj.y,
+						tmpObj.dir,
+						tmpObj.scale,
+						tmpObj.type,
+						tmpObj.id,
+						tmpObj.owner ? tmpObj.owner.sid : -1
+					)
+				}
+			}
+			server.send(tmpPlayer.id, '6', [tmpObjectsData])
+		}
+	}
+}
+let rynTickTimer = setInterval(tickLoop, 5)
+
+// As the game shows it: the top ten by points (whoever has played, alive or not), the dead
+// with a skull, and a crab by whoever has killed the Crab King (they have its shell).
+function updateLeaderboard() {
+	const tmpLeaderboardData = []
+	const dead = []
+	const crabKillers = []
+	for (const player of players
+		.filter(player => player.active)
+		.sort(UTILS.sortByPoints)
+		.slice(0, 10)) {
+		tmpLeaderboardData.push(player.sid, player.name, player.points)
+		if (!player.alive) dead.push(player.sid)
+		if (player.skins && player.skins[61]) crabKillers.push(player.sid)
+	}
+	server.sendAll('5', [tmpLeaderboardData, [], dead, crabKillers])
+}
+
+// Points per second (windmills and the Windmill Hat), in game time: they stop while the
+// world is paused and slow down with it. Called every tick with its delta.
+var ppsTime = 0
+function payPointsPerSecond(delta) {
+	ppsTime += delta
+	if (ppsTime < 1000) return
+	ppsTime -= 1000
+	for (let i = 0; i < players.length; i++) {
+		const tmpPlayer = players[i]
+		const pps = (tmpPlayer.pps || 0) + (tmpPlayer.alive && tmpPlayer.skin && tmpPlayer.skin.pps ? tmpPlayer.skin.pps : 0)
+		if (pps) {
+			scoreCallback(tmpPlayer, pps)
+		}
+	}
+}
+
+// Update Leaderboard
+setInterval(updateLeaderboard, 1000)
+
+// SEND MAP DATA
+setInterval(() => {
+	for (const key in tribeManager.tribes) {
+		const tmpMembers = tribeManager.tribes[key].members
+		const tmpPlayersID = []
+		const posData = []
+		for (let i = 0; i < tmpMembers.length; i++) {
+			const tmpPlayer = findPlayerBySID(tmpMembers[i])
+			tmpPlayersID.push(tmpPlayer.id)
+			posData.push(tmpPlayer.x, tmpPlayer.y)
+		}
+		for (let i = 0; i < tmpPlayersID.length; i++) {
+			server.send(tmpPlayersID[i], 'mm', [
+				posData.filter((value, index) => ![i * 2, i * 2 + 1].includes(index))
+			])
+		}
+	}
+	for (let i = 0; i < players.length; i++) {
+		if (players[i].team == null) {
+			server.send(players[i].id, 'mm', [0])
+		}
+	}
+}, 3000)
+
+function scoreCallback(player, amount, setResource) {
+	player.points += amount
+	player.earnXP(amount)
+	server.send(player.id, '9', ['points', Math.round(player.points), 1])
+}
+
+function iconCallback() {
+	var highestKill = 0
+	var highest = null
+	for (let i = 0; i < players.length; i++) {
+		const player = players[i]
+		player.iconIndex = 0
+		if (
+			player &&
+			player.alive &&
+			player.kills > 0 &&
+			(highest == null || highestKill < player.kills)
+		) {
+			highest = i
+			highestKill = player.kills
+		}
+	}
+	if (highest !== null) {
+		players[highest].iconIndex = 1
+	}
+}
+
+function addBossArenaStones(stoneCount, stoneScale, xCenter, yCenter) {
+	const arenaScale = (stoneScale * stoneCount) / Math.PI
+	for (let i = 0; i <= stoneCount; i++) {
+		let tmpX = xCenter + arenaScale * Math.cos((i * 2 * Math.PI) / stoneCount)
+		let tmpY = yCenter + arenaScale * Math.sin((i * 2 * Math.PI) / stoneCount)
+		let size = UTILS.randInt(0, 1)
+		if (i === 0) {
+			tmpX -= 175
+			size = 2
+		} else if (i === stoneCount) {
+			tmpX += 175
+			size = 2
+		}
+		objectManager.add(
+			objectManager.objects.length,
+			tmpX,
+			tmpY,
+			UTILS.randFloat(-Math.PI, Math.PI),
+			config.rockScales[size],
+			2,
+			null,
+			true,
+			null
+		)
+	}
+}
+
+function addTree(treeCount) {
+	for (let j = 0; j < treeCount; j++) {
+		const tmpX = UTILS.randFloat(0, config.mapScale)
+		const tmpY = UTILS.randInt(0, 1)
+			? UTILS.randFloat(0, 6850)
+			: UTILS.randFloat(7550, 12000)
+		const size = config.treeScales[UTILS.randInt(0, 3)]
+		let overlap
+
+		for (let i = 0; i < gameObjects.length; i++) {
+			if (
+				UTILS.getDistance(tmpX, tmpY, gameObjects[i].x, gameObjects[i].y) <
+				100 + size
+			) {
+				overlap = true
+				break
+			}
+		}
+		if (overlap) continue
+
+		objectManager.add(
+			objectManager.objects.length,
+			tmpX,
+			tmpY,
+			UTILS.randFloat(-Math.PI, Math.PI),
+			size,
+			0,
+			null,
+			true,
+			null
+		)
+	}
+}
+
+function addBush(bushCount) {
+	for (let j = 0; j < bushCount; j++) {
+		const tmpX = UTILS.randFloat(0, config.mapScale)
+		const tmpY = UTILS.randInt(0, 1)
+			? UTILS.randFloat(0, 6850)
+			: UTILS.randFloat(7550, 12000)
+		const size = config.bushScales[UTILS.randInt(0, 2)]
+		let overlap
+
+		for (let i = 0; i < gameObjects.length; i++) {
+			if (
+				UTILS.getDistance(tmpX, tmpY, gameObjects[i].x, gameObjects[i].y) <
+				100 + size
+			) {
+				overlap = true
+				break
+			}
+		}
+		if (overlap) continue
+
+		objectManager.add(
+			objectManager.objects.length,
+			tmpX,
+			tmpY,
+			UTILS.randFloat(-Math.PI, Math.PI),
+			size,
+			1,
+			null,
+			true,
+			null
+		)
+	}
+}
+
+function addCacti(cactiCount) {
+	for (let j = 0; j < cactiCount; j++) {
+		const tmpX = UTILS.randFloat(0, config.mapScale)
+		const tmpY = UTILS.randFloat(12000, config.mapScale)
+		const size = config.bushScales[2]
+		let overlap
+
+		for (let i = 0; i < gameObjects.length; i++) {
+			if (
+				UTILS.getDistance(tmpX, tmpY, gameObjects[i].x, gameObjects[i].y) <
+				100 + size
+			) {
+				overlap = true
+				break
+			}
+		}
+		if (overlap) continue
+
+		const tmpObj = objectManager.add(
+			objectManager.objects.length,
+			tmpX,
+			tmpY,
+			UTILS.randFloat(-Math.PI, Math.PI),
+			size,
+			1,
+			null,
+			true,
+			null
+		)
+		tmpObj.dmg = 35
+	}
+}
+
+function addStoneGold(stoneCount, isStone) {
+	for (let j = 0; j < stoneCount; j++) {
+		const tmpX = UTILS.randFloat(0, config.mapScale)
+		const tmpY = UTILS.randInt(0, 1)
+			? UTILS.randFloat(0, 6850)
+			: UTILS.randFloat(7550, config.mapScale)
+		const size = config.rockScales[UTILS.randInt(0, 2)]
+		let overlap
+
+		for (let i = 0; i < gameObjects.length; i++) {
+			if (
+				UTILS.getDistance(tmpX, tmpY, gameObjects[i].x, gameObjects[i].y) <
+				100 + size
+			) {
+				overlap = true
+				break
+			}
+		}
+		if (overlap) continue
+
+		objectManager.add(
+			objectManager.objects.length,
+			tmpX,
+			tmpY,
+			UTILS.randFloat(-Math.PI, Math.PI),
+			size,
+			isStone ? 2 : 3,
+			null,
+			true,
+			null
+		)
+	}
+}
+
+function addRiverStone(riverStoneCount) {
+	for (let j = 0; j < riverStoneCount; j++) {
+		const tmpX = UTILS.randFloat(0, config.mapScale)
+		const tmpY = UTILS.randFloat(6850, 7550)
+		const size = config.rockScales[UTILS.randInt(0, 2)]
+		let overlap
+
+		for (let i = 0; i < gameObjects.length; i++) {
+			if (
+				UTILS.getDistance(tmpX, tmpY, gameObjects[i].x, gameObjects[i].y) <
+				100 + size
+			) {
+				overlap = true
+				break
+			}
+		}
+		if (overlap) continue
+
+		objectManager.add(
+			objectManager.objects.length,
+			tmpX,
+			tmpY,
+			UTILS.randFloat(-Math.PI, Math.PI),
+			size,
+			2,
+			null,
+			true,
+			null
+		)
+	}
+}
+
+function addAnimal() {
+	if (!config.spawnMobs) return
+	// cow, pig, bull, bully, wolf, quack, moostafa, treasure, moofie,
+	// boar, yeti, crab king, sheep (crabs and crablings come with the King)
+	const animalCount = [10, 10, 10, 2, 15, 2, 1, 1, 1, 6, 2, 1, 10]
+	const hostileTypes = [2, 3, 4, 9, 10]
+	const bossTypes = [6, 7, 8, 11]
+	for (let i = 0; i < animalCount.length; i++) {
+		if (!config.spawnHostile && hostileTypes.includes(i)) continue
+		if (!config.spawnBosses && bossTypes.includes(i)) continue
+		if (config.disabledMobTypes && config.disabledMobTypes.includes(i)) continue
+		for (let j = 0; j < animalCount[i]; j++) {
+			if (i === 11) {
+				const home = config.secretPool.pool[0]
+				aiManager.spawn(home[0], home[1], Math.PI, i)
+				continue
+			}
+			if (i === 10) {
+				aiManager.spawn(UTILS.randFloat(0, config.mapScale), UTILS.randFloat(0, config.snowBiomeTop), Math.PI / 2, i)
+				continue
+			}
+			aiManager.spawn(
+				animalCount[i] === 1
+					? config.mapScale / 2
+					: UTILS.randFloat(0, config.mapScale),
+				animalCount[i] === 1
+					? config.mapScale - config.snowBiomeTop / 2
+					: UTILS.randFloat(0, config.mapScale),
+				Math.PI / 2,
+				i
+			)
+		}
+	}
+}
+
+function setupServer() {
+	config.isStarted = false
+	ais = []
+	players = []
+	gameObjects = []
+	projectiles = []
+	connection = []
+	playersSid = []
+	objectManager = new ObjectManager(
+		GameObject,
+		gameObjects,
+		UTILS,
+		config,
+		players,
+		server
+	)
+	aiManager = new AiManager(
+		ais,
+		AI,
+		players,
+		items,
+		objectManager,
+		config,
+		UTILS,
+		scoreCallback,
+		server
+	)
+	projectileManager = new ProjectileManager(
+		Projectile,
+		projectiles,
+		players,
+		ais,
+		objectManager,
+		items,
+		config,
+		UTILS,
+		server
+	)
+	tribeManager = new TribeManager(Tribe, findPlayerBySID, server)
+
+	server.clients.forEach(socket => {
+		if (socket.readyState === WebSocket.OPEN) {
+			socket.close()
+		}
+	})
+
+	if (['NORMAL', 'SANDBOX', 'ZOMBIE'].includes(MODE)) {
+		config.inSandbox = MODE === 'SANDBOX'
+		config.canHitObj = true
+		addBossArenaStones(
+			config.totalRocks - 1,
+			config.rockScales[1],
+			config.mapScale / 2,
+			config.mapScale - config.snowBiomeTop / 2
+		)
+		addTree(200)
+		addBush(100)
+		addCacti(20)
+		addStoneGold(100, true)
+		addStoneGold(10, false)
+		addRiverStone(15)
+		addAnimal()
+	} else if (MODE === 'HOCKEY') {
+		config.canHitObj = false
+		for (let i = 0; i < 40; i++) {
+			objectManager.add(
+				objectManager.objects.length,
+				3000 + i * items.list[18].scale * 2,
+				3000,
+				0,
+				items.list[18].scale,
+				items.list[18].id,
+				items.list[18]
+			)
+			objectManager.add(
+				objectManager.objects.length,
+				3000 + i * items.list[18].scale * 2,
+				3000 + 19 * items.list[18].scale * 2,
+				0,
+				items.list[18].scale,
+				items.list[18].id,
+				items.list[18]
+			)
+		}
+		for (let i = 0; i < 20; i++) {
+			if (i >= 7 && i <= 12) continue
+			objectManager.add(
+				objectManager.objects.length,
+				3000,
+				3000 + i * items.list[18].scale * 2,
+				Math.PI / 2,
+				items.list[18].scale,
+				items.list[18].id,
+				items.list[18]
+			)
+			objectManager.add(
+				objectManager.objects.length,
+				3000 + 39 * items.list[18].scale * 2,
+				3000 + i * items.list[18].scale * 2,
+				Math.PI / 2,
+				items.list[18].scale,
+				items.list[18].id,
+				items.list[18]
+			)
+		}
+
+		playersSid = [1]
+		let tmpA = new Player(
+			UTILS.randomString(10),
+			1,
+			config,
+			UTILS,
+			projectileManager,
+			objectManager,
+			players,
+			ais,
+			items,
+			hats,
+			accessories,
+			server,
+			scoreCallback,
+			iconCallback,
+			MODE
+		)
+		players.push(tmpA)
+	}
+}
+
+const httpServer = http.createServer((req, res) => {
+	res.setHeader('Access-Control-Allow-Origin', '*')
+	res.setHeader('Access-Control-Request-Method', '*')
+	res.setHeader('Access-Control-Allow-Methods', 'OPTIONS, GET')
+	res.setHeader('Access-Control-Allow-Headers', '*')
+
+	const tmpObj = []
+	for (let i = 0; i < players.length; i++) {
+		tmpObj.push({
+			name: players[i].name,
+			sid: players[i].sid
+		})
+	}
+	res.writeHead(200)
+	res.end(JSON.stringify(tmpObj))
+})
+
+httpServer.on('upgrade', (request, socket, head) => {
+	const pathname = url.parse(request.url).pathname?.replace(/\/$/, '')
+
+	if (pathname === '/server') {
+		server.handleUpgrade(request, socket, head, ws => {
+			server.emit('connection', ws, request)
+		})
+	} else {
+		socket.destroy()
+	}
+})
+
+httpServer.listen(PORT, () => {
+	setupServer()
+	commandStart()
+})
+
+async function commandStart() {
+	console.clear()
+	if (!(await checkLatest())) {
+		console.log(
+			'Update available at https://github.com/kookywarrior/moomooio-private-server'
+		)
+	}
+	console.log(`Private server listening at http://localhost:${PORT}\n`)
+	const command = await inquirer.prompt({
+		name: 'command',
+		type: 'list',
+		message: 'Custom command',
+		choices: [
+			'Change mode',
+			'Change password',
+			'Change prefix',
+			'Kick player',
+			'Restart server'
+		]
+	})
+	if (command.command === 'Change mode') {
+		const mode = await inquirer.prompt({
+			name: 'mode',
+			type: 'list',
+			message: 'Select mode',
+			choices: ['NORMAL', 'SANDBOX', 'HOCKEY']
+		})
+		const modeType = [['HOCKEY'], ['SANDBOX', 'NORMAL']]
+		function areInSameGroup(arg1, arg2) {
+			for (const group of modeType) {
+				if (group.includes(arg1) && group.includes(arg2)) {
+					return true
+				}
+			}
+			return false
+		}
+
+		if (areInSameGroup(MODE, mode.mode)) {
+			MODE = mode.mode
+		} else {
+			const restart = await inquirer.prompt({
+				name: 'restart',
+				type: 'confirm',
+				message: 'Are you sure you want to restart server?'
+			})
+			if (restart.restart) {
+				MODE = mode.mode
+				setupServer()
+			}
+		}
+	} else if (command.command === 'Change password') {
+		const password = await inquirer.prompt({
+			name: 'password',
+			type: 'input',
+			message: 'Input password:'
+		})
+		PASSWORD = password.password
+	} else if (command.command === 'Change prefix') {
+		const prefix = await inquirer.prompt({
+			name: 'prefix',
+			type: 'list',
+			message: 'Select prefix',
+			choices: [
+				'!',
+				'?',
+				'/',
+				'\\',
+				'`',
+				"'",
+				'"',
+				':',
+				'|',
+				';',
+				'<',
+				'>',
+				',',
+				'.',
+				'~'
+			]
+		})
+		PREFIX = prefix.prefix
+	} else if (command.command === 'Kick player') {
+		const sid = await inquirer.prompt({
+			name: 'sid',
+			type: 'number',
+			message: 'Input player sid:'
+		})
+		if (sid.sid != null) {
+			for (let i = 0; i < players.length; i++) {
+				let tmpPlayer = players[i]
+				if (tmpPlayer.sid === sid.sid) {
+					if (MODE === 'HOCKEY' && sid.sid !== 1) {
+						connection[tmpPlayer.id].close()
+						break
+					} else {
+						connection[tmpPlayer.id].close()
+						break
+					}
+				}
+			}
+		}
+	} else if (command.command === 'Restart server') {
+		const restart = await inquirer.prompt({
+			name: 'restart',
+			type: 'confirm',
+			message: 'Are you sure you want to restart server?'
+		})
+		if (restart.restart) {
+			setupServer()
+		}
+	}
+	commandStart()
+}
+    },
+    "src/ai.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
+var PI2 = Math.PI * 2
+var Capes = require('./capes.js')
+module.exports = function (sid, objectManager, players, items, UTILS, config, scoreCallback, server) {
+	var capes = Capes(config)
+	this.sid = sid
+	this.isAI = true
+	this.nameIndex = UTILS.randInt(0, config.cowNames.length - 1)
+
+	// INIT:
+	this.init = function (x, y, dir, index, data) {
+		this.x = x
+		this.y = y
+		this.startX = data.fixedSpawn ? x : null
+		this.startY = data.fixedSpawn ? y : null
+		this.xVel = 0
+		this.yVel = 0
+		this.zIndex = 0
+		this.dir = dir
+		this.dirPlus = 0
+		this.index = index
+		this.src = data.src
+		if (data.name) this.name = data.name
+		this.weightM = data.weightM
+		this.speed = data.speed
+		this.baseSpeed = data.speed
+		this.killScore = data.killScore
+		this.turnSpeed = data.turnSpeed
+		this.scale = data.scale
+		this.maxHealth = data.health
+		this.leapForce = data.leapForce
+		this.health = this.maxHealth
+		this.chargePlayer = data.chargePlayer
+		this.viewRange = data.viewRange
+		this.drop = data.drop
+		this.dmg = data.dmg
+		this.hostile = data.hostile
+		this.dontRun = data.dontRun
+		this.hitRange = data.hitRange
+		this.hitDelay = data.hitDelay
+		this.hitScare = data.hitScare
+		this.spriteMlt = data.spriteMlt
+		this.nameScale = data.nameScale
+		this.colDmg = data.colDmg
+		this.noTrap = data.noTrap
+		this.spawnDelay = data.spawnDelay
+		this.minSpawnRange = data.minSpawnRange
+		this.maxSpawnRange = data.maxSpawnRange
+		this.boss = data.boss
+		this.diver = data.diver
+		// the Crab King and its crabs live in the arena west of the map
+		this.arena = index === 11 || index === 13 || index === 14
+		this.state = 0
+		this.crab = null
+		this.minion = false
+		this.owner = null
+		this.minions = []
+		this.emerge = 0
+		this.hitWait = 0
+		this.waitCount = 1000
+		this.moveCount = 0
+		this.targetDir = 0
+		this.active = true
+		this.alive = true
+		this.runFrom = null
+		this.chargeTarget = null
+		this.dmgOverTime = {}
+	}
+
+	// UPDATE:
+	var timerCount = 0
+	this.update = function (delta) {
+		if (this.active) {
+			// SPAWN DELAY:
+			if (this.spawnCounter) {
+				this.spawnCounter -= delta
+				if (this.spawnCounter <= 0) {
+					this.spawnCounter = 0
+					this.respawnAt()
+				}
+				return
+			}
+
+			// REGENS AND AUTO:
+			timerCount -= delta
+			if (timerCount <= 0) {
+				if (this.dmgOverTime.dmg) {
+					this.changeHealth(-this.dmgOverTime.dmg, this.dmgOverTime.doer)
+					this.dmgOverTime.time -= 1
+					if (this.dmgOverTime.time <= 0) {
+						this.dmgOverTime.dmg = 0
+					}
+				}
+				timerCount = 1000
+			}
+
+			// BEHAVIOUR:
+			// The Crab King runs the game's own animal code below, like MOOSTAFA. Ryn adds the
+			// rest (who it fights, its dive, charge and ring, its crabs, see kingThink);
+			// config.rynKingExtras = false leaves only the game's code.
+			var isKing = this.index === 11
+			var extras = this.arena && config.rynKingExtras !== false
+			var special = false
+			if (isKing && extras) {
+				try {
+					special = this.kingThink(delta)
+				} catch (e) {
+					this.crab = null
+				}
+			}
+			// crabs that just came out of the water
+			if (this.emerge > 0) {
+				this.emerge -= delta
+				if (this.emerge <= 0) {
+					this.emerge = 0
+					this.state = 0
+				}
+			}
+			// arena animals let go of a player who has left the pools (ours), as if the chase ended
+			if (extras && this.chargeTarget && !this.fighter(this.chargeTarget)) {
+				this.chargeTarget = null
+				this.moveCount = 0
+				this.waitCount = 1500
+			}
+			var charging = false
+			var slowMlt = 1
+			if (!this.zIndex && !this.lockMove && UTILS.inRiver(config, this.x, this.y)) {
+				slowMlt = 0.33
+				this.xVel += UTILS.riverCurrent(config, this.x) * delta
+			}
+			if (special) {
+				// a dive, charge or ring moves or holds the King itself
+			} else if (this.lockMove) {
+				this.xVel = 0
+				this.yVel = 0
+			} else if (this.waitCount > 0) {
+				this.waitCount -= delta
+				if (this.waitCount <= 0) {
+					// the King goes for whoever is in its pools (ours: the game's King has no
+					// chargePlayer, so on its own it only wanders and hits back)
+					if (this.chargePlayer || (isKing && extras)) {
+						var tmpPlayer, bestDst, tmpDist
+						for (let i = 0; i < players.length; ++i) {
+							if (players[i].alive && !(players[i].skin && players[i].skin.bullRepel) && !(extras && !this.fighter(players[i]))) {
+								tmpDist = UTILS.getDistance(this.x, this.y, players[i].x, players[i].y)
+								if (tmpDist <= this.viewRange && (!tmpPlayer || tmpDist < bestDst)) {
+									bestDst = tmpDist
+									tmpPlayer = players[i]
+								}
+							}
+						}
+						if (tmpPlayer) {
+							this.chargeTarget = tmpPlayer
+							this.moveCount = UTILS.randInt(8000, 12000)
+						} else {
+							this.moveCount = UTILS.randInt(1000, 2000)
+							this.targetDir = UTILS.randFloat(-Math.PI, Math.PI)
+						}
+					} else {
+						this.moveCount = UTILS.randInt(4000, 10000)
+						this.targetDir = UTILS.randFloat(-Math.PI, Math.PI)
+					}
+				}
+			} else if (this.moveCount > 0) {
+				var tmpSpd = this.speed * slowMlt
+				if (this.runFrom && this.runFrom.active && !(this.runFrom.isPlayer && !this.runFrom.alive)) {
+					this.targetDir = UTILS.getDirection(this.x, this.y, this.runFrom.x, this.runFrom.y)
+					tmpSpd *= 1.42
+				} else if (this.chargeTarget && this.chargeTarget.alive && !(extras && !this.fighter(this.chargeTarget))) {
+					this.targetDir = UTILS.getDirection(this.chargeTarget.x, this.chargeTarget.y, this.x, this.y)
+					tmpSpd *= 1.75
+					charging = true
+				}
+				if (this.hitWait) {
+					tmpSpd *= 0.3
+				}
+				if (this.dir != this.targetDir) {
+					this.dir %= PI2
+					var netAngle = (this.dir - this.targetDir + PI2) % PI2
+					var amnt = Math.min(Math.abs(netAngle - PI2), netAngle, this.turnSpeed * delta)
+					var sign = netAngle - Math.PI >= 0 ? 1 : -1
+					this.dir += sign * amnt + PI2
+				}
+				this.dir %= PI2
+				this.xVel += tmpSpd * delta * Math.cos(this.dir)
+				this.yVel += tmpSpd * delta * Math.sin(this.dir)
+				this.moveCount -= delta
+				if (this.moveCount <= 0) {
+					this.runFrom = null
+					this.chargeTarget = null
+					this.waitCount = this.hostile ? 1500 : UTILS.randInt(1500, 6000)
+				}
+			}
+
+			// OBJECT COLL:
+			var startX = this.x
+			var startY = this.y
+			this.zIndex = 0
+			this.lockMove = false
+			var tmpList
+			var tmpSpeed = UTILS.getDistance(0, 0, this.xVel * delta, this.yVel * delta)
+			var depth = Math.min(4, Math.max(1, Math.round(tmpSpeed / 40)))
+			var tMlt = 1 / depth
+			for (let i = 0; i < depth; ++i) {
+				if (this.xVel) {
+					this.x += this.xVel * delta * tMlt
+				}
+				if (this.yVel) {
+					this.y += this.yVel * delta * tMlt
+				}
+				tmpList = objectManager.getGridArrays(this.x, this.y, this.scale)
+				for (let x = 0; x < tmpList.length; ++x) {
+					for (let y = 0; y < tmpList[x].length; ++y) {
+						if (tmpList[x][y].active) {
+							objectManager.checkCollision(this, tmpList[x][y], tMlt)
+						}
+					}
+				}
+			}
+
+			// HITTING:
+			var hitting = false
+			var kingHits = null
+			if (this.hitWait > 0) {
+				this.hitWait -= delta
+				if (this.hitWait <= 0) {
+					hitting = true
+					this.hitWait = 0
+					if (this.leapForce && !UTILS.randInt(0, 2)) {
+						this.xVel += this.leapForce * Math.cos(this.dir)
+						this.yVel += this.leapForce * Math.sin(this.dir)
+					}
+					let tmpList = objectManager.getGridArrays(this.x, this.y, this.hitRange)
+					let tmpObj, tmpDst
+					for (var t = 0; t < tmpList.length; ++t) {
+						for (var x = 0; x < tmpList[t].length; ++x) {
+							tmpObj = tmpList[t][x]
+							if (tmpObj.health) {
+								tmpDst = UTILS.getDistance(this.x, this.y, tmpObj.x, tmpObj.y)
+								if (tmpDst < tmpObj.scale + this.hitRange) {
+									if (tmpObj.changeHealth(-this.dmg * 5)) objectManager.disableObj(tmpObj)
+									objectManager.hitObj(tmpObj, UTILS.getDirection(this.x, this.y, tmpObj.x, tmpObj.y))
+								}
+							}
+						}
+					}
+					for (let x = 0; x < players.length; ++x) {
+						if (players[x].canSee(this)) {
+							server.send(players[x].id, "aa", [this.sid])
+						}
+					}
+				}
+			}
+
+			// PLAYER COLLISIONS:
+			if (charging || hitting) {
+				let tmpObj, tmpDst, tmpDir
+				for (let i = 0; i < players.length; ++i) {
+					tmpObj = players[i]
+					if (tmpObj && tmpObj.alive) {
+						tmpDst = UTILS.getDistance(this.x, this.y, tmpObj.x, tmpObj.y)
+						if (this.hitRange) {
+							if (!this.hitWait && tmpDst <= this.hitRange + tmpObj.scale) {
+								if (hitting) {
+									tmpDir = UTILS.getDirection(tmpObj.x, tmpObj.y, this.x, this.y)
+									if (isKing) (kingHits || (kingHits = [])).push(tmpObj.sid)
+									tmpObj.changeHealth(-this.dmg * (isKing && extras ? this.kingDamage() : 1), null, this)
+									tmpObj.xVel += 0.6 * Math.cos(tmpDir)
+									tmpObj.yVel += 0.6 * Math.sin(tmpDir)
+									this.runFrom = null
+									this.chargeTarget = null
+									this.waitCount = 3000
+									this.hitWait = !UTILS.randInt(0, 2) ? 600 : 0
+								} else this.hitWait = this.hitDelay
+							}
+						} else if (tmpDst <= this.scale + tmpObj.scale) {
+							tmpDir = UTILS.getDirection(tmpObj.x, tmpObj.y, this.x, this.y)
+							tmpObj.changeHealth(-this.dmg, null, this)
+							tmpObj.xVel += 0.55 * Math.cos(tmpDir)
+							tmpObj.yVel += 0.55 * Math.sin(tmpDir)
+						}
+					}
+				}
+			}
+
+			// the King's own hit: shown before it lands, counted for Ryn's dodge stats
+			if (isKing && extras) {
+				if (hitting) this.kingAttackDone("slam", kingHits || [])
+				this.kingWarnHit()
+			}
+
+			// DECEL:
+			if (this.xVel) {
+				this.xVel *= Math.pow(config.playerDecel, delta)
+			}
+			if (this.yVel) {
+				this.yVel *= Math.pow(config.playerDecel, delta)
+			}
+
+			// MAP BOUNDARIES:
+			var tmpScale = this.scale
+			if (this.arena) {
+				// the King and its crabs stay in the pools, all of their body; they slide
+				// along the edge
+				var fits = function (x, y) {
+					return UTILS.inArenaPools(config, x, y, tmpScale)
+				}
+				if (!fits(this.x, this.y)) {
+					if (fits(this.x, startY)) {
+						this.y = startY
+						this.yVel = 0
+					} else if (fits(startX, this.y)) {
+						this.x = startX
+						this.xVel = 0
+					} else if (fits(startX, startY)) {
+						this.x = startX
+						this.y = startY
+						this.xVel = 0
+						this.yVel = 0
+					} else {
+						var home = config.secretPool.pool[0]
+						this.x = home[0]
+						this.y = home[1]
+						this.xVel = 0
+						this.yVel = 0
+					}
+				}
+			} else if (this.x - tmpScale < 0) {
+				this.x = tmpScale
+				this.xVel = 0
+			} else if (this.x + tmpScale > config.mapScale) {
+				this.x = config.mapScale - tmpScale
+				this.xVel = 0
+			}
+			if (this.y - tmpScale < 0) {
+				this.y = tmpScale
+				this.yVel = 0
+			} else if (this.y + tmpScale > config.mapScale) {
+				this.y = config.mapScale - tmpScale
+				this.yVel = 0
+			}
+		}
+	}
+
+	// WHERE IT COMES BACK:
+	// its own spot (fixedSpawn), a band of the map (min/maxSpawnRange), or anywhere, as the
+	// game; the Yeti comes back in the snow (ours)
+	this.respawnAt = function () {
+		if (this.minSpawnRange || this.maxSpawnRange) {
+			var lo = config.mapScale * this.minSpawnRange
+			var hi = config.mapScale * this.maxSpawnRange
+			this.x = UTILS.randInt(lo, hi)
+			this.y = UTILS.randInt(lo, hi)
+			return
+		}
+		this.x = this.startX || UTILS.randInt(0, config.mapScale)
+		this.y = this.startY || (this.index === 10 ? UTILS.randInt(0, config.snowBiomeTop) : UTILS.randInt(0, config.mapScale))
+	}
+
+	// CAN SEE:
+	this.canSee = function (other) {
+		if (!other) return false
+		if (other.skin && other.skin.invisTimer && other.noMovTimer >= other.skin.invisTimer) return false
+		var dx = Math.abs(other.x - this.x) - other.scale
+		var dy = Math.abs(other.y - this.y) - other.scale
+		return dx <= (config.maxScreenWidth / 2) * 1.3 && dy <= (config.maxScreenHeight / 2) * 1.3
+	}
+
+	var tmpRatio = 0
+	var animIndex = 0
+	this.animate = function (delta) {
+		if (this.animTime > 0) {
+			this.animTime -= delta
+			if (this.animTime <= 0) {
+				this.animTime = 0
+				this.dirPlus = 0
+				tmpRatio = 0
+				animIndex = 0
+			} else {
+				if (animIndex == 0) {
+					tmpRatio += delta / (this.animSpeed * config.hitReturnRatio)
+					this.dirPlus = UTILS.lerp(0, this.targetAngle, Math.min(1, tmpRatio))
+					if (tmpRatio >= 1) {
+						tmpRatio = 1
+						animIndex = 1
+					}
+				} else {
+					tmpRatio -= delta / (this.animSpeed * (1 - config.hitReturnRatio))
+					this.dirPlus = UTILS.lerp(0, this.targetAngle, Math.max(0, tmpRatio))
+				}
+			}
+		}
+	}
+
+	// ANIMATION:
+	this.startAnim = function () {
+		this.animTime = this.animSpeed = 600
+		this.targetAngle = Math.PI * 0.8
+		tmpRatio = 0
+		animIndex = 0
+	}
+
+	// CHANGE HEALTH:
+	this.changeHealth = function (val, doer, runFrom) {
+		if (this.active) {
+			if (val < 0 && this.index === 11 && this.state === 2) return
+			// Ryn's damage rule and combat log
+			if (config.rynHealth) val = config.rynHealth(this, val, doer)
+			this.health += val
+			if (runFrom) {
+				if (this.hitScare && !UTILS.randInt(0, this.hitScare)) {
+					this.runFrom = runFrom
+					this.waitCount = 0
+					this.moveCount = 2000
+				} else if (this.hostile && this.chargePlayer && runFrom.isPlayer) {
+					this.chargeTarget = runFrom
+					this.waitCount = 0
+					this.moveCount = 8000
+				} else if (!this.dontRun) {
+					this.runFrom = runFrom
+					this.waitCount = 0
+					this.moveCount = 2000
+				}
+			}
+			if (val < 0 && this.hitRange && UTILS.randInt(0, 1)) this.hitWait = 500
+			if (doer && doer.canSee(this) && val < 0) {
+				server.send(doer.id, "t", [Math.round(this.x), Math.round(this.y), Math.round(-val), 1])
+			}
+			if (this.health <= 0 && this.minion) {
+				this.active = false
+				this.alive = false
+				this.minion = false
+				this.owner = null
+				if (doer) scoreCallback(doer, this.killScore)
+				return
+			}
+			if (this.health <= 0 && this.index === 11) {
+				this.state = 0
+				this.crab = null
+				// its crabs go back into the water with it (ours)
+				for (var mi = 0; mi < this.minions.length; mi++) {
+					var mn = this.minions[mi]
+					if (mn.active && mn.minion && mn.owner === this) {
+						mn.active = false
+						mn.alive = false
+					}
+				}
+				this.minions = []
+				if (doer && doer.isPlayer && doer.skins && !doer.skins[61]) {
+					doer.skins[61] = 1
+					server.send(doer.id, "us", [0, 61, 0])
+				}
+			}
+			if (this.health <= 0) {
+				if (this.spawnDelay) {
+					this.spawnCounter = this.spawnDelay
+					this.x = -1000000
+					this.y = -1000000
+				} else {
+					this.respawnAt()
+				}
+				this.health = this.maxHealth
+				this.runFrom = null
+				if (doer) {
+					// Cow Cape: half as much again from cows
+					var cowMult = capes.cow(doer, this)
+					scoreCallback(doer, this.killScore * cowMult)
+					if (this.drop) {
+						for (var i = 0; i < this.drop.length; ) {
+							doer.addResource(config.resourceTypes.indexOf(this.drop[i]), this.drop[i + 1] * cowMult)
+							i += 2
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// CRAB KING:
+	// From the game's files: its numbers (aiTypes 11), its arena (config.secretPool), how
+	// the game draws it under water (state 1 going under over 700 ms, 2 under, 3 coming up
+	// over 1650 ms) and its warnings, W [kind, x, y, r, ms, x2, y2]: 3 a hit circle, 4 a
+	// charge line, 1 a ring, anything else a splash. Its hit is the game's own, run by the
+	// animal code above: it holds for hitDelay (700 ms), then everyone within hitRange (400)
+	// takes dmg (45) and a 0.6 push, buildings take 5x, and the game's J animation plays.
+	// Ours, until they can be measured on the real game: who it fights (players in its
+	// pools), when it dives, charges or calls a ring and their sizes and times, its crabs,
+	// and its healing. They are tied to its own numbers and its own pace.
+	var KING_HIT = 3
+	var KING_LINE = 4
+	var KING_RING = 1
+	var KING_SPLASH = 0
+	var GO_UNDER = 700 // the game's animation for state 1
+	var COME_UP = 1650 // and for state 3
+	var UNDER_MAX = 3000
+	var LINE_MAX = 1100
+	var RING_R = 250
+	var RING_MS = 1100
+	var SUMMON_AT = 0.75
+	var SUMMON_EVERY = 30000
+	var MINIONS_MAX = 6
+
+	// a player in the pools: who the King and its crabs fight (and where the game shows
+	// the King's health bar)
+	this.fighter = function (p) {
+		return !!p && p.alive && UTILS.inArenaPools(config, p.x, p.y, 0)
+	}
+	this.nearestFighter = function () {
+		var best = null
+		var bestDst = Infinity
+		for (var i = 0; i < players.length; ++i) {
+			var p = players[i]
+			if (!this.fighter(p) || (p.skin && p.skin.bullRepel)) continue
+			var d = UTILS.getDistance(this.x, this.y, p.x, p.y)
+			if (d <= this.viewRange && d < bestDst) {
+				bestDst = d
+				best = p
+			}
+		}
+		return best
+	}
+	this.kingTune = function () {
+		return config.rynKing || { speed: 1, damage: 1 }
+	}
+	this.kingDamage = function () {
+		var t = this.kingTune()
+		return t.damage === undefined ? 1 : t.damage
+	}
+	// how fast it walks when it chases, per ms, from the game's movement: speed x1.75 every
+	// tick, then the game's slowdown
+	this.kingPace = function (delta) {
+		var q = Math.pow(config.playerDecel, delta)
+		return (this.baseSpeed * 1.75 * delta) / (1 - q)
+	}
+	this.kingWarn = function (kind, x, y, r, ms, x2, y2) {
+		if (x2 === undefined) {
+			x2 = x
+			y2 = y
+		}
+		var probe = { x: (x + x2) / 2, y: (y + y2) / 2, scale: r + Math.abs(x2 - x) / 2 + Math.abs(y2 - y) / 2 }
+		for (var i = 0; i < players.length; ++i) {
+			if (players[i].canSee(probe)) {
+				server.send(players[i].id, "cw", [kind, Math.round(x), Math.round(y), r, Math.round(ms), Math.round(x2), Math.round(y2)])
+			}
+		}
+	}
+	// the game's hit, at a spot: everyone within r takes its damage and a 0.6 push away
+	this.kingStrike = function (x, y, r, animate, hitList) {
+		var hit = []
+		if (animate) {
+			for (var a = 0; a < players.length; ++a) {
+				if (players[a].canSee(this)) server.send(players[a].id, "aa", [this.sid])
+			}
+		}
+		for (var i = 0; i < players.length; ++i) {
+			var p = players[i]
+			if (!p.alive || (hitList && hitList[p.sid])) continue
+			if (UTILS.getDistance(x, y, p.x, p.y) <= r + p.scale) {
+				if (hitList) hitList[p.sid] = 1
+				hit.push(p.sid)
+				var dir = UTILS.getDirection(p.x, p.y, x, y)
+				p.changeHealth(-this.dmg * this.kingDamage(), null, this)
+				p.xVel += 0.6 * Math.cos(dir)
+				p.yVel += 0.6 * Math.sin(dir)
+			}
+		}
+		return hit
+	}
+	// Ryn's dodge counter: did the attack catch the player it was aimed at
+	this.kingAttackDone = function (kind, hit) {
+		var c = this.crab
+		if (!c) return
+		c.warned = false
+		if (config.rynKingAttack && c.victim !== undefined) config.rynKingAttack(this, kind, c.victim, hit || [])
+	}
+	// the game's hit is shown as it starts holding (hitWait), for as long as it holds
+	this.kingWarnHit = function () {
+		var c = this.crab
+		if (!c) return
+		if (this.hitWait > 0 && !c.warned) {
+			c.warned = true
+			c.victim = this.chargeTarget ? this.chargeTarget.sid : undefined
+			this.kingWarn(KING_HIT, this.x, this.y, this.hitRange, this.hitWait)
+		} else if (!(this.hitWait > 0)) {
+			c.warned = false
+		}
+	}
+	this.kingSummon = function () {
+		this.minions = this.minions.filter(function (m) {
+			return m.active && m.alive && m.minion
+		})
+		var kinds = [14, 14, 13]
+		for (var i = 0; i < kinds.length && this.minions.length < MINIONS_MAX && this.spawnAi; i++) {
+			// around the King, wherever there is water for them
+			var a, x, y, found = false
+			for (var tries = 0; tries < 16 && !found; tries++) {
+				a = UTILS.randFloat(-Math.PI, Math.PI)
+				var d = this.scale + UTILS.randInt(100, 300)
+				x = this.x + d * Math.cos(a)
+				y = this.y + d * Math.sin(a)
+				found = UTILS.inArenaPools(config, x, y, 40)
+			}
+			if (!found) continue
+			var m = this.spawnAi(x, y, a, kinds[i])
+			m.minion = true
+			m.owner = this
+			// they come up out of the water
+			m.state = 3
+			m.emerge = COME_UP
+			m.waitCount = COME_UP
+			this.minions.push(m)
+			this.kingWarn(KING_SPLASH, x, y, Math.round(m.scale * 1.5), COME_UP)
+		}
+	}
+	this.kingPick = function (target, tune) {
+		var d = UTILS.getDistance(this.x, this.y, target.x, target.y)
+		if (tune.only) {
+			if (tune.only === "slam") return null
+			if (tune.only === "charge") return d <= LINE_MAX ? "charge" : null
+			return tune.only
+		}
+		// close up, its own hit does the work
+		if (d <= this.hitRange + target.scale) return null
+		var fits = { charge: d >= 350 && d <= LINE_MAX, ring: d <= 1500, dive: d >= 500 }
+		var order = ["charge", "ring", "dive"]
+		var c = this.crab
+		for (var i = 0; i < order.length; i++) {
+			var k = order[(c.turn + i) % order.length]
+			if (fits[k]) {
+				c.turn = (c.turn + i + 1) % order.length
+				return k
+			}
+		}
+		return null
+	}
+	this.kingHold = function () {
+		this.xVel = 0
+		this.yVel = 0
+	}
+	this.kingEnd = function (kind, hit) {
+		var c = this.crab
+		this.kingAttackDone(kind, hit)
+		c.phase = "idle"
+		c.next = UTILS.randInt(6000, 9000)
+		this.state = 0
+		// a rest, as after the game's chase
+		this.chargeTarget = null
+		this.moveCount = 0
+		this.waitCount = 1500
+	}
+	// true while one of its own attacks moves or holds it
+	this.kingThink = function (delta) {
+		var c = this.crab
+		if (!c) c = this.crab = { phase: "idle", t: 0, next: 5000, turn: 0, summon: 0, summoned: false, alone: 0, warned: false, kind: null, victim: undefined }
+		var tune = this.kingTune()
+		this.speed = this.baseSpeed * (tune.speed || 1)
+		var target = this.fighter(this.chargeTarget) ? this.chargeTarget : this.nearestFighter()
+		// back a little under water, and slowly with nobody in its pools
+		if (this.state === 2) this.health = Math.min(this.maxHealth, this.health + this.maxHealth * 0.015 * (delta / 1000))
+		c.alone = target ? 0 : c.alone + delta
+		if (c.alone > 5000) this.health = Math.min(this.maxHealth, this.health + this.maxHealth * 0.005 * (delta / 1000))
+		// its crabs: once it is down to 75%, then every 30 s while it fights
+		if (target && this.health <= this.maxHealth * SUMMON_AT) {
+			c.summon -= delta
+			if (!c.summoned || c.summon <= 0) {
+				this.kingSummon()
+				c.summoned = true
+				c.summon = SUMMON_EVERY
+			}
+		}
+		if (c.phase !== "idle") this.hitWait = 0
+		c.t -= delta
+		var v, d
+		switch (c.phase) {
+			case "idle": {
+				this.state = 0
+				if (!target) {
+					c.next = Math.max(c.next, 3000)
+					return false
+				}
+				c.next -= delta * (this.health < this.maxHealth * 0.4 ? 1.5 : 1)
+				if (c.next > 0 || this.hitWait > 0) return false
+				var pick = this.kingPick(target, tune)
+				if (!pick) {
+					c.next = 1000
+					return false
+				}
+				c.kind = pick
+				c.victim = target.sid
+				this.chargeTarget = target
+				this.hitWait = 0
+				this.kingHold()
+				if (pick === "dive") {
+					c.phase = "under1"
+					c.t = GO_UNDER
+					this.state = 1
+				} else if (pick === "charge") {
+					d = UTILS.getDistance(this.x, this.y, target.x, target.y)
+					c.phase = "lineWind"
+					c.t = this.hitDelay
+					c.dir = UTILS.getDirection(target.x, target.y, this.x, this.y)
+					c.len = Math.max(400, Math.min(LINE_MAX, d + 200))
+					this.dir = c.dir
+					this.kingWarn(KING_LINE, this.x, this.y, this.scale, c.t, this.x + c.len * Math.cos(c.dir), this.y + c.len * Math.sin(c.dir))
+				} else {
+					c.phase = "ring"
+					c.t = RING_MS
+					c.x = target.x
+					c.y = target.y
+					this.kingWarn(KING_RING, c.x, c.y, RING_R, c.t)
+				}
+				return true
+			}
+			case "under1":
+				this.state = 1
+				this.kingHold()
+				if (c.t <= 0) {
+					c.phase = "under2"
+					c.t = UNDER_MAX
+					this.state = 2
+				}
+				return true
+			case "under2":
+				this.state = 2
+				d = target ? UTILS.getDistance(this.x, this.y, target.x, target.y) : 0
+				if (target && d > 60 && c.t > 0) {
+					v = Math.min(this.kingPace(delta) * 1.5, d / delta)
+					this.dir = UTILS.getDirection(target.x, target.y, this.x, this.y)
+					this.xVel = v * Math.cos(this.dir)
+					this.yVel = v * Math.sin(this.dir)
+					return true
+				}
+				c.phase = "up"
+				c.t = COME_UP
+				this.state = 3
+				this.kingHold()
+				this.kingWarn(KING_SPLASH, this.x, this.y, this.hitRange, COME_UP)
+				return true
+			case "up":
+				this.state = 3
+				this.kingHold()
+				if (c.t <= 0) this.kingEnd("dive", this.kingStrike(this.x, this.y, this.hitRange, true))
+				return true
+			case "lineWind":
+				this.dir = c.dir
+				this.kingHold()
+				if (c.t <= 0) {
+					c.phase = "line"
+					c.t = 4000
+					c.travel = 0
+					c.lx = this.x
+					c.ly = this.y
+					c.hit = {}
+					c.hits = []
+				}
+				return true
+			case "line": {
+				var moved = UTILS.getDistance(this.x, this.y, c.lx, c.ly)
+				c.travel += moved
+				c.lx = this.x
+				c.ly = this.y
+				c.hits = c.hits.concat(this.kingStrike(this.x, this.y, this.scale, false, c.hit))
+				v = this.kingPace(delta) * 2
+				var stuck = c.travel > 0 && moved < v * delta * 0.25
+				if (c.travel >= c.len || c.t <= 0 || stuck) {
+					this.kingHold()
+					this.kingEnd("charge", c.hits)
+					return true
+				}
+				this.dir = c.dir
+				this.xVel = v * Math.cos(c.dir)
+				this.yVel = v * Math.sin(c.dir)
+				return true
+			}
+			case "ring":
+				this.kingHold()
+				if (target) {
+					var face = UTILS.getDirection(target.x, target.y, this.x, this.y)
+					this.dir %= PI2
+					var net = (this.dir - face + PI2) % PI2
+					var amnt = Math.min(Math.abs(net - PI2), net, this.turnSpeed * delta)
+					this.dir = (this.dir + (net - Math.PI >= 0 ? 1 : -1) * amnt + PI2) % PI2
+				}
+				if (c.t <= 0) this.kingEnd("ring", this.kingStrike(c.x, c.y, RING_R, false))
+				return true
+		}
+		c.phase = "idle"
+		return false
+	}
+}
+    },
+    "src/aiManager.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
+module.exports = function (ais, AI, players, items, objectManager, config, UTILS, scoreCallback, server) {
+	// AI TYPES:
+	this.aiTypes = [
+		{
+			id: 0,
+			src: "cow_1",
+			killScore: 150,
+			health: 500,
+			weightM: 0.8,
+			speed: 0.00095,
+			turnSpeed: 0.001,
+			scale: 72,
+			drop: ["food", 50]
+		},
+		{
+			id: 1,
+			src: "pig_1",
+			killScore: 200,
+			health: 800,
+			weightM: 0.6,
+			speed: 0.00085,
+			turnSpeed: 0.001,
+			scale: 72,
+			drop: ["food", 80]
+		},
+		{
+			id: 2,
+			name: "Bull",
+			src: "bull_2",
+			hostile: true,
+			dmg: 20,
+			killScore: 1000,
+			health: 1800,
+			weightM: 0.5,
+			speed: 0.00094,
+			turnSpeed: 0.00074,
+			scale: 78,
+			viewRange: 800,
+			chargePlayer: true,
+			drop: ["food", 100]
+		},
+		{
+			id: 3,
+			name: "Bully",
+			src: "bull_1",
+			hostile: true,
+			dmg: 20,
+			killScore: 2000,
+			health: 2800,
+			weightM: 0.45,
+			speed: 0.001,
+			turnSpeed: 0.0008,
+			scale: 90,
+			viewRange: 900,
+			chargePlayer: true,
+			drop: ["food", 400]
+		},
+		{
+			id: 4,
+			name: "Wolf",
+			src: "wolf_1",
+			hostile: true,
+			dmg: 8,
+			killScore: 500,
+			health: 300,
+			weightM: 0.45,
+			speed: 0.001,
+			turnSpeed: 0.002,
+			scale: 84,
+			viewRange: 800,
+			chargePlayer: true,
+			drop: ["food", 200]
+		},
+		{
+			id: 5,
+			name: "Quack",
+			src: "chicken_1",
+			dmg: 8,
+			killScore: 2000,
+			noTrap: true,
+			health: 300,
+			weightM: 0.2,
+			speed: 0.0018,
+			turnSpeed: 0.006,
+			scale: 70,
+			drop: ["food", 100]
+		},
+		{
+			id: 6,
+			name: "MOOSTAFA",
+			nameScale: 50,
+			src: "enemy",
+			hostile: true,
+			dontRun: true,
+			fixedSpawn: true,
+			spawnDelay: 60000,
+			noTrap: true,
+			colDmg: 100,
+			dmg: 40,
+			killScore: 8000,
+			health: 18000,
+			weightM: 0.4,
+			speed: 0.0007,
+			turnSpeed: 0.01,
+			scale: 80,
+			spriteMlt: 1.8,
+			leapForce: 0.9,
+			viewRange: 1000,
+			hitRange: 210,
+			hitDelay: 1000,
+			chargePlayer: true,
+			drop: ["food", 100]
+		},
+		{
+			id: 7,
+			name: "Treasure",
+			hostile: true,
+			nameScale: 35,
+			src: "crate_1",
+			fixedSpawn: true,
+			spawnDelay: 120000,
+			colDmg: 200,
+			killScore: 5000,
+			health: 20000,
+			weightM: 0.1,
+			speed: 0.0,
+			turnSpeed: 0.0,
+			scale: 70,
+			spriteMlt: 1.0
+		},
+		{
+			id: 8,
+			name: "MOOFIE",
+			src: "wolf_2",
+			hostile: true,
+			fixedSpawn: true,
+			dontRun: true,
+			hitScare: 4,
+			spawnDelay: 30000,
+			noTrap: true,
+			nameScale: 35,
+			dmg: 10,
+			colDmg: 100,
+			killScore: 3000,
+			health: 7000,
+			weightM: 0.45,
+			speed: 0.0015,
+			turnSpeed: 0.002,
+			scale: 90,
+			viewRange: 800,
+			chargePlayer: true,
+			drop: ["food", 1000]
+		},
+		// added from the current game (12d386a8)
+		{
+			id: 9,
+			name: "Boar",
+			src: "boar_1",
+			hostile: true,
+			dmg: 14,
+			killScore: 800,
+			health: 900,
+			weightM: 0.55,
+			speed: 0.00105,
+			turnSpeed: 0.0012,
+			scale: 76,
+			viewRange: 700,
+			chargePlayer: true,
+			drop: ["food", 150]
+		},
+		{
+			id: 10,
+			name: "Yeti",
+			src: "yeti_1",
+			hostile: true,
+			dmg: 25,
+			killScore: 4500,
+			health: 3200,
+			weightM: 0.35,
+			speed: 0.0008,
+			turnSpeed: 0.0008,
+			scale: 95,
+			viewRange: 750,
+			leapForce: 0.6,
+			chargePlayer: true,
+			drop: ["food", 800]
+		},
+		{
+			id: 11,
+			name: "Crab King",
+			src: "crab_1",
+			boss: true,
+			hostile: true,
+			dontRun: true,
+			fixedSpawn: true,
+			noTrap: true,
+			dmg: 45,
+			killScore: 4000,
+			health: 480000,
+			weightM: 0,
+			speed: 0.00045,
+			turnSpeed: 0.0007,
+			scale: 280,
+			viewRange: 1800,
+			hitRange: 400,
+			hitDelay: 700,
+			// not in the game's table (server side): how long the King stays dead
+			spawnDelay: 180000
+		},
+		{
+			id: 12,
+			src: "sheep_1",
+			killScore: 200,
+			health: 650,
+			weightM: 0.7,
+			speed: 0.0009,
+			turnSpeed: 0.001,
+			scale: 72,
+			drop: ["food", 150]
+		},
+		{
+			id: 13,
+			name: "Crab",
+			src: "crab_1",
+			diver: true,
+			hostile: true,
+			noTrap: true,
+			dmg: 14.4,
+			killScore: 400,
+			health: 500,
+			weightM: 0.5,
+			speed: 0.0014,
+			turnSpeed: 0.003,
+			scale: 78,
+			viewRange: 4000,
+			chargePlayer: true
+		},
+		{
+			id: 14,
+			name: "Crabling",
+			src: "crab_1",
+			diver: true,
+			hostile: true,
+			noTrap: true,
+			dmg: 6,
+			killScore: 200,
+			health: 250,
+			weightM: 0.5,
+			speed: 0.0017,
+			turnSpeed: 0.004,
+			scale: 39,
+			viewRange: 4000,
+			chargePlayer: true
+		}
+	]
+
+	// SPAWN AI:
+	this.spawn = function (x, y, dir, index) {
+		// as the game: an unknown kind becomes a cow
+		if (!this.aiTypes[index]) {
+			console.error("missing ai type", index)
+			return this.spawn(x, y, dir, 0)
+		}
+		var tmpObj
+		for (var i = 0; i < ais.length; ++i) {
+			if (!ais[i].active) {
+				tmpObj = ais[i]
+				break
+			}
+		}
+		if (!tmpObj) {
+			tmpObj = new AI(ais.length, objectManager, players, items, UTILS, config, scoreCallback, server)
+			ais.push(tmpObj)
+		}
+		tmpObj.init(x, y, dir, index, this.aiTypes[index])
+		// the Crab King calls its crabs through this
+		tmpObj.spawnAi = this.spawn.bind(this)
+		return tmpObj
+	}
+}
+    },
+    "src/badwords.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
+// The game's name filter (12d386a8): the bad-words package's two lists and the words the
+// game adds, in the game's order. A name that contains one, lowercased with spaces
+// removed and 1/0/5 read as i/o/s, becomes "unknown".
+module.exports = ["ahole","anus","ash0le","ash0les","asholes","ass","Ass Monkey","Assface","assh0le","assh0lez","asshole","assholes","assholz","asswipe","azzhole","bassterds","bastard","bastards","bastardz","basterds","basterdz","Biatch","bitch","bitches","Blow Job","boffing","butthole","buttwipe","c0ck","c0cks","c0k","Carpet Muncher","cawk","cawks","Clit","cnts","cntz","cock","cockhead","cock-head","cocks","CockSucker","cock-sucker","crap","cum","cunt","cunts","cuntz","dick","dild0","dild0s","dildo","dildos","dilld0","dilld0s","dominatricks","dominatrics","dominatrix","dyke","enema","f u c k","f u c k e r","fag","fag1t","faget","fagg1t","faggit","faggot","fagg0t","fagit","fags","fagz","faig","faigs","fart","flipping the bird","fuck","fucker","fuckin","fucking","fucks","Fudge Packer","fuk","Fukah","Fuken","fuker","Fukin","Fukk","Fukkah","Fukken","Fukker","Fukkin","g00k","God-damned","h00r","h0ar","h0re","hells","hoar","hoor","hoore","jackoff","jap","japs","jerk-off","jisim","jiss","jizm","jizz","knob","knobs","knobz","kunt","kunts","kuntz","Lezzian","Lipshits","Lipshitz","masochist","masokist","massterbait","masstrbait","masstrbate","masterbaiter","masterbate","masterbates","Motha Fucker","Motha Fuker","Motha Fukkah","Motha Fukker","Mother Fucker","Mother Fukah","Mother Fuker","Mother Fukkah","Mother Fukker","mother-fucker","Mutha Fucker","Mutha Fukah","Mutha Fuker","Mutha Fukkah","Mutha Fukker","n1gr","nastt","nigger;","nigur;","niiger;","niigr;","orafis","orgasim;","orgasm","orgasum","oriface","orifice","orifiss","packi","packie","packy","paki","pakie","paky","pecker","peeenus","peeenusss","peenus","peinus","pen1s","penas","penis","penis-breath","penus","penuus","Phuc","Phuck","Phuk","Phuker","Phukker","polac","polack","polak","Poonani","pr1c","pr1ck","pr1k","pusse","pussee","pussy","puuke","puuker","qweir","recktum","rectum","retard","sadist","scank","schlong","screwing","semen","sex","sexy","Sh!t","sh1t","sh1ter","sh1ts","sh1tter","sh1tz","shit","shits","shitter","Shitty","Shity","shitz","Shyt","Shyte","Shytty","Shyty","skanck","skank","skankee","skankey","skanks","Skanky","slag","slut","sluts","Slutty","slutz","son-of-a-bitch","tit","turd","va1jina","vag1na","vagiina","vagina","vaj1na","vajina","vullva","vulva","w0p","wh00r","wh0re","whore","xrated","xxx","b!+ch","bitch","blowjob","clit","arschloch","fuck","shit","ass","asshole","b!tch","b17ch","b1tch","bastard","bi+ch","boiolas","buceta","c0ck","cawk","chink","cipa","clits","cock","cum","cunt","dildo","dirsa","ejakulate","fatass","fcuk","fuk","fux0r","hoer","hore","jism","kawk","l3itch","l3i+ch","masturbate","masterbat*","masterbat3","motherfucker","s.o.b.","mofo","nazi","nigga","nigger","nutsack","phuck","pimpis","pusse","pussy","scrotum","sh!t","shemale","shi+","sh!+","slut","smut","teets","tits","boobs","b00bs","teez","testical","testicle","titt","w00se","jackoff","wank","whoar","whore","*damn","*dyke","*fuck*","*shit*","@$$","amcik","andskota","arse*","assrammer","ayir","bi7ch","bitch*","bollock*","breasts","butt-pirate","cabron","cazzo","chraa","chuj","Cock*","cunt*","d4mn","daygo","dego","dick*","dike*","dupa","dziwka","ejackulate","Ekrem*","Ekto","enculer","faen","fag*","fanculo","fanny","feces","feg","Felcher","ficken","fitt*","Flikker","foreskin","Fotze","Fu(*","fuk*","futkretzn","gook","guiena","h0r","h4x0r","hell","helvete","hoer*","honkey","Huevon","hui","injun","jizz","kanker*","kike","klootzak","kraut","knulle","kuk","kuksuger","Kurac","kurwa","kusi*","kyrpa*","lesbo","mamhoon","masturbat*","merd*","mibun","monkleigh","mouliewop","muie","mulkku","muschi","nazis","nepesaurio","nigger*","orospu","paska*","perse","picka","pierdol*","pillu*","pimmel","piss*","pizda","poontsee","poop","porn","p0rn","pr0n","preteen","pula","pule","puta","puto","qahbeh","queef*","rautenberg","schaffer","scheiss*","schlampe","schmuck","screw","sh!t*","sharmuta","sharmute","shipal","shiz","skribz","skurwysyn","sphencter","spic","spierdalaj","splooge","suka","b00b*","testicle*","titt*","twat","vittu","wank*","wetback*","wichser","wop*","yed","zabourah","4r5e","5h1t","5hit","a55","anal","anus","ar5e","arrse","arse","ass","ass-fucker","asses","assfucker","assfukka","asshole","assholes","asswhole","a_s_s","b!tch","b00bs","b17ch","b1tch","ballbag","balls","ballsack","bastard","beastial","beastiality","bellend","bestial","bestiality","bi+ch","biatch","bitch","bitcher","bitchers","bitches","bitchin","bitching","bloody","blow job","blowjob","blowjobs","boiolas","bollock","bollok","boner","boob","boobs","booobs","boooobs","booooobs","booooooobs","breasts","buceta","bugger","bum","bunny fucker","butt","butthole","buttmuch","buttplug","c0ck","c0cksucker","carpet muncher","cawk","chink","cipa","cl1t","clit","clitoris","clits","cnut","cock","cock-sucker","cockface","cockhead","cockmunch","cockmuncher","cocks","cocksuck","cocksucked","cocksucker","cocksucking","cocksucks","cocksuka","cocksukka","cok","cokmuncher","coksucka","coon","cox","crap","cum","cummer","cumming","cums","cumshot","cunilingus","cunillingus","cunnilingus","cunt","cuntlick","cuntlicker","cuntlicking","cunts","cyalis","cyberfuc","cyberfuck","cyberfucked","cyberfucker","cyberfuckers","cyberfucking","d1ck","damn","dick","dickhead","dildo","dildos","dink","dinks","dirsa","dlck","dog-fucker","doggin","dogging","donkeyribber","doosh","duche","dyke","ejaculate","ejaculated","ejaculates","ejaculating","ejaculatings","ejaculation","ejakulate","f u c k","f u c k e r","f4nny","fag","fagging","faggitt","faggot","faggs","fagot","fagots","fags","fanny","fannyflaps","fannyfucker","fanyy","fatass","fcuk","fcuker","fcuking","feck","fecker","felching","fellate","fellatio","fingerfuck","fingerfucked","fingerfucker","fingerfuckers","fingerfucking","fingerfucks","fistfuck","fistfucked","fistfucker","fistfuckers","fistfucking","fistfuckings","fistfucks","flange","fook","fooker","fuck","fucka","fucked","fucker","fuckers","fuckhead","fuckheads","fuckin","fucking","fuckings","fuckingshitmotherfucker","fuckme","fucks","fuckwhit","fuckwit","fudge packer","fudgepacker","fuk","fuker","fukker","fukkin","fuks","fukwhit","fukwit","fux","fux0r","f_u_c_k","gangbang","gangbanged","gangbangs","gaylord","gaysex","goatse","God","god-dam","god-damned","goddamn","goddamned","hardcoresex","hell","heshe","hoar","hoare","hoer","homo","hore","horniest","horny","hotsex","jack-off","jackoff","jap","jerk-off","jism","jiz","jizm","jizz","kawk","knob","knobead","knobed","knobend","knobhead","knobjocky","knobjokey","kock","kondum","kondums","kum","kummer","kumming","kums","kunilingus","l3i+ch","l3itch","labia","lust","lusting","m0f0","m0fo","m45terbate","ma5terb8","ma5terbate","masochist","master-bate","masterb8","masterbat*","masterbat3","masterbate","masterbation","masterbations","masturbate","mo-fo","mof0","mofo","mothafuck","mothafucka","mothafuckas","mothafuckaz","mothafucked","mothafucker","mothafuckers","mothafuckin","mothafucking","mothafuckings","mothafucks","mother fucker","motherfuck","motherfucked","motherfucker","motherfuckers","motherfuckin","motherfucking","motherfuckings","motherfuckka","motherfucks","muff","mutha","muthafecker","muthafuckker","muther","mutherfucker","n1gga","n1gger","nazi","nigg3r","nigg4h","nigga","niggah","niggas","niggaz","nigger","niggers","nob","nob jokey","nobhead","nobjocky","nobjokey","numbnuts","nutsack","orgasim","orgasims","orgasm","orgasms","p0rn","pawn","pecker","penis","penisfucker","phonesex","phuck","phuk","phuked","phuking","phukked","phukking","phuks","phuq","pigfucker","pimpis","piss","pissed","pisser","pissers","pisses","pissflaps","pissin","pissing","pissoff","poop","porn","porno","pornography","pornos","prick","pricks","pron","pube","pusse","pussi","pussies","pussy","pussys","rectum","retard","rimjaw","rimming","s hit","s.o.b.","sadist","schlong","screwing","scroat","scrote","scrotum","semen","sex","sh!+","sh!t","sh1t","shag","shagger","shaggin","shagging","shemale","shi+","shit","shitdick","shite","shited","shitey","shitfuck","shitfull","shithead","shiting","shitings","shits","shitted","shitter","shitters","shitting","shittings","shitty","skank","slut","sluts","smegma","smut","snatch","son-of-a-bitch","spac","spunk","s_h_i_t","t1tt1e5","t1tties","teets","teez","testical","testicle","tit","titfuck","tits","titt","tittie5","tittiefucker","titties","tittyfuck","tittywank","titwank","tosser","turd","tw4t","twat","twathead","twatty","twunt","twunter","v14gra","v1gra","vagina","viagra","vulva","w00se","wang","wank","wanker","wanky","whoar","whore","willies","willy","xrated","xxx","jew","black","baby","child","white","porn","pedo","trump","clinton","hitler","nazi","gay","pride","sex","pleasure","touch","poo","kids","rape","white power","nigga","nig nog","doggy","rapist","boner","nigger","nigg","finger","nogger","nagger","nig","fag","gai","pole","stripper","penis","vagina","pussy","nazi","hitler","stalin","burn","chamber","cock","peen","dick","spick","nieger","die","satan","n|ig","nlg","cunt","c0ck","fag","lick","condom","anal","shit","phile","little","kids","free KR","tiny","sidney","ass","kill",".io","(dot)","[dot]","mini","whiore","whore","faggot","github","1337","666","satan","senpa","discord","d1scord","mistik",".io","senpa.io","sidney","sid","senpaio","vries","asa"]
+    },
+    "src/capes.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
+// Accessories whose effect the game only gives in its store text ("5% faster", "no snow
+// slowdown", ...). The game's files carry the code for every other hat and accessory
+// property, but not for these, so they follow the text. Two amounts are not in the text
+// and are ours: Thorns heals 10% of the damage of the hit, Devils Tail bleeds 5 a second.
+//
+// config.storeEffects = false turns them off, with the Emerald tier's lifesteal (also only
+// in the game's data): tools/server-parity.js compares everything else with the game's code.
+var SUPER = 1
+var DRAGON = 2
+var COOKIE = 3
+var SKULL = 4
+var DASH = 5
+var WINTER = 6
+var TROLL = 7
+var COW = 8
+var TREE = 9
+var STONE = 10
+var SNOWBALL = 12
+var THORNS = 14
+var BLOCKADES = 15
+var DEVIL = 20
+
+var SUPER_MS = 10000
+var DRAGON_MS = 5000
+
+module.exports = function (config) {
+	var on = function () {
+		return config.storeEffects !== false
+	}
+	var wears = function (p, id) {
+		return !!(p && p.tail && p.tailIndex === id) && on()
+	}
+	var capes = {
+		on: on,
+		wears: wears,
+		// time-limited buffs run on game time, so they stop when the world is paused
+		tick: function (p, delta) {
+			if (p.capeSuper > 0) p.capeSuper -= delta
+			if (p.capeDragon > 0) p.capeDragon -= delta
+		},
+		speed: function (p) {
+			return (wears(p, DASH) ? 1.05 : 1) * (wears(p, SUPER) && p.capeSuper > 0 ? 1.15 : 1)
+		},
+		snow: function (p) {
+			if (wears(p, WINTER)) return 1
+			if (wears(p, SNOWBALL)) return 1 - (1 - config.snowSpeed) / 2
+			return config.snowSpeed
+		},
+		// damage a player deals, melee or shot
+		damage: function (p) {
+			return (wears(p, SUPER) && p.capeSuper > 0 ? 1.05 : 1) * (wears(p, DRAGON) && p.capeDragon > 0 ? 1.05 : 1)
+		},
+		hitPlayer: function (p) {
+			if (wears(p, DRAGON)) p.capeDragon = DRAGON_MS
+		},
+		killed: function (p) {
+			if (wears(p, SUPER)) p.capeSuper = SUPER_MS
+		},
+		// resource type: 0 wood (tree), 1 food (bush, cactus), 2 stone (rock)
+		gather: function (p, type) {
+			if (type === 0 && wears(p, TREE)) return 1
+			if (type === 1 && wears(p, COOKIE)) return 1
+			if (type === 2 && wears(p, STONE)) return 1
+			return 0
+		},
+		// gold for a kill: the kill leader (the crown) and kills by your spikes
+		killGold: function (doer, victim, src) {
+			var mult = 1
+			if (wears(doer, SKULL) && victim.iconIndex === 1) mult *= 3
+			if (wears(doer, TROLL) && src && src.isItem && src.dmg && src.owner === doer) mult *= 2
+			return mult
+		},
+		// gold and food for a cow
+		cow: function (doer, ai) {
+			return ai.index === 0 && wears(doer, COW) ? 1.5 : 1
+		},
+		shotTaken: function (p) {
+			return wears(p, BLOCKADES) ? 0.75 : 1
+		},
+		thorns: function (p) {
+			return wears(p, THORNS) ? 0.1 : 0
+		},
+		bleed: function (doer, target) {
+			if (!wears(doer, DEVIL) || !target.dmgOverTime) return
+			// a longer poison stays
+			if (target.dmgOverTime.dmg && target.dmgOverTime.time > 2) return
+			target.dmgOverTime.dmg = 5
+			target.dmgOverTime.time = 2
+			target.dmgOverTime.doer = doer
+		}
+	}
+	return capes
+}
+    },
+    "src/config.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
+//Default screen:
+/*module.exports.maxScreenWidth = 1920;
+module.exports.maxScreenHeight = 1080;*/
+
+//Max screen:
+// view range of the current game (12d386a8)
+module.exports.maxScreenWidth = 1920
+module.exports.maxScreenHeight = 1080
+
+// SERVER:
+module.exports.serverUpdateRate = 9
+module.exports.maxPlayers =
+	process && process.argv.indexOf('--largeserver') != -1 ? 80 : 50
+module.exports.maxPlayersHard = module.exports.maxPlayers
+module.exports.collisionDepth = 6
+module.exports.minimapRate = 3000
+
+// COLLISIONS:
+module.exports.colGrid = 10
+
+// CLIENT:
+module.exports.clientSendRate = 5
+
+// UI:
+module.exports.healthBarWidth = 50
+module.exports.healthBarPad = 4.5
+module.exports.iconPadding = 15
+module.exports.iconPad = 0.9
+module.exports.deathFadeout = 3000
+module.exports.crownIconScale = 60
+module.exports.crownPad = 35
+
+// CHAT:
+module.exports.chatCountdown = 3000
+module.exports.chatCooldown = 500
+
+// SANDBOX:
+// module.exports.inSandbox = process && process.env.VULTR_SCHEME === "mm_exp"
+module.exports.inSandbox = false
+
+// PLAYER:
+module.exports.maxAge = 100
+module.exports.gatherAngle = Math.PI / 2.6
+module.exports.gatherWiggle = 10
+module.exports.hitReturnRatio = 0.25
+module.exports.hitAngle = Math.PI / 2
+module.exports.playerScale = 35
+module.exports.playerSpeed = 0.0016
+module.exports.playerDecel = 0.993
+module.exports.nameY = 34
+
+// CUSTOMIZATION:
+module.exports.skinColors = [
+	'#bf8f54',
+	'#cbb091',
+	'#896c4b',
+	'#fadadc',
+	'#ececec',
+	'#c37373',
+	'#4c4c4c',
+	'#ecaff7',
+	'#738cc3',
+	'#8bc373'
+]
+module.exports.skinColors1 = [
+	'#bf8f54',
+	'#cbb091',
+	'#896c4b',
+	'#fadadc',
+	'#ececec',
+	'#c37373',
+	'#4c4c4c',
+	'#ecaff7',
+	'#738cc3',
+	'#8bc373',
+	'#85a1c7'
+]
+
+// ANIMALS:
+module.exports.animalCount = 7
+module.exports.aiTurnRandom = 0.06
+
+module.exports.spawnMobs = true
+module.exports.spawnHostile = true
+module.exports.spawnBosses = true
+module.exports.disabledMobTypes = []
+
+module.exports.adminNames = []
+module.exports.cowNames = [
+	'Sid',
+	'Steph',
+	'Bmoe',
+	'Romn',
+	'Jononthecool',
+	'Fiona',
+	'Vince',
+	'Nathan',
+	'Nick',
+	'Flappy',
+	'Ronald',
+	'Otis',
+	'Pepe',
+	'Mc Donald',
+	'Theo',
+	'Fabz',
+	'Oliver',
+	'Jeff',
+	'Jimmy',
+	'Helena',
+	'Reaper',
+	'Ben',
+	'Alan',
+	'Naomi',
+	'XYZ',
+	'Clever',
+	'Jeremy',
+	'Mike',
+	'Destined',
+	'Stallion',
+	'Allison',
+	'Meaty',
+	'Sophia',
+	'Vaja',
+	'Joey',
+	'Pendy',
+	'Murdoch',
+	'Theo',
+	'Jared',
+	'July',
+	'Sonia',
+	'Mel',
+	'Dexter',
+	'Quinn',
+	'Milky'
+]
+
+// WEAPONS:
+module.exports.shieldAngle = Math.PI / 3
+module.exports.weaponVariants = [
+	{
+		id: 0,
+		src: '',
+		xp: 0,
+		val: 1
+	},
+	{
+		id: 1,
+		src: '_g',
+		xp: 3000,
+		val: 1.1
+	},
+	{
+		id: 2,
+		src: '_d',
+		xp: 7000,
+		val: 1.18
+	},
+	{
+		id: 3,
+		src: '_r',
+		poison: true,
+		xp: 12000,
+		val: 1.18
+	},
+	{
+		id: 4,
+		src: '_e',
+		poison: true,
+		lifesteal: 0.15,
+		membersOnly: true,
+		xp: 30000,
+		val: 1.18
+	}
+]
+module.exports.fetchVariant = function (player) {
+	var tmpXP = player.weaponXP[player.weaponIndex] || 0
+	for (var i = module.exports.weaponVariants.length - 1; i >= 0; --i) {
+		if (tmpXP >= module.exports.weaponVariants[i].xp) {
+			return module.exports.weaponVariants[i]
+		}
+	}
+}
+
+// NATURE:
+module.exports.resourceTypes = ['wood', 'food', 'stone', 'points']
+module.exports.areaCount = 7
+module.exports.treesPerArea = 9
+module.exports.bushesPerArea = 3
+module.exports.totalRocks = 32
+module.exports.goldOres = 7
+module.exports.riverWidth = 724
+module.exports.riverPadding = 114
+module.exports.waterCurrent = 0.0011
+module.exports.waveSpeed = 0.0001
+module.exports.waveMax = 1.3
+module.exports.treeScales = [150, 160, 165, 175]
+module.exports.bushScales = [80, 85, 95]
+module.exports.rockScales = [80, 85, 90]
+
+// BIOME DATA:
+module.exports.snowBiomeTop = 2400
+module.exports.snowSpeed = 0.75
+
+// DATA:
+module.exports.maxNameLength = 15
+
+// MAP:
+module.exports.mapScale = 14400
+
+// The Crab King's arena west of the map (x < 0), reached through a gorge at the river:
+// a corridor, five pools and a passage behind the waterfall. Same numbers as the game.
+module.exports.secretPool = {
+	gorgeX0: -1500,
+	gorgeHalf: 520,
+	pool: [
+		[-2500, 7200, 1150],
+		[-3300, 6750, 750],
+		[-3200, 7750, 700],
+		[-1700, 6900, 600],
+		[-1800, 7550, 600]
+	],
+	waterfall: { x: -3860, y: 7250, half: 210 },
+	shallows: { start: -1500, length: 320 }
+}
+module.exports.mapPingScale = 40
+module.exports.mapPingTime = 2200
+    },
+    "src/gameObject.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
+module.exports = function (sid) {
+    this.sid = sid
+
+    // INIT:
+    this.init = function (x, y, dir, scale, type, data, owner) {
+        data = data || {}
+        this.sentTo = {}
+        this.gridLocations = []
+        this.active = true
+        this.doUpdate = data.doUpdate
+        this.x = x
+        this.y = y
+        this.dir = dir
+        this.xWiggle = 0
+        this.yWiggle = 0
+        this.scale = scale
+        this.type = type
+        this.id = data.id
+        this.owner = owner
+        this.name = data.name
+        this.isItem = this.id != undefined
+        this.group = data.group
+        this.health = data.health
+        this.isInvis = 0
+        this.layer = 2
+        if (this.group != undefined) {
+            this.layer = this.group.layer
+        } else if (this.type == 0) {
+            this.layer = 3
+        } else if (this.type == 2) {
+            this.layer = 0
+        } else if (this.type == 4) {
+            this.layer = -1
+        }
+        this.colDiv = data.colDiv || 1
+        this.blocker = data.blocker
+        this.ignoreCollision = data.ignoreCollision
+        this.dontGather = data.dontGather
+        this.hideFromEnemy = data.hideFromEnemy
+        this.friction = data.friction
+        this.projDmg = data.projDmg
+        this.dmg = data.dmg
+        this.pDmg = data.pDmg
+        this.pps = data.pps
+        this.zIndex = data.zIndex || 0
+        this.turnSpeed = data.turnSpeed
+        this.req = data.req
+        this.trap = data.trap
+        this.healCol = data.healCol
+        this.teleport = data.teleport
+        this.boostSpeed = data.boostSpeed
+        this.projectile = data.projectile
+        this.shootRange = data.shootRange
+        this.shootRate = data.shootRate
+        this.shootCount = this.shootRate
+        this.spawnPoint = data.spawnPoint
+    }
+
+    // GET HIT:
+    this.changeHealth = function (amount, doer) {
+        this.health += amount
+        return this.health <= 0
+    }
+
+    // GET SCALE:
+    this.getScale = function (sM, ig) {
+        sM = sM || 1
+        return this.scale * (this.isItem || this.type == 2 || this.type == 3 || this.type == 4 ? 1 : 0.6 * sM) * (ig ? 1 : this.colDiv)
+    }
+
+    // VISIBLE TO PLAYER:
+    this.visibleToPlayer = function (player) {
+        return !this.hideFromEnemy || (this.owner && (this.owner == player || (this.owner.team && player.team == this.owner.team)))
+    }
+
+    // UPDATE:
+    this.update = function (delta) {
+        if (this.active) {
+            if (this.xWiggle) {
+                this.xWiggle *= Math.pow(0.99, delta)
+            }
+            if (this.yWiggle) {
+                this.yWiggle *= Math.pow(0.99, delta)
+            }
+            if (this.turnSpeed) {
+                this.dir += this.turnSpeed * delta
+            }
+        }
+    }
+    this.update = function (delta) {
+        if (this.active) {
+            if (this.dir > 1e50 || this.dir < -1e50) {
+                this.isInvis = 1
+            }
+            if (this.xWiggle) {
+                this.xWiggle *= Math.pow(0.99, delta)
+            }
+            if (this.yWiggle) {
+                this.yWiggle *= Math.pow(0.99, delta)
+            }
+            try {
+                if (this.turnSpeed) {
+                    this.dir = Math.atan2(Math.sin(this.dir), Math.cos(this.dir)) + this.turnSpeed * delta
+                }
+            } catch (e) {}
+        }
+    }
+}
+    },
+    "src/items.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
+// ITEM GROUPS:
+module.exports.groups = [
+	{
+		id: 0,
+		name: "food",
+		layer: 0
+	},
+	{
+		id: 1,
+		name: "walls",
+		place: true,
+		limit: 30,
+		layer: 0
+	},
+	{
+		id: 2,
+		name: "spikes",
+		place: true,
+		limit: 15,
+		layer: 0
+	},
+	{
+		id: 3,
+		name: "mill",
+		place: true,
+		limit: 7,
+		layer: 1,
+		sandboxLimit: 299
+	},
+	{
+		id: 4,
+		name: "mine",
+		place: true,
+		limit: 1,
+		layer: 0
+	},
+	{
+		id: 5,
+		name: "trap",
+		place: true,
+		limit: 6,
+		layer: -1
+	},
+	{
+		id: 6,
+		name: "booster",
+		place: true,
+		limit: 12,
+		layer: -1,
+		sandboxLimit: 299
+	},
+	{
+		id: 7,
+		name: "turret",
+		place: true,
+		limit: 2,
+		layer: 1
+	},
+	{
+		id: 8,
+		name: "watchtower",
+		place: true,
+		limit: 12,
+		layer: 1
+	},
+	{
+		id: 9,
+		name: "buff",
+		place: true,
+		limit: 4,
+		layer: -1
+	},
+	{
+		id: 10,
+		name: "spawn",
+		place: true,
+		limit: 1,
+		layer: -1
+	},
+	{
+		id: 11,
+		name: "sapling",
+		place: true,
+		limit: 2,
+		layer: 0
+	},
+	{
+		id: 12,
+		name: "blocker",
+		place: true,
+		limit: 3,
+		layer: -1
+	},
+	{
+		id: 13,
+		name: "teleporter",
+		place: true,
+		limit: 2,
+		layer: -1,
+		sandboxLimit: 299
+	}
+]
+
+// PROJECTILES:
+exports.projectiles = [
+	{
+		indx: 0,
+		layer: 0,
+		src: "arrow_1",
+		dmg: 25,
+		speed: 1.6,
+		scale: 103,
+		range: 1000
+	},
+	{
+		indx: 1,
+		layer: 1,
+		dmg: 25,
+		scale: 20
+	},
+	{
+		indx: 0,
+		layer: 0,
+		src: "arrow_1",
+		dmg: 35,
+		speed: 2.5,
+		scale: 103,
+		range: 1200
+	},
+	{
+		indx: 0,
+		layer: 0,
+		src: "arrow_1",
+		dmg: 30,
+		speed: 2,
+		scale: 103,
+		range: 1200
+	},
+	{
+		indx: 1,
+		layer: 1,
+		dmg: 16,
+		scale: 20
+	},
+	{
+		indx: 0,
+		layer: 0,
+		src: "bullet_1",
+		dmg: 50,
+		speed: 3.6,
+		scale: 160,
+		range: 1400
+	}
+]
+
+// WEAPONS:
+exports.weapons = [
+	{
+		id: 0,
+		type: 0,
+		name: "tool hammer",
+		desc: "tool for gathering all resources",
+		src: "hammer_1",
+		length: 140,
+		width: 140,
+		xOff: -3,
+		yOff: 18,
+		dmg: 25,
+		range: 65,
+		gather: 1,
+		speed: 300
+	},
+	{
+		id: 1,
+		type: 0,
+		age: 2,
+		name: "hand axe",
+		desc: "gathers resources at a higher rate",
+		src: "axe_1",
+		length: 140,
+		width: 140,
+		xOff: 3,
+		yOff: 24,
+		dmg: 30,
+		spdMult: 1,
+		range: 70,
+		gather: 2,
+		speed: 400
+	},
+	{
+		id: 2,
+		type: 0,
+		age: 8,
+		name: "great axe",
+		pre: 1,
+		desc: "deal more damage and gather more resources",
+		src: "great_axe_1",
+		length: 140,
+		width: 140,
+		xOff: -8,
+		yOff: 25,
+		dmg: 35,
+		spdMult: 1,
+		range: 75,
+		gather: 4,
+		speed: 400
+	},
+	{
+		id: 3,
+		type: 0,
+		age: 2,
+		name: "short sword",
+		desc: "increased attack power but slower move speed",
+		src: "sword_1",
+		iPad: 1.3,
+		length: 130,
+		width: 210,
+		xOff: -8,
+		yOff: 46,
+		dmg: 35,
+		spdMult: 0.85,
+		range: 110,
+		gather: 1,
+		speed: 300
+	},
+	{
+		id: 4,
+		type: 0,
+		age: 8,
+		name: "katana",
+		pre: 3,
+		desc: "greater range and damage",
+		src: "samurai_1",
+		iPad: 1.3,
+		length: 130,
+		width: 210,
+		xOff: -8,
+		yOff: 59,
+		dmg: 40,
+		spdMult: 0.8,
+		range: 118,
+		gather: 1,
+		speed: 300
+	},
+	{
+		id: 5,
+		type: 0,
+		age: 2,
+		name: "polearm",
+		desc: "long range melee weapon",
+		src: "spear_1",
+		iPad: 1.3,
+		length: 130,
+		width: 210,
+		xOff: -8,
+		yOff: 53,
+		dmg: 45,
+		knock: 0.2,
+		spdMult: 0.82,
+		range: 142,
+		gather: 1,
+		speed: 700
+	},
+	{
+		id: 6,
+		type: 0,
+		age: 2,
+		name: "bat",
+		desc: "fast long range melee weapon",
+		src: "bat_1",
+		iPad: 1.3,
+		length: 110,
+		width: 180,
+		xOff: -8,
+		yOff: 53,
+		dmg: 20,
+		knock: 0.7,
+		range: 110,
+		gather: 1,
+		speed: 300
+	},
+	{
+		id: 7,
+		type: 0,
+		age: 2,
+		name: "daggers",
+		desc: "really fast short range weapon",
+		src: "dagger_1",
+		iPad: 0.8,
+		length: 110,
+		width: 110,
+		xOff: 18,
+		yOff: 0,
+		dmg: 20,
+		knock: 0.1,
+		range: 65,
+		gather: 1,
+		hitSlow: 0.1,
+		spdMult: 1.13,
+		speed: 100
+	},
+	{
+		id: 8,
+		type: 0,
+		age: 2,
+		name: "stick",
+		desc: "great for gathering but very weak",
+		src: "stick_1",
+		length: 140,
+		width: 140,
+		xOff: 3,
+		yOff: 24,
+		dmg: 1,
+		spdMult: 1,
+		range: 70,
+		gather: 7,
+		speed: 400
+	},
+	{
+		id: 9,
+		type: 1,
+		age: 6,
+		name: "hunting bow",
+		desc: "bow used for ranged combat and hunting",
+		src: "bow_1",
+		req: ["wood", 4],
+		length: 120,
+		width: 120,
+		xOff: -6,
+		yOff: 0,
+		projectile: 0,
+		spdMult: 0.75,
+		speed: 600
+	},
+	{
+		id: 10,
+		type: 1,
+		age: 6,
+		name: "great hammer",
+		desc: "hammer used for destroying structures",
+		src: "great_hammer_1",
+		length: 140,
+		width: 140,
+		xOff: -9,
+		yOff: 25,
+		dmg: 10,
+		spdMult: 0.88,
+		range: 75,
+		sDmg: 7.5,
+		gather: 1,
+		speed: 400
+	},
+	{
+		id: 11,
+		type: 1,
+		age: 6,
+		name: "wooden shield",
+		desc: "blocks projectiles and reduces melee damage",
+		src: "shield_1",
+		length: 120,
+		width: 120,
+		shield: 0.2,
+		xOff: 6,
+		yOff: 0,
+		spdMult: 0.7
+	},
+	{
+		id: 12,
+		type: 1,
+		age: 8,
+		name: "crossbow",
+		pre: 9,
+		desc: "deals more damage and has greater range",
+		src: "crossbow_1",
+		req: ["wood", 5],
+		aboveHand: true,
+		armS: 0.75,
+		length: 120,
+		width: 120,
+		xOff: -4,
+		yOff: 0,
+		projectile: 2,
+		spdMult: 0.7,
+		speed: 700
+	},
+	{
+		id: 13,
+		type: 1,
+		age: 9,
+		name: "repeater crossbow",
+		pre: 12,
+		desc: "high firerate crossbow with reduced damage",
+		src: "crossbow_2",
+		req: ["wood", 10],
+		aboveHand: true,
+		armS: 0.75,
+		length: 120,
+		width: 120,
+		xOff: -4,
+		yOff: 0,
+		projectile: 3,
+		spdMult: 0.7,
+		speed: 230
+	},
+	{
+		id: 14,
+		type: 1,
+		age: 6,
+		name: "mc grabby",
+		desc: "steals resources from enemies",
+		src: "grab_1",
+		length: 130,
+		width: 210,
+		xOff: -8,
+		yOff: 53,
+		dmg: 0,
+		steal: 250,
+		knock: 0.2,
+		spdMult: 1.05,
+		range: 125,
+		gather: 0,
+		speed: 700
+	},
+	{
+		id: 15,
+		type: 1,
+		age: 9,
+		name: "musket",
+		pre: 12,
+		desc: "slow firerate but high damage and range",
+		src: "musket_1",
+		req: ["stone", 10],
+		aboveHand: true,
+		rec: 0.35,
+		armS: 0.6,
+		hndS: 0.3,
+		hndD: 1.6,
+		length: 205,
+		width: 205,
+		xOff: 25,
+		yOff: 0,
+		projectile: 5,
+		hideProjectile: true,
+		spdMult: 0.6,
+		speed: 1500
+	}
+]
+
+// ITEMS:
+module.exports.list = [
+	{
+		group: module.exports.groups[0],
+		name: "apple",
+		desc: "restores 20 health when consumed",
+		req: ["food", 10],
+		consume: function (doer) {
+			return doer.changeHealth(20, doer)
+		},
+		scale: 22,
+		holdOffset: 15
+	},
+	{
+		age: 3,
+		group: module.exports.groups[0],
+		name: "cookie",
+		desc: "restores 40 health when consumed",
+		req: ["food", 15],
+		consume: function (doer) {
+			return doer.changeHealth(40, doer)
+		},
+		scale: 27,
+		holdOffset: 15
+	},
+	{
+		age: 7,
+		group: module.exports.groups[0],
+		name: "cheese",
+		desc: "restores 30 health and another 50 over 5 seconds",
+		req: ["food", 25],
+		consume: function (doer) {
+			if (doer.changeHealth(30, doer) || doer.health < 100) {
+				doer.dmgOverTime.dmg = -10
+				doer.dmgOverTime.doer = doer
+				doer.dmgOverTime.time = 5
+				return true
+			}
+			return false
+		},
+		scale: 27,
+		holdOffset: 15
+	},
+	{
+		group: module.exports.groups[1],
+		name: "wood wall",
+		desc: "provides protection for your village",
+		req: ["wood", 10],
+		projDmg: true,
+		health: 380,
+		scale: 50,
+		holdOffset: 20,
+		placeOffset: -5
+	},
+	{
+		age: 3,
+		group: module.exports.groups[1],
+		name: "stone wall",
+		desc: "provides improved protection for your village",
+		req: ["stone", 25],
+		health: 900,
+		scale: 50,
+		holdOffset: 20,
+		placeOffset: -5
+	},
+	{
+		age: 7,
+		group: module.exports.groups[1],
+		name: "castle wall",
+		pre: 1,
+		desc: "provides powerful protection for your village",
+		req: ["stone", 35],
+		health: 1500,
+		scale: 52,
+		holdOffset: 20,
+		placeOffset: -5
+	},
+	{
+		group: module.exports.groups[2],
+		name: "spikes",
+		desc: "damages enemies when they touch them",
+		req: ["wood", 20, "stone", 5],
+		health: 400,
+		dmg: 20,
+		scale: 49,
+		spritePadding: -23,
+		holdOffset: 8,
+		placeOffset: -5
+	},
+	{
+		age: 5,
+		group: module.exports.groups[2],
+		name: "greater spikes",
+		desc: "damages enemies when they touch them",
+		req: ["wood", 30, "stone", 10],
+		health: 500,
+		dmg: 35,
+		scale: 52,
+		spritePadding: -23,
+		holdOffset: 8,
+		placeOffset: -5
+	},
+	{
+		age: 9,
+		group: module.exports.groups[2],
+		name: "poison spikes",
+		pre: 1,
+		desc: "poisons enemies when they touch them",
+		req: ["wood", 35, "stone", 15],
+		health: 600,
+		dmg: 30,
+		pDmg: 5,
+		scale: 52,
+		spritePadding: -23,
+		holdOffset: 8,
+		placeOffset: -5
+	},
+	{
+		age: 9,
+		group: module.exports.groups[2],
+		name: "spinning spikes",
+		pre: 2,
+		desc: "damages enemies when they touch them",
+		req: ["wood", 30, "stone", 20],
+		health: 500,
+		dmg: 45,
+		turnSpeed: 0.003,
+		scale: 52,
+		spritePadding: -23,
+		holdOffset: 8,
+		placeOffset: -5
+	},
+	{
+		group: module.exports.groups[3],
+		name: "windmill",
+		desc: "generates gold over time",
+		req: ["wood", 50, "stone", 10],
+		health: 400,
+		pps: 1,
+		turnSpeed: 0.0016,
+		spritePadding: 25,
+		iconLineMult: 12,
+		scale: 45,
+		holdOffset: 20,
+		placeOffset: 5
+	},
+	{
+		age: 5,
+		group: module.exports.groups[3],
+		name: "faster windmill",
+		pre: 1,
+		desc: "generates more gold over time",
+		req: ["wood", 60, "stone", 20],
+		health: 500,
+		pps: 1.5,
+		turnSpeed: 0.0025,
+		spritePadding: 25,
+		iconLineMult: 12,
+		scale: 47,
+		holdOffset: 20,
+		placeOffset: 5
+	},
+	{
+		age: 8,
+		group: module.exports.groups[3],
+		name: "power mill",
+		pre: 1,
+		desc: "generates more gold over time",
+		req: ["wood", 100, "stone", 50],
+		health: 800,
+		pps: 2,
+		turnSpeed: 0.005,
+		spritePadding: 25,
+		iconLineMult: 12,
+		scale: 47,
+		holdOffset: 20,
+		placeOffset: 5
+	},
+	{
+		age: 5,
+		group: module.exports.groups[4],
+		type: 2,
+		name: "mine",
+		desc: "allows you to mine stone",
+		req: ["wood", 20, "stone", 100],
+		iconLineMult: 12,
+		scale: 65,
+		holdOffset: 20,
+		placeOffset: 0
+	},
+	{
+		age: 5,
+		group: module.exports.groups[11],
+		type: 0,
+		name: "sapling",
+		desc: "allows you to farm wood",
+		req: ["wood", 150],
+		iconLineMult: 12,
+		colDiv: 0.5,
+		scale: 110,
+		holdOffset: 50,
+		placeOffset: -15
+	},
+	{
+		age: 4,
+		group: module.exports.groups[5],
+		name: "pit trap",
+		desc: "pit that traps enemies if they walk over it",
+		req: ["wood", 30, "stone", 30],
+		trap: true,
+		ignoreCollision: true,
+		hideFromEnemy: true,
+		health: 500,
+		colDiv: 0.2,
+		scale: 50,
+		holdOffset: 20,
+		placeOffset: -5
+	},
+	{
+		age: 4,
+		group: module.exports.groups[6],
+		name: "boost pad",
+		desc: "provides boost when stepped on",
+		req: ["stone", 20, "wood", 5],
+		ignoreCollision: true,
+		boostSpeed: 1.5,
+		health: 150,
+		colDiv: 0.7,
+		scale: 45,
+		holdOffset: 20,
+		placeOffset: -5
+	},
+	{
+		age: 7,
+		group: module.exports.groups[7],
+		doUpdate: true,
+		name: "turret",
+		desc: "defensive structure that shoots at enemies",
+		req: ["wood", 200, "stone", 150],
+		health: 800,
+		projectile: 1,
+		shootRange: 700,
+		shootRate: 2200,
+		scale: 43,
+		holdOffset: 20,
+		placeOffset: -5
+	},
+	{
+		age: 7,
+		group: module.exports.groups[8],
+		name: "platform",
+		desc: "platform to shoot over walls and cross over water",
+		req: ["wood", 20],
+		ignoreCollision: true,
+		zIndex: 1,
+		health: 300,
+		scale: 43,
+		holdOffset: 20,
+		placeOffset: -5
+	},
+	{
+		age: 7,
+		group: module.exports.groups[9],
+		name: "healing pad",
+		desc: "standing on it will slowly heal you",
+		req: ["wood", 30, "food", 10],
+		ignoreCollision: true,
+		healCol: 15,
+		health: 400,
+		colDiv: 0.7,
+		scale: 45,
+		holdOffset: 20,
+		placeOffset: -5
+	},
+	{
+		age: 9,
+		group: module.exports.groups[10],
+		name: "spawn pad",
+		desc: "you will spawn here when you die but it will dissapear",
+		req: ["wood", 100, "stone", 100],
+		health: 400,
+		ignoreCollision: true,
+		spawnPoint: true,
+		scale: 45,
+		holdOffset: 20,
+		placeOffset: -5
+	},
+	{
+		age: 7,
+		group: module.exports.groups[12],
+		name: "blocker",
+		desc: "blocks building in radius",
+		req: ["wood", 30, "stone", 25],
+		ignoreCollision: true,
+		blocker: 300,
+		health: 400,
+		colDiv: 0.7,
+		scale: 45,
+		holdOffset: 20,
+		placeOffset: -5
+	},
+	{
+		age: 7,
+		group: module.exports.groups[13],
+		name: "teleporter",
+		desc: "teleports you to a random point on the map",
+		req: ["wood", 60, "stone", 60],
+		ignoreCollision: true,
+		teleport: true,
+		health: 200,
+		colDiv: 0.7,
+		scale: 45,
+		holdOffset: 20,
+		placeOffset: -5
+	}
+]
+
+// ASSIGN IDS:
+for (var i = 0; i < module.exports.list.length; ++i) {
+	module.exports.list[i].id = i
+	if (module.exports.list[i].pre) module.exports.list[i].pre = i - module.exports.list[i].pre
+}
+    },
+    "src/objectManager.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
+var mathFloor = Math.floor
+var mathABS = Math.abs
+var mathCOS = Math.cos
+var mathSIN = Math.sin
+var mathSQRT = Math.sqrt
+module.exports = function (GameObject, gameObjects, UTILS, config, players, server) {
+	this.count = 1
+	this.objects = gameObjects
+	this.grids = {}
+	this.updateObjects = []
+
+	// SET OBJECT GRIDS:
+	var tmpX, tmpY
+	var tmpS = config.mapScale / config.colGrid
+	this.setObjectGrids = function (obj) {
+		var objX = Math.min(config.mapScale, Math.max(0, obj.x))
+		var objY = Math.min(config.mapScale, Math.max(0, obj.y))
+		for (var x = 0; x < config.colGrid; ++x) {
+			tmpX = x * tmpS
+			for (var y = 0; y < config.colGrid; ++y) {
+				tmpY = y * tmpS
+				if (objX + obj.scale >= tmpX && objX - obj.scale <= tmpX + tmpS && objY + obj.scale >= tmpY && objY - obj.scale <= tmpY + tmpS) {
+					if (!this.grids[x + "_" + y]) {
+						this.grids[x + "_" + y] = []
+					}
+					this.grids[x + "_" + y].push(obj)
+					obj.gridLocations.push(x + "_" + y)
+				}
+			}
+		}
+	}
+
+	// REMOVE OBJECT FROM GRID:
+	this.removeObjGrid = function (obj) {
+		var tmpIndx
+		for (var i = 0; i < obj.gridLocations.length; ++i) {
+			tmpIndx = this.grids[obj.gridLocations[i]].indexOf(obj)
+			if (tmpIndx >= 0) {
+				this.grids[obj.gridLocations[i]].splice(tmpIndx, 1)
+			}
+		}
+	}
+
+	// DISABLE OBJ:
+	this.disableObj = function (obj) {
+		obj.active = false
+		if (server) {
+			if (obj.owner && obj.pps) obj.owner.pps -= obj.pps
+			this.removeObjGrid(obj)
+			var tmpIndx = this.updateObjects.indexOf(obj)
+			if (tmpIndx >= 0) {
+				this.updateObjects.splice(tmpIndx, 1)
+			}
+		}
+	}
+
+	// HIT OBJECT:
+	this.hitObj = function (tmpObj, tmpDir) {
+		for (var p = 0; p < players.length; ++p) {
+			if (players[p].active) {
+				if (tmpObj.sentTo[players[p].id]) {
+					if (!tmpObj.active) {
+						server.send(players[p].id, "12", [tmpObj.sid])
+					} else if (players[p].canSee(tmpObj)) {
+						server.send(players[p].id, "8", [UTILS.fixTo(tmpDir, 1), tmpObj.sid])
+					}
+				}
+				if (!tmpObj.active && tmpObj.owner == players[p]) {
+					players[p].changeItemCount(tmpObj.group.id, -1)
+				}
+			}
+		}
+	}
+
+	// GET GRID ARRAY:
+	var tmpArray = []
+	var tmpGrid
+	this.getGridArrays = function (xPos, yPos, s) {
+		tmpX = mathFloor(xPos / tmpS)
+		tmpY = mathFloor(yPos / tmpS)
+		tmpArray.length = 0
+		try {
+			if (this.grids[tmpX + "_" + tmpY]) {
+				tmpArray.push(this.grids[tmpX + "_" + tmpY])
+			}
+			if (xPos + s >= (tmpX + 1) * tmpS) {
+				// RIGHT
+				tmpGrid = this.grids[tmpX + 1 + "_" + tmpY]
+				if (tmpGrid) tmpArray.push(tmpGrid)
+				if (tmpY && yPos - s <= tmpY * tmpS) {
+					// TOP RIGHT
+					tmpGrid = this.grids[tmpX + 1 + "_" + (tmpY - 1)]
+					if (tmpGrid) tmpArray.push(tmpGrid)
+				} else if (yPos + s >= (tmpY + 1) * tmpS) {
+					// BOTTOM RIGHT
+					tmpGrid = this.grids[tmpX + 1 + "_" + (tmpY + 1)]
+					if (tmpGrid) tmpArray.push(tmpGrid)
+				}
+			}
+			if (tmpX && xPos - s <= tmpX * tmpS) {
+				// LEFT
+				tmpGrid = this.grids[tmpX - 1 + "_" + tmpY]
+				if (tmpGrid) tmpArray.push(tmpGrid)
+				if (tmpY && yPos - s <= tmpY * tmpS) {
+					// TOP LEFT
+					tmpGrid = this.grids[tmpX - 1 + "_" + (tmpY - 1)]
+					if (tmpGrid) tmpArray.push(tmpGrid)
+				} else if (yPos + s >= (tmpY + 1) * tmpS) {
+					// BOTTOM LEFT
+					tmpGrid = this.grids[tmpX - 1 + "_" + (tmpY + 1)]
+					if (tmpGrid) tmpArray.push(tmpGrid)
+				}
+			}
+			if (yPos + s >= (tmpY + 1) * tmpS) {
+				// BOTTOM
+				tmpGrid = this.grids[tmpX + "_" + (tmpY + 1)]
+				if (tmpGrid) tmpArray.push(tmpGrid)
+			}
+			if (tmpY && yPos - s <= tmpY * tmpS) {
+				// TOP
+				tmpGrid = this.grids[tmpX + "_" + (tmpY - 1)]
+				if (tmpGrid) tmpArray.push(tmpGrid)
+			}
+		} catch (e) {}
+		return tmpArray
+	}
+
+	// ADD NEW:
+	var tmpObj
+	this.add = function (sid, x, y, dir, s, type, data, setSID, owner) {
+		tmpObj = null
+		for (let i = 0; i < gameObjects.length; ++i) {
+			if (gameObjects[i].sid == sid) {
+				tmpObj = gameObjects[i]
+				break
+			}
+		}
+		if (!tmpObj) {
+			for (let i = 0; i < gameObjects.length; ++i) {
+				if (!gameObjects[i].active) {
+					tmpObj = gameObjects[i]
+					break
+				}
+			}
+		}
+		if (!tmpObj) {
+			tmpObj = new GameObject(sid)
+			gameObjects.push(tmpObj)
+		}
+		if (setSID) {
+			tmpObj.sid = sid
+		}
+		tmpObj.init(x, y, dir, s, type, data, owner)
+		if (server) {
+			this.setObjectGrids(tmpObj)
+			if (tmpObj.doUpdate) {
+				this.updateObjects.push(tmpObj)
+			}
+		}
+		return tmpObj
+	}
+
+	// DISABLE BY SID:
+	this.disableBySid = function (sid) {
+		for (var i = 0; i < gameObjects.length; ++i) {
+			if (gameObjects[i].sid == sid) {
+				this.disableObj(gameObjects[i])
+				break
+			}
+		}
+	}
+
+	// REMOVE ALL FROM PLAYER:
+	this.removeAllItems = function (sid, server) {
+		for (var i = 0; i < gameObjects.length; ++i) {
+			if (gameObjects[i].active && gameObjects[i].owner && gameObjects[i].owner.sid == sid) {
+				this.disableObj(gameObjects[i])
+			}
+		}
+		if (server) {
+			server.sendAll("13", [sid])
+		}
+	}
+
+	// FETCH SPAWN OBJECT:
+	this.fetchSpawnObj = function (sid) {
+		var tmpLoc = null
+		for (var i = 0; i < gameObjects.length; ++i) {
+			tmpObj = gameObjects[i]
+			if (tmpObj.active && tmpObj.owner && tmpObj.owner.sid == sid && tmpObj.spawnPoint) {
+				tmpLoc = [tmpObj.x, tmpObj.y]
+				this.disableObj(tmpObj)
+				server.sendAll("12", [tmpObj.sid])
+				if (tmpObj.owner) {
+					tmpObj.owner.changeItemCount(tmpObj.group.id, -1)
+				}
+				break
+			}
+		}
+		return tmpLoc
+	}
+
+	// CHECK IF PLACABLE:
+	this.checkItemLocation = function (x, y, s, sM, indx, ignoreWater, placer) {
+		for (var i = 0; i < gameObjects.length; ++i) {
+			var blockS = gameObjects[i].blocker ? gameObjects[i].blocker : gameObjects[i].getScale(sM, gameObjects[i].isItem)
+			if (gameObjects[i].active && UTILS.getDistance(x, y, gameObjects[i].x, gameObjects[i].y) < s + blockS) {
+				return false
+			}
+		}
+		if (!ignoreWater && indx != 18 && y >= config.mapScale / 2 - config.riverWidth / 2 && y <= config.mapScale / 2 + config.riverWidth / 2) {
+			return false
+		}
+		// nothing gets built in the Crab King's arena or at the mouth of its gorge
+		var pool = config.secretPool
+		if (pool && (x < 0 || (x < 140 && Math.abs(y - config.mapScale / 2) < pool.gorgeHalf + 140))) {
+			return false
+		}
+		return true
+	}
+
+	// CHECK PLAYER COLLISION:
+	this.checkCollision = function (player, other, delta) {
+		delta = delta || 1
+		var dx = player.x - other.x
+		var dy = player.y - other.y
+		var tmpLen = player.scale + other.scale
+		if (mathABS(dx) <= tmpLen || mathABS(dy) <= tmpLen) {
+			tmpLen = player.scale + (other.getScale ? other.getScale() : other.scale)
+			var tmpInt = mathSQRT(dx * dx + dy * dy) - tmpLen
+			if (tmpInt <= 0) {
+				if (!other.ignoreCollision) {
+					var tmpDir = UTILS.getDirection(player.x, player.y, other.x, other.y)
+					var tmpDist = UTILS.getDistance(player.x, player.y, other.x, other.y)
+					if (other.isPlayer) {
+						tmpInt = (tmpInt * -1) / 2
+						player.x += tmpInt * mathCOS(tmpDir)
+						player.y += tmpInt * mathSIN(tmpDir)
+						other.x -= tmpInt * mathCOS(tmpDir)
+						other.y -= tmpInt * mathSIN(tmpDir)
+					} else {
+						player.x = other.x + tmpLen * mathCOS(tmpDir)
+						player.y = other.y + tmpLen * mathSIN(tmpDir)
+						player.xVel *= 0.75
+						player.yVel *= 0.75
+					}
+					if (other.dmg && other.owner != player && !(other.owner && other.owner.team && other.owner.team == player.team)) {
+						player.changeHealth(-other.dmg, other.owner, other)
+						var tmpSpd = 1.5 * (other.weightM || 1)
+						player.xVel += tmpSpd * mathCOS(tmpDir)
+						player.yVel += tmpSpd * mathSIN(tmpDir)
+						if (other.pDmg && !(player.skin && player.skin.poisonRes)) {
+							player.dmgOverTime.dmg = other.pDmg
+							player.dmgOverTime.time = 5
+							player.dmgOverTime.doer = other.owner
+						}
+						if (player.colDmg && other.health) {
+							if (other.changeHealth(-player.colDmg)) this.disableObj(other)
+							this.hitObj(other, UTILS.getDirection(player.x, player.y, other.x, other.y))
+						}
+					}
+				} else if (other.trap && !player.noTrap && other.owner != player && !(other.owner && other.owner.team && other.owner.team == player.team)) {
+					player.lockMove = true
+					other.hideFromEnemy = false
+				} else if (other.boostSpeed) {
+					player.xVel += delta * other.boostSpeed * (other.weightM || 1) * mathCOS(other.dir)
+					player.yVel += delta * other.boostSpeed * (other.weightM || 1) * mathSIN(other.dir)
+				} else if (other.healCol) {
+					player.healCol = other.healCol
+				} else if (other.teleport) {
+					player.x = UTILS.randInt(0, config.mapScale)
+					player.y = UTILS.randInt(0, config.mapScale)
+				}
+				if (other.zIndex > player.zIndex) player.zIndex = other.zIndex
+				return true
+			}
+		}
+		return false
+	}
+}
+    },
+    "src/player.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
+var mathABS = Math.abs
+var mathCOS = Math.cos
+var mathSIN = Math.sin
+var mathPOW = Math.pow
+var mathSQRT = Math.sqrt
+var badWords = require('./badwords.js')
+var Capes = require('./capes.js')
+module.exports = function (
+	id,
+	sid,
+	config,
+	UTILS,
+	projectileManager,
+	objectManager,
+	players,
+	ais,
+	items,
+	hats,
+	accessories,
+	server,
+	scoreCallback,
+	iconCallback,
+	MODE
+) {
+	var capes = Capes(config)
+	this.id = id
+	this.sid = sid
+	this.tmpScore = 0
+	this.team = null
+	this.skinIndex = MODE === "HOCKEY" && this.sid !== 1 ? 12 : 0
+	this.tailIndex = MODE === "HOCKEY" && this.sid !== 1 ? 11 : 0
+	this.skin = MODE === "HOCKEY" && this.sid !== 1 ? { spdMult: 1.16 } : null
+	this.tail = MODE === "HOCKEY" && this.sid !== 1 ? { spdMult: 1.35 } : null
+	this.primary = null
+	this.primaryVariant = 0
+	this.secondary = null
+	this.secondaryVariant = 0
+	this.hitTime = 0
+	// the free ones, as the game: not Shame! or the Crab Shell (dontSell), which are given
+	this.tails = {}
+	for (let i = 0; i < accessories.length; ++i) {
+		if (accessories[i].price <= 0 && !accessories[i].dontSell) {
+			this.tails[accessories[i].id] = 1
+		}
+	}
+	this.skins = {}
+	for (let i = 0; i < hats.length; ++i) {
+		if (hats[i].price <= 0 && !hats[i].dontSell) {
+			this.skins[hats[i].id] = 1
+		}
+	}
+	this.points = 0
+	this.dt = 0
+	this.hidden = false
+	this.itemCounts = {}
+	this.isPlayer = true
+	this.pps = 0
+	this.moveDir = undefined
+	this.skinRot = 0
+	this.lastPing = 0
+	this.iconIndex = 0
+	this.skinColor = 0
+
+	// SPAWN:
+	this.spawn = function (moofoll) {
+		this.sentTo = {}
+		this.active = true
+		this.alive = true
+		this.lockMove = false
+		this.lockDir = false
+		this.minimapCounter = 0
+		this.chatCountdown = 0
+		this.shameCount = 0
+		this.shameTimer = 0
+		this.gathering = 0
+		this.autoGather = 0
+		this.animTime = 0
+		this.animSpeed = 0
+		this.mouseState = 0
+		this.buildIndex = -1
+		this.weaponIndex = MODE === "HOCKEY" ? 6 : 0
+		this.dmgOverTime = {}
+		this.noMovTimer = 0
+		this.maxXP = 300
+		this.XP = 0
+		this.age = 1
+		this.kills = 0
+		this.upgrAge = 2
+		this.upgradePoints = 0
+		this.x = 0
+		this.y = 0
+		this.zIndex = 0
+		this.xVel = 0
+		this.yVel = 0
+		this.slowMult = 1
+		this.dir = 0
+		this.dirPlus = 0
+		this.targetDir = 0
+		this.targetAngle = 0
+		this.maxHealth = 100
+		this.health = this.maxHealth
+		this.lastDamage = 0
+		this.scale = config.playerScale
+		this.speed = config.playerSpeed
+		this.resetMoveDir()
+		this.resetResources(moofoll)
+		this.items = [0, 3, 6, 10]
+		this.weapons = [0]
+		this.shootCount = 0
+		this.weaponXP = []
+		this.reloads = {}
+	}
+
+	// RESET MOVE DIR:
+	this.resetMoveDir = function () {
+		this.moveDir = undefined
+	}
+
+	// RESET RESOURCES:
+	this.resetResources = function (moofoll) {
+		for (var i = 0; i < config.resourceTypes.length; ++i) {
+			this[config.resourceTypes[i]] = moofoll ? 100 : 0
+		}
+	}
+
+	// ADD ITEM:
+	this.addItem = function (id) {
+		var tmpItem = items.list[id]
+		if (tmpItem) {
+			for (var i = 0; i < this.items.length; ++i) {
+				if (items.list[this.items[i]].group == tmpItem.group) {
+					if (this.buildIndex == this.items[i]) {
+						this.buildIndex = id
+					}
+					this.items[i] = id
+					return true
+				}
+			}
+			this.items.push(id)
+			return true
+		}
+		return false
+	}
+
+	// SET USER DATA:
+	this.setUserData = function (data) {
+		if (data) {
+			// SET INITIAL NAME:
+			this.name = "unknown"
+
+			// VALIDATE NAME:
+			var name = data.name + ""
+			name = name.slice(0, config.maxNameLength)
+			name = name.replace(/[^\w:\(\)\/? -]+/gim, " ") // USE SPACE SO WE CAN CHECK PROFANITY
+			name = name.replace(/[^\x00-\x7F]/g, " ")
+			name = name.trim()
+			// the game's filter: a name with a listed word in it stays "unknown"
+			var check = name.toLowerCase().replace(/\s/g, '').replace(/1/g, 'i').replace(/0/g, 'o').replace(/5/g, 's')
+			var banned = false
+			for (var w = 0; w < badWords.length; ++w) {
+				if (check.indexOf(badWords[w]) != -1) {
+					banned = true
+					break
+				}
+			}
+			if (name.length > 0 && !banned) {
+				this.name = name
+			}
+
+			// SKIN:
+			this.skinColor = 0
+			if (config.skinColors[data.skin]) {
+				this.skinColor = data.skin
+			}
+		}
+	}
+
+	// GET DATA TO SEND:
+	this.getData = function () {
+		return [
+			this.id,
+			this.sid,
+			this.name,
+			UTILS.fixTo(this.x, 2),
+			UTILS.fixTo(this.y, 2),
+			UTILS.fixTo(this.dir, 3),
+			this.health,
+			this.maxHealth,
+			this.scale,
+			this.skinColor
+		]
+	}
+
+	// SET DATA:
+	this.setData = function (data) {
+		this.id = data[0]
+		this.sid = data[1]
+		this.name = data[2]
+		this.x = data[3]
+		this.y = data[4]
+		this.dir = data[5]
+		this.health = data[6]
+		this.maxHealth = data[7]
+		this.scale = data[8]
+		this.skinColor = data[9]
+	}
+
+	// UPDATE:
+	var timerCount = 0
+	this.update = function (delta) {
+		if (!this.alive) return
+
+		capes.tick(this, delta)
+
+		// SHAME SHAME SHAME:
+		if (this.shameTimer > 0) {
+			this.shameTimer -= delta
+			if (this.shameTimer <= 0) {
+				this.shameTimer = 0
+				this.shameCount = 0
+			}
+		}
+
+		// REGENS AND AUTO:
+		timerCount -= delta
+		if (timerCount <= 0) {
+			var regenAmount = (this.skin && this.skin.healthRegen ? this.skin.healthRegen : 0) + (this.tail && this.tail.healthRegen ? this.tail.healthRegen : 0)
+			if (regenAmount) {
+				this.changeHealth(regenAmount, this)
+			}
+			if (this.dmgOverTime.dmg) {
+				this.changeHealth(-this.dmgOverTime.dmg, this.dmgOverTime.doer)
+				this.dmgOverTime.time -= 1
+				if (this.dmgOverTime.time <= 0) {
+					this.dmgOverTime.dmg = 0
+				}
+			}
+			if (this.healCol) {
+				this.changeHealth(this.healCol, this)
+			}
+			timerCount = 1000
+		}
+
+		// CHECK KILL:
+		if (!this.alive) {
+			return
+		}
+
+		// SLOWER:
+		if (this.slowMult < 1) {
+			this.slowMult += 0.0008 * delta
+			if (this.slowMult > 1) {
+				this.slowMult = 1
+			}
+		}
+
+		// MOVE:
+		this.noMovTimer += delta
+		if (this.xVel || this.yVel) this.noMovTimer = 0
+		if (this.lockMove) {
+			this.xVel = 0
+			this.yVel = 0
+		} else {
+			var spdMult =
+				(this.buildIndex >= 0 ? 0.5 : 1) *
+				(items.weapons[this.weaponIndex].spdMult || 1) *
+				(this.skin ? this.skin.spdMult || 1 : 1) *
+				(this.tail ? this.tail.spdMult || 1 : 1) *
+				(this.y <= config.snowBiomeTop ? (this.skin && this.skin.coldM ? 1 : capes.snow(this)) : 1) *
+				this.slowMult *
+				capes.speed(this)
+
+			// the river runs on into the Crab King's gorge, and it is calm in the game's shallows
+			// (up to x = 320), so the gorge can be walked into
+			if (!this.zIndex && UTILS.inRiver(config, this.x, this.y)) {
+				var current = UTILS.riverCurrent(config, this.x)
+				if (this.skin && this.skin.watrImm) {
+					spdMult *= 0.75
+					this.xVel += current * 0.4 * delta
+				} else {
+					spdMult *= 0.33
+					this.xVel += current * delta
+				}
+			}
+			var xVel = this.moveDir != undefined ? mathCOS(this.moveDir) : 0
+			var yVel = this.moveDir != undefined ? mathSIN(this.moveDir) : 0
+			var length = mathSQRT(xVel * xVel + yVel * yVel)
+			if (length != 0) {
+				xVel /= length
+				yVel /= length
+			}
+			if (xVel) this.xVel += xVel * this.speed * spdMult * delta
+			if (yVel) this.yVel += yVel * this.speed * spdMult * delta
+		}
+
+		// OBJECT COLL:
+		var startX = this.x
+		var startY = this.y
+		this.zIndex = 0
+		this.lockMove = false
+		this.healCol = 0
+		let tmpList
+		const tmpSpeed = UTILS.getDistance(0, 0, this.xVel * delta, this.yVel * delta)
+		const depth = Math.min(4, Math.max(1, Math.round(tmpSpeed / 40)))
+		const tMlt = 1 / depth
+		// as the game: an object touched in one step of the tick is not checked again in
+		// the next steps (so a spike hurts and pushes once, a boost pad pushes once)
+		const touched = {}
+		for (let i = 0; i < depth; ++i) {
+			if (this.xVel) {
+				this.x += this.xVel * delta * tMlt
+			}
+			if (this.yVel) {
+				this.y += this.yVel * delta * tMlt
+			}
+			tmpList = objectManager.getGridArrays(this.x, this.y, this.scale)
+			for (var x = 0; x < tmpList.length && this.alive; ++x) {
+				for (var y = 0; y < tmpList[x].length; ++y) {
+					if (tmpList[x][y].active && !touched[tmpList[x][y].sid] && objectManager.checkCollision(this, tmpList[x][y], tMlt)) {
+						touched[tmpList[x][y].sid] = true
+						if (!this.alive) break
+					}
+				}
+			}
+			if (!this.alive) break
+		}
+
+		// PLAYER COLLISIONS:
+		let tmpIndx = players.indexOf(this)
+		for (let i = tmpIndx + 1; i < players.length; ++i) {
+			if (players[i] != this && players[i].alive) {
+				objectManager.checkCollision(this, players[i])
+			}
+		}
+
+		// DECEL:
+		if (this.xVel) {
+			this.xVel *= mathPOW(config.playerDecel, delta)
+			if (this.xVel <= 0.01 && this.xVel >= -0.01) this.xVel = 0
+		}
+		if (this.yVel) {
+			this.yVel *= mathPOW(config.playerDecel, delta)
+			if (this.yVel <= 0.01 && this.yVel >= -0.01) this.yVel = 0
+		}
+
+		// MAP BOUNDARIES:
+		// west of the map only the Crab King's arena is open; slide along its walls
+		if (this.x - this.scale < 0 && !UTILS.inSecretPool(config, this.x, this.y, this.scale)) {
+			var scale = this.scale
+			var fits = function (x, y) {
+				return x - scale >= 0 || UTILS.inSecretPool(config, x, y, scale)
+			}
+			if (fits(this.x, startY)) {
+				this.y = startY
+				this.yVel = 0
+			} else if (fits(startX, this.y)) {
+				this.x = startX
+				this.xVel = 0
+			} else if (fits(startX, startY)) {
+				this.x = startX
+				this.y = startY
+				this.xVel = 0
+				this.yVel = 0
+			} else {
+				this.x = this.scale
+			}
+		} else if (this.x + this.scale > config.mapScale) {
+			this.x = config.mapScale - this.scale
+		}
+		if (this.y - this.scale < 0) {
+			this.y = this.scale
+		} else if (this.y + this.scale > config.mapScale) {
+			this.y = config.mapScale - this.scale
+		}
+
+		// USE WEAPON OR TOOL:
+		if (this.buildIndex < 0) {
+			if (this.reloads[this.weaponIndex] > 0) {
+				this.reloads[this.weaponIndex] -= delta
+				this.gathering = this.mouseState
+			} else if (this.gathering || this.autoGather) {
+				var worked = true
+				if (items.weapons[this.weaponIndex].gather != undefined) {
+					this.gather(players)
+				} else if (
+					items.weapons[this.weaponIndex].projectile != undefined &&
+					this.hasRes(items.weapons[this.weaponIndex], this.skin ? this.skin.projCost : 0)
+				) {
+					this.useRes(items.weapons[this.weaponIndex], this.skin ? this.skin.projCost : 0)
+					this.noMovTimer = 0
+					let tmpIndx = items.weapons[this.weaponIndex].projectile
+					var projOffset = this.scale * 2
+					var aMlt = this.skin && this.skin.aMlt ? this.skin.aMlt : 1
+					if (items.weapons[this.weaponIndex].rec) {
+						this.xVel -= items.weapons[this.weaponIndex].rec * mathCOS(this.dir)
+						this.yVel -= items.weapons[this.weaponIndex].rec * mathSIN(this.dir)
+					}
+					projectileManager.addProjectile(
+						this.x + projOffset * mathCOS(this.dir),
+						this.y + projOffset * mathSIN(this.dir),
+						this.dir,
+						items.projectiles[tmpIndx].range * aMlt,
+						items.projectiles[tmpIndx].speed * aMlt,
+						tmpIndx,
+						this,
+						null,
+						this.zIndex
+					)
+				} else {
+					worked = false
+				}
+				this.gathering = this.mouseState
+				if (worked) {
+					this.reloads[this.weaponIndex] = items.weapons[this.weaponIndex].speed * (this.skin ? this.skin.atkSpd || 1 : 1)
+				}
+			}
+		}
+
+		if (MODE === "HOCKEY" && this.sid === 1 && config.isStarted) {
+			if (this.x - this.scale < 3000 + 43 || this.x + this.scale > 3000 + 43 + (40 - 2) * 43 * 2) {
+				if (this.y - this.scale < 3000 + 43 + 6 * 43 * 2 || this.y + this.scale > 3000 + 43 + 12 * 43 * 2) {
+					this.xVel = -this.xVel * 5
+				} else if (this.x + this.scale < 3000 - 43) {
+					Array.from(players).forEach((tmpPlayer) => {
+						server.sendAll("ch", [tmpPlayer.sid, `Team 2 has won the game!`])
+					})
+					config.isStarted = false
+				} else if (this.x - this.scale > 3000 + 43 + (40 - 1) * 43 * 2) {
+					Array.from(players).forEach((tmpPlayer) => {
+						server.sendAll("ch", [tmpPlayer.sid, `Team 1 has won the game!`])
+					})
+					config.isStarted = false
+				}
+			}
+			if (
+				((this.x + this.scale > 3000 - 43 && this.x - this.scale < 3000 + 43) ||
+					(this.x + this.scale > 3000 + 43 + (40 - 2) * 43 * 2 && this.x - this.scale < 3000 + 43 + (40 - 1) * 43 * 2)) &&
+				(this.y - this.scale < 3000 + 43 + 6 * 43 * 2 || this.y + this.scale > 3000 + 43 + 12 * 43 * 2)
+			) {
+				this.yVel = -this.yVel * 5
+			} else if (this.y - this.scale < 3000 + 43 || this.y + this.scale > 3000 + 43 + (20 - 2) * 43 * 2) {
+				this.yVel = -this.yVel * 5
+			}
+		}
+
+		if (MODE === "HOCKEY" && this.sid !== 1) {
+			if (this.x - this.scale < 3000 - 43) {
+				this.x = this.scale + 3000 - 43
+			} else if (this.x + this.scale > 3000 + 43 + (40 - 1) * 43 * 2) {
+				this.x = 3000 + 43 + (40 - 1) * 43 * 2 - this.scale
+			}
+			if (this.y - this.scale < 3000 - 43) {
+				this.y = this.scale + 3000 - 43
+			} else if (this.y + this.scale > 3000 + 43 + (20 - 1) * 43 * 2) {
+				this.y = 3000 + 43 + (20 - 1) * 43 * 2 - this.scale
+			}
+		}
+	}
+
+	// ADD WEAPON XP:
+	this.addWeaponXP = function (amnt) {
+		if (!this.weaponXP[this.weaponIndex]) {
+			this.weaponXP[this.weaponIndex] = 0
+		}
+		this.weaponXP[this.weaponIndex] += amnt
+	}
+
+	// EARN XP:
+	this.earnXP = function (amount) {
+		if (this.age < config.maxAge) {
+			this.XP += amount
+			if (this.XP >= this.maxXP) {
+				if (this.age < config.maxAge) {
+					this.age++
+					this.XP = 0
+					this.maxXP *= 1.2
+				} else {
+					this.XP = this.maxXP
+				}
+				this.upgradePoints++
+				server.send(this.id, "16", [this.upgradePoints, this.upgrAge])
+				server.send(this.id, "15", [this.XP, UTILS.fixTo(this.maxXP, 1), this.age])
+			} else {
+				server.send(this.id, "15", [this.XP])
+			}
+		}
+	}
+
+	// CHANGE HEALTH:
+	this.changeHealth = function (amount, doer, src) {
+		// Ryn's !god
+		if (amount < 0 && this.rynGod) {
+			return false
+		}
+		if (amount > 0 && this.health >= this.maxHealth) {
+			return false
+		}
+		if (amount < 0 && this.skin) {
+			amount *= this.skin.dmgMult || 1
+		}
+		if (amount < 0 && this.tail) {
+			amount *= this.tail.dmgMult || 1
+		}
+		// Ryn's damage rule and combat log
+		if (config.rynHealth) {
+			amount = config.rynHealth(this, amount, doer, src)
+		}
+		if (amount < 0) {
+			this.hitTime = Date.now()
+		}
+		this.health += amount
+		if (this.health > this.maxHealth) {
+			amount -= this.health - this.maxHealth
+			this.health = this.maxHealth
+		}
+		if (this.health <= 0) {
+			this.kill(doer, src)
+		}
+		for (var i = 0; i < players.length; ++i) {
+			if (this.sentTo[players[i].id]) {
+				server.send(players[i].id, "h", [this.sid, this.health])
+			}
+		}
+		if (doer && doer.canSee(this) && !(doer == this && amount < 0)) {
+			server.send(doer.id, "t", [Math.round(this.x), Math.round(this.y), Math.round(-amount), 1])
+		}
+		return true
+	}
+
+	// KILL:
+	this.kill = function (doer, src) {
+		if (doer && doer.alive) {
+			doer.kills++
+			// Skull Cape (the kill leader) and Troll Cape (your spikes) multiply the gold
+			var capeGold = capes.killGold(doer, this, src)
+			if (doer.skin && doer.skin.goldSteal) scoreCallback(doer, Math.round(this.points / 2) * capeGold)
+			else scoreCallback(doer, Math.round(this.age * 100 * (doer.skin && doer.skin.kScrM ? doer.skin.kScrM : 1)) * capeGold)
+			server.send(doer.id, "9", ["kills", doer.kills, 1])
+			capes.killed(doer)
+		}
+		this.alive = false
+		// Ryn's private log: who killed you
+		if (config.rynDied) config.rynDied(this, doer)
+		server.send(this.id, "11")
+		iconCallback()
+	}
+
+	// ADD RESOURCE:
+	this.addResource = function (type, amount, auto) {
+		if (!auto && amount > 0) {
+			this.addWeaponXP(amount)
+		}
+		if (type == 3) {
+			scoreCallback(this, amount, true)
+		} else {
+			this[config.resourceTypes[type]] += amount
+			server.send(this.id, "9", [config.resourceTypes[type], this[config.resourceTypes[type]], 1])
+		}
+	}
+
+	// CHANGE ITEM COUNT:
+	this.changeItemCount = function (index, value) {
+		this.itemCounts[index] = this.itemCounts[index] || 0
+		this.itemCounts[index] += value
+		server.send(this.id, "14", [index, this.itemCounts[index]])
+	}
+
+	// CHANGE ITEM ALL COUNT:
+	this.changeItemAllCount = function (index, value) {
+		this.itemCounts[index] = value
+		server.send(this.id, "14", [index, this.itemCounts[index]])
+	}
+
+	// BUILD:
+	this.buildItem = function (item) {
+		var tmpS = this.scale + item.scale + (item.placeOffset || 0)
+		var tmpX = this.x + tmpS * mathCOS(this.dir)
+		var tmpY = this.y + tmpS * mathSIN(this.dir)
+		if (
+			this.canBuild(item) &&
+			!(item.consume && this.skin && this.skin.noEat) &&
+			(item.consume || objectManager.checkItemLocation(tmpX, tmpY, item.scale, 0.6, item.id, false, this))
+		) {
+			var worked = false
+			if (item.consume) {
+				if (this.hitTime) {
+					var timeSinceHit = Date.now() - this.hitTime
+					this.hitTime = 0
+					if (timeSinceHit <= 120) {
+						this.shameCount++
+						if (this.shameCount >= 8) {
+							this.shameTimer = 30000
+							this.shameCount = 0
+						}
+					} else {
+						this.shameCount -= 2
+						if (this.shameCount <= 0) {
+							this.shameCount = 0
+						}
+					}
+				}
+				if (this.shameTimer <= 0) {
+					worked = item.consume(this)
+				}
+			} else {
+				worked = true
+				if (item.group.limit) {
+					this.changeItemCount(item.group.id, 1)
+				}
+				if (item.pps) {
+					this.pps += item.pps
+				}
+				objectManager.add(objectManager.objects.length, tmpX, tmpY, this.dir, item.scale, item.type, item, false, this)
+			}
+			if (worked) {
+				this.useRes(item)
+				this.buildIndex = -1
+			}
+		}
+	}
+
+	// HAS RESOURCES:
+	this.hasRes = function (item, mult) {
+		for (var i = 0; i < item.req.length; ) {
+			if (this[item.req[i]] < Math.round(item.req[i + 1] * (mult || 1))) {
+				return false
+			}
+			i += 2
+		}
+		return true
+	}
+
+	// USE RESOURCES:
+	this.useRes = function (item, mult) {
+		if (config.inSandbox) {
+			return
+		}
+		for (var i = 0; i < item.req.length; ) {
+			this.addResource(config.resourceTypes.indexOf(item.req[i]), -Math.round(item.req[i + 1] * (mult || 1)))
+			i += 2
+		}
+	}
+
+	// CAN BUILD:
+	this.canBuild = function (item) {
+		// in sandbox the game still has a cap: the group's sandbox limit, else 3x its limit (at least 99)
+		var limit = config.inSandbox ? item.group.sandboxLimit || Math.max(item.group.limit * 3, 99) : item.group.limit
+		if (limit && this.itemCounts[item.group.id] >= limit) {
+			return false
+		}
+		return config.inSandbox ? true : this.hasRes(item)
+	}
+
+	// GATHER:
+	this.gather = function () {
+		// SHOW:
+		this.noMovTimer = 0
+
+		// SLOW MOVEMENT:
+		this.slowMult -= items.weapons[this.weaponIndex].hitSlow || 0.3
+		if (this.slowMult < 0) {
+			this.slowMult = 0
+		}
+
+		// VARIANT DMG:
+		var tmpVariant = config.fetchVariant(this)
+		var applyPoison = tmpVariant.poison
+		var variantDmg = tmpVariant.val
+
+		// CHECK IF HIT GAME OBJECT:
+		var hitObjs = {}
+		var tmpDist, tmpDir, tmpObj, hitSomething
+		var tmpList = objectManager.getGridArrays(this.x, this.y, items.weapons[this.weaponIndex].range)
+		if (config.canHitObj) {
+			for (var t = 0; t < tmpList.length; ++t) {
+				for (let i = 0; i < tmpList[t].length; ++i) {
+					tmpObj = tmpList[t][i]
+					if (tmpObj.active && !tmpObj.dontGather && !hitObjs[tmpObj.sid] && tmpObj.visibleToPlayer(this)) {
+						tmpDist = UTILS.getDistance(this.x, this.y, tmpObj.x, tmpObj.y) - tmpObj.scale
+						if (tmpDist <= items.weapons[this.weaponIndex].range) {
+							tmpDir = UTILS.getDirection(tmpObj.x, tmpObj.y, this.x, this.y)
+							if (UTILS.getAngleDist(tmpDir, this.dir) <= config.gatherAngle) {
+								hitObjs[tmpObj.sid] = 1
+								if (tmpObj.health) {
+									if (
+										tmpObj.changeHealth(
+											-items.weapons[this.weaponIndex].dmg * variantDmg * (items.weapons[this.weaponIndex].sDmg || 1) * (this.skin && this.skin.bDmg ? this.skin.bDmg : 1),
+											this
+										)
+									) {
+										for (var x = 0; x < tmpObj.req.length; ) {
+											this.addResource(config.resourceTypes.indexOf(tmpObj.req[x]), tmpObj.req[x + 1])
+											x += 2
+										}
+										objectManager.disableObj(tmpObj)
+									}
+								} else {
+									this.earnXP(4 * items.weapons[this.weaponIndex].gather)
+									var count = Math.round((items.weapons[this.weaponIndex].gather + (tmpObj.type == 3 ? 4 : 0)) * ((config.rynRules && config.rynRules.gatherMult) || 1))
+									// Tree, Cookie and Stone Capes: one more per hit
+									this.addResource(tmpObj.type, count + capes.gather(this, tmpObj.type))
+									if (this.skin && this.skin.extraGold) {
+										this.addResource(3, 1)
+									}
+								}
+								hitSomething = true
+								objectManager.hitObj(tmpObj, tmpDir)
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// CHECK IF HIT PLAYER:
+		for (let i = 0; i < players.length + ais.length; ++i) {
+			tmpObj = players[i] || ais[i - players.length]
+			if (tmpObj != this && tmpObj.alive && !(tmpObj.team && tmpObj.team == this.team)) {
+				tmpDist = UTILS.getDistance(this.x, this.y, tmpObj.x, tmpObj.y) - tmpObj.scale * 1.8
+				if (tmpDist <= items.weapons[this.weaponIndex].range) {
+					tmpDir = UTILS.getDirection(tmpObj.x, tmpObj.y, this.x, this.y)
+					if (UTILS.getAngleDist(tmpDir, this.dir) <= config.gatherAngle) {
+						// STEAL RESOURCES:
+						var stealCount = items.weapons[this.weaponIndex].steal
+						if (stealCount && tmpObj.addResource) {
+							stealCount = Math.min(tmpObj.points || 0, stealCount)
+							this.addResource(3, stealCount)
+							tmpObj.addResource(3, -stealCount)
+						}
+
+						// MELEE HIT PLAYER:
+
+						var dmgMlt = variantDmg
+						if (
+							tmpObj.weaponIndex != undefined &&
+							items.weapons[tmpObj.weaponIndex].shield &&
+							UTILS.getAngleDist(tmpDir + Math.PI, tmpObj.dir) <= config.shieldAngle
+						) {
+							dmgMlt = items.weapons[tmpObj.weaponIndex].shield
+						}
+						var dmgVal =
+							this.customDmg ||
+							items.weapons[this.weaponIndex].dmg *
+								(this.skin && this.skin.dmgMultO ? this.skin.dmgMultO : 1) *
+								(this.tail && this.tail.dmgMultO ? this.tail.dmgMultO : 1) *
+								capes.damage(this)
+						var tmpSpd = 0.3 * (tmpObj.weightM || 1) + (items.weapons[this.weaponIndex].knock || 0)
+						if (MODE !== "HOCKEY") {
+							tmpObj.xVel += tmpSpd * mathCOS(tmpDir)
+							tmpObj.yVel += tmpSpd * mathSIN(tmpDir)
+						}
+						if (MODE === "HOCKEY" && tmpObj.sid === 1) {
+							tmpObj.xVel += tmpSpd * mathCOS(tmpDir) * 1.2
+							tmpObj.yVel += tmpSpd * mathSIN(tmpDir) * 1.2
+							tmpObj.dir = tmpDir
+						}
+						if (this.skin && this.skin.healD) {
+							this.changeHealth(dmgVal * dmgMlt * this.skin.healD, this)
+						}
+						if (this.tail && this.tail.healD) {
+							this.changeHealth(dmgVal * dmgMlt * this.tail.healD, this)
+						}
+						// gear that hurts the attacker returns part of the weapon's own damage, every hit
+						var weaponDmg = items.weapons[this.weaponIndex].dmg
+						if (tmpObj.skin && tmpObj.skin.dmg) {
+							this.changeHealth(-weaponDmg * tmpObj.skin.dmg, tmpObj)
+						}
+						if (tmpObj.tail && tmpObj.tail.dmg) {
+							this.changeHealth(-weaponDmg * tmpObj.tail.dmg, tmpObj)
+						}
+						if (MODE !== "HOCKEY" && tmpObj.dmgOverTime && this.skin && this.skin.poisonDmg && !(tmpObj.skin && tmpObj.skin.poisonRes)) {
+							tmpObj.dmgOverTime.dmg = this.skin.poisonDmg
+							tmpObj.dmgOverTime.time = this.skin.poisonTime || 1
+							tmpObj.dmgOverTime.doer = this
+						}
+						if (MODE !== "HOCKEY" && tmpObj.dmgOverTime && applyPoison && !(tmpObj.skin && tmpObj.skin.poisonRes)) {
+							tmpObj.dmgOverTime.dmg = 5
+							tmpObj.dmgOverTime.time = 5
+							tmpObj.dmgOverTime.doer = this
+						}
+						if (MODE !== "HOCKEY" && tmpObj.isPlayer) {
+							// Devils Tail: bleeding; Thorns: a little health back; Dragon Cape: 5s of more damage
+							capes.bleed(this, tmpObj)
+							if (capes.thorns(this)) this.changeHealth(dmgVal * dmgMlt * capes.thorns(this), this)
+							capes.hitPlayer(this)
+						}
+						if (tmpObj.skin && tmpObj.skin.dmgK) {
+							this.xVel -= tmpObj.skin.dmgK * mathCOS(tmpDir)
+							this.yVel -= tmpObj.skin.dmgK * mathSIN(tmpDir)
+						}
+						if (MODE !== "HOCKEY") {
+							tmpObj.changeHealth(-dmgVal * dmgMlt, this, this)
+							// emerald weapons heal by part of the damage they deal (in the game's data,
+							// not in its code, so it goes with the store effects)
+							if (tmpVariant.lifesteal && capes.on() && dmgVal * dmgMlt > 0) {
+								this.changeHealth(dmgVal * dmgMlt * tmpVariant.lifesteal, this)
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// SEND FOR ANIMATION:
+		this.sendAnimation(hitSomething ? 1 : 0)
+	}
+
+	// SEND ANIMATION:
+	this.sendAnimation = function (hit) {
+		for (var i = 0; i < players.length; ++i) {
+			if (this.sentTo[players[i].id] && this.canSee(players[i])) {
+				server.send(players[i].id, "7", [this.sid, hit ? 1 : 0, this.weaponIndex])
+			}
+		}
+	}
+
+	// ANIMATE:
+	var tmpRatio = 0
+	var animIndex = 0
+	this.animate = function (delta) {
+		if (this.animTime > 0) {
+			this.animTime -= delta
+			if (this.animTime <= 0) {
+				this.animTime = 0
+				this.dirPlus = 0
+				tmpRatio = 0
+				animIndex = 0
+			} else {
+				if (animIndex == 0) {
+					tmpRatio += delta / (this.animSpeed * config.hitReturnRatio)
+					this.dirPlus = UTILS.lerp(0, this.targetAngle, Math.min(1, tmpRatio))
+					if (tmpRatio >= 1) {
+						tmpRatio = 1
+						animIndex = 1
+					}
+				} else {
+					tmpRatio -= delta / (this.animSpeed * (1 - config.hitReturnRatio))
+					this.dirPlus = UTILS.lerp(0, this.targetAngle, Math.max(0, tmpRatio))
+				}
+			}
+		}
+	}
+
+	// GATHER ANIMATION:
+	this.startAnim = function (didHit, index) {
+		this.animTime = this.animSpeed = items.weapons[index].speed
+		this.targetAngle = didHit ? -config.hitAngle : -Math.PI
+		tmpRatio = 0
+		animIndex = 0
+	}
+
+	// CAN SEE:
+	this.canSee = function (other) {
+		if (!other) return false
+		if (other.skin && other.skin.invisTimer && other.noMovTimer >= other.skin.invisTimer) return false
+		var dx = mathABS(other.x - this.x) - other.scale
+		var dy = mathABS(other.y - this.y) - other.scale
+		return dx <= (config.maxScreenWidth / 2) * 1.3 && dy <= (config.maxScreenHeight / 2) * 1.3
+	}
+}
+    },
+    "src/projectile.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
+var Capes = require('./capes.js')
+module.exports = function (players, ais, objectManager, items, config, UTILS, server) {
+	var capes = Capes(config)
+	// INIT:
+	this.init = function (indx, x, y, dir, spd, dmg, rng, scl, owner) {
+		this.active = true
+		this.indx = indx
+		this.x = x
+		this.y = y
+		this.dir = dir
+		this.skipMov = true
+		this.speed = spd
+		this.dmg = dmg
+		this.scale = scl
+		this.range = rng
+		this.owner = owner
+		if (server) {
+			this.sentTo = {}
+		}
+	}
+
+	// UPDATE:
+	var objectsHit = []
+	var tmpObj
+	this.update = function (delta) {
+		if (this.active) {
+			var tmpSpeed = this.speed * delta
+			var tmpScale
+			if (!this.skipMov) {
+				this.x += tmpSpeed * Math.cos(this.dir)
+				this.y += tmpSpeed * Math.sin(this.dir)
+				this.range -= tmpSpeed
+				if (this.range <= 0) {
+					this.x += this.range * Math.cos(this.dir)
+					this.y += this.range * Math.sin(this.dir)
+					tmpSpeed = 1
+					this.range = 0
+					this.active = false
+				}
+			} else {
+				this.skipMov = false
+			}
+			if (server) {
+				for (let i = 0; i < players.length; ++i) {
+					if (!this.sentTo[players[i].id] && players[i].canSee(this)) {
+						this.sentTo[players[i].id] = 1
+						server.send(players[i].id, "18", [
+							UTILS.fixTo(this.x, 1),
+							UTILS.fixTo(this.y, 1),
+							UTILS.fixTo(this.dir, 2),
+							UTILS.fixTo(this.range, 1),
+							this.speed,
+							this.indx,
+							this.layer,
+							this.sid
+						])
+					}
+				}
+				objectsHit.length = 0
+				for (let i = 0; i < players.length + ais.length; ++i) {
+					tmpObj = players[i] || ais[i - players.length]
+					if (tmpObj.alive && tmpObj != this.owner && !(this.owner.team && tmpObj.team == this.owner.team)) {
+						if (
+							UTILS.lineInRect(
+								tmpObj.x - tmpObj.scale,
+								tmpObj.y - tmpObj.scale,
+								tmpObj.x + tmpObj.scale,
+								tmpObj.y + tmpObj.scale,
+								this.x,
+								this.y,
+								this.x + tmpSpeed * Math.cos(this.dir),
+								this.y + tmpSpeed * Math.sin(this.dir)
+							)
+						) {
+							objectsHit.push(tmpObj)
+						}
+					}
+				}
+				var tmpList = objectManager.getGridArrays(this.x, this.y, this.scale)
+				for (var x = 0; x < tmpList.length; ++x) {
+					for (var y = 0; y < tmpList[x].length; ++y) {
+						tmpObj = tmpList[x][y]
+						tmpScale = tmpObj.getScale()
+						if (
+							tmpObj.active &&
+							!(this.ignoreObj == tmpObj.sid) &&
+							this.layer <= tmpObj.layer &&
+							objectsHit.indexOf(tmpObj) < 0 &&
+							!tmpObj.ignoreCollision &&
+							UTILS.lineInRect(
+								tmpObj.x - tmpScale,
+								tmpObj.y - tmpScale,
+								tmpObj.x + tmpScale,
+								tmpObj.y + tmpScale,
+								this.x,
+								this.y,
+								this.x + tmpSpeed * Math.cos(this.dir),
+								this.y + tmpSpeed * Math.sin(this.dir)
+							)
+						) {
+							objectsHit.push(tmpObj)
+						}
+					}
+				}
+
+				// HIT OBJECTS:
+				if (objectsHit.length > 0) {
+					var hitObj = null
+					var shortDist = null
+					var tmpDist = null
+					for (let i = 0; i < objectsHit.length; ++i) {
+						tmpDist = UTILS.getDistance(this.x, this.y, objectsHit[i].x, objectsHit[i].y)
+						if (shortDist == null || tmpDist < shortDist) {
+							shortDist = tmpDist
+							hitObj = objectsHit[i]
+						}
+					}
+					if (hitObj.isPlayer || hitObj.isAI) {
+						var tmpSd = 0.3 * (hitObj.weightM || 1)
+						hitObj.xVel += tmpSd * Math.cos(this.dir)
+						hitObj.yVel += tmpSd * Math.sin(this.dir)
+						if (
+							hitObj.weaponIndex == undefined ||
+							!(items.weapons[hitObj.weaponIndex].shield && UTILS.getAngleDist(this.dir + Math.PI, hitObj.dir) <= config.shieldAngle)
+						) {
+							// the shooter's Dragon or Super Cape (weapons only, not turrets: those
+							// shoot projectile 1), the target's Blockades
+							var shotDmg = this.dmg
+							var byWeapon = this.owner && this.owner.isPlayer && this.indx !== 1
+							if (byWeapon) shotDmg *= capes.damage(this.owner)
+							if (hitObj.isPlayer) {
+								shotDmg *= capes.shotTaken(hitObj)
+								if (byWeapon) capes.hitPlayer(this.owner)
+							}
+							hitObj.changeHealth(-shotDmg, this.owner, this.owner)
+						}
+					} else {
+						if (hitObj.projDmg && hitObj.health && hitObj.changeHealth(-this.dmg)) {
+							objectManager.disableObj(hitObj)
+						}
+						for (let i = 0; i < players.length; ++i) {
+							if (players[i].active) {
+								if (hitObj.sentTo[players[i].id]) {
+									if (hitObj.active) {
+										if (players[i].canSee(hitObj)) {
+											server.send(players[i].id, "8", [UTILS.fixTo(this.dir, 2), hitObj.sid])
+										}
+									} else {
+										server.send(players[i].id, "12", [hitObj.sid])
+									}
+								}
+								if (!hitObj.active && hitObj.owner == players[i]) {
+									players[i].changeItemCount(hitObj.group.id, -1)
+								}
+							}
+						}
+					}
+					this.active = false
+					for (let i = 0; i < players.length; ++i) {
+						if (this.sentTo[players[i].id]) {
+							server.send(players[i].id, "19", [this.sid, UTILS.fixTo(shortDist, 1)])
+						}
+					}
+				}
+			}
+		}
+	}
+}
+    },
+    "src/projectileManager.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
+module.exports = function (Projectile, projectiles, players, ais, objectManager, items, config, UTILS, server) {
+	this.addProjectile = function (x, y, dir, range, speed, indx, owner, ignoreObj, layer) {
+		var tmpData = items.projectiles[indx]
+		var tmpProj
+		for (var i = 0; i < projectiles.length; ++i) {
+			if (!projectiles[i].active) {
+				tmpProj = projectiles[i]
+				break
+			}
+		}
+		if (!tmpProj) {
+			tmpProj = new Projectile(players, ais, objectManager, items, config, UTILS, server)
+			tmpProj.sid = projectiles.length
+			projectiles.push(tmpProj)
+		}
+		tmpProj.init(indx, x, y, dir, speed, tmpData.dmg, range, tmpData.scale, owner)
+		tmpProj.ignoreObj = ignoreObj
+		tmpProj.layer = layer || tmpData.layer
+		tmpProj.src = tmpData.src
+		return tmpProj
+	}
+}
+    },
+    "src/ryn.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
+// Ryn's side of the private server: admin commands, test dummies, time control,
+// stats and the combat log, the map editor, world saves, scenarios, rules and the
+// Crab King's controls. index.js hands the server's state over through ctx; its
+// getters always return the current arrays.
+module.exports = function (ctx) {
+	const UTILS = ctx.UTILS
+	const config = ctx.config
+	const items = ctx.items
+	const hats = ctx.hats
+	const accessories = ctx.accessories
+	const server = ctx.server
+
+	const time = { paused: false, scale: 1, steps: 0, tick: 0, clock: 0 }
+	const rules = { dmgMult: 1, gatherMult: 1 }
+	const king = { speed: 1, damage: 1 }
+	config.rynRules = rules
+	config.rynKing = king
+	const log = []
+	let dummies = []
+	let dummyCount = 0
+
+	const ANIMALS = { cow: 0, pig: 1, bull: 2, bully: 3, wolf: 4, duck: 5, quack: 5, moostafa: 6, treasure: 7, moofie: 8, boar: 9, yeti: 10, king: 11, crabking: 11, sheep: 12, crab: 13, crabling: 14 }
+	const NATURE = { tree: [0, 'treeScales'], bush: [1, 'bushScales'], stone: [2, 'rockScales'], rock: [2, 'rockScales'], gold: [3, null], cactus: [1, 'bushScales'] }
+	const TIERS = { normal: 0, gold: 3000, diamond: 7000, ruby: 12000, emerald: 30000 }
+	const BEHAVIORS = ['idle', 'walk', 'circle', 'chase', 'attack', 'insta']
+
+	const num = v => (v === undefined || v === '' ? NaN : Number(v))
+	const players = () => ctx.players
+	const itemByName = name => {
+		if (name === undefined) return null
+		const n = String(name).toLowerCase().replace(/[_-]/g, ' ')
+		if (/^\d+$/.test(n)) return items.list[Number(n)] || null
+		return items.list.find(it => it.name === n) || items.list.find(it => it.name.replace(/\s/g, '') === n.replace(/\s/g, '')) || null
+	}
+	const setHealth = (p, value) => {
+		p.health = Math.max(1, Math.min(p.maxHealth, value))
+		for (const q of players()) {
+			if (p.sentTo[q.id]) server.send(q.id, 'h', [p.sid, Math.round(p.health)])
+		}
+	}
+	const moveTo = (p, x, y) => {
+		p.x = x
+		p.y = y
+		p.xVel = 0
+		p.yVel = 0
+	}
+	const aiName = a => (ctx.aiManager && ctx.aiManager.aiTypes[a.index] && ctx.aiManager.aiTypes[a.index].name) || 'animal'
+
+	// ---- time ----
+	const api = {}
+	api.time = time
+	api.beginTick = function (delta) {
+		if (time.paused) {
+			if (time.steps > 0) {
+				time.steps--
+				const step = 1000 / config.serverUpdateRate
+				time.tick++
+				time.clock += step
+				stepProbes()
+				reviveGuarded()
+				return { run: true, delta: step }
+			}
+			return { run: false, delta: 0 }
+		}
+		const scaled = delta * time.scale
+		time.tick++
+		time.clock += scaled
+		stepProbes()
+		reviveGuarded()
+		return { run: true, delta: scaled }
+	}
+
+	// ---- combat log and stats ----
+	// what a hit came from: a weapon, a building (spikes), an animal or nothing
+	const sourceOf = (doer, src) => {
+		if (src && src.isAI) return { from: src.sid, name: aiName(src), ai: true, kind: 'animal' }
+		if (src && src !== doer && src.name && !src.isPlayer) return { from: doer ? doer.sid : null, name: doer ? doer.name : null, ai: false, kind: src.name }
+		if (doer && doer.isAI) return { from: doer.sid, name: aiName(doer), ai: true, kind: 'animal' }
+		if (doer) return { from: doer.sid, name: doer.name, ai: false, kind: doer.isPlayer ? 'w' + doer.weaponIndex : null }
+		return { from: null, name: null, ai: false, kind: null }
+	}
+	// knockback probes: where a hit player was, then where the next ticks moved it
+	const probes = []
+	const physics = []
+	// a failure in Ryn's bookkeeping must never change or stop a hit
+	config.rynHealth = function (target, amount, doer, src) {
+		try {
+			return rynHealth(target, amount, doer, src)
+		} catch (e) {
+			return amount
+		}
+	}
+	const rynHealth = function (target, amount, doer, src) {
+		if (amount < 0 && doer && doer.isPlayer && doer !== target && rules.dmgMult !== 1) amount *= rules.dmgMult
+		if (amount !== 0) {
+			const s = sourceOf(doer, src)
+			if (amount < 0 && !target.isAI) target.rynLastHit = s.name || (s.kind ? s.kind : 'something')
+			// the test bench: a guarded player is left on 1 health instead of dying, and that counts as a death
+			if (amount < 0 && !target.isAI && bench.guard[target.sid] && target.health + amount <= 0) {
+				if (!target.rynRevive) bench.events.push({ tick: time.tick, kind: 'death', sid: target.sid, by: s.from })
+				amount = Math.min(0, 1 - target.health)
+				target.rynRevive = 2
+			}
+			if (amount < 0 && s.from !== null && !s.ai) tickSums.dealt[s.from] = (tickSums.dealt[s.from] || 0) - amount
+			if (amount < 0 && !target.isAI) tickSums.taken[target.sid] = (tickSums.taken[target.sid] || 0) - amount
+			if (target.isAI && target.index === 11 && amount < 0 && doer && doer.isPlayer) kingFight(target, doer, amount)
+			log.push({
+				tick: time.tick,
+				at: time.clock,
+				to: target.sid,
+				toName: target.isAI ? aiName(target) : target.name,
+				ai: !!target.isAI,
+				from: s.from,
+				fromName: s.name,
+				fromAi: s.ai,
+				kind: s.kind,
+				amount: Math.round(amount * 10) / 10,
+				hp: Math.max(0, Math.round((target.health + amount) * 10) / 10),
+				weapon: doer && doer.isPlayer && doer !== target && s.kind && s.kind[0] === 'w' ? doer.weaponIndex : null
+			})
+			if (log.length > 400) log.shift()
+			if (amount < 0 && !target.isAI && doer !== target && (s.from !== null || s.ai) && !probes.some(p => p.t === target && p.tick === time.tick)) {
+				const w = s.kind && s.kind[0] === 'w' ? items.weapons[Number(s.kind.slice(1))] : null
+				// the push the server gives: melee 0.3 + the weapon's knock, spikes 1.5, per ms
+				let push = null
+				if (src === doer && w && w.projectile === undefined) push = 0.3 + (w.knock || 0)
+				else if (src && src !== doer && src.dmg && !src.isAI) push = 1.5 * (src.weightM || 1)
+				probes.push({ t: target, tick: time.tick, x: target.x, y: target.y, kind: s.kind, push: push, steps: [] })
+			}
+		}
+		return amount
+	}
+	const stepProbes = function () {
+		for (let i = probes.length - 1; i >= 0; i--) {
+			const p = probes[i]
+			p.steps.push(Math.round(UTILS.getDistance(p.x, p.y, p.t.x, p.t.y)))
+			if (p.steps.length >= 6) {
+				probes.splice(i, 1)
+				const first = p.steps.find(d => d > 0) || 0
+				physics.push({
+					tick: p.tick,
+					name: p.t.name,
+					kind: p.kind,
+					first: first,
+					total: p.steps[p.steps.length - 1],
+					// Ryn's model: the first tick moves the push times one 111ms tick
+					ryn: p.push === null ? null : Math.round(p.push * 1000 / 9)
+				})
+				if (physics.length > 12) physics.shift()
+			}
+		}
+	}
+	api.physics = () => physics.slice()
+	api.log = function (limit) {
+		return log.slice(-(limit || 40))
+	}
+	api.stats = function (me) {
+		if (!me) return null
+		const now = time.clock
+		const mine = log.filter(e => e.from === me.sid && !e.fromAi && e.amount < 0 && !(e.to === me.sid && !e.ai))
+		const recent = mine.filter(e => now - e.at <= 5000)
+		const dps = recent.reduce((s, e) => s - e.amount, 0) / 5
+		// biggest damage on one target inside one tick
+		let burst = 0
+		const byTick = {}
+		for (const e of mine) {
+			if (now - e.at > 60000) continue
+			const k = e.tick + ':' + (e.ai ? 'a' : 'p') + e.to
+			byTick[k] = (byTick[k] || 0) - e.amount
+			if (byTick[k] > burst) burst = byTick[k]
+		}
+		// time to kill: first hit after the target was last at full health, until it hit 0
+		const kills = []
+		const first = {}
+		for (const e of log) {
+			const k = (e.ai ? 'a' : 'p') + e.to
+			if (e.amount > 0) continue
+			if (e.from === me.sid && !e.fromAi && first[k] === undefined) first[k] = e.at
+			if (e.hp <= 0 && first[k] !== undefined) {
+				kills.push({ name: e.toName, ms: Math.round(e.at - first[k]) })
+				delete first[k]
+			}
+		}
+		// heal timing: from damage on me to my next heal
+		const heals = []
+		let hurtAt = null
+		let hurtTick = null
+		for (const e of log) {
+			if (e.to !== me.sid || e.ai) continue
+			if (e.amount < 0 && hurtAt === null) {
+				hurtAt = e.at
+				hurtTick = e.tick
+			} else if (e.amount > 0 && hurtAt !== null) {
+				heals.push({ ms: Math.round(e.at - hurtAt), ticks: e.tick - hurtTick })
+				hurtAt = null
+			}
+		}
+		// instas: my damage on one target inside two ticks; a kill that way counts as a success
+		let instaTries = 0
+		let instaKills = 0
+		const windows = {}
+		for (const e of log) {
+			if (e.from !== me.sid || e.fromAi || e.amount >= 0 || (e.to === me.sid && !e.ai)) continue
+			const k = (e.ai ? 'a' : 'p') + e.to
+			const w = windows[k]
+			if (w && e.tick - w.tick <= 1) {
+				w.sum -= e.amount
+				w.dead = w.dead || e.hp <= 0
+			} else {
+				if (w && w.sum >= 80) {
+					instaTries++
+					if (w.dead) instaKills++
+				}
+				windows[k] = { tick: e.tick, sum: -e.amount, dead: e.hp <= 0 }
+			}
+		}
+		for (const k in windows) {
+			if (windows[k].sum >= 80) {
+				instaTries++
+				if (windows[k].dead) instaKills++
+			}
+		}
+		const lastHeals = heals.slice(-10)
+		return {
+			tick: time.tick,
+			dps: Math.round(dps),
+			burst: Math.round(burst),
+			kills: kills.slice(-5),
+			heals: lastHeals,
+			healAvg: lastHeals.length ? Math.round(lastHeals.reduce((s, h) => s + h.ms, 0) / lastHeals.length) : null,
+			shame: me.shameCount || 0,
+			instaTries: instaTries,
+			instaKills: instaKills,
+			taken: Math.round(log.filter(e => e.to === me.sid && !e.ai && e.amount < 0 && now - e.at <= 5000).reduce((s, e) => s - e.amount, 0))
+		}
+	}
+	api.clearLog = function () {
+		log.length = 0
+	}
+
+	// ---- dummies ----
+	const nearestTarget = p => {
+		let best = null
+		let bestD = 1600
+		for (const q of players()) {
+			if (q === p || !q.alive || q.rynDummy) continue
+			const d = UTILS.getDistance(p.x, p.y, q.x, q.y)
+			if (d < bestD) {
+				bestD = d
+				best = q
+			}
+		}
+		return best
+	}
+	const hatById = id => hats.find(h => h.id === id) || null
+	const accById = id => accessories.find(a => a.id === id) || null
+	function equipDummy(d) {
+		const p = d.p
+		const o = d.opts
+		const primary = items.weapons[o.primary] && items.weapons[o.primary].type === 0 ? o.primary : 5
+		const secondary = items.weapons[o.secondary] && items.weapons[o.secondary].type === 1 ? o.secondary : null
+		p.weapons = secondary === null ? [primary] : [primary, secondary]
+		p.weaponIndex = primary
+		p.weaponXP = []
+		p.weaponXP[primary] = TIERS[o.tier] || 0
+		if (secondary !== null) p.weaponXP[secondary] = TIERS[o.tier] || 0
+		p.items = [o.food === 'cookie' ? 1 : 0, 3, 6, 10, 15]
+		p.skin = hatById(o.hat)
+		p.skinIndex = p.skin ? o.hat : 0
+		p.tail = accById(o.acc)
+		p.tailIndex = p.tail ? o.acc : 0
+		d.restHat = p.skinIndex
+	}
+	function respawnDummy(d) {
+		const p = d.p
+		p.spawn(true)
+		p.setData([p.id, p.sid, d.name, d.home.x, d.home.y, 0, 100, 100, config.playerScale, d.opts.skinColor || 0])
+		p.rynGod = !!d.opts.god
+		equipDummy(d)
+		d.brain = { t: 0, wanderT: 0, healAt: null, insta: 0, instaWait: 0, angle: UTILS.randFloat(0, Math.PI * 2) }
+	}
+	function addDummy(x, y, opts) {
+		const sid = ctx.allocSid()
+		if (!sid) return null
+		const p = ctx.newPlayer('dummy-' + sid + '-' + UTILS.randomString(4), sid)
+		p.rynDummy = true
+		ctx.players.push(p)
+		dummyCount++
+		const d = {
+			p: p,
+			name: (opts && opts.name) || 'Dummy ' + dummyCount,
+			behavior: BEHAVIORS.includes(opts && opts.behavior) ? opts.behavior : 'idle',
+			home: { x: x, y: y },
+			opts: Object.assign({ primary: 5, secondary: null, tier: 'normal', hat: 0, acc: 0, heal: false, healAt: 0.6, healDelay: 120, food: 'apple', god: false }, opts || {}),
+			brain: null,
+			deadFor: 0
+		}
+		respawnDummy(d)
+		dummies.push(d)
+		ctx.updateLeaderboard()
+		ctx.iconCallback()
+		return d
+	}
+	function removeDummy(d) {
+		const p = d.p
+		ctx.objectManager.removeAllItems(p.sid, server)
+		const i = ctx.players.indexOf(p)
+		if (i >= 0) ctx.players.splice(i, 1)
+		ctx.freeSid(p.sid)
+		server.sendAll('4', [p.id])
+		dummies = dummies.filter(x => x !== d)
+	}
+	api.clearDummies = function () {
+		for (const d of dummies.slice()) removeDummy(d)
+		dummyCount = 0
+		ctx.updateLeaderboard()
+		ctx.iconCallback()
+	}
+	function steer(p, tx, ty) {
+		p.moveDir = UTILS.getDirection(tx, ty, p.x, p.y)
+	}
+	function thinkDummy(d, delta) {
+		const p = d.p
+		if (!p.alive) {
+			if (d.opts.noRespawn) {
+				removeDummy(d)
+				return
+			}
+			d.deadFor += delta
+			if (d.deadFor >= 3000) {
+				d.deadFor = 0
+				respawnDummy(d)
+			}
+			return
+		}
+		const b = d.brain
+		b.t += delta
+		const target = nearestTarget(p)
+		const dist = target ? UTILS.getDistance(p.x, p.y, target.x, target.y) : Infinity
+		if (target) p.dir = UTILS.getDirection(target.x, target.y, p.x, p.y)
+		p.moveDir = undefined
+		const fromHome = UTILS.getDistance(p.x, p.y, d.home.x, d.home.y)
+		switch (d.behavior) {
+			case 'walk':
+				b.wanderT -= delta
+				if (b.wanderT <= 0) {
+					b.wanderT = UTILS.randInt(900, 2200)
+					b.angle = UTILS.randFloat(-Math.PI, Math.PI)
+				}
+				p.moveDir = fromHome > 350 ? UTILS.getDirection(d.home.x, d.home.y, p.x, p.y) : b.angle
+				break
+			case 'circle':
+				b.angle += delta * 0.0011
+				steer(p, d.home.x + 220 * Math.cos(b.angle), d.home.y + 220 * Math.sin(b.angle))
+				break
+			case 'chase':
+			case 'attack':
+			case 'insta': {
+				const w = items.weapons[p.weapons[0]]
+				const reach = w.range + (target ? target.scale : 35)
+				if (target && dist > reach * 0.8) steer(p, target.x, target.y)
+				break
+			}
+			default:
+				if (fromHome > 60) steer(p, d.home.x, d.home.y)
+		}
+		p.mouseState = 0
+		p.gathering = 0
+		if (target && (d.behavior === 'attack' || d.behavior === 'insta')) {
+			const w = items.weapons[p.weaponIndex]
+			const reach = w.projectile !== undefined ? 700 : w.range + target.scale
+			if (d.behavior === 'insta' && p.weapons[1] !== undefined) {
+				instaStep(d, dist, target)
+			} else if (dist <= reach) {
+				p.mouseState = 1
+				p.gathering = 1
+			}
+		}
+		if (d.opts.heal && p.health < p.maxHealth * d.opts.healAt) {
+			if (b.healAt === null) b.healAt = b.t + d.opts.healDelay
+			if (b.t >= b.healAt) {
+				const food = items.list[p.items[0]]
+				const keep = p.buildIndex
+				p.buildItem(food)
+				p.buildIndex = keep
+				b.healAt = null
+			}
+		} else {
+			b.healAt = null
+		}
+	}
+	// a two-tick insta like a player's: bull hat and the primary, then the secondary
+	function instaStep(d, dist, target) {
+		const p = d.p
+		const b = d.brain
+		const primary = p.weapons[0]
+		const secondary = p.weapons[1]
+		const reach = items.weapons[primary].range + target.scale
+		if (b.instaWait > 0) b.instaWait -= 1
+		if (b.insta === 0) {
+			// a weapon only reloads while it is held, so hold whichever still needs it
+			if (p.reloads[secondary] > 0) p.weaponIndex = secondary
+			else p.weaponIndex = primary
+			const ready = !(p.reloads[primary] > 0) && !(p.reloads[secondary] > 0)
+			if (ready && b.instaWait <= 0 && dist <= reach) {
+				p.skin = hatById(7)
+				p.skinIndex = p.skin ? 7 : p.skinIndex
+				p.weaponIndex = primary
+				p.mouseState = 1
+				p.gathering = 1
+				b.insta = 1
+				bench.events.push({ tick: time.tick, kind: 'insta', sid: target.sid, by: p.sid })
+				if (bench.events.length > 500) bench.events.splice(0, 100)
+			}
+		} else if (b.insta === 1) {
+			p.weaponIndex = secondary
+			p.mouseState = 1
+			p.gathering = 1
+			b.insta = 2
+		} else {
+			p.weaponIndex = primary
+			p.skin = hatById(d.restHat)
+			p.skinIndex = p.skin ? d.restHat : 0
+			b.insta = 0
+			b.instaWait = d.opts.instaGap || 8
+		}
+	}
+	api.thinkDummies = function (delta) {
+		for (const d of dummies.slice()) thinkDummy(d, delta)
+		thinkSurvival(delta)
+		thinkSpawners(delta)
+	}
+	api.dummyCount = () => dummies.length
+
+	// ---- map editor ----
+	function placeItem(item, x, y, dir, owner) {
+		const obj = ctx.objectManager.add(ctx.objectManager.objects.length, x, y, dir, item.scale, item.type, item, false, owner || null)
+		if (owner) {
+			if (item.group.limit) owner.changeItemCount(item.group.id, 1)
+			if (item.pps) owner.pps += item.pps
+		}
+		return obj
+	}
+	function placeNature(kind, x, y) {
+		const n = NATURE[kind]
+		const scales = n[1] ? config[n[1]] : null
+		const scale = scales ? scales[UTILS.randInt(0, scales.length - 1)] : 74
+		return ctx.objectManager.add(ctx.objectManager.objects.length, x, y, UTILS.randFloat(-Math.PI, Math.PI), scale, n[0], null, false, null)
+	}
+	function removeObject(obj) {
+		ctx.objectManager.disableObj(obj)
+		ctx.objectManager.hitObj(obj, 0)
+	}
+	api.place = function (what, x, y, owner) {
+		const kind = String(what || '').toLowerCase()
+		if (NATURE[kind]) return placeNature(kind, x, y) ? kind : null
+		const item = itemByName(kind)
+		if (!item || item.consume) return null
+		placeItem(item, x, y, 0, owner)
+		return item.name
+	}
+	api.removeNear = function (x, y, r) {
+		let best = null
+		let bestD = r
+		for (const o of ctx.gameObjects) {
+			if (!o.active) continue
+			const d = UTILS.getDistance(x, y, o.x, o.y) - o.scale
+			if (d < bestD) {
+				bestD = d
+				best = o
+			}
+		}
+		if (best) removeObject(best)
+		return best ? best.name || 'object' : null
+	}
+	function clearArea(x, y, r, includeNature) {
+		let n = 0
+		for (const o of ctx.gameObjects) {
+			if (o.active && (includeNature || o.owner) && UTILS.getDistance(x, y, o.x, o.y) <= r) {
+				removeObject(o)
+				n++
+			}
+		}
+		return n
+	}
+
+	// ---- world saves ----
+	api.snapshot = function (me) {
+		const tag = o => {
+			if (!o.owner) return null
+			if (me && o.owner === me) return 'me'
+			const i = dummies.findIndex(d => d.p === o.owner)
+			return i >= 0 ? 'd' + i : null
+		}
+		return {
+			v: 1,
+			objects: ctx.gameObjects.filter(o => o.active).map(o => [Math.round(o.x), Math.round(o.y), Math.round(o.dir * 100) / 100, o.scale, o.type, o.id === undefined ? -1 : o.id, tag(o)]),
+			dummies: dummies.map(d => ({ x: Math.round(d.p.x), y: Math.round(d.p.y), name: d.name, behavior: d.behavior, opts: d.opts })),
+			me: me ? [Math.round(me.x), Math.round(me.y)] : null,
+			rules: Object.assign({}, rules),
+			king: Object.assign({}, king)
+		}
+	}
+	api.restore = function (me, snap) {
+		if (!snap || snap.v !== 1 || !Array.isArray(snap.objects)) return false
+		api.clearDummies()
+		for (const o of ctx.gameObjects) if (o.active) removeObject(o)
+		for (const p of players()) {
+			for (let g = 0; g < items.groups.length; g++) if (p.itemCounts && p.itemCounts[g]) p.changeItemAllCount(g, 0)
+			p.pps = 0
+		}
+		const made = (snap.dummies || []).map(s => addDummy(s.x, s.y, Object.assign({}, s.opts, { name: s.name, behavior: s.behavior })))
+		for (const [x, y, dir, scale, type, id, owner] of snap.objects) {
+			if (id >= 0 && items.list[id]) {
+				const o = owner === 'me' ? me : owner && owner[0] === 'd' && made[Number(owner.slice(1))] ? made[Number(owner.slice(1))].p : null
+				placeItem(items.list[id], x, y, dir, o)
+			} else {
+				ctx.objectManager.add(ctx.objectManager.objects.length, x, y, dir, scale, type, null, false, null)
+			}
+		}
+		if (snap.rules) Object.assign(rules, snap.rules)
+		if (snap.king) Object.assign(king, snap.king)
+		if (me && snap.me) moveTo(me, snap.me[0], snap.me[1])
+		return true
+	}
+
+	// ---- worlds: what Ryn's lobby saves per world besides the map ----
+	api.playerState = function (me) {
+		if (!me || !me.alive) return null
+		return {
+			x: Math.round(me.x),
+			y: Math.round(me.y),
+			dir: me.dir,
+			health: Math.round(me.health),
+			age: me.age,
+			XP: me.XP,
+			maxXP: me.maxXP,
+			upgradePoints: me.upgradePoints,
+			upgrAge: me.upgrAge,
+			weapons: me.weapons.slice(),
+			weaponXP: me.weapons.map(w => me.weaponXP[w] || 0),
+			items: me.items.slice(),
+			wood: me.wood,
+			food: me.food,
+			stone: me.stone,
+			points: me.points,
+			kills: me.kills,
+			skins: Object.keys(me.skins).map(Number).filter(k => me.skins[k]),
+			tails: Object.keys(me.tails).map(Number).filter(k => me.tails[k]),
+			skinIndex: me.skinIndex || 0,
+			tailIndex: me.tailIndex || 0,
+			// saved since fix26: before it, every player owned Shame! and the Crab Shell
+			given: 1
+		}
+	}
+	api.applyPlayer = function (me, st) {
+		if (!me || !me.alive || !st) return false
+		me.age = st.age || 1
+		me.XP = st.XP || 0
+		me.maxXP = st.maxXP || 300
+		me.upgradePoints = st.upgradePoints || 0
+		me.upgrAge = st.upgrAge || 2
+		server.send(me.id, '15', [me.XP, UTILS.fixTo(me.maxXP, 1), me.age])
+		server.send(me.id, '16', [me.upgradePoints, me.upgrAge])
+		const weapons = (st.weapons || []).filter(w => items.weapons[w])
+		if (weapons.length) {
+			me.weapons = weapons
+			weapons.forEach((w, i) => (me.weaponXP[w] = (st.weaponXP || [])[i] || 0))
+			me.weaponIndex = weapons[0]
+		}
+		const list = (st.items || []).filter(i => items.list[i])
+		if (list.length) me.items = list
+		me.buildIndex = -1
+		server.send(me.id, '17', [me.items])
+		server.send(me.id, '17', [me.weapons, 1])
+		for (const type of ['wood', 'food', 'stone']) {
+			me[type] = st[type] || 0
+			server.send(me.id, '9', [type, me[type], 1])
+		}
+		me.points = st.points || 0
+		server.send(me.id, '9', ['points', Math.round(me.points), 1])
+		me.kills = st.kills || 0
+		server.send(me.id, '9', ['kills', me.kills, 1])
+		for (const id of st.skins || []) {
+			const hat = hatById(id)
+			if (!hat) continue
+			// hats that are only given (Shame!, the Crab Shell) come back only from saves that
+			// know who was given them; Shame! is never owned
+			if (hat.dontSell && (!st.given || id === 45)) continue
+			me.skins[id] = 1
+			server.send(me.id, 'us', [0, id, 0])
+		}
+		for (const id of st.tails || []) {
+			if (!accById(id)) continue
+			me.tails[id] = 1
+			server.send(me.id, 'us', [0, id, 1])
+		}
+		me.skin = hatById(st.skinIndex) || null
+		if (me.skin && me.skin.dontSell && !me.skins[st.skinIndex]) me.skin = null
+		me.skinIndex = me.skin ? st.skinIndex : 0
+		server.send(me.id, 'us', [1, me.skinIndex, 0])
+		me.tail = accById(st.tailIndex) || null
+		me.tailIndex = me.tail ? st.tailIndex : 0
+		server.send(me.id, 'us', [1, me.tailIndex, 1])
+		setHealth(me, st.health || 100)
+		if (Number.isFinite(st.x) && Number.isFinite(st.y)) moveTo(me, st.x, st.y)
+		if (Number.isFinite(st.dir)) me.dir = st.dir
+		return true
+	}
+	// a world nobody has played yet: the map as the server made it, nothing else
+	api.newWorld = function () {
+		keepOriginal()
+		api.clearDummies()
+		if (survival.on) survivalEnd('new world')
+		spawners.length = 0
+		for (const o of ctx.gameObjects) if (o.active) removeObject(o)
+		for (const p of players()) {
+			for (let g = 0; g < items.groups.length; g++) if (p.itemCounts && p.itemCounts[g]) p.changeItemAllCount(g, 0)
+			p.pps = 0
+		}
+		for (const [x, y, dir, scale, type] of original) ctx.objectManager.add(ctx.objectManager.objects.length, x, y, dir, scale, type, null, false, null)
+		Object.assign(rules, { dmgMult: 1, gatherMult: 1 })
+		Object.assign(king, { speed: 1, damage: 1, only: '' })
+		return true
+	}
+
+	// ---- scenarios ----
+	const SCENARIOS = {
+		trapped: 'Enemy in your trap with your spikes around it',
+		push: 'Enemy in front of your spike line, to knock into it',
+		metrapped: 'You in an enemy trap, enemy spikes around, an insta dummy on you',
+		surrounded: 'Four dummies attacking you',
+		duel: 'One dummy with soldier helmet and auto heal fighting you',
+		crab: 'The Crab King arena'
+	}
+	api.scenarios = () => SCENARIOS
+	api.scenario = function (me, name) {
+		if (!SCENARIOS[name]) return false
+		api.clearDummies()
+		clearArea(me.x, me.y, 650, false)
+		const a = me.dir
+		const at = (r, off) => ({ x: me.x + r * Math.cos(a + (off || 0)), y: me.y + r * Math.sin(a + (off || 0)) })
+		const spikes = itemByName('spikes')
+		const trap = itemByName('pit trap')
+		switch (name) {
+			case 'trapped': {
+				const c = at(170)
+				addDummy(c.x, c.y, { behavior: 'idle', heal: true, hat: 6 })
+				placeItem(trap, c.x, c.y, 0, me)
+				for (let k = 0; k < 4; k++) {
+					const s = k * Math.PI / 2 + Math.PI / 4
+					placeItem(spikes, c.x + 98 * Math.cos(a + s), c.y + 98 * Math.sin(a + s), 0, me)
+				}
+				break
+			}
+			case 'push': {
+				const c = at(170)
+				addDummy(c.x, c.y, { behavior: 'idle', heal: true })
+				for (let k = -1; k <= 1; k++) {
+					const s = at(170 + 90, k * 0.36)
+					placeItem(spikes, s.x, s.y, 0, me)
+				}
+				break
+			}
+			case 'metrapped': {
+				const c = at(160)
+				const dm = addDummy(c.x, c.y, { behavior: 'insta', primary: 5, secondary: 15, hat: 6, heal: true })
+				if (dm) {
+					placeItem(trap, me.x, me.y, 0, dm.p)
+					for (let k = 0; k < 3; k++) {
+						const s = k * (Math.PI * 2 / 3) + Math.PI / 3
+						placeItem(spikes, me.x + 100 * Math.cos(a + s), me.y + 100 * Math.sin(a + s), 0, dm.p)
+					}
+				}
+				break
+			}
+			case 'surrounded':
+				for (let k = 0; k < 4; k++) {
+					const c = at(320, k * Math.PI / 2)
+					addDummy(c.x, c.y, { behavior: 'attack', primary: [5, 3, 1, 4][k], hat: 6 })
+				}
+				break
+			case 'duel': {
+				const c = at(420)
+				addDummy(c.x, c.y, { behavior: 'attack', primary: 5, secondary: 10, hat: 6, heal: true, healDelay: 150 })
+				break
+			}
+			case 'crab':
+				moveTo(me, -1650, config.mapScale / 2)
+				break
+		}
+		return true
+	}
+
+	// ---- the Crab King ----
+	const kings = () => ctx.ais.filter(a => a.active && a.index === 11)
+	api.kings = () => kings().map(k => ({ sid: k.sid, health: Math.round(k.health), maxHealth: k.maxHealth, state: k.state || 0, phase: k.crab ? k.crab.phase : 'idle', dead: !!k.spawnCounter, respawnIn: k.spawnCounter ? Math.round(k.spawnCounter / 1000) : 0 }))
+
+	// ---- state for the panel ----
+	api.world = function (me) {
+		const near = (o, r) => !me || Math.abs(o.x - me.x) <= r && Math.abs(o.y - me.y) <= r
+		return {
+			tick: time.tick,
+			players: players().filter(p => p.alive).map(p => [p.sid, p.x, p.y, p.scale, p.dir, p.health, p.maxHealth, p.weaponIndex, p.skinIndex, !!p.rynDummy]),
+			ais: ctx.ais.filter(a => a.active && a.alive && !a.spawnCounter).map(a => [a.sid, a.index, a.x, a.y, a.scale, a.health, a.maxHealth, a.state || 0]),
+			// what can hurt: spikes (dmg) and turrets (shootRange) near me
+			danger: ctx.gameObjects.filter(o => o.active && (o.dmg || o.shootRange) && near(o, 1400)).map(o => [o.sid, o.x, o.y, o.scale, o.dmg ? 'spike' : 'turret', o.shootRange || 0, o.owner ? o.owner.sid : -1]),
+			shots: (ctx.projectiles || []).filter(q => q.active && near(q, 2000)).map(q => [q.sid, q.x, q.y, q.dir, q.indx, q.owner ? q.owner.sid : -1]),
+			spawners: spawners.map(sp => [sp.id, sp.x, sp.y, sp.name, sp.every, sp.max, sp.mobs.length])
+		}
+	}
+	api.panelState = function (me) {
+		return {
+			time: { paused: time.paused, scale: time.scale, tick: time.tick },
+			rules: Object.assign({ sandbox: !!config.inSandbox, tickRate: config.serverUpdateRate }, rules),
+			king: Object.assign({}, king),
+			kings: api.kings(),
+			kingStats: me ? kingStatsOf(me) : null,
+			dummies: dummies.length,
+			survival: { on: survival.on, wave: survival.wave, left: survival.on ? survivalLeft() : 0, best: survival.best, last: survival.last },
+			spawners: spawners.map(sp => ({ id: sp.id, kind: sp.name, every: sp.every / 1000, max: sp.max, alive: sp.mobs.length }))
+		}
+	}
+
+	// ---- the private log: tell the owner's page why a player died ----
+	config.rynDied = function (p, doer) {
+		const by = p.health > 0 ? 'a command (!die or !kill)' : doer && doer !== p ? doer.name || 'someone' : p.rynLastHit || 'unknown'
+		if (ctx.debug) ctx.debug(p, 'died, killed by ' + by + ' (health ' + Math.round(p.health) + ')')
+	}
+
+	// ---- test bench support ----
+	const bench = { guard: {}, events: [] }
+	function reviveGuarded() {
+		for (const p of players()) {
+			if (!p.rynRevive) continue
+			p.rynRevive--
+			if (p.rynRevive === 0 && p.alive) {
+				p.dmgOverTime = {}
+				setHealth(p, p.maxHealth)
+			}
+		}
+	}
+	api.benchGuard = function (me, on) {
+		if (!me) return false
+		if (on) bench.guard[me.sid] = true
+		else delete bench.guard[me.sid]
+		return true
+	}
+	api.benchEvents = function (since) {
+		return bench.events.filter(e => e.tick >= (since || 0))
+	}
+
+	// ---- per-tick sums, health/damage series and the replay buffer ----
+	const tickSums = { dealt: {}, taken: {} }
+	const series = {}
+	const replay = { frames: [], base: new Map(), seen: new Map() }
+	const objRec = o => [o.sid, Math.round(o.x), Math.round(o.y), o.scale, o.type, o.id === undefined ? -1 : o.id, o.owner ? o.owner.sid : -1, Math.round(o.dir * 100) / 100]
+	api.endTick = function () {
+		keepOriginal()
+		const ps = players()
+		// series for real players: health and what they dealt and took this tick
+		for (const p of ps) {
+			if (p.rynDummy) continue
+			const list = series[p.sid] || (series[p.sid] = [])
+			list.push([time.tick, Math.round(time.clock), p.alive ? Math.round(p.health) : 0, Math.round(tickSums.dealt[p.sid] || 0), Math.round(tickSums.taken[p.sid] || 0)])
+			if (list.length > config.serverUpdateRate * 60) list.shift()
+		}
+		// replay: everything near a real player, and buildings as changes
+		const real = ps.filter(p => p.alive && !p.rynDummy)
+		const close = o => real.some(p => Math.abs(o.x - p.x) <= 2200 && Math.abs(o.y - p.y) <= 2200)
+		const now = new Map()
+		for (const o of ctx.gameObjects) if (o.active) now.set(o.sid, o)
+		const add = []
+		const del = []
+		for (const [sid, o] of now) {
+			if (replay.seen.get(sid) !== o || o.rynSeenX !== o.x || o.rynSeenY !== o.y) {
+				add.push(objRec(o))
+				o.rynSeenX = o.x
+				o.rynSeenY = o.y
+			}
+		}
+		for (const sid of replay.seen.keys()) if (!now.has(sid)) del.push(sid)
+		replay.seen = now
+		const hits = []
+		for (let i = log.length - 1; i >= 0 && log[i].tick === time.tick; i--) hits.push([log[i].from, log[i].fromName, log[i].to, log[i].toName, log[i].amount, log[i].kind, log[i].ai])
+		replay.frames.push({
+			tick: time.tick,
+			at: Math.round(time.clock),
+			players: ps.filter(p => p.alive).map(p => [p.sid, Math.round(p.x), Math.round(p.y), Math.round(p.dir * 100) / 100, Math.round(p.health), p.maxHealth, p.weaponIndex, p.skinIndex, p.buildIndex, p.scale, p.name, !!p.rynDummy]),
+			ais: ctx.ais.filter(a => a.active && a.alive && !a.spawnCounter && close(a)).map(a => [a.sid, a.index, Math.round(a.x), Math.round(a.y), Math.round(a.dir * 100) / 100, Math.round(a.health), a.maxHealth, a.scale, a.state || 0]),
+			shots: (ctx.projectiles || []).filter(q => q.active && close(q)).map(q => [q.sid, Math.round(q.x), Math.round(q.y), q.dir, q.indx]),
+			add: add,
+			del: del,
+			hits: hits
+		})
+		while (replay.frames.length > config.serverUpdateRate * 30) {
+			const f = replay.frames.shift()
+			for (const r of f.add) replay.base.set(r[0], r)
+			for (const sid of f.del) replay.base.delete(sid)
+		}
+		tickSums.dealt = {}
+		tickSums.taken = {}
+	}
+	api.series = me => (me && series[me.sid] ? series[me.sid].slice() : [])
+	api.replay = function () {
+		return { rate: config.serverUpdateRate, base: [...replay.base.values()], frames: replay.frames.slice() }
+	}
+
+	// ---- survival: waves of dummies and animals until you die ----
+	const survival = { on: false, wave: 0, best: 0, last: null, me: null, mobs: [], dummies: [], rest: 0, tell: null }
+	const survivalLeft = () => survival.dummies.filter(d => dummies.includes(d)).length + survival.mobs.filter(m => m.active && m.alive).length
+	function survivalWave() {
+		const me = survival.me
+		const w = ++survival.wave
+		const tiers = ['normal', 'normal', 'gold', 'gold', 'diamond', 'diamond', 'ruby', 'ruby', 'emerald']
+		const tier = tiers[Math.min(tiers.length - 1, w - 1)]
+		const primaries = [5, 3, 4, 1, 7]
+		const nd = Math.min(6, 1 + Math.floor(w / 2))
+		survival.dummies = []
+		for (let i = 0; i < nd; i++) {
+			const a = UTILS.randFloat(-Math.PI, Math.PI)
+			const insta = w >= 4 && i === 0
+			const d = addDummy(me.x + 650 * Math.cos(a), me.y + 650 * Math.sin(a), {
+				name: 'Wave ' + w,
+				behavior: insta ? 'insta' : 'attack',
+				primary: insta ? 5 : primaries[(w + i) % primaries.length],
+				secondary: insta ? 15 : null,
+				tier: tier,
+				hat: w >= 3 ? 6 : 0,
+				heal: w >= 3,
+				healDelay: Math.max(60, 260 - w * 20),
+				instaGap: 20,
+				noRespawn: true
+			})
+			if (d) survival.dummies.push(d)
+		}
+		const kinds = w >= 3 ? [4, 2, 3] : [4, 2]
+		survival.mobs = []
+		for (let i = 0; i < Math.min(8, w); i++) {
+			const a = UTILS.randFloat(-Math.PI, Math.PI)
+			const m = ctx.aiManager.spawn(me.x + 800 * Math.cos(a), me.y + 800 * Math.sin(a), a + Math.PI, kinds[i % kinds.length])
+			m.minion = true
+			m.chargeTarget = me
+			m.waitCount = 0
+			m.moveCount = 8000
+			survival.mobs.push(m)
+		}
+		if (survival.tell) survival.tell('[Admin] Wave ' + w + ': ' + nd + ' dummies, ' + survival.mobs.length + ' animals')
+	}
+	function survivalEnd(why) {
+		const reached = Math.max(0, survival.wave - 1)
+		survival.best = Math.max(survival.best, reached)
+		survival.last = { waves: reached, why: why }
+		survival.on = false
+		for (const d of survival.dummies) if (dummies.includes(d)) removeDummy(d)
+		for (const m of survival.mobs) {
+			if (m.active) {
+				m.active = false
+				m.alive = false
+			}
+		}
+		survival.dummies = []
+		survival.mobs = []
+		ctx.updateLeaderboard()
+		if (survival.tell) survival.tell('[Admin] Survival over: ' + reached + ' wave' + (reached === 1 ? '' : 's') + ' cleared (best ' + survival.best + ')')
+	}
+	function thinkSurvival(delta) {
+		if (!survival.on) return
+		const me = survival.me
+		if (!me || !me.alive || !players().includes(me)) return survivalEnd('you died')
+		if (survival.rest > 0) {
+			survival.rest -= delta
+			if (survival.rest <= 0) survivalWave()
+			return
+		}
+		if (survivalLeft() === 0) {
+			setHealth(me, me.maxHealth)
+			survival.rest = 3000
+			if (survival.tell) survival.tell('[Admin] Wave ' + survival.wave + ' cleared, next in 3s')
+		}
+	}
+
+	// ---- animal spawners ----
+	const spawners = []
+	let spawnerId = 0
+	function thinkSpawners(delta) {
+		for (const sp of spawners) {
+			sp.mobs = sp.mobs.filter(m => m.active && m.alive)
+			sp.t -= delta
+			if (sp.t > 0 || sp.mobs.length >= sp.max) continue
+			sp.t = sp.every
+			const m = ctx.aiManager.spawn(sp.x + UTILS.randInt(-80, 80), sp.y + UTILS.randInt(-80, 80), UTILS.randFloat(-Math.PI, Math.PI), sp.kind)
+			m.minion = true
+			sp.mobs.push(m)
+		}
+	}
+
+	// ---- Crab King: dodges and kill times ----
+	const kingStats = {}
+	const kingFights = {}
+	config.rynKingAttack = function (k, kind, victim, hit) {
+		const st = kingStats[victim] || (kingStats[victim] = { dodged: 0, hit: 0, kinds: {} })
+		const got = hit.includes(victim)
+		const kk = st.kinds[kind] || (st.kinds[kind] = [0, 0])
+		if (got) {
+			st.hit++
+			kk[1]++
+		} else {
+			st.dodged++
+			kk[0]++
+		}
+	}
+	function kingFight(k, doer, amount) {
+		let f = kingFights[k.sid]
+		if (!f || time.clock - f.last > 60000 || f.done) f = kingFights[k.sid] = { start: time.clock, last: time.clock, by: {}, done: false }
+		f.last = time.clock
+		f.by[doer.sid] = 1
+		if (k.health + amount <= 0) {
+			f.done = true
+			const ms = Math.round(time.clock - f.start)
+			for (const sid of Object.keys(f.by)) {
+				const st = kingStats[sid] || (kingStats[sid] = { dodged: 0, hit: 0, kinds: {} })
+				st.lastKill = ms
+				st.bestKill = st.bestKill ? Math.min(st.bestKill, ms) : ms
+			}
+		}
+	}
+	const kingStatsOf = me => {
+		const st = kingStats[me.sid] || { dodged: 0, hit: 0, kinds: {} }
+		const f = Object.values(kingFights).find(x => !x.done && x.by[me.sid] && time.clock - x.last <= 60000)
+		return { dodged: st.dodged, hit: st.hit, kinds: st.kinds, lastKill: st.lastKill || null, bestKill: st.bestKill || null, fighting: f ? Math.round(time.clock - f.start) : null }
+	}
+	api.resetKingStats = me => {
+		if (me) delete kingStats[me.sid]
+	}
+
+	// ---- map presets ----
+	let original = null
+	const isNature = o => o.active && !o.owner && o.id === undefined
+	const keepOriginal = () => {
+		if (!original) original = ctx.gameObjects.filter(isNature).map(o => [o.x, o.y, o.dir, o.scale, o.type])
+	}
+	function scatter(me, kind, count, rMin, rMax, made) {
+		const n = NATURE[kind]
+		const scales = n[1] ? config[n[1]] : null
+		for (let i = 0, tries = 0; i < count && tries < count * 20; tries++) {
+			const a = UTILS.randFloat(-Math.PI, Math.PI)
+			const r = UTILS.randFloat(rMin, rMax)
+			const x = me.x + r * Math.cos(a)
+			const y = me.y + r * Math.sin(a)
+			const scale = scales ? scales[UTILS.randInt(0, scales.length - 1)] : 74
+			if (x < scale || y < scale || x > config.mapScale - scale || y > config.mapScale - scale) continue
+			if (made.some(m => UTILS.getDistance(x, y, m[0], m[1]) < scale + m[2] + 20)) continue
+			ctx.objectManager.add(ctx.objectManager.objects.length, x, y, UTILS.randFloat(-Math.PI, Math.PI), scale, n[0], null, false, null)
+			made.push([x, y, scale])
+			i++
+		}
+	}
+	api.mapPreset = function (me, name) {
+		keepOriginal()
+		const clearNature = r => {
+			for (const o of ctx.gameObjects) if (isNature(o) && UTILS.getDistance(me.x, me.y, o.x, o.y) <= r) removeObject(o)
+		}
+		const made = []
+		switch (name) {
+			case 'empty':
+				clearNature(1600)
+				return true
+			case 'forest':
+				clearNature(1600)
+				scatter(me, 'tree', 45, 260, 1600, made)
+				scatter(me, 'bush', 25, 260, 1600, made)
+				return true
+			case 'rocks':
+				clearNature(1600)
+				scatter(me, 'stone', 22, 260, 1600, made)
+				scatter(me, 'gold', 8, 260, 1600, made)
+				return true
+			case 'duel': {
+				clearArea(me.x, me.y, 1000, true)
+				const n = 16
+				for (let i = 0; i < n; i++) {
+					const a = (i / n) * Math.PI * 2
+					ctx.objectManager.add(ctx.objectManager.objects.length, me.x + 950 * Math.cos(a), me.y + 950 * Math.sin(a), a, config.rockScales[1], 2, null, false, null)
+				}
+				return true
+			}
+			case 'reset':
+				for (const o of ctx.gameObjects) if (isNature(o)) removeObject(o)
+				for (const [x, y, dir, scale, type] of original) ctx.objectManager.add(ctx.objectManager.objects.length, x, y, dir, scale, type, null, false, null)
+				return true
+		}
+		return false
+	}
+
+	// ---- editor helpers for the panel: many points, removal with undo, base stamps ----
+	const ownerOf = (me, owner) => (owner === 'none' ? null : owner === 'me' || owner === undefined ? me : ctx.findPlayerBySID(Number(owner)) || me)
+	api.placeMany = function (me, what, owner, points) {
+		const kind = String(what || '').toLowerCase()
+		const o = ownerOf(me, owner)
+		const sids = []
+		let name = null
+		for (const [x, y] of points || []) {
+			if (NATURE[kind]) {
+				const obj = placeNature(kind, x, y)
+				if (obj) sids.push(obj.sid)
+				name = kind
+			} else {
+				const item = itemByName(kind)
+				if (!item || item.consume) return { name: null, sids: sids }
+				sids.push(placeItem(item, x, y, 0, o).sid)
+				name = item.name
+			}
+		}
+		return { name: name, sids: sids }
+	}
+	api.removeAt = function (x, y, r) {
+		let best = null
+		let bestD = r || 90
+		for (const o of ctx.gameObjects) {
+			if (!o.active) continue
+			const d = UTILS.getDistance(x, y, o.x, o.y) - o.scale
+			if (d < bestD) {
+				bestD = d
+				best = o
+			}
+		}
+		if (!best) return null
+		const rec = objRec(best)
+		removeObject(best)
+		return rec
+	}
+	api.removeSids = function (sids) {
+		let n = 0
+		const want = new Set(sids || [])
+		for (const o of ctx.gameObjects) {
+			if (o.active && want.has(o.sid)) {
+				removeObject(o)
+				n++
+			}
+		}
+		return n
+	}
+	api.restoreObjs = function (recs) {
+		const sids = []
+		for (const [, x, y, scale, type, id, ownerSid, dir] of recs || []) {
+			if (id >= 0 && items.list[id]) sids.push(placeItem(items.list[id], x, y, dir || 0, ownerSid >= 0 ? ctx.findPlayerBySID(ownerSid) : null).sid)
+			else sids.push(ctx.objectManager.add(ctx.objectManager.objects.length, x, y, dir || 0, scale, type, null, false, null).sid)
+		}
+		return sids
+	}
+	api.copyBase = function (me, r) {
+		const list = ctx.gameObjects.filter(o => o.active && o.owner === me && UTILS.getDistance(me.x, me.y, o.x, o.y) <= (r || 600))
+		return { v: 1, dir: me.dir, items: list.map(o => [Math.round(o.x - me.x), Math.round(o.y - me.y), Math.round(o.dir * 100) / 100, o.id]) }
+	}
+	api.pasteBase = function (me, stamp, rotate) {
+		if (!stamp || !Array.isArray(stamp.items)) return []
+		const turn = rotate ? me.dir - (stamp.dir || 0) : 0
+		const c = Math.cos(turn)
+		const sn = Math.sin(turn)
+		const sids = []
+		for (const [dx, dy, dir, id] of stamp.items) {
+			const item = items.list[id]
+			if (!item) continue
+			sids.push(placeItem(item, me.x + dx * c - dy * sn, me.y + dx * sn + dy * c, dir + turn, me).sid)
+		}
+		return sids
+	}
+
+	// ---- chat commands (also what the panel sends) ----
+	api.command = function (conn, me, text, tell) {
+		const args = String(text).trim().split(/\s+/)
+		const cmd = (args.shift() || '').toLowerCase()
+		const who = v => {
+			if (v === undefined) return me
+			const p = ctx.findPlayerBySID(parseInt(v))
+			if (!p) tell('[Admin] No player with SID ' + v)
+			return p
+		}
+		switch (cmd) {
+			case 'help':
+				;[
+					'!ping <ms> [jitter]  !god [sid]  !heal [sid]  !hp <n> [sid]  !age <n> [sid]  !res <n> [sid]',
+					'!hat <id> [sid]  !acc <id> [sid]  !give weapon <id> [tier] [sid]  !give item <id> [sid]',
+					'!spawn <animal> [count]  !dummy <idle|walk|circle|chase|attack|insta> [count] [p= s= tier= hat= heal=1 delay= god=1]',
+						'!dummy clear | remove <sid> | set <sid> <kind>',
+					'!place <item|tree|bush|stone|gold> [count]  !remove  !clearnear <r>',
+					'!time pause|play|step [n]|speed <x>  !scenario <name>  !rules dmg|gather|sandbox|tick <v>',
+					'!king respawn|attack|hp <n>|speed <x>|damage <x>|only <slam|charge|ring|dive|all>|stats  !bring <sid>  !arena  !tp <sid>|<x> <y>',
+						'!survival start|stop  !spawner <animal> [every s] [max] | clear  !map empty|forest|rocks|duel|reset  !killmobs [r]',
+					'!s  !speed <n>  !v <tier>  !dmg [n]  !upgrade <n>  !kill <sid>  !die  !b  !mobs|hostile|bosses on|off'
+				].forEach(tell)
+				return true
+			case 'ping': {
+				const ms = Math.max(0, Math.min(2000, num(args[0]) || 0))
+				const jitter = Math.max(0, Math.min(1000, num(args[1]) || 0))
+				if (typeof conn.rynSetPing !== 'function') {
+					tell('[Admin] Fake ping only works inside Ryn')
+					return true
+				}
+				conn.rynSetPing(ms, jitter)
+				tell(ms ? '[Admin] Ping ' + ms + 'ms' + (jitter ? ' +-' + jitter + 'ms' : '') : '[Admin] Ping off')
+				return true
+			}
+			case 'spawn': {
+				const kind = ANIMALS[(args[0] || '').toLowerCase()]
+				if (kind === undefined) {
+					tell('[Admin] Animals: ' + Object.keys(ANIMALS).join(' '))
+					return true
+				}
+				const count = Math.max(1, Math.min(20, num(args[1]) || 1))
+				const arena = kind === 11 || kind === 13 || kind === 14
+				const home = config.secretPool.pool[0]
+				const inArena = me.x < 0 && UTILS.inSecretPool(config, me.x, me.y, 100)
+				for (let i = 0; i < count; i++) {
+					let x = me.x + 300 * Math.cos(me.dir) + UTILS.randInt(-60, 60)
+					let y = me.y + 300 * Math.sin(me.dir) + UTILS.randInt(-60, 60)
+					if (arena && !(x < 0 && UTILS.inSecretPool(config, x, y, 300))) {
+						x = (inArena ? me.x : home[0]) + UTILS.randInt(-150, 150)
+						y = (inArena ? me.y : home[1]) + UTILS.randInt(-150, 150)
+					}
+					const ai = ctx.aiManager.spawn(x, y, me.dir + Math.PI, kind)
+					if (kind === 13 || kind === 14) ai.minion = true
+				}
+				tell('[Admin] Spawned ' + count + ' ' + args[0] + (arena && !inArena ? ' in the Crab King arena' : ''))
+				return true
+			}
+			case 'hp': {
+				const p = who(args[1])
+				if (p && !isNaN(num(args[0]))) {
+					setHealth(p, num(args[0]))
+					tell('[Admin] ' + p.name + ' health ' + Math.round(p.health))
+				}
+				return true
+			}
+			case 'heal': {
+				const p = who(args[0])
+				if (p) {
+					setHealth(p, p.maxHealth)
+					tell('[Admin] Healed ' + p.name)
+				}
+				return true
+			}
+			case 'god': {
+				const p = who(args[0])
+				if (p) {
+					p.rynGod = !p.rynGod
+					tell('[Admin] God mode ' + (p.rynGod ? 'on' : 'off') + ' for ' + p.name)
+				}
+				return true
+			}
+			case 'age': {
+				const p = who(args[1])
+				const target = Math.min(config.maxAge, num(args[0]))
+				if (p && !isNaN(target)) {
+					while (p.age < target && p.age < config.maxAge) p.earnXP(p.maxXP - p.XP)
+					tell('[Admin] ' + p.name + ' age ' + p.age)
+				}
+				return true
+			}
+			case 'res': {
+				const p = who(args[1])
+				const amount = num(args[0])
+				if (p && !isNaN(amount)) {
+					for (let type = 0; type < 3; type++) p.addResource(type, amount - p[config.resourceTypes[type]], true)
+					p.points = amount
+					server.send(p.id, '9', ['points', Math.round(p.points), 1])
+					tell('[Admin] ' + p.name + ' resources ' + amount)
+				}
+				return true
+			}
+			case 'hat':
+			case 'acc': {
+				const p = who(args[1])
+				const id = num(args[0])
+				const tail = cmd === 'acc'
+				const item = (tail ? accessories : hats).find(h => h.id === id)
+				if (p && !item && id !== 0) tell('[Admin] No ' + (tail ? 'accessory' : 'hat') + ' ' + args[0])
+				if (p && (item || id === 0)) {
+					if (tail) {
+						if (item) p.tails[id] = 1
+						p.tail = item || null
+						p.tailIndex = id
+					} else {
+						if (item) p.skins[id] = 1
+						p.skin = item || null
+						p.skinIndex = id
+					}
+					if (item) server.send(p.id, 'us', [0, id, tail ? 1 : 0])
+					server.send(p.id, 'us', [1, id, tail ? 1 : 0])
+					tell('[Admin] ' + p.name + (tail ? ' accessory ' : ' hat ') + (item ? item.name : 'off'))
+				}
+				return true
+			}
+			case 'give': {
+				const kind = (args[0] || '').toLowerCase()
+				if (kind === 'weapon') {
+					const w = items.weapons[num(args[1])]
+					const tier = TIERS[(args[2] || 'normal').toLowerCase()] !== undefined ? (args[2] || 'normal').toLowerCase() : 'normal'
+					const p = who(TIERS[(args[2] || '').toLowerCase()] !== undefined ? args[3] : args[2])
+					if (!w) tell('[Admin] No weapon ' + args[1])
+					if (p && w) {
+						if (p.weapons[w.type] === p.weaponIndex) p.weaponIndex = w.id
+						p.weapons[w.type] = w.id
+						p.weaponXP[w.id] = TIERS[tier]
+						server.send(p.id, '17', [p.weapons, 1])
+						tell('[Admin] ' + p.name + ' got ' + w.name + (tier !== 'normal' ? ' (' + tier + ')' : ''))
+					}
+					return true
+				}
+				if (kind === 'item') {
+					const it = items.list[num(args[1])]
+					const p = who(args[2])
+					if (!it) tell('[Admin] No item ' + args[1])
+					if (p && it) {
+						const slot = p.items.findIndex(i => items.list[i] && items.list[i].group.id === it.group.id)
+						if (slot >= 0) p.items[slot] = it.id
+						else p.items.push(it.id)
+						if (p.buildIndex >= 0 && items.list[p.buildIndex] && items.list[p.buildIndex].group.id === it.group.id) p.buildIndex = it.id
+						server.send(p.id, '17', [p.items])
+						tell('[Admin] ' + p.name + ' got ' + it.name)
+					}
+					return true
+				}
+				tell('[Admin] !give weapon <id> [tier] [sid]  or  !give item <id> [sid]')
+				return true
+			}
+			case 'bring': {
+				const p = who(args[0])
+				if (p && p !== me) {
+					moveTo(p, me.x + 80 * Math.cos(me.dir), me.y + 80 * Math.sin(me.dir))
+					tell('[Admin] Brought ' + p.name)
+				}
+				return true
+			}
+			case 'arena':
+				// in the first pool past the gorge, where the King fights
+				moveTo(me, -1650, config.mapScale / 2)
+				tell('[Admin] Crab King arena')
+				return true
+			case 'dummy': {
+				const sub = (args[0] || 'idle').toLowerCase()
+				if (sub === 'clear') {
+					const n = dummies.length
+					api.clearDummies()
+					tell('[Admin] Removed ' + n + ' dummies')
+					return true
+				}
+				if (sub === 'remove' || sub === 'set') {
+					const d = dummies.find(x => x.p.sid === parseInt(args[1]))
+					if (!d) {
+						tell('[Admin] No dummy with SID ' + args[1])
+					} else if (sub === 'remove') {
+						removeDummy(d)
+						ctx.updateLeaderboard()
+						ctx.iconCallback()
+						tell('[Admin] Removed ' + d.name)
+					} else if (BEHAVIORS.includes(args[2])) {
+						d.behavior = args[2]
+						d.home = { x: d.p.x, y: d.p.y }
+						tell('[Admin] ' + d.name + ' now ' + args[2])
+					}
+					return true
+				}
+				if (!BEHAVIORS.includes(sub)) {
+					tell('[Admin] Dummy kinds: ' + BEHAVIORS.join(' ') + '  (or !dummy clear | remove <sid> | set <sid> <kind>)')
+					return true
+				}
+				const count = Math.max(1, Math.min(10, num(args[1]) || 1))
+				// options as key=value: p (primary) s (secondary) tier hat acc heal delay god food
+				const opts = { behavior: sub, hat: sub === 'insta' ? 6 : 0, secondary: sub === 'insta' ? 15 : null }
+				for (const pair of args.slice(2)) {
+					const [k, v] = pair.split('=')
+					if (k === 'p' && !isNaN(num(v))) opts.primary = num(v)
+					else if (k === 's') opts.secondary = v === 'none' || isNaN(num(v)) ? null : num(v)
+					else if (k === 'tier' && TIERS[v] !== undefined) opts.tier = v
+					else if (k === 'hat' && !isNaN(num(v))) opts.hat = num(v)
+					else if (k === 'acc' && !isNaN(num(v))) opts.acc = num(v)
+					else if (k === 'heal') opts.heal = v === '1' || v === 'on'
+					else if (k === 'delay' && !isNaN(num(v))) opts.healDelay = Math.max(0, Math.min(2000, num(v)))
+					else if (k === 'god') opts.god = v === '1' || v === 'on'
+					else if (k === 'food') opts.food = v
+					else if (k === 'gap' && !isNaN(num(v))) opts.instaGap = Math.max(2, Math.min(100, num(v)))
+				}
+				let made = 0
+				for (let i = 0; i < count; i++) {
+					const ang = me.dir + (i - (count - 1) / 2) * 0.5
+					const d = addDummy(me.x + 260 * Math.cos(ang), me.y + 260 * Math.sin(ang), Object.assign({}, opts))
+					if (d) made++
+				}
+				tell('[Admin] ' + made + ' ' + sub + ' dumm' + (made === 1 ? 'y' : 'ies'))
+				return true
+			}
+			case 'place': {
+				const count = Math.max(1, Math.min(12, num(args[1]) || 1))
+				let placed = null
+				for (let i = 0; i < count; i++) {
+					const ang = me.dir + (i - (count - 1) / 2) * 0.45
+					const r = me.scale + 70
+					placed = api.place(args[0], me.x + r * Math.cos(ang), me.y + r * Math.sin(ang), me) || placed
+				}
+				tell(placed ? '[Admin] Placed ' + count + ' ' + placed : '[Admin] Nothing called ' + args[0])
+				return true
+			}
+			case 'placeat': {
+				const owner = args[3] === 'none' ? null : args[3] ? ctx.findPlayerBySID(parseInt(args[3])) : me
+				const placed = api.place(args[0], num(args[1]), num(args[2]), owner)
+				tell(placed ? '[Admin] Placed ' + placed : '[Admin] Nothing called ' + args[0])
+				return true
+			}
+			case 'remove':
+			case 'removeat': {
+				const x = cmd === 'removeat' ? num(args[0]) : me.x + 120 * Math.cos(me.dir)
+				const y = cmd === 'removeat' ? num(args[1]) : me.y + 120 * Math.sin(me.dir)
+				const gone = api.removeNear(x, y, 90)
+				tell(gone ? '[Admin] Removed ' + gone : '[Admin] Nothing there')
+				return true
+			}
+			case 'clearnear': {
+				const r = Math.max(50, Math.min(3000, num(args[0]) || 500))
+				tell('[Admin] Removed ' + clearArea(me.x, me.y, r, args[1] === 'all') + ' objects')
+				return true
+			}
+			case 'time': {
+				const sub = (args[0] || '').toLowerCase()
+				if (sub === 'pause') time.paused = true
+				else if (sub === 'play') time.paused = false
+				else if (sub === 'step') {
+					time.paused = true
+					time.steps += Math.max(1, Math.min(50, num(args[1]) || 1))
+				} else if (sub === 'speed') time.scale = Math.max(0.05, Math.min(4, num(args[1]) || 1))
+				tell('[Admin] Time ' + (time.paused ? 'paused' : 'running') + ' at x' + time.scale + ', tick ' + time.tick)
+				return true
+			}
+			case 'scenario': {
+				const name = (args[0] || '').toLowerCase()
+				if (!api.scenario(me, name)) {
+					tell('[Admin] Scenarios: ' + Object.keys(SCENARIOS).join(' '))
+					return true
+				}
+				tell('[Admin] Scenario: ' + SCENARIOS[name])
+				return true
+			}
+			case 'rules': {
+				const key = (args[0] || '').toLowerCase()
+				const v = num(args[1])
+				if (key === 'dmg' && v > 0) rules.dmgMult = Math.min(100, v)
+				else if (key === 'gather' && v > 0) rules.gatherMult = Math.min(100, v)
+				else if (key === 'sandbox') config.inSandbox = args[1] !== 'off'
+				else if (key === 'tick' && v >= 1) ctx.setTickRate(Math.max(1, Math.min(30, v)))
+				tell('[Admin] Damage x' + rules.dmgMult + ', gather x' + rules.gatherMult + ', ' + (config.inSandbox ? 'sandbox' : 'normal costs') + ', ' + config.serverUpdateRate + ' ticks/s')
+				return true
+			}
+			case 'survival': {
+				const sub = (args[0] || 'start').toLowerCase()
+				if (sub === 'stop') {
+					if (survival.on) survivalEnd('stopped')
+					else tell('[Admin] Survival is not running')
+				} else if (!survival.on) {
+					api.clearDummies()
+					survival.on = true
+					survival.wave = 0
+					survival.me = me
+					survival.tell = tell
+					survival.rest = 0
+					setHealth(me, me.maxHealth)
+					survivalWave()
+				} else tell('[Admin] Survival: wave ' + survival.wave + ', ' + survivalLeft() + ' left')
+				return true
+			}
+			case 'spawner': {
+				const sub = (args[0] || '').toLowerCase()
+				if (sub === 'clear') {
+					tell('[Admin] Removed ' + spawners.length + ' spawners')
+					spawners.length = 0
+					return true
+				}
+				if (sub === 'remove') {
+					const i = spawners.findIndex(sp => sp.id === num(args[1]))
+					if (i >= 0) spawners.splice(i, 1)
+					tell(i >= 0 ? '[Admin] Spawner ' + args[1] + ' removed' : '[Admin] No spawner ' + args[1])
+					return true
+				}
+				const kind = ANIMALS[sub]
+				if (kind === undefined) {
+					tell('[Admin] !spawner <animal> [every seconds] [max]  |  !spawner clear | remove <id>')
+					return true
+				}
+				const arena = kind === 11 || kind === 13 || kind === 14
+				if (arena && !(me.x < 0 && UTILS.inSecretPool(config, me.x, me.y, 100))) {
+					tell('[Admin] Crabs and the King only spawn in the arena')
+					return true
+				}
+				const every = Math.max(1, Math.min(600, num(args[1]) || 10)) * 1000
+				const max = Math.max(1, Math.min(kind === 11 ? 1 : 20, num(args[2]) || 3))
+				const sp = { id: ++spawnerId, name: sub, x: Math.round(me.x), y: Math.round(me.y), kind: kind, every: every, max: max, t: 0, mobs: [] }
+				spawners.push(sp)
+				tell('[Admin] Spawner ' + sp.id + ': ' + args[0] + ' every ' + every / 1000 + 's, up to ' + max)
+				return true
+			}
+			case 'killmobs': {
+				// animals near you go away: summoned ones for good, wild ones respawn elsewhere
+				const r = Math.max(100, Math.min(20000, num(args[0]) || 1500))
+				let n = 0
+				for (const a of ctx.ais) {
+					if (!a.active || !a.alive || a.spawnCounter || a.index === 11 || UTILS.getDistance(me.x, me.y, a.x, a.y) > r) continue
+					if (a.minion) {
+						a.active = false
+						a.alive = false
+					} else {
+						a.x = a.startX || UTILS.randInt(0, config.mapScale)
+						a.y = a.startY || (a.index === 10 ? UTILS.randInt(0, config.snowBiomeTop) : UTILS.randInt(0, config.mapScale))
+						a.health = a.maxHealth
+						a.chargeTarget = null
+						a.runFrom = null
+					}
+					n++
+				}
+				tell('[Admin] Sent away ' + n + ' animals')
+				return true
+			}
+			case 'map': {
+				const name = (args[0] || '').toLowerCase()
+				if (!api.mapPreset(me, name)) tell('[Admin] Maps: empty forest rocks duel reset')
+				else tell('[Admin] Map: ' + name)
+				return true
+			}
+			case 'king': {
+				const sub = (args[0] || '').toLowerCase()
+				const list = kings()
+				if (sub === 'only') {
+					const a = (args[1] || 'all').toLowerCase()
+					king.only = ['slam', 'charge', 'ring', 'dive'].includes(a) ? a : ''
+					tell('[Admin] Crab King attacks: ' + (king.only || 'all'))
+					return true
+				}
+				if (sub === 'stats') {
+					const st = kingStatsOf(me)
+					tell('[Admin] Dodged ' + st.dodged + ', hit ' + st.hit + (st.bestKill ? ', best kill ' + (st.bestKill / 1000).toFixed(1) + 's' : ''))
+					return true
+				}
+				if (sub === 'resetstats') {
+					api.resetKingStats(me)
+					tell('[Admin] Crab King stats reset')
+					return true
+				}
+				if (sub === 'respawn') {
+					if (!list.length) {
+						const home = config.secretPool.pool[0]
+						ctx.aiManager.spawn(home[0], home[1], Math.PI, 11)
+					}
+					for (const k of list) {
+						if (k.spawnCounter) k.spawnCounter = 1
+						k.health = k.maxHealth
+						k.crab = null
+						k.state = 0
+					}
+					tell('[Admin] Crab King back at full health')
+				} else if (sub === 'attack') {
+					for (const k of list) if (k.crab) k.crab.next = 0
+					tell('[Admin] Crab King attacks')
+				} else if (sub === 'speed' && num(args[1]) > 0) {
+					king.speed = Math.min(5, num(args[1]))
+					tell('[Admin] Crab King speed x' + king.speed)
+				} else if (sub === 'hp' && num(args[1]) > 0) {
+				for (const k of list) k.health = Math.min(k.maxHealth, num(args[1]))
+				tell('[Admin] Crab King health ' + Math.min(list[0] ? list[0].maxHealth : 0, num(args[1])))
+			} else if (sub === 'damage' && num(args[1]) >= 0) {
+					king.damage = Math.min(20, num(args[1]))
+					tell('[Admin] Crab King damage x' + king.damage)
+				} else {
+					const k = list[0]
+					tell(k ? '[Admin] Crab King ' + Math.round(k.health) + '/' + k.maxHealth + (k.spawnCounter ? ', back in ' + Math.round(k.spawnCounter / 1000) + 's' : ', ' + (k.crab ? k.crab.phase : 'idle')) : '[Admin] No Crab King')
+				}
+				return true
+			}
+		}
+		return false
+	}
+	return api
+}
+    },
+    "src/store.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
+// STORE HATS:
+module.exports.sHats = {
+	1: 1,
+	2: 1,
+	4: 1,
+	5: 1,
+	6: 0.94,
+	7: 0.96,
+	8: 1,
+	9: 1,
+	10: 1,
+	11: 1,
+	12: 1.16,
+	13: 1,
+	14: 1,
+	15: 1,
+	18: 1,
+	20: 1,
+	21: 1,
+	22: 0.7,
+	23: 1,
+	26: 1,
+	27: 1,
+	28: 1,
+	29: 1,
+	30: 1,
+	31: 1,
+	32: 1,
+	35: 1,
+	36: 1,
+	37: 1,
+	38: 1,
+	40: 0.3,
+	42: 1,
+	43: 1,
+	44: 1,
+	45: 1,
+	46: 1,
+	48: 1,
+	49: 1,
+	50: 1,
+	51: 1,
+	52: 1,
+	53: 0.7,
+	55: 1,
+	56: 1.1,
+	57: 1,
+	58: 1,
+	59: 1.08,
+	60: 0.94,
+	61: 0.93
+}
+module.exports.hats = [
+	{
+		id: 45,
+		name: "Shame!",
+		dontSell: true,
+		price: 0,
+		scale: 120,
+		desc: "hacks are for losers"
+	},
+	{
+		id: 51,
+		name: "Moo Cap",
+		price: 0,
+		scale: 120,
+		desc: "coolest mooer around"
+	},
+	{
+		id: 50,
+		name: "Apple Cap",
+		price: 0,
+		scale: 120,
+		desc: "apple farms remembers"
+	},
+	{
+		id: 28,
+		name: "Moo Head",
+		price: 0,
+		scale: 120,
+		desc: "no effect"
+	},
+	{
+		id: 29,
+		name: "Pig Head",
+		price: 0,
+		scale: 120,
+		desc: "no effect"
+	},
+	{
+		id: 30,
+		name: "Fluff Head",
+		price: 0,
+		scale: 120,
+		desc: "no effect"
+	},
+	{
+		id: 36,
+		name: "Pandou Head",
+		price: 0,
+		scale: 120,
+		desc: "no effect"
+	},
+	{
+		id: 37,
+		name: "Bear Head",
+		price: 0,
+		scale: 120,
+		desc: "no effect"
+	},
+	{
+		id: 38,
+		name: "Monkey Head",
+		price: 0,
+		scale: 120,
+		desc: "no effect"
+	},
+	{
+		id: 44,
+		name: "Polar Head",
+		price: 0,
+		scale: 120,
+		desc: "no effect"
+	},
+	{
+		id: 35,
+		name: "Fez Hat",
+		price: 0,
+		scale: 120,
+		desc: "no effect"
+	},
+	{
+		id: 42,
+		name: "Enigma Hat",
+		price: 0,
+		scale: 120,
+		desc: "join the enigma army"
+	},
+	{
+		id: 43,
+		name: "Blitz Hat",
+		price: 0,
+		scale: 120,
+		desc: "hey everybody i'm blitz"
+	},
+	{
+		id: 49,
+		name: "Bob XIII Hat",
+		price: 0,
+		scale: 120,
+		desc: "like and subscribe"
+	},
+	{
+		id: 57,
+		name: "Pumpkin",
+		price: 50,
+		scale: 120,
+		desc: "Spooooky"
+	},
+	{
+		id: 8,
+		name: "Bummle Hat",
+		price: 100,
+		scale: 120,
+		desc: "no effect"
+	},
+	{
+		id: 2,
+		name: "Straw Hat",
+		price: 500,
+		scale: 120,
+		desc: "no effect"
+	},
+	{
+		id: 15,
+		name: "Winter Cap",
+		price: 600,
+		scale: 120,
+		desc: "allows you to move at normal speed in snow",
+		coldM: 1
+	},
+	{
+		id: 5,
+		name: "Cowboy Hat",
+		price: 1000,
+		scale: 120,
+		desc: "no effect"
+	},
+	{
+		id: 4,
+		name: "Ranger Hat",
+		price: 2000,
+		scale: 120,
+		desc: "no effect"
+	},
+	{
+		id: 18,
+		name: "Explorer Hat",
+		price: 2000,
+		scale: 120,
+		desc: "no effect"
+	},
+	{
+		id: 31,
+		name: "Flipper Hat",
+		price: 2500,
+		scale: 120,
+		desc: "have more control while in water",
+		watrImm: true
+	},
+	{
+		id: 1,
+		name: "Marksman Cap",
+		price: 3000,
+		scale: 120,
+		desc: "increases arrow speed and range",
+		aMlt: 1.3
+	},
+	{
+		id: 10,
+		name: "Bush Gear",
+		price: 3000,
+		scale: 160,
+		desc: "allows you to disguise yourself as a bush"
+	},
+	{
+		id: 48,
+		name: "Halo",
+		price: 3000,
+		scale: 120,
+		desc: "no effect"
+	},
+	{
+		id: 6,
+		name: "Soldier Helmet",
+		price: 4000,
+		scale: 120,
+		desc: "reduces damage taken but slows movement",
+		spdMult: 0.94,
+		dmgMult: 0.75
+	},
+	{
+		id: 23,
+		name: "Anti Venom Gear",
+		price: 4000,
+		scale: 120,
+		desc: "makes you immune to poison",
+		poisonRes: 1
+	},
+	{
+		id: 13,
+		name: "Medic Gear",
+		price: 5000,
+		scale: 110,
+		desc: "slowly regenerates health over time",
+		healthRegen: 3
+	},
+	{
+		id: 9,
+		name: "Miners Helmet",
+		price: 5000,
+		scale: 120,
+		desc: "earn 1 extra gold per resource",
+		extraGold: 1
+	},
+	{
+		id: 32,
+		name: "Musketeer Hat",
+		price: 5000,
+		scale: 120,
+		desc: "reduces cost of projectiles",
+		projCost: 0.5
+	},
+	{
+		id: 7,
+		name: "Bull Helmet",
+		price: 6000,
+		scale: 120,
+		desc: "increases damage done but drains health",
+		healthRegen: -5,
+		dmgMultO: 1.5,
+		spdMult: 0.96
+	},
+	{
+		id: 22,
+		name: "Emp Helmet",
+		price: 6000,
+		scale: 120,
+		desc: "turrets won't attack but you move slower",
+		antiTurret: 1,
+		spdMult: 0.7
+	},
+	{
+		id: 12,
+		name: "Booster Hat",
+		price: 6000,
+		scale: 120,
+		desc: "increases your movement speed",
+		spdMult: 1.16
+	},
+	{
+		id: 26,
+		name: "Barbarian Armor",
+		price: 8000,
+		scale: 120,
+		desc: "knocks back enemies that attack you",
+		dmgK: 0.6
+	},
+	{
+		id: 21,
+		name: "Plague Mask",
+		price: 10000,
+		scale: 120,
+		desc: "melee attacks deal poison damage",
+		poisonDmg: 5,
+		poisonTime: 6
+	},
+	{
+		id: 46,
+		name: "Bull Mask",
+		price: 10000,
+		scale: 120,
+		desc: "bulls won't target you unless you attack them",
+		bullRepel: 1
+	},
+	{
+		id: 14,
+		name: "Windmill Hat",
+		topSprite: true,
+		price: 10000,
+		scale: 120,
+		desc: "generates points while worn",
+		pps: 1.5
+	},
+	{
+		id: 11,
+		name: "Spike Gear",
+		topSprite: true,
+		price: 10000,
+		scale: 120,
+		desc: "deal damage to players that damage you",
+		dmg: 0.45
+	},
+	{
+		id: 53,
+		name: "Turret Gear",
+		topSprite: true,
+		price: 10000,
+		scale: 120,
+		desc: "you become a walking turret",
+		turret: {
+			proj: 1,
+			range: 700,
+			rate: 2500
+		},
+		spdMult: 0.7
+	},
+	{
+		id: 20,
+		name: "Samurai Armor",
+		price: 12000,
+		scale: 120,
+		desc: "increased attack speed and fire rate",
+		atkSpd: 0.78
+	},
+	{
+		id: 58,
+		name: "Dark Knight",
+		price: 12000,
+		scale: 120,
+		desc: "restores health when you deal damage",
+		healD: 0.4
+	},
+	{
+		id: 27,
+		name: "Scavenger Gear",
+		price: 15000,
+		scale: 120,
+		desc: "earn double points for each kill",
+		kScrM: 2
+	},
+	{
+		id: 40,
+		name: "Tank Gear",
+		price: 15000,
+		scale: 120,
+		desc: "increased damage to buildings but slower movement",
+		spdMult: 0.3,
+		bDmg: 3.3
+	},
+	{
+		id: 52,
+		name: "Thief Gear",
+		price: 15000,
+		scale: 120,
+		desc: "steal half of a players gold when you kill them",
+		goldSteal: 0.5
+	},
+	{
+		id: 55,
+		name: "Bloodthirster",
+		price: 20000,
+		scale: 120,
+		desc: "Restore Health when dealing damage. And increased damage",
+		healD: 0.25,
+		dmgMultO: 1.2
+	},
+	{
+		id: 56,
+		name: "Assassin Gear",
+		price: 20000,
+		scale: 120,
+		desc: "Go invisible when not moving. Can't eat. Increased speed",
+		noEat: true,
+		spdMult: 1.1,
+		invisTimer: 1000
+	},
+	{
+		id: 59,
+		name: "Scout Hat",
+		price: 3500,
+		scale: 120,
+		desc: "move faster but take more damage",
+		spdMult: 1.08,
+		dmgMult: 1.12
+	},
+	{
+		id: 60,
+		name: "Frost Helm",
+		price: 7000,
+		scale: 120,
+		desc: "normal speed in snow and reduces damage taken",
+		coldM: 1,
+		spdMult: 0.94,
+		dmgMult: 0.88
+	},
+	{
+		id: 61,
+		name: "Crab Shell",
+		dontSell: true,
+		earned: true,
+		price: 0,
+		scale: 120,
+		desc: "dropped by the Crab King. reflects damage and reduces damage taken",
+		dmg: 0.375,
+		dmgMult: 0.8,
+		spdMult: 0.93
+	}
+]
+
+// STORE ACCESSORIES:
+module.exports.sAccs = {
+	1: 1,
+	2: 1,
+	3: 1,
+	4: 1,
+	5: 1,
+	6: 1,
+	7: 1,
+	8: 1,
+	9: 1,
+	10: 1,
+	11: 1.35,
+	12: 1,
+	13: 1,
+	14: 1,
+	15: 1,
+	16: 1,
+	17: 1,
+	18: 1,
+	19: 1.1,
+	20: 1,
+	21: 1
+}
+module.exports.accessories = [
+	{
+		id: 12,
+		name: "Snowball",
+		price: 1000,
+		scale: 105,
+		xOff: 18,
+		desc: "no effect"
+	},
+	{
+		id: 9,
+		name: "Tree Cape",
+		price: 1000,
+		scale: 90,
+		desc: "no effect"
+	},
+	{
+		id: 10,
+		name: "Stone Cape",
+		price: 1000,
+		scale: 90,
+		desc: "no effect"
+	},
+	{
+		id: 3,
+		name: "Cookie Cape",
+		price: 1500,
+		scale: 90,
+		desc: "no effect"
+	},
+	{
+		id: 8,
+		name: "Cow Cape",
+		price: 2000,
+		scale: 90,
+		desc: "no effect"
+	},
+	{
+		id: 11,
+		name: "Monkey Tail",
+		price: 2000,
+		scale: 97,
+		xOff: 25,
+		desc: "Super speed but reduced damage",
+		spdMult: 1.35,
+		dmgMultO: 0.2
+	},
+	{
+		id: 17,
+		name: "Apple Basket",
+		price: 3000,
+		scale: 80,
+		xOff: 12,
+		desc: "slowly regenerates health over time",
+		healthRegen: 1
+	},
+	{
+		id: 6,
+		name: "Winter Cape",
+		price: 3000,
+		scale: 90,
+		desc: "no effect"
+	},
+	{
+		id: 4,
+		name: "Skull Cape",
+		price: 4000,
+		scale: 90,
+		desc: "no effect"
+	},
+	{
+		id: 5,
+		name: "Dash Cape",
+		price: 5000,
+		scale: 90,
+		desc: "no effect"
+	},
+	{
+		id: 2,
+		name: "Dragon Cape",
+		price: 6000,
+		scale: 90,
+		desc: "no effect"
+	},
+	{
+		id: 1,
+		name: "Super Cape",
+		price: 8000,
+		scale: 90,
+		desc: "no effect"
+	},
+	{
+		id: 7,
+		name: "Troll Cape",
+		price: 8000,
+		scale: 90,
+		desc: "no effect"
+	},
+	{
+		id: 14,
+		name: "Thorns",
+		price: 10000,
+		scale: 115,
+		xOff: 20,
+		desc: "no effect"
+	},
+	{
+		id: 15,
+		name: "Blockades",
+		price: 10000,
+		scale: 95,
+		xOff: 15,
+		desc: "no effect"
+	},
+	{
+		id: 20,
+		name: "Devils Tail",
+		price: 10000,
+		scale: 95,
+		xOff: 20,
+		desc: "no effect"
+	},
+	{
+		id: 16,
+		name: "Sawblade",
+		price: 12000,
+		scale: 90,
+		spin: true,
+		xOff: 0,
+		desc: "deal damage to players that damage you",
+		dmg: 0.15
+	},
+	{
+		id: 13,
+		name: "Angel Wings",
+		price: 15000,
+		scale: 138,
+		xOff: 22,
+		desc: "slowly regenerates health over time",
+		healthRegen: 3
+	},
+	{
+		id: 19,
+		name: "Shadow Wings",
+		price: 15000,
+		scale: 138,
+		xOff: 22,
+		desc: "increased movement speed",
+		spdMult: 1.1
+	},
+	{
+		id: 18,
+		name: "Blood Wings",
+		price: 20000,
+		scale: 178,
+		xOff: 26,
+		desc: "restores health when you deal damage",
+		healD: 0.2
+	},
+	{
+		id: 21,
+		name: "Corrupt X Wings",
+		price: 20000,
+		scale: 178,
+		xOff: 26,
+		desc: "deal damage to players that damage you",
+		dmg: 0.25
+	}
+]
+    },
+    "src/tribe.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
+module.exports = function (name, findPlayerBySID, server) {
+	this.name = name
+	this.members = []
+	this.ownerID = null
+	this.joinQueue = []
+
+	this.addPlayer = (player) => {
+		player.team = this.name
+		if (this.ownerID === null) {
+			this.ownerID = player.sid
+			player.isLeader = true
+		}
+        this.members.push(player.sid)
+		const tmpData = this.getMembers()
+		for (let i = 0; i < this.members.length; i++) {
+			server.send(findPlayerBySID(this.members[i]).id, "sa", [tmpData])
+		}
+	}
+
+	this.removePlayer = (player) => {
+		player.team = null
+		player.isLeader = false
+		this.members.splice(this.members.indexOf(player.sid), 1)
+		const tmpData = this.getMembers()
+		for (let i = 0; i < this.members.length; i++) {
+			server.send(findPlayerBySID(this.members[i]).id, "sa", [tmpData])
+		}
+	}
+
+	this.getData = () => {
+		return {
+			sid: this.name,
+			ownerID: this.ownerID
+		}
+	}
+
+	this.getMembers = () => {
+		var tmpMembers = []
+		for (let i = 0; i < this.members.length; i++) {
+			const tmpPlayer = findPlayerBySID(this.members[i])
+			if (tmpPlayer) {
+				tmpMembers.push(tmpPlayer.sid, tmpPlayer.name)
+			}
+		}
+		return tmpMembers
+	}
+}
+    },
+    "src/tribeManager.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
+module.exports = function (Tribe, findPlayerBySID, server) {
+	this.tribes = {}
+	this.createTribe = (name, player) => {
+		const newTribe = new Tribe(name, findPlayerBySID, server)
+		this.tribes[name] = newTribe
+		newTribe.addPlayer(player)
+		return newTribe
+	}
+
+	this.deleteTribe = (name) => {
+		const tmpTribe = this.tribes[name]
+		if (tmpTribe) {
+			for (let i = 0; i < tmpTribe.members.length; i++) {
+				const tmpPlayer = findPlayerBySID(tmpTribe.members[i])
+				tmpPlayer.team = null
+				tmpPlayer.isLeader = false
+				server.send(tmpPlayer.id, "st", [null, 0])
+			}
+			delete this.tribes[name]
+		}
+	}
+
+	this.getTribe = (name) => {
+		return this.tribes[name]
+	}
+}
+    },
+    "src/utils.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
+// MATH UTILS:
+var mathABS = Math.abs
+var mathCOS = Math.cos
+var mathSIN = Math.sin
+var mathPOW = Math.pow
+var mathSQRT = Math.sqrt
+var mathATAN2 = Math.atan2
+var mathPI = Math.PI
+
+// GLOBAL UTILS:
+module.exports.randInt = function (min, max) {
+	return Math.floor(Math.random() * (max - min + 1)) + min
+}
+module.exports.randFloat = function (min, max) {
+	return Math.random() * (max - min + 1) + min
+}
+module.exports.random = function (min, max) {
+	return Math.floor(Math.random() * (max - min + 1)) + min
+}
+module.exports.lerp = function (value1, value2, amount) {
+	return value1 + (value2 - value1) * amount
+}
+module.exports.decel = function (val, cel) {
+	if (val > 0) {
+		val = Math.max(0, val - cel)
+	} else if (val < 0) {
+		val = Math.min(0, val + cel)
+	}
+	return val
+}
+module.exports.getDistance = function (x1, y1, x2, y2) {
+	return mathSQRT((x2 -= x1) * x2 + (y2 -= y1) * y2)
+}
+module.exports.getDirection = function (x1, y1, x2, y2) {
+	return mathATAN2(y1 - y2, x1 - x2)
+}
+module.exports.getAngleDist = function (a, b) {
+	var p = mathABS(b - a) % (mathPI * 2)
+	return p > mathPI ? mathPI * 2 - p : p
+}
+module.exports.isNumber = function (n) {
+	return typeof n == "number" && !isNaN(n) && isFinite(n)
+}
+module.exports.isNumber2 = function (potNum, isAbsoluteNumber, returnNumber) {
+	if (!isAbsoluteNumber) {
+		potNum = parseFloat(potNum)
+	}
+	if (returnNumber) {
+		return potNum
+	}
+	return typeof potNum == "number" && !isNaN(potNum) && isFinite(potNum)
+}
+module.exports.isString = function (s) {
+	return s && typeof s == "string"
+}
+module.exports.animateString = function (str) {
+	let arr = str.split("")
+	let mapFunction = function (letter) {
+		if (Math.random() > 0.7) {
+			return "~"
+		} else {
+			return letter
+		}
+	}
+	let replacedArr = arr.map((letter) => mapFunction(letter))
+	return replacedArr.join("")
+}
+module.exports.kFormat = function (num) {
+	return num > 999 ? (num / 1000).toFixed(1) + "k" : num
+}
+module.exports.toRad = function (deg) {
+	return deg * (Math.PI / 180)
+}
+module.exports.toDeg = function (rad) {
+	return rad * (180 / Math.PI)
+}
+module.exports.capitalizeFirst = function (string) {
+	return string.charAt(0).toUpperCase() + string.slice(1)
+}
+module.exports.fixTo = function (n, v) {
+	return n ? parseFloat(n.toFixed(v)) : 0
+}
+module.exports.sortByPoints = function (a, b) {
+	return parseFloat(b.points) - parseFloat(a.points)
+}
+module.exports.lineInRect = function (recX, recY, recX2, recY2, x1, y1, x2, y2) {
+	var minX = x1
+	var maxX = x2
+	if (x1 > x2) {
+		minX = x2
+		maxX = x1
+	}
+	if (maxX > recX2) {
+		maxX = recX2
+	}
+	if (minX < recX) {
+		minX = recX
+	}
+	if (minX > maxX) {
+		return false
+	}
+	var minY = y1
+	var maxY = y2
+	var dx = x2 - x1
+	if (Math.abs(dx) > 0.0000001) {
+		var a = (y2 - y1) / dx
+		var b = y1 - a * x1
+		minY = a * minX + b
+		maxY = a * maxX + b
+	}
+	if (minY > maxY) {
+		var tmp = maxY
+		maxY = minY
+		minY = tmp
+	}
+	if (maxY > recY2) {
+		maxY = recY2
+	}
+	if (minY < recY) {
+		minY = recY
+	}
+	if (minY > maxY) {
+		return false
+	}
+	return true
+}
+module.exports.randomString = function (length) {
+	var text = ""
+	var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+	for (var i = 0; i < length; i++) {
+		text += possible.charAt(Math.floor(Math.random() * possible.length))
+	}
+	return text
+}
+module.exports.countInArray = function (array, val) {
+	var count = 0
+	for (var i = 0; i < array.length; i++) {
+		if (array[i] === val) count++
+	}
+	return count
+}
+module.exports.randTeam = function (array, teamSize) {
+	const teams = []
+	for (let i = array.length - 1; i > 0; i--) {
+		const randomIndex = Math.floor(Math.random() * (i + 1))
+		;[array[i], array[randomIndex]] = [array[randomIndex], array[i]]
+	}
+
+	while (array.length > 0) {
+		const team = []
+		for (let i = 0; i < teamSize; i++) {
+			team.push(array.pop())
+		}
+		teams.push(team)
+	}
+	return teams
+}
+const PACKETCODE = {
+	SEND: {
+		aJoinReq: "P",
+		kickFromClan: "Q",
+		sendJoin: "b",
+		createAlliance: "L",
+		leaveAlliance: "N",
+		storeEquipOrBuy: "c",
+		sendChat: "6",
+		resetMoveDir: "e",
+		sendAtckState: "F",
+		sendMoveDir: "9",
+		sendLockDirOrAutoGather: "K",
+		sendMapPing: "S",
+		selectToBuild: "z",
+		enterGame: "M",
+		sendUpgrade: "H",
+		sendDir: "D",
+		pingSocket: "0"
+	},
+	RECEIVE: {
+		ioInit: "io-init",
+		setInitData: "A",
+		disconnect: "B",
+		setupGame: "C",
+		addPlayer: "D",
+		removePlayer: "E",
+		updatePlayers: "a",
+		updateLeaderboard: "G",
+		loadGameObject: "H",
+		loadAI: "I",
+		animateAI: "J",
+		gatherAnimation: "K",
+		wiggleGameObject: "L",
+		shootTurret: "M",
+		updatePlayerValue: "N",
+		updateHealth: "O",
+		killPlayer: "P",
+		killObject: "Q",
+		killObjects: "R",
+		updateItemCounts: "S",
+		updateAge: "T",
+		updateUpgrades: "U",
+		updateItems: "V",
+		addProjectile: "X",
+		remProjectile: "Y",
+		serverShutdownNotice: "Z",
+		addAlliance: "g",
+		deleteAlliance: "1",
+		allianceNotification: "2",
+		setPlayerTeam: "3",
+		setAlliancePlayers: "4",
+		updateStoreItems: "5",
+		receiveChat: "6",
+		updateMinimap: "7",
+		showText: "8",
+		pingMap: "9",
+		pingSocketResponse: "0",
+		crabWarning: "W"
+	}
+}
+const OLDPACKETCODE = {
+	SEND: {
+		11: PACKETCODE.SEND.aJoinReq,
+		12: PACKETCODE.SEND.kickFromClan,
+		10: PACKETCODE.SEND.sendJoin,
+		8: PACKETCODE.SEND.createAlliance,
+		9: PACKETCODE.SEND.leaveAlliance,
+		"13c": PACKETCODE.SEND.storeEquipOrBuy,
+		ch: PACKETCODE.SEND.sendChat,
+		rmd: PACKETCODE.SEND.resetMoveDir,
+		c: PACKETCODE.SEND.sendAtckState,
+		33: PACKETCODE.SEND.sendMoveDir,
+		7: PACKETCODE.SEND.sendLockDirOrAutoGather,
+		14: PACKETCODE.SEND.sendMapPing,
+		5: PACKETCODE.SEND.selectToBuild,
+		sp: PACKETCODE.SEND.enterGame,
+		6: PACKETCODE.SEND.sendUpgrade,
+		2: PACKETCODE.SEND.sendDir,
+		pp: PACKETCODE.SEND.pingSocket
+	},
+	RECEIVE: {
+		"io-init": PACKETCODE.RECEIVE.ioInit,
+		id: PACKETCODE.RECEIVE.setInitData,
+		d: PACKETCODE.RECEIVE.disconnect,
+		1: PACKETCODE.RECEIVE.setupGame,
+		2: PACKETCODE.RECEIVE.addPlayer,
+		4: PACKETCODE.RECEIVE.removePlayer,
+		33: PACKETCODE.RECEIVE.updatePlayers,
+		5: PACKETCODE.RECEIVE.updateLeaderboard,
+		6: PACKETCODE.RECEIVE.loadGameObject,
+		a: PACKETCODE.RECEIVE.loadAI,
+		aa: PACKETCODE.RECEIVE.animateAI,
+		7: PACKETCODE.RECEIVE.gatherAnimation,
+		8: PACKETCODE.RECEIVE.wiggleGameObject,
+		sp: PACKETCODE.RECEIVE.shootTurret,
+		9: PACKETCODE.RECEIVE.updatePlayerValue,
+		h: PACKETCODE.RECEIVE.updateHealth,
+		11: PACKETCODE.RECEIVE.killPlayer,
+		12: PACKETCODE.RECEIVE.killObject,
+		13: PACKETCODE.RECEIVE.killObjects,
+		14: PACKETCODE.RECEIVE.updateItemCounts,
+		15: PACKETCODE.RECEIVE.updateAge,
+		16: PACKETCODE.RECEIVE.updateUpgrades,
+		17: PACKETCODE.RECEIVE.updateItems,
+		18: PACKETCODE.RECEIVE.addProjectile,
+		19: PACKETCODE.RECEIVE.remProjectile,
+		20: PACKETCODE.RECEIVE.serverShutdownNotice,
+		ac: PACKETCODE.RECEIVE.addAlliance,
+		ad: PACKETCODE.RECEIVE.deleteAlliance,
+		an: PACKETCODE.RECEIVE.allianceNotification,
+		st: PACKETCODE.RECEIVE.setPlayerTeam,
+		sa: PACKETCODE.RECEIVE.setAlliancePlayers,
+		us: PACKETCODE.RECEIVE.updateStoreItems,
+		ch: PACKETCODE.RECEIVE.receiveChat,
+		mm: PACKETCODE.RECEIVE.updateMinimap,
+		t: PACKETCODE.RECEIVE.showText,
+		p: PACKETCODE.RECEIVE.pingMap,
+		pp: PACKETCODE.RECEIVE.pingSocketResponse,
+		cw: PACKETCODE.RECEIVE.crabWarning
+	}
+}
+const NEWPACKETCODE = {
+	SEND: {},
+	RECEIVE: {}
+}
+for (const key in OLDPACKETCODE.SEND) {
+	NEWPACKETCODE.SEND[OLDPACKETCODE.SEND[key]] = key
+}
+for (const key in OLDPACKETCODE.RECEIVE) {
+	NEWPACKETCODE.RECEIVE[OLDPACKETCODE.RECEIVE[key]] = key
+}
+module.exports.OldToNew = function (packetCode, type) {
+	return OLDPACKETCODE[type][packetCode]
+}
+module.exports.NewToOld = function (packetCode, type) {
+	return NEWPACKETCODE[type][packetCode]
+}
+
+// The Crab King's arena west of the map (config.secretPool): the gorge from the river,
+// the pools and the passage behind the waterfall. True when a circle of radius r at
+// (x, y) fits inside it.
+module.exports.inSecretPool = function (config, x, y, r) {
+	var p = config.secretPool
+	if (!p) return false
+	var midY = config.mapScale / 2
+	if (x >= p.gorgeX0 && mathABS(y - midY) <= p.gorgeHalf - r) return true
+	for (var i = 0; i < p.pool.length; i++) {
+		var c = p.pool[i]
+		if (mathSQRT((x - c[0]) * (x - c[0]) + (y - c[1]) * (y - c[1])) <= c[2] - r) return true
+	}
+	// the passage behind the waterfall runs west to where the game stops drawing it
+	var w = p.waterfall
+	if (w && x <= w.x + r && x >= -7000 + r && mathABS(y - w.y) <= w.half - r) return true
+	return false
+}
+// True when a circle of radius r at (x, y) is inside one of the arena's pools: where the
+// Crab King and its crabs live, and where the game shows the King's health bar.
+module.exports.inArenaPools = function (config, x, y, r) {
+	var p = config.secretPool
+	if (!p) return false
+	for (var i = 0; i < p.pool.length; i++) {
+		var c = p.pool[i]
+		if (mathSQRT((x - c[0]) * (x - c[0]) + (y - c[1]) * (y - c[1])) <= c[2] - r) return true
+	}
+	return false
+}
+// The river reaches into the arena's gorge (the game draws it from x = gorgeX0), and it is
+// calm in the shallows (the game's secretPool.shallows, up to x = 320).
+module.exports.inRiver = function (config, x, y) {
+	if (mathABS(y - config.mapScale / 2) > config.riverWidth / 2) return false
+	return !config.secretPool || x >= config.secretPool.gorgeX0
+}
+module.exports.riverCurrent = function (config, x) {
+	var s = config.secretPool && config.secretPool.shallows
+	return !s || x >= s.length ? config.waterCurrent : 0
+}
+module.exports.PACKETCODE = PACKETCODE
+    }
+    };
+    const create = (options = {}) => {
+      const log = typeof options.log === "function" ? options.log : () => {};
+      const quiet = { log: log, info: log, warn: log, error: log, debug: log, clear() {} };
+      const intervals = new Set();
+      const timers = {
+        setInterval: (fn, ms, ...a) => {
+          const id = setInterval(() => {
+            try {
+              fn(...a);
+            } catch (e) {
+              log("tick error", e);
+            }
+          }, ms);
+          intervals.add(id);
+          return id;
+        },
+        clearInterval: id => {
+          intervals.delete(id);
+          clearInterval(id);
+        },
+        setTimeout: (fn, ms, ...a) => setTimeout(fn, ms, ...a),
+        clearTimeout: id => clearTimeout(id)
+      };
+      const env = {
+        MODE: options.mode || "SANDBOX",
+        PREFIX: options.prefix || "!",
+        PASSWORD: "",
+        PORT: "0"
+      };
+      const processShim = { env: env, argv: [] };
+      let hub = null;
+      class Hub {
+        constructor() {
+          this.listeners = {};
+          this.clients = new Set;
+          hub = this;
+        }
+        on(ev, fn) {
+          (this.listeners[ev] || (this.listeners[ev] = [])).push(fn);
+          return this;
+        }
+        addListener(ev, fn) {
+          return this.on(ev, fn);
+        }
+        emit(ev, ...args) {
+          for (const fn of this.listeners[ev] || []) fn(...args);
+          return true;
+        }
+        handleUpgrade() {}
+      }
+      const cache = {};
+      const run = rel => {
+        if (cache[rel]) return cache[rel].exports;
+        const factory = sources[rel];
+        if (!factory) throw new Error("private server: no module " + rel);
+        const module = { exports: {} };
+        cache[rel] = module;
+        // a module's "./x.js" is next to it, as in Node
+        const dir = rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/") + 1) : "";
+        factory(module, module.exports, name => require(name, dir), processShim, quiet, timers.setInterval, timers.clearInterval, timers.setTimeout, timers.clearTimeout);
+        return module.exports;
+      };
+      const codec = (() => {
+        const { Encoder, Decoder } = run("msgpack.js");
+        const encoder = new Encoder;
+        const decoder = new Decoder;
+        return {
+          encode: value => encoder.encode(value),
+          decode: bytes => decoder.decode(bytes)
+        };
+      })();
+      const externals = {
+        dotenv: { config() {} },
+        ws: { Server: Hub, CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 },
+        "msgpack-lite": codec,
+        http: {
+          createServer: () => ({
+            on() {},
+            listen(port, cb) {
+              if (cb) cb();
+            }
+          })
+        },
+        url: { parse: u => new URL(u, "http://localhost") },
+        inquirer: { prompt: () => new Promise(() => {}) },
+        "node-fetch": async () => ({ json: async () => ({ version: "1.2.2" }) }),
+        "./package.json": { version: "1.2.2" }
+      };
+      function require(name, dir = "") {
+        if (Object.prototype.hasOwnProperty.call(externals, name)) return externals[name];
+        const parts = (dir + name).split("/");
+        const out = [];
+        for (const part of parts) {
+          if (part === "" || part === ".") continue;
+          if (part === "..") out.pop();
+          else out.push(part);
+        }
+        let rel = out.join("/");
+        if (!rel.endsWith(".js")) rel += ".js";
+        return run(rel);
+      }
+      run("index.js");
+      if (hub === null) throw new Error("private server: index.js never opened its socket server");
+      return {
+        accept(conn) {
+          hub.clients.add(conn);
+          conn.on("close", () => hub.clients.delete(conn));
+          hub.emit("connection", conn);
+        },
+        stop() {
+          for (const id of intervals) clearInterval(id);
+          intervals.clear();
+        },
+        catalog() {
+          const store = run("src/store.js");
+          const items = run("src/items.js");
+          const pick = list => list.map(x => ({ id: x.id, name: x.name }));
+          return {
+            hats: pick(store.hats),
+            accessories: pick(store.accessories),
+            weapons: items.weapons.map(x => ({ id: x.id, name: x.name, type: x.type })),
+            items: items.list.map(x => ({ id: x.id, name: x.name, consume: !!x.consume, scale: x.scale })),
+            weaponRange: items.weapons.map(x => x.range || 0),
+            packets: (() => {
+              const codes = run("src/utils.js").PACKETCODE;
+              const flip = o => Object.fromEntries(Object.entries(o).map(([name, code]) => [code, name]));
+              return { in: flip(codes.RECEIVE), out: flip(codes.SEND) };
+            })()
+          };
+        }
+      };
+    };
+    return { create };
+  })();
+  // ==/RynPrivateServer==
   let _rynOwnSocket = false;
+  const RYN_PRIVATE_KEY = "_ryn_private";
+  const RYN_PRIVATE_URL = "ws://localhost/ryn-private";
+  const rynPrivateLater = (() => {
+    const queue = [];
+    let posted = false;
+    let port = null;
+    const flush = () => {
+      posted = false;
+      const batch = queue.splice(0);
+      for (const fn of batch) {
+        try {
+          fn();
+        } catch (e) {
+          setTimeout(() => {
+            throw e;
+          });
+        }
+      }
+    };
+    try {
+      const channel = new MessageChannel;
+      channel.port1.onmessage = flush;
+      port = channel.port2;
+    } catch (_) {}
+    return fn => {
+      queue.push(fn);
+      if (posted) return;
+      posted = true;
+      if (port !== null) port.postMessage(0); else setTimeout(flush, 0);
+    };
+  })();
+  const RynPrivate = {
+    on: (() => {
+      try {
+        const asked = new URLSearchParams(location.search).get("rynPrivate");
+        if (asked === "1") sessionStorage.setItem(RYN_PRIVATE_KEY, "1"); else if (asked === "0") sessionStorage.removeItem(RYN_PRIVATE_KEY);
+        return sessionStorage.getItem(RYN_PRIVATE_KEY) === "1";
+      } catch (_) {
+        return false;
+      }
+    })(),
+    engine: null,
+    ownerSocket: null,
+    notes: [],
+    noteListeners: new Set,
+    notice(text) {
+      this.notes.push(String(text));
+      if (this.notes.length > 40) this.notes.shift();
+      for (const fn of this.noteListeners) {
+        try {
+          fn(String(text));
+        } catch (_) {}
+      }
+    },
+    command(text) {
+      const socket = this.ownerSocket;
+      if (!socket || socket.readyState !== 1 || typeof socket._conn.rynCommand !== "function") return false;
+      return socket._conn.rynCommand(text);
+    },
+    state() {
+      const socket = this.ownerSocket;
+      if (!socket || socket.readyState !== 1 || typeof socket._conn.rynState !== "function") return null;
+      try {
+        return socket._conn.rynState();
+      } catch (_) {
+        return null;
+      }
+    },
+    call(name, arg) {
+      const socket = this.ownerSocket;
+      if (!socket || socket.readyState !== 1 || typeof socket._conn.rynCall !== "function") return null;
+      try {
+        return socket._conn.rynCall(name, arg);
+      } catch (_) {
+        return null;
+      }
+    },
+    world() {
+      const socket = this.ownerSocket;
+      if (!socket || socket.readyState !== 1 || typeof socket._conn.rynWorld !== "function") return null;
+      try {
+        return socket._conn.rynWorld();
+      } catch (_) {
+        return null;
+      }
+    },
+    catalog() {
+      if (this._catalog) return this._catalog;
+      try {
+        this._catalog = this.engine ? this.engine.catalog() : null;
+      } catch (_) {
+        this._catalog = null;
+      }
+      return this._catalog;
+    },
+    ping: (() => {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem("_ryn_private_ping") || "null");
+        if (saved && Number.isFinite(saved.ms) && Number.isFinite(saved.jitter)) return saved;
+      } catch (_) {}
+      return {
+        ms: 0,
+        jitter: 0
+      };
+    })(),
+    setPing(ms, jitter) {
+      this.ping = {
+        ms: ms,
+        jitter: jitter
+      };
+      try {
+        sessionStorage.setItem("_ryn_private_ping", JSON.stringify(this.ping));
+      } catch (_) {}
+    },
+    oneWay() {
+      const {ms: ms, jitter: jitter} = this.ping;
+      if (!ms && !jitter) return 0;
+      return Math.max(0, ms / 2 + (Math.random() * 2 - 1) * jitter / 2);
+    },
+    setMode(on) {
+      try {
+        if (on) sessionStorage.setItem(RYN_PRIVATE_KEY, "1"); else sessionStorage.removeItem(RYN_PRIVATE_KEY);
+      } catch (_) {}
+    },
+    log(...args) {
+      try {
+        console.debug("[RYN private]", ...args);
+      } catch (_) {}
+      try {
+        this.dbg("server: " + args.map(a => a && a.stack ? String(a.stack).split("\n").slice(0, 3).join(" | ") : String(a)).join(" "));
+      } catch (_) {}
+    },
+    // the private log: what happened to the connection, kept across reloads (this tab only)
+    debugLog: (() => {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem("_ryn_private_log") || "[]");
+        return Array.isArray(saved) ? saved : [];
+      } catch (_) {
+        return [];
+      }
+    })(),
+    dbg(text) {
+      const d = new Date;
+      const pad = n => String(n).padStart(2, "0");
+      this.debugLog.push(pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds()) + " " + String(text).slice(0, 400));
+      while (this.debugLog.length > 120) this.debugLog.shift();
+      try {
+        sessionStorage.setItem("_ryn_private_log", JSON.stringify(this.debugLog));
+      } catch (_) {}
+      for (const fn of this.debugListeners) {
+        try {
+          fn();
+        } catch (_) {}
+      }
+    },
+    debugListeners: new Set,
+    caller() {
+      try {
+        const lines = String(new Error().stack || "").split("\n").slice(3, 6).map(l => l.trim().replace(/^at /, "")).filter(Boolean);
+        return lines.join(" < ").slice(0, 300);
+      } catch (_) {
+        return "";
+      }
+    },
+    server() {
+      if (this.engine === null) {
+        this.engine = RynPrivateServer.create({
+          mode: "SANDBOX",
+          log: (...args) => this.log(...args)
+        });
+      }
+      return this.engine;
+    },
+    patchNativeSend() {
+      const proto = WebSocket.prototype;
+      const nativeSend = proto.send;
+      if (nativeSend._rynPrivate) return;
+      const send = function(data) {
+        if (this instanceof RynPrivateSocket) return RynPrivateSocket.prototype.send.call(this, data);
+        return nativeSend.call(this, data);
+      };
+      send._rynPrivate = true;
+      proto.send = send;
+    },
+    patchJoin() {
+      const nativeFetch = window.fetch;
+      if (typeof nativeFetch !== "function" || nativeFetch._rynPrivate) return;
+      const fetchPrivate = function(input, init) {
+        try {
+          const url = String(typeof input === "string" ? input : input && input.url || input);
+          const method = String(init && init.method || input && input.method || "GET").toUpperCase();
+          if (method === "POST" && /^https?:\/\/api[\w.-]*\.moomoo\.io\/join(?:[?#]|$)/i.test(url)) {
+            return Promise.resolve(new Response(JSON.stringify({
+              ticket: "ryn-private"
+            }), {
+              status: 200,
+              headers: {
+                "Content-Type": "application/json"
+              }
+            }));
+          }
+        } catch (_) {}
+        return nativeFetch.apply(this, arguments);
+      };
+      fetchPrivate._rynPrivate = true;
+      window.fetch = fetchPrivate;
+    }
+  };
+  class RynPrivateSocket extends EventTarget {
+    constructor(url, owner) {
+      super();
+      this.url = url;
+      this.readyState = 0;
+      this.binaryType = "blob";
+      this.protocol = "";
+      this.extensions = "";
+      this.bufferedAmount = 0;
+      this._handlers = {
+        open: null,
+        message: null,
+        close: null,
+        error: null
+      };
+      this._wired = {};
+      this._upAt = 0;
+      this._downAt = 0;
+      this._queues = {
+        _upAt: [],
+        _downAt: []
+      };
+      this._who = owner ? "you" : "a bot";
+      if (owner) RynPrivate.ownerSocket = this;
+      if (owner) RynPrivate.dbg("you: connecting to the private server");
+      const socket = this;
+      const listeners = {};
+      this._conn = {
+        rynOwner: !!owner,
+        get readyState() {
+          return socket.readyState;
+        },
+        on(ev, fn) {
+          (listeners[ev] || (listeners[ev] = [])).push(fn);
+          return this;
+        },
+        addListener(ev, fn) {
+          return this.on(ev, fn);
+        },
+        send(bytes) {
+          socket._fromServer(bytes);
+        },
+        close() {
+          RynPrivate.dbg(socket._who + ": the private server closed the connection (" + RynPrivate.caller() + ")");
+          socket._shut(1000, "");
+        },
+        rynDebug(text) {
+          if (owner) RynPrivate.dbg("you: " + text);
+        },
+        rynSpawned() {
+          if (owner) RynWorlds.onSpawn();
+        },
+        rynSetPing(ms, jitter) {
+          RynPrivate.setPing(ms, jitter);
+        },
+        rynNotice(text) {
+          RynPrivate.notice(text);
+        },
+        _emit(ev, ...args) {
+          for (const fn of listeners[ev] || []) {
+            try {
+              fn(...args);
+            } catch (e) {
+              RynPrivate.log(ev, e);
+            }
+          }
+        }
+      };
+      rynPrivateLater(() => {
+        if (this.readyState !== 0) return;
+        let server;
+        try {
+          server = RynPrivate.server();
+        } catch (e) {
+          RynPrivate.log("the private server did not start", e);
+          this.readyState = 3;
+          this.dispatchEvent(new Event("error"));
+          this.dispatchEvent(new CloseEvent("close", {
+            code: 1006,
+            reason: "",
+            wasClean: false
+          }));
+          return;
+        }
+        this.readyState = 1;
+        if (owner) RynPrivate.dbg("you: connected");
+        this.dispatchEvent(new Event("open"));
+        server.accept(this._conn);
+      });
+    }
+    send(data) {
+      if (this.readyState === 0) throw new DOMException("Failed to execute 'send' on 'WebSocket': Still in CONNECTING state.", "InvalidStateError");
+      if (this.readyState !== 1) return;
+      let bytes = null;
+      if (data instanceof ArrayBuffer) {
+        bytes = new Uint8Array(data.slice(0));
+      } else if (ArrayBuffer.isView(data)) {
+        bytes = new Uint8Array(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
+      }
+      if (bytes === null) return;
+      this._later("_upAt", () => {
+        if (this.readyState === 1) this._conn._emit("message", bytes);
+      });
+    }
+    // Messages arrive in the order they were sent, as on a real socket: each direction is
+    // one queue that a single timer drains in order. A timer per message could fire out of
+    // order (delays are whole milliseconds, and a message with no delay could pass a late
+    // timer), so a tick's player list could arrive before the player it lists.
+    _later(way, fn) {
+      const now = performance.now();
+      const at = Math.max(now + RynPrivate.oneWay(), this[way]);
+      this[way] = at;
+      const queue = this._queues[way];
+      queue.push(at, fn);
+      if (queue.length === 2) this._drainSoon(way, at - now);
+    }
+    _drainSoon(way, wait) {
+      if (wait <= 0) rynPrivateLater(() => this._drain(way)); else setTimeout(() => this._drain(way), Math.ceil(wait));
+    }
+    _drain(way) {
+      const queue = this._queues[way];
+      let i = 0;
+      while (i < queue.length && queue[i] <= performance.now()) {
+        const fn = queue[i + 1];
+        i += 2;
+        try {
+          fn();
+        } catch (e) {
+          setTimeout(() => {
+            throw e;
+          });
+        }
+      }
+      queue.splice(0, i);
+      if (queue.length) this._drainSoon(way, queue[0] - performance.now());
+    }
+    close(code = 1000, reason = "") {
+      if (this.readyState < 2 && this._who === "you") RynPrivate.dbg("you: the game closed its connection (" + code + (reason ? " " + reason : "") + ") from " + RynPrivate.caller());
+      this._shut(code, reason);
+    }
+    _fromServer(bytes) {
+      if (this.readyState !== 1) return;
+      const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+      this._later("_downAt", () => {
+        if (this.readyState === 1) this.dispatchEvent(new MessageEvent("message", {
+          data: data
+        }));
+      });
+    }
+    _shut(code, reason) {
+      if (this.readyState >= 2) return;
+      const open = this.readyState === 1;
+      // save the world while your buildings are still in it (the server removes them when you go)
+      if (open && this._who === "you") {
+        try {
+          RynWorlds.beforeLeave();
+        } catch (_) {}
+      }
+      this.readyState = 2;
+      rynPrivateLater(() => {
+        if (open) this._conn._emit("close", code, reason);
+        this.readyState = 3;
+        this.dispatchEvent(new CloseEvent("close", {
+          code: code,
+          reason: String(reason),
+          wasClean: true
+        }));
+      });
+    }
+  }
+  for (const type of [ "open", "message", "close", "error" ]) {
+    Object.defineProperty(RynPrivateSocket.prototype, "on" + type, {
+      configurable: true,
+      enumerable: true,
+      get() {
+        return this._handlers[type];
+      },
+      set(fn) {
+        this._handlers[type] = typeof fn === "function" ? fn : null;
+        if (this._wired[type]) return;
+        this._wired[type] = true;
+        this.addEventListener(type, event => {
+          const handler = this._handlers[type];
+          if (handler !== null) handler.call(this, event);
+        });
+      }
+    });
+  }
+  for (const [ name, value ] of [ [ "CONNECTING", 0 ], [ "OPEN", 1 ], [ "CLOSING", 2 ], [ "CLOSED", 3 ] ]) {
+    Object.defineProperty(RynPrivateSocket, name, {
+      value: value
+    });
+    Object.defineProperty(RynPrivateSocket.prototype, name, {
+      value: value
+    });
+  }
+  const RYN_ADMIN_CSS = `
+#ryn-admin {
+  --ra-ink: 13, 13, 19;
+  --ra-line: rgba(255, 255, 255, 0.075);
+  --ra-line-2: rgba(255, 255, 255, 0.13);
+  --ra-card: rgba(255, 255, 255, 0.028);
+  --ra-iris: #8e76ce;
+  --ra-iris-hi: #b19ee8;
+  --ra-iris-glow: rgba(142, 118, 206, 0.35);
+  --ra-sage: #a6d7b2;
+  --ra-rose: #e0a7b0;
+  --ra-tx-1: #f4f3f8;
+  --ra-tx-2: #b4b1c2;
+  --ra-tx-3: #7c7990;
+  --ra-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 9999;
+  width: 540px;
+  max-width: calc(100vw - 16px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ra-line-2);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(142, 118, 206, 0.07), rgba(142, 118, 206, 0) 160px), rgba(var(--ra-ink), 0.9);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  font-family: 'Manrope', 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  color: var(--ra-tx-1);
+  -webkit-user-select: none;
+  user-select: none;
+  overflow: hidden;
+  transform-origin: top right;
+  animation: ra-pop 220ms var(--ra-ease);
+  transition: width 260ms var(--ra-ease);
+}
+@keyframes ra-pop { from { opacity: 0; scale: 0.96; } to { opacity: 1; scale: 1; } }
+@keyframes ra-page { from { opacity: 0; translate: 0 8px; } to { opacity: 1; translate: 0 0; } }
+@keyframes ra-flash { from { background: rgba(142, 118, 206, 0.22); } to { background: transparent; } }
+@keyframes ra-flash-bad { from { background: rgba(224, 167, 176, 0.2); } to { background: transparent; } }
+#ryn-admin.ra-hidden { display: none; }
+#ryn-admin.ra-wide { width: 880px; }
+#ryn-admin, #ryn-admin * { box-sizing: border-box; }
+#ryn-admin svg { display: block; flex-shrink: 0; }
+
+#ryn-admin .ra-head { display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 8px 0 16px; cursor: grab; flex-shrink: 0; }
+#ryn-admin.ra-drag .ra-head { cursor: grabbing; }
+#ryn-admin .ra-logo { width: 10px; height: 10px; border-radius: 3px; background: linear-gradient(135deg, var(--ra-iris-hi), var(--ra-iris)); box-shadow: 0 0 12px var(--ra-iris-glow); rotate: 45deg; }
+#ryn-admin .ra-title { font-family: 'Space Grotesk', 'Manrope', sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.18em; color: var(--ra-tx-1); }
+#ryn-admin .ra-tag { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ra-tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ryn-admin .ra-tick { font-family: 'Space Grotesk', 'Manrope', sans-serif; font-variant-numeric: tabular-nums; }
+#ryn-admin .ra-live { width: 7px; height: 7px; border-radius: 50%; background: var(--ra-sage); box-shadow: 0 0 8px rgba(166, 215, 178, 0.9); flex-shrink: 0; transition: background 200ms ease, box-shadow 200ms ease; }
+#ryn-admin .ra-live.ra-paused { background: #e8c872; box-shadow: 0 0 8px rgba(232, 200, 114, 0.8); }
+#ryn-admin .ra-live.ra-off { background: var(--ra-tx-3); box-shadow: none; }
+#ryn-admin .ra-spacer { flex: 1; }
+#ryn-admin .ra-ic { width: 32px; height: 32px; display: grid; place-items: center; flex-shrink: 0; border: none; border-radius: 9px; background: none; padding: 0; cursor: pointer; color: var(--ra-tx-3); font: inherit; font-size: 17px; line-height: 1; transition: color 140ms ease, background 140ms ease; }
+#ryn-admin .ra-ic:hover { color: var(--ra-tx-1); background: rgba(255, 255, 255, 0.08); }
+#ryn-admin .ra-ic.ra-on { color: var(--ra-iris-hi); background: rgba(142, 118, 206, 0.16); }
+
+#ryn-admin .ra-target { margin: 0 12px 10px; padding: 12px 14px 14px; border: 1px solid var(--ra-line-2); border-radius: 14px; background: linear-gradient(135deg, rgba(142, 118, 206, 0.16), rgba(142, 118, 206, 0.03)); flex-shrink: 0; }
+#ryn-admin .ra-tg-top { display: flex; align-items: center; gap: 12px; }
+#ryn-admin .ra-avatar { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; flex-shrink: 0; font-family: 'Space Grotesk', 'Manrope', sans-serif; font-weight: 700; font-size: 14px; color: #fff; background: linear-gradient(135deg, #9a83dc, #6f58b4); box-shadow: 0 6px 16px -6px var(--ra-iris-glow); transition: background 240ms ease; }
+#ryn-admin .ra-avatar.ra-av-dummy { background: linear-gradient(135deg, #c9939c, #8f5e67); }
+#ryn-admin .ra-avatar.ra-av-player { background: linear-gradient(135deg, #d0b46a, #8c7536); }
+#ryn-admin .ra-avatar.ra-av-dead { background: #3a3946; color: var(--ra-tx-3); box-shadow: none; }
+#ryn-admin .ra-tg-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+#ryn-admin .ra-tg-line { display: flex; align-items: center; gap: 8px; }
+#ryn-admin .ra-tg-line select { flex: 1; height: 32px; font-size: 14px; font-weight: 700; background-color: rgba(0, 0, 0, 0.18); }
+#ryn-admin .ra-tg-chips { display: flex; gap: 5px; flex-shrink: 0; }
+#ryn-admin .ra-tg-hp { display: flex; align-items: center; gap: 10px; }
+#ryn-admin .ra-tg-hp .ra-bar { flex: 1; height: 8px; margin: 0; border-radius: 4px; }
+#ryn-admin .ra-tg-hp span { font-family: 'Space Grotesk', 'Manrope', sans-serif; font-size: 12.5px; font-weight: 600; color: var(--ra-tx-2); min-width: 70px; text-align: right; font-variant-numeric: tabular-nums; }
+#ryn-admin .ra-tg-acts { display: flex; gap: 6px; margin-top: 12px; }
+#ryn-admin .ra-tg-acts .ra-btn { flex: 1 1 0; height: 36px; padding: 0 6px; font-size: 13px; }
+
+#ryn-admin .ra-main { display: flex; min-height: 0; border-top: 1px solid var(--ra-line); flex: 1; }
+#ryn-admin .ra-tabs { position: relative; display: flex; flex-direction: column; gap: 4px; width: 132px; flex-shrink: 0; padding: 12px 10px; border-right: 1px solid var(--ra-line); }
+#ryn-admin .ra-tab { position: relative; z-index: 1; display: flex; align-items: center; gap: 10px; height: 42px; padding: 0 12px; border: none; border-radius: 10px; background: none; color: var(--ra-tx-2); font: inherit; font-size: 13.5px; font-weight: 700; text-align: left; cursor: pointer; white-space: nowrap; transition: color 160ms ease, background 160ms ease; }
+#ryn-admin .ra-tab svg { width: 18px; height: 18px; opacity: 0.8; transition: opacity 160ms ease, transform 200ms var(--ra-ease); }
+#ryn-admin .ra-tab:hover { color: var(--ra-tx-1); background: rgba(255, 255, 255, 0.05); }
+#ryn-admin .ra-tab:hover svg { transform: translateX(1px); }
+#ryn-admin .ra-tab.ra-cur { color: #fff; }
+#ryn-admin .ra-tab.ra-cur svg { opacity: 1; color: var(--ra-iris-hi); }
+#ryn-admin .ra-tab[data-count]::after { content: attr(data-count); margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; display: grid; place-items: center; font-size: 11px; background: rgba(142, 118, 206, 0.3); color: #fff; }
+#ryn-admin .ra-tab.ra-none { opacity: 0.35; }
+#ryn-admin .ra-tab-ink { position: absolute; left: 10px; right: 10px; top: 0; height: 42px; border-radius: 10px; background: linear-gradient(90deg, rgba(142, 118, 206, 0.32), rgba(142, 118, 206, 0.14)); box-shadow: inset 3px 0 0 var(--ra-iris-hi); transition: translate 260ms var(--ra-ease), opacity 200ms ease; pointer-events: none; }
+#ryn-admin .ra-searching-on .ra-tab-ink { opacity: 0; }
+
+#ryn-admin .ra-body { flex: 1; min-width: 0; overflow-y: auto; max-height: min(62vh, 680px); padding: 0 14px 14px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.18) transparent; scroll-behavior: smooth; }
+#ryn-admin .ra-search { position: sticky; top: 0; z-index: 3; margin: 0 -14px; padding: 12px 14px 8px; transition: background 180ms ease, box-shadow 180ms ease; }
+#ryn-admin .ra-search.ra-stuck { background: rgba(var(--ra-ink), 0.96); box-shadow: 0 10px 14px -12px rgba(0, 0, 0, 0.7); }
+#ryn-admin .ra-search input { width: 100%; height: 36px; padding-left: 36px; font-size: 13.5px; border-radius: 11px; background: rgba(255, 255, 255, 0.05) no-repeat 12px 50% / 15px 15px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='7' cy='7' r='5' fill='none' stroke='%237c7990' stroke-width='1.8'/%3E%3Cpath d='M11 11l4 4' stroke='%237c7990' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E"); }
+#ryn-admin .ra-page { animation: ra-page 260ms var(--ra-ease) both; }
+#ryn-admin .ra-page-label { display: none; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ra-iris-hi); margin: 14px 2px 2px; }
+#ryn-admin .ra-searching .ra-page-label { display: flex; }
+#ryn-admin .ra-empty { display: none; padding: 28px 4px; color: var(--ra-tx-3); font-size: 13px; text-align: center; }
+#ryn-admin .ra-searching .ra-empty.ra-shown { display: block; }
+
+#ryn-admin .ra-section { margin-top: 10px; border: 1px solid var(--ra-line); border-radius: 13px; background: var(--ra-card); transition: border-color 200ms ease, background 200ms ease; }
+#ryn-admin .ra-section:hover { border-color: var(--ra-line-2); }
+#ryn-admin .ra-sec-head { display: flex; align-items: center; gap: 10px; width: 100%; height: 44px; padding: 0 14px; border: none; background: none; cursor: pointer; font: inherit; color: var(--ra-tx-1); text-align: left; }
+#ryn-admin .ra-sec-title { flex: 1; font-size: 12px; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase; }
+#ryn-admin .ra-chev { width: 8px; height: 8px; border-right: 2px solid var(--ra-tx-3); border-bottom: 2px solid var(--ra-tx-3); transform: translateY(-2px) rotate(45deg); transition: transform 240ms var(--ra-ease); }
+#ryn-admin .ra-folded .ra-chev { transform: rotate(-45deg); }
+#ryn-admin .ra-sec-body { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 260ms var(--ra-ease); }
+#ryn-admin .ra-sec-inner { min-height: 0; overflow: hidden; padding: 0 14px 14px; transition: opacity 200ms ease, visibility 0s; }
+#ryn-admin .ra-folded .ra-sec-body { grid-template-rows: 0fr; }
+#ryn-admin .ra-folded .ra-sec-inner { opacity: 0; visibility: hidden; transition: opacity 160ms ease, visibility 0s linear 260ms; }
+#ryn-admin .ra-section.ra-danger { border-color: rgba(224, 167, 176, 0.3); background: rgba(224, 167, 176, 0.05); }
+#ryn-admin .ra-danger .ra-sec-title { color: var(--ra-rose); }
+
+#ryn-admin .ra-searching .ra-section.ra-folded .ra-sec-body { grid-template-rows: 1fr; }
+#ryn-admin .ra-searching .ra-section.ra-folded .ra-sec-inner { opacity: 1; visibility: visible; }
+#ryn-admin .ra-searching .ra-section.ra-folded .ra-chev { transform: translateY(-2px) rotate(45deg); }
+#ryn-admin .ra-searching .ra-section.ra-miss, #ryn-admin .ra-searching .ra-item.ra-miss { display: none; }
+#ryn-admin .ra-searching .ra-section:not(.ra-hit-all) .ra-sec-inner > :not(.ra-item) { display: none; }
+
+#ryn-admin .ra-hint { font-size: 12px; color: var(--ra-tx-3); margin: -2px 0 8px; line-height: 1.45; }
+#ryn-admin .ra-note { font-size: 12px; color: var(--ra-tx-2); margin: 6px 0 0; line-height: 1.45; font-variant-numeric: tabular-nums; }
+#ryn-admin .ra-sub { display: flex; align-items: baseline; gap: 8px; margin: 14px 0 4px; font-size: 12.5px; font-weight: 800; color: var(--ra-tx-1); }
+#ryn-admin .ra-sub:first-of-type { margin-top: 4px; }
+#ryn-admin .ra-sub small { font-weight: 500; font-size: 11.5px; color: var(--ra-tx-3); }
+#ryn-admin .ra-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+#ryn-admin .ra-lbl { width: 96px; flex-shrink: 0; color: var(--ra-tx-2); font-size: 13px; font-weight: 600; white-space: nowrap; }
+#ryn-admin .ra-you { margin-left: 5px; padding: 1px 5px; border-radius: 5px; font-size: 9.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ra-iris-hi); background: rgba(142, 118, 206, 0.18); vertical-align: 1px; }
+#ryn-admin .ra-unit { margin-left: -3px; font-size: 12px; color: var(--ra-tx-3); }
+
+#ryn-admin input, #ryn-admin select {
+  height: 34px;
+  min-width: 0;
+  border: 1px solid var(--ra-line-2);
+  border-radius: 9px;
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--ra-tx-1);
+  font: inherit;
+  font-size: 13px;
+  padding: 0 10px;
+  outline: none;
+  -webkit-user-select: text;
+  user-select: text;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+}
+#ryn-admin input:hover, #ryn-admin select:hover { border-color: rgba(255, 255, 255, 0.22); }
+#ryn-admin input:focus, #ryn-admin select:focus { border-color: var(--ra-iris); box-shadow: 0 0 0 3px rgba(142, 118, 206, 0.22); }
+#ryn-admin input[type=number] { width: 88px; font-variant-numeric: tabular-nums; }
+#ryn-admin input.ra-narrow { width: 68px; }
+#ryn-admin input.ra-tiny { width: 58px; }
+#ryn-admin input[type=text] { flex: 1; }
+#ryn-admin select { flex: 1; cursor: pointer; }
+#ryn-admin select option { background: #111118; color: #f4f3f8; }
+#ryn-admin input[type=range] { width: 100%; height: 24px; padding: 0; border: none; background: none; box-shadow: none; accent-color: var(--ra-iris); }
+
+#ryn-admin .ra-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--ra-line-2);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ra-tx-1);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 160ms ease, scale 120ms ease;
+}
+#ryn-admin .ra-btn:hover { background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.26); }
+#ryn-admin .ra-btn:active { scale: 0.97; }
+#ryn-admin .ra-btn:focus-visible, #ryn-admin .ra-tab:focus-visible, #ryn-admin .ra-sec-head:focus-visible, #ryn-admin .ra-ic:focus-visible { outline: 2px solid var(--ra-iris-hi); outline-offset: 2px; }
+#ryn-admin .ra-btn.ra-go { background: linear-gradient(180deg, rgba(160, 138, 222, 0.42), rgba(142, 118, 206, 0.3)); border-color: rgba(168, 148, 224, 0.6); }
+#ryn-admin .ra-btn.ra-go:hover { background: linear-gradient(180deg, rgba(160, 138, 222, 0.56), rgba(142, 118, 206, 0.42)); box-shadow: 0 6px 18px -8px var(--ra-iris-glow); }
+#ryn-admin .ra-btn.ra-del { color: var(--ra-rose); border-color: rgba(224, 167, 176, 0.38); }
+#ryn-admin .ra-btn.ra-del:hover { background: rgba(224, 167, 176, 0.14); }
+#ryn-admin .ra-btn.ra-lit { background: rgba(166, 215, 178, 0.16); border-color: rgba(166, 215, 178, 0.55); color: var(--ra-sage); }
+#ryn-admin .ra-btn.ra-tog { justify-content: space-between; gap: 12px; padding: 0 10px 0 14px; }
+#ryn-admin .ra-btn.ra-tog > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ryn-admin .ra-sw { position: relative; width: 30px; height: 18px; border-radius: 9px; background: rgba(255, 255, 255, 0.14); flex-shrink: 0; transition: background 200ms ease; }
+#ryn-admin .ra-sw::after { content: ""; position: absolute; left: 3px; top: 3px; width: 12px; height: 12px; border-radius: 50%; background: #d8d6e2; transition: translate 220ms var(--ra-ease), background 200ms ease; }
+#ryn-admin .ra-btn.ra-on { border-color: rgba(166, 215, 178, 0.5); color: var(--ra-sage); background: rgba(166, 215, 178, 0.1); }
+#ryn-admin .ra-on .ra-sw { background: rgba(166, 215, 178, 0.75); }
+#ryn-admin .ra-on .ra-sw::after { translate: 12px 0; background: #fff; }
+#ryn-admin .ra-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0; }
+#ryn-admin .ra-grid .ra-btn { padding: 0 10px; overflow: hidden; text-overflow: ellipsis; }
+#ryn-admin .ra-grid .ra-btn.ra-tog { padding: 0 8px 0 12px; }
+#ryn-admin .ra-grid.ra-grid-2 { grid-template-columns: repeat(2, 1fr); }
+#ryn-admin.ra-wide .ra-grid { grid-template-columns: repeat(5, 1fr); }
+#ryn-admin.ra-wide .ra-grid.ra-grid-2 { grid-template-columns: repeat(3, 1fr); }
+#ryn-admin .ra-seg { display: flex; gap: 4px; flex: 1; min-width: 0; padding: 3px; border-radius: 11px; background: rgba(0, 0, 0, 0.2); border: 1px solid var(--ra-line); }
+#ryn-admin .ra-seg .ra-btn { flex: 1; min-width: 0; height: 30px; padding: 0 4px; border-color: transparent; background: none; font-size: 12.5px; color: var(--ra-tx-2); }
+#ryn-admin .ra-seg .ra-btn:hover { color: var(--ra-tx-1); background: rgba(255, 255, 255, 0.06); }
+#ryn-admin .ra-seg .ra-btn.ra-pick { background: linear-gradient(180deg, rgba(160, 138, 222, 0.5), rgba(142, 118, 206, 0.36)); color: #fff; box-shadow: 0 4px 12px -6px var(--ra-iris-glow); }
+
+#ryn-admin .ra-plist { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+#ryn-admin .ra-plist:empty { display: none; }
+#ryn-admin .ra-pl { border: 1px solid var(--ra-line); border-radius: 11px; padding: 9px 11px; background: rgba(255, 255, 255, 0.025); transition: border-color 160ms ease, background 160ms ease, translate 160ms var(--ra-ease); }
+#ryn-admin .ra-pl.ra-click { cursor: pointer; }
+#ryn-admin .ra-pl.ra-click:hover { border-color: rgba(255, 255, 255, 0.22); background: rgba(255, 255, 255, 0.05); translate: 2px 0; }
+#ryn-admin .ra-pl.ra-pick { border-color: var(--ra-iris); background: rgba(142, 118, 206, 0.14); box-shadow: inset 3px 0 0 var(--ra-iris-hi); }
+#ryn-admin .ra-pl-top { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+#ryn-admin .ra-pl-dot { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; flex-shrink: 0; font-family: 'Space Grotesk', 'Manrope', sans-serif; font-size: 11.5px; font-weight: 700; color: #fff; background: rgba(142, 118, 206, 0.5); }
+#ryn-admin .ra-pl-dot.ra-av-dummy { background: rgba(201, 147, 156, 0.55); }
+#ryn-admin .ra-pl-dot.ra-av-player { background: rgba(208, 180, 106, 0.55); }
+#ryn-admin .ra-pl-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+#ryn-admin .ra-pl-hp { font-size: 12px; color: var(--ra-tx-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+#ryn-admin .ra-pl .ra-row { margin: 8px 0 0; gap: 6px; }
+#ryn-admin .ra-pl .ra-btn { height: 30px; padding: 0 12px; font-size: 12.5px; }
+#ryn-admin .ra-chip { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ra-tx-2); border: 1px solid var(--ra-line-2); border-radius: 6px; padding: 2px 6px; white-space: nowrap; }
+#ryn-admin .ra-chip.ra-chip-god { color: var(--ra-sage); border-color: rgba(166, 215, 178, 0.45); background: rgba(166, 215, 178, 0.08); }
+#ryn-admin .ra-chip.ra-chip-dead { color: var(--ra-rose); border-color: rgba(224, 167, 176, 0.45); background: rgba(224, 167, 176, 0.08); }
+#ryn-admin .ra-bar { height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); margin: 8px 0 0; overflow: hidden; }
+#ryn-admin .ra-bar > i { display: block; height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, #8fcf9f, var(--ra-sage)); transition: width 320ms var(--ra-ease), background 240ms ease; }
+#ryn-admin .ra-bar.ra-low > i { background: linear-gradient(90deg, #d68792, var(--ra-rose)); }
+
+#ryn-admin .ra-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0; }
+#ryn-admin.ra-wide .ra-stats { grid-template-columns: repeat(6, 1fr); }
+#ryn-admin .ra-stat { border: 1px solid var(--ra-line); border-radius: 11px; padding: 9px 11px; min-width: 0; background: rgba(0, 0, 0, 0.12); }
+#ryn-admin .ra-stat b { display: block; font-family: 'Space Grotesk', 'Manrope', sans-serif; font-size: 19px; color: var(--ra-tx-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#ryn-admin .ra-stat span { font-size: 11.5px; color: var(--ra-tx-3); }
+#ryn-admin .ra-lines { font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; font-size: 11.5px; color: var(--ra-tx-2); line-height: 1.6; max-height: 210px; overflow-y: auto; border: 1px solid var(--ra-line); border-radius: 11px; padding: 8px 10px; margin-top: 8px; background: rgba(0, 0, 0, 0.16); -webkit-user-select: text; user-select: text; }
+#ryn-admin .ra-lines:empty::before { content: "Nothing yet"; color: var(--ra-tx-3); }
+#ryn-admin .ra-lines .ra-hurt { color: var(--ra-rose); }
+#ryn-admin .ra-lines .ra-heal { color: var(--ra-sage); }
+#ryn-admin .ra-lines div { white-space: pre-line; overflow-wrap: anywhere; }
+#ryn-admin.ra-wide .ra-lines { max-height: 320px; }
+#ryn-admin canvas.ra-canvas { display: block; width: 100%; height: auto; border: 1px solid var(--ra-line); border-radius: 11px; background: #0e1410; margin-top: 8px; }
+
+#ryn-admin .ra-foot { border-top: 1px solid var(--ra-line); flex-shrink: 0; background: rgba(0, 0, 0, 0.14); }
+#ryn-admin .ra-log { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 8px 16px; font-size: 13px; color: var(--ra-tx-2); cursor: pointer; overflow-wrap: anywhere; }
+#ryn-admin .ra-log::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ra-iris-hi); flex-shrink: 0; }
+#ryn-admin .ra-log.ra-new { animation: ra-flash 900ms ease; }
+#ryn-admin .ra-log.ra-bad { color: var(--ra-rose); }
+#ryn-admin .ra-log.ra-bad::before { background: var(--ra-rose); }
+#ryn-admin .ra-log.ra-bad.ra-new { animation: ra-flash-bad 900ms ease; }
+#ryn-admin .ra-loglist { max-height: 0; overflow-y: auto; padding: 0 16px 0 32px; font-size: 12px; color: var(--ra-tx-3); transition: max-height 260ms var(--ra-ease), padding 260ms var(--ra-ease); }
+#ryn-admin .ra-loglist.ra-open { max-height: 170px; padding: 0 16px 10px 32px; }
+#ryn-admin .ra-loglist div { padding: 2px 0; overflow-wrap: anywhere; }
+
+#ryn-admin.ra-min .ra-main, #ryn-admin.ra-min .ra-target, #ryn-admin.ra-min .ra-loglist { display: none; }
+#adminButton.ryn-admin-open { box-shadow: inset 0 0 0 2px rgba(177, 158, 232, 0.8); }
+@media (max-width: 600px) {
+  #ryn-admin .ra-tabs { width: 58px; }
+  #ryn-admin .ra-tab span { display: none; }
+  #ryn-admin .ra-tab[data-count]::after { display: none; }
+  #ryn-admin .ra-lbl { width: 78px; }
+  #ryn-admin .ra-grid, #ryn-admin .ra-stats { grid-template-columns: repeat(2, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #ryn-admin, #ryn-admin * { animation: none !important; transition: none !important; }
+}
+`;
+  const RYN_ADMIN_ANIMALS = [ [ "cow", "Cow" ], [ "pig", "Pig" ], [ "sheep", "Sheep" ], [ "bull", "Bull" ], [ "bully", "Bully" ], [ "wolf", "Wolf" ], [ "duck", "Quack" ], [ "boar", "Boar" ], [ "yeti", "Yeti" ], [ "moostafa", "MOOSTAFA" ], [ "moofie", "MOOFIE" ], [ "treasure", "Treasure" ], [ "king", "Crab King" ], [ "crab", "Crab" ], [ "crabling", "Crabling" ] ];
+  const RYN_ADMIN_TIERS = [ [ "normal", "Normal" ], [ "gold", "Gold" ], [ "diamond", "Diamond" ], [ "ruby", "Ruby" ], [ "emerald", "Emerald" ] ];
+  const RYN_ADMIN_TIER_XP = [ [ "emerald", 3e4 ], [ "ruby", 12e3 ], [ "diamond", 7e3 ], [ "gold", 3e3 ], [ "normal", 0 ] ];
+  const RYN_ADMIN_LOADOUTS = [ {
+    name: "Pole + Musket",
+    weapons: [ [ 5, "ruby" ], [ 15, "ruby" ] ],
+    hat: 6,
+    acc: 0
+  }, {
+    name: "Katana + Hammer",
+    weapons: [ [ 4, "ruby" ], [ 10, "ruby" ] ],
+    hat: 6,
+    acc: 0
+  }, {
+    name: "Daggers + Musket",
+    weapons: [ [ 7, "ruby" ], [ 15, "ruby" ] ],
+    hat: 6,
+    acc: 0
+  } ];
+  const RYN_ADMIN_PHASES = {
+    idle: "Walking",
+    slam: "Slam",
+    chargeWind: "Aiming a charge",
+    charge: "Charging",
+    ring: "Water ring",
+    dive1: "Going under",
+    dive2: "Under water, healing",
+    dive3: "Coming up"
+  };
+  // tabs, most important first, and the sections each one is built from (most used on top)
+  const RYN_ADMIN_TABS = [ [ "player", "Player", [ "buildVitals", "buildGear", "buildLoadouts", "buildYou" ] ], [ "people", "People", [ "buildPlayers", "buildBots", "buildDummies" ] ], [ "world", "World", [ "buildMap", "buildAnimals", "buildKing", "buildRules", "buildSaves", "buildTravel", "buildClear" ] ], [ "train", "Train", [ "buildScenarios", "buildTime", "buildSurvival", "buildBench" ] ], [ "analyze", "Analyze", [ "buildFight", "buildGraph", "buildCombatLog", "buildReplay", "buildLayers", "buildKnockback", "buildDesync" ] ], [ "tools", "Tools", [ "buildPing", "buildPackets", "buildPrivateLog" ] ] ];
+  const RYN_ADMIN_ICONS = (() => {
+    const svg = d => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + d + "</svg>";
+    return {
+      player: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>'),
+      people: svg('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 3.5-5.5 6.5-5.5s5.5 2 6.5 5.5"/><circle cx="17" cy="7" r="2.8"/><path d="M17 12.5c2.4 0 4 1.6 4.8 4.5"/>'),
+      world: svg('<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.7 2.6 4 5.6 4 9s-1.3 6.4-4 9c-2.7-2.6-4-5.6-4-9s1.3-6.4 4-9z"/>'),
+      train: svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/>'),
+      analyze: svg('<path d="M3 20h18"/><path d="M6 16v-5"/><path d="M11 16V6"/><path d="M16 16v-8"/><path d="M21 16v-3"/>'),
+      tools: svg('<path d="M4 6h9"/><path d="M19 6h1"/><circle cx="16" cy="6" r="2.2"/><path d="M4 12h3"/><path d="M13 12h7"/><circle cx="10" cy="12" r="2.2"/><path d="M4 18h11"/><circle cx="18" cy="18" r="2.2"/>')
+    };
+  })();
+  // what _ryn_admin_tab held before the tabs were regrouped
+  const RYN_ADMIN_OLD_TABS = {
+    me: "player",
+    players: "people",
+    test: "train",
+    world: "world",
+    stats: "analyze",
+    lab: "analyze",
+    mine: "tools"
+  };
+  // Private: the bots added from the admin panel wait as they get in, then all spawn at
+  // once, so the in-page server takes every spawn in the same tick
+  const RynFleet = {
+    batch: null,
+    start(n, done) {
+      this.cancel();
+      this.batch = {
+        want: n,
+        held: [],
+        done: done,
+        timer: setTimeout(() => this.release(), 15e3)
+      };
+    },
+    // how many really started joining (the fleet has a cap)
+    expect(n) {
+      const b = this.batch;
+      if (b === null) return;
+      b.want = n;
+      if (b.held.length >= n) this.release();
+    },
+    cancel() {
+      if (this.batch !== null) clearTimeout(this.batch.timer);
+      this.batch = null;
+    },
+    wants() {
+      return RynPrivate.on && this.batch !== null && this.batch.held.length < this.batch.want;
+    },
+    take(bot) {
+      if (!this.wants()) return false;
+      // a bot out of the game spawns itself on the next server update; not while it waits
+      bot.PlayerManager._spawnAskedAt = Infinity;
+      this.batch.held.push(bot);
+      if (this.batch.held.length >= this.batch.want) this.release();
+      return true;
+    },
+    release() {
+      const b = this.batch;
+      if (b === null) return;
+      this.batch = null;
+      clearTimeout(b.timer);
+      const open = c => c.SocketManager.socket !== null && c.SocketManager.socket.readyState === 1;
+      const bots = b.held.filter(open);
+      // the ones that closed: their auto-respawn comes back with them
+      for (const c of b.held) if (!open(c)) c.PlayerManager._spawnAskedAt = 0;
+      if (!bots.length) {
+        if (b.done) b.done(0);
+        return;
+      }
+      // one trip of the fake ping, then a moment when no bot has a packet still on its way
+      // (a packet in flight would hold its spawn back behind it)
+      let tries = 0;
+      const clear = () => {
+        const now = performance.now();
+        // still on its way, or due but not yet handed over (its socket's queue is not empty)
+        const wait = s => s._queues && s._queues._upAt.length ? Math.max(1, s._upAt - now) : (s._upAt || 0) - now;
+        const late = Math.max(0, ...bots.filter(open).map(c => wait(c.SocketManager.socket)));
+        if (late > 0 && ++tries < 40) setTimeout(clear, late + 1); else go();
+      };
+      setTimeout(clear, Math.max(0, RynPrivate.oneWay()));
+      const go = () => {
+        // every spawn leaves in this one moment with no extra delay, so the in-page
+        // server reads them all in one go (its name check needs no network in Private)
+        const oneWay = RynPrivate.oneWay;
+        RynPrivate.oneWay = () => 0;
+        let made = 0;
+        for (const c of bots) {
+          if (!open(c)) continue;
+          try {
+            c._rynEntry = {
+              phase: "spawning",
+              at: Date.now(),
+              tries: 0
+            };
+            c.PlayerManager._spawnAskedAt = Date.now();
+            c.myPlayer.spawn();
+            made++;
+          } catch (_) {}
+        }
+        setTimeout(() => {
+          if (RynPrivate.oneWay !== oneWay) RynPrivate.oneWay = oneWay;
+        }, 0);
+        if (b.done) b.done(made);
+      };
+    }
+  };
+  const RynAdminPanel = {
+    root: null,
+    icon: null,
+    open: false,
+    target: "",
+    stateTimer: null,
+    lastState: null,
+    lastPanel: null,
+    tab: "player",
+    pages: {},
+    tabButtons: {},
+    sections: [],
+    folds: {},
+    query: "",
+    layers: {},
+    editMode: "",
+    mouse: null,
+    autoRestored: false,
+    store(key, value) {
+      try {
+        if (value === undefined) return JSON.parse(localStorage.getItem(key) || "null");
+        localStorage.setItem(key, JSON.stringify(value));
+      } catch (_) {}
+      return null;
+    },
+    watchPage() {
+      // page errors and a heartbeat into the private log, so one report says what went wrong
+      const seen = new Map;
+      const note = (kind, msg) => {
+        const key = kind + msg;
+        const n = (seen.get(key) || 0) + 1;
+        seen.set(key, n);
+        if (n === 1 || n === 10 || n === 100) RynPrivate.dbg(kind + (n > 1 ? " (x" + n + ")" : "") + ": " + msg);
+      };
+      window.addEventListener("error", e => {
+        try {
+          note("page error", String(e.message || e.error || "?") + (e.filename ? " @ " + String(e.filename).split("/").pop() + ":" + e.lineno : ""));
+        } catch (_) {}
+      });
+      window.addEventListener("unhandledrejection", e => {
+        try {
+          note("page promise error", String(e.reason && e.reason.message || e.reason));
+        } catch (_) {}
+      });
+      setInterval(() => {
+        try {
+          const st = RynPrivate.state();
+          const sock = RynPrivate.ownerSocket;
+          if (!sock) return;
+          const p = RynPrivate.call("panel");
+          RynPrivate.dbg("status: socket " + [ "connecting", "open", "closing", "closed" ][sock.readyState] + (st && st.me ? ", you " + (st.me.alive ? "alive" : "dead") + ", " + st.players.length + " players" : ", not spawned") + (p ? ", server tick " + p.time.tick + (p.time.paused ? " (paused)" : "") : "") + ", ping " + RynPrivate.ping.ms + "ms");
+        } catch (e) {
+          RynPrivate.dbg("status check failed: " + (e && e.message));
+        }
+      }, 3e4);
+    },
+    start() {
+      if (!RynPrivate.on || this.root !== null) return;
+      this.watchPage();
+      window.addEventListener("keydown", e => this.onHotkey(e), true);
+      RynPrivate.noteListeners.add(text => this.say(text));
+      const layers = this.store("_ryn_admin_layers");
+      this.layers = layers && typeof layers === "object" ? layers : {
+        truth: !!this.store("_ryn_admin_overlay"),
+        ranges: false,
+        shots: false,
+        desync: false,
+        shame: false
+      };
+      const wave = this.store("_ryn_ping_wave");
+      this.pingWave = wave && typeof wave === "object" ? wave : {
+        on: false,
+        min: 60,
+        max: 250,
+        every: 5
+      };
+      this.startPingWave();
+      window.addEventListener("mousemove", e => {
+        this.mouse = {
+          x: e.clientX,
+          y: e.clientY
+        };
+      }, true);
+      window.addEventListener("pointerdown", e => this.onEditPointer(e), true);
+      window.addEventListener("mousedown", e => {
+        if (this.editTarget(e)) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+      }, true);
+      setInterval(() => this.autoTick(), 5e3);
+      this.startOverlay();
+      const wait = setInterval(() => {
+        if (!document.body) return;
+        if (this.root === null) this.build();
+        if (this.installIcon()) clearInterval(wait);
+      }, 400);
+    },
+    installIcon() {
+      const button = document.getElementById("adminButton");
+      if (button === null) return false;
+      const style = document.createElement("style");
+      style.textContent = "#adminButton { display: block !important; }";
+      document.head.appendChild(style);
+      button.title = "Admin (Private)";
+      button.addEventListener("click", e => {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        this.toggle();
+      }, true);
+      for (const type of [ "mousedown", "touchstart", "pointerdown" ]) {
+        button.addEventListener(type, e => e.stopPropagation(), true);
+      }
+      this.icon = button;
+      if (this.store("_ryn_admin_open")) this.toggle(true);
+      return true;
+    },
+    el(tag, cls, text) {
+      const node = document.createElement(tag);
+      if (cls) node.className = cls;
+      if (text !== undefined) node.textContent = text;
+      return node;
+    },
+    button(label, onClick, cls = "", title = "") {
+      const b = this.el("button", "ra-btn" + (cls ? " " + cls : ""), label);
+      b.type = "button";
+      if (title) b.title = title;
+      b.addEventListener("click", e => {
+        e.stopPropagation();
+        onClick(b);
+      });
+      return b;
+    },
+    number(value, step = 1, min = null, narrow = false) {
+      const input = this.el("input", narrow ? "ra-narrow" : "");
+      input.type = "number";
+      input.value = String(value);
+      input.step = String(step);
+      if (min !== null) input.min = String(min);
+      return input;
+    },
+    text(placeholder) {
+      const input = this.el("input");
+      input.type = "text";
+      input.placeholder = placeholder;
+      return input;
+    },
+    select(options, value) {
+      const s = this.el("select");
+      for (const [v, label] of options) {
+        const o = this.el("option", "", label);
+        o.value = String(v);
+        s.appendChild(o);
+      }
+      if (value !== undefined) s.value = String(value);
+      return s;
+    },
+    // a labelled row of controls; rows are what the search shows or hides
+    row(parent, label, ...children) {
+      const r = this.el("div", "ra-row ra-item");
+      if (label) r.appendChild(this.el("span", "ra-lbl", label));
+      for (const c of children) r.appendChild(c);
+      parent.appendChild(r);
+      return r;
+    },
+    // marks a row as always acting on you, whoever the target is
+    you(r) {
+      const lbl = r.querySelector(".ra-lbl");
+      if (lbl) lbl.appendChild(this.el("span", "ra-you", "you"));
+      r.title = "Always you, whoever the target is";
+      return r;
+    },
+    grid(parent, buttons) {
+      const g = this.el("div", "ra-grid ra-item");
+      for (const b of buttons) g.appendChild(b);
+      parent.appendChild(g);
+      return g;
+    },
+    sub(parent, title, note) {
+      const s = this.el("div", "ra-sub ra-item", title);
+      if (note) s.appendChild(this.el("small", "", note));
+      parent.appendChild(s);
+      return s;
+    },
+    section(page, id, title, hint, danger = false) {
+      const sec = this.el("section", "ra-section" + (danger ? " ra-danger" : ""));
+      sec.dataset.id = page.dataset.tab + "." + id;
+      sec.dataset.title = title;
+      const head = this.el("button", "ra-sec-head");
+      head.type = "button";
+      head.appendChild(this.el("span", "ra-sec-title", title));
+      head.appendChild(this.el("span", "ra-chev"));
+      // the body folds by animating its grid row; the inner box holds the rows
+      const body = this.el("div", "ra-sec-body");
+      const inner = this.el("div", "ra-sec-inner");
+      if (hint) inner.appendChild(this.el("div", "ra-hint", hint));
+      body.appendChild(inner);
+      sec.appendChild(head);
+      sec.appendChild(body);
+      page.appendChild(sec);
+      const fold = on => {
+        sec.classList.toggle("ra-folded", on);
+        head.setAttribute("aria-expanded", on ? "false" : "true");
+      };
+      fold(!!this.folds[sec.dataset.id]);
+      head.addEventListener("click", e => {
+        e.stopPropagation();
+        if (this.query) return;
+        const on = !sec.classList.contains("ra-folded");
+        fold(on);
+        if (on) this.folds[sec.dataset.id] = true; else delete this.folds[sec.dataset.id];
+        this.store("_ryn_admin_folds", this.folds);
+        if (!on) this.refresh();
+      });
+      this.sections.push(sec);
+      return inner;
+    },
+    toggleButton(label, get, set, title = "") {
+      const b = this.liveToggle(label, () => {
+        set(!get());
+        draw();
+      }, title);
+      const draw = () => this.lit(b, !!get());
+      draw();
+      return b;
+    },
+    // an on/off switch whose state is drawn by lit()
+    liveToggle(label, onClick, title = "") {
+      const b = this.button("", onClick, "ra-tog", title);
+      b.appendChild(this.el("span", "", label));
+      b.appendChild(this.el("i", "ra-sw"));
+      b.setAttribute("aria-pressed", "false");
+      return b;
+    },
+    lit(b, on) {
+      if (!b) return;
+      b.classList.toggle("ra-on", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    },
+    // a row of buttons where one is picked (the weapon tier)
+    chips(options, value) {
+      const box = this.el("div", "ra-seg");
+      const pick = {
+        value: String(value),
+        el: box
+      };
+      const draw = () => {
+        for (const b of box.children) b.classList.toggle("ra-pick", b.dataset.value === pick.value);
+      };
+      for (const [v, label] of options) {
+        const b = this.button(label, () => {
+          pick.value = String(v);
+          draw();
+        });
+        b.dataset.value = String(v);
+        box.appendChild(b);
+      }
+      draw();
+      return pick;
+    },
+    build() {
+      const style = document.createElement("style");
+      style.textContent = RYN_ADMIN_CSS;
+      document.head.appendChild(style);
+      const root = this.root = this.el("div", "ra-hidden");
+      root.id = "ryn-admin";
+      for (const type of [ "mousedown", "mouseup", "click", "dblclick", "contextmenu", "wheel", "touchstart", "touchend", "pointerdown", "pointerup" ]) {
+        root.addEventListener(type, e => e.stopPropagation());
+      }
+      for (const type of [ "keydown", "keyup", "keypress" ]) {
+        root.addEventListener(type, e => {
+          if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) e.stopPropagation();
+        });
+      }
+      const folds = this.store("_ryn_admin_folds");
+      this.folds = folds && typeof folds === "object" && !Array.isArray(folds) ? folds : {};
+      const head = this.el("div", "ra-head");
+      head.appendChild(this.el("span", "ra-logo"));
+      head.appendChild(this.el("span", "ra-title", "ADMIN"));
+      this.liveDot = this.el("span", "ra-live ra-off");
+      this.liveDot.title = "Green: the server is running. Yellow: paused.";
+      head.appendChild(this.liveDot);
+      this.tagLine = this.el("span", "ra-tag", "Private");
+      head.appendChild(this.tagLine);
+      head.appendChild(this.el("span", "ra-spacer"));
+      const icon = (text, title, fn) => {
+        const b = this.el("button", "ra-ic", text);
+        b.type = "button";
+        b.title = title;
+        b.addEventListener("click", e => {
+          e.stopPropagation();
+          fn();
+        });
+        head.appendChild(b);
+        return b;
+      };
+      this.bigButton = icon("⤢", "Wider", () => this.setBig(!root.classList.contains("ra-wide")));
+      icon("–", "Minimise", () => {
+        root.classList.toggle("ra-min");
+        this.store("_ryn_admin_min", root.classList.contains("ra-min"));
+      });
+      icon("×", "Close", () => this.toggle(false));
+      root.appendChild(head);
+      this.makeDraggable(head);
+      this.buildTargetBar(root);
+      const main = this.el("div", "ra-main");
+      const tabs = this.el("nav", "ra-tabs");
+      this.tabInk = this.el("div", "ra-tab-ink");
+      tabs.appendChild(this.tabInk);
+      main.appendChild(tabs);
+      const body = this.body = this.el("div", "ra-body");
+      main.appendChild(body);
+      root.appendChild(main);
+      this.buildSearch(body);
+      const foot = this.el("div", "ra-foot");
+      this.logLine = this.el("div", "ra-log", "Press Play, then use the buttons above.");
+      this.logLine.title = "Show the last messages";
+      this.logList = this.el("div", "ra-loglist");
+      this.logLine.addEventListener("click", () => this.logList.classList.toggle("ra-open"));
+      foot.appendChild(this.logLine);
+      foot.appendChild(this.logList);
+      root.appendChild(foot);
+      if (this.store("_ryn_admin_min")) root.classList.add("ra-min");
+      if (this.store("_ryn_admin_big")) root.classList.add("ra-wide");
+      this.lit(this.bigButton, root.classList.contains("ra-wide"));
+      for (const [id, label, parts] of RYN_ADMIN_TABS) {
+        const page = this.el("div", "ra-page");
+        page.dataset.tab = id;
+        const pageLabel = this.el("div", "ra-page-label");
+        pageLabel.innerHTML = RYN_ADMIN_ICONS[id];
+        pageLabel.appendChild(this.el("span", "", label));
+        page.appendChild(pageLabel);
+        for (const part of parts) this[part](page);
+        body.appendChild(page);
+        this.pages[id] = page;
+        const b = this.el("button", "ra-tab");
+        b.type = "button";
+        b.innerHTML = RYN_ADMIN_ICONS[id];
+        b.appendChild(this.el("span", "", label));
+        b.addEventListener("click", e => {
+          e.stopPropagation();
+          if (this.query) this.search("");
+          this.showTab(id);
+        });
+        tabs.appendChild(b);
+        this.tabButtons[id] = b;
+      }
+      this.noMatch = this.el("div", "ra-empty", "Nothing matches");
+      body.appendChild(this.noMatch);
+      let tab = this.store("_ryn_admin_tab");
+      if (!this.pages[tab] && RYN_ADMIN_OLD_TABS[tab]) tab = RYN_ADMIN_OLD_TABS[tab];
+      this.showTab(this.pages[tab] ? tab : "player");
+      document.body.appendChild(root);
+      const pos = this.store("_ryn_admin_pos");
+      this.place(pos && Number.isFinite(pos.x) ? pos.x : window.innerWidth - 560, pos && Number.isFinite(pos.y) ? pos.y : 70);
+      window.addEventListener("resize", () => this.place(this.x, this.y));
+    },
+    setBig(on) {
+      this.root.classList.toggle("ra-wide", on);
+      this.lit(this.bigButton, on);
+      this.store("_ryn_admin_big", on);
+      this.place(this.x, this.y);
+      if (this.open) this.refresh();
+    },
+    place(x, y) {
+      const root = this.root;
+      const w = root.offsetWidth || 312;
+      const h = root.offsetHeight || 40;
+      this.x = Math.max(0, Math.min(window.innerWidth - Math.min(w, 120), x));
+      this.y = Math.max(0, Math.min(window.innerHeight - Math.min(h, 34), y));
+      root.style.transform = "translate(" + Math.round(this.x) + "px, " + Math.round(this.y) + "px)";
+    },
+    makeDraggable(handle) {
+      let start = null;
+      handle.addEventListener("pointerdown", e => {
+        if (e.button !== 0 || e.target.closest(".ra-ic")) return;
+        start = {
+          id: e.pointerId,
+          dx: e.clientX - this.x,
+          dy: e.clientY - this.y
+        };
+        try {
+          handle.setPointerCapture(e.pointerId);
+        } catch (_) {}
+        this.root.classList.add("ra-drag");
+      });
+      handle.addEventListener("pointermove", e => {
+        if (start === null || e.pointerId !== start.id) return;
+        this.place(e.clientX - start.dx, e.clientY - start.dy);
+      });
+      const end = e => {
+        if (start === null || e.pointerId !== start.id) return;
+        start = null;
+        this.root.classList.remove("ra-drag");
+        this.store("_ryn_admin_pos", {
+          x: this.x,
+          y: this.y
+        });
+      };
+      handle.addEventListener("pointerup", end);
+      handle.addEventListener("pointercancel", end);
+    },
+    toggle(force) {
+      if (this.root === null) return;
+      this.open = force === undefined ? !this.open : !!force;
+      this.root.classList.toggle("ra-hidden", !this.open);
+      if (this.icon) this.icon.classList.toggle("ryn-admin-open", this.open);
+      this.store("_ryn_admin_open", this.open);
+      clearInterval(this.stateTimer);
+      if (this.open) {
+        this.place(this.x, this.y);
+        this.moveInk();
+        this.refresh();
+        this.stateTimer = setInterval(() => this.refresh(), 1e3);
+      }
+    },
+    say(text, bad = false) {
+      if (!this.logLine) return;
+      // the test bench sends many commands; their replies would bury its own lines
+      if (this.benchRunning && /^\[Admin\]/.test(text)) return;
+      const line = this.logLine;
+      line.textContent = text;
+      line.classList.toggle("ra-bad", bad);
+      line.classList.remove("ra-new");
+      void line.offsetWidth;
+      line.classList.add("ra-new");
+      this.logList.prepend(this.el("div", "", text));
+      while (this.logList.childNodes.length > 30) this.logList.lastChild.remove();
+    },
+    run(text) {
+      const parts = String(text).split(/[;\n]/).map(t => t.trim()).filter(Boolean);
+      for (const part of parts) {
+        const cmd = part[0] === "!" ? part : "!" + part;
+        if (!RynPrivate.command(cmd)) {
+          this.say("Spawn into the game first (press Play).", true);
+          return false;
+        }
+      }
+      setTimeout(() => this.refresh(), 60);
+      return true;
+    },
+    done(text, label) {
+      // one command: its own reply says more; several: the label sums them up
+      const many = /[;\n]/.test(text);
+      if (label && !many) this.say(label);
+      if (this.run(text) && label && many) this.say(label);
+    },
+    sid() {
+      return this.target === "" ? "" : " " + this.target;
+    },
+    // a tab's contents are drawn while it is open, or while a search shows every tab
+    shown(id) {
+      return this.query !== "" || this.tab === id;
+    },
+    refresh() {
+      const state = RynPrivate.state();
+      this.lastState = state;
+      if (this.liveDot) this.liveDot.classList.toggle("ra-off", state === null);
+      if (state === null) return;
+      this.drawTarget(state);
+      for (const [key, b] of Object.entries(this.worldButtons || {})) this.lit(b, !!(state.world && state.world[key]));
+      const ping = RynPrivate.ping;
+      if (this.pingNow) this.pingNow.textContent = ping.ms || ping.jitter ? "Now " + ping.ms + "ms" + (ping.jitter ? " ±" + ping.jitter : "") : "Now off";
+      const panel = this.lastPanel = RynPrivate.call("panel");
+      if (panel) this.drawPanelState(panel);
+      this.drawEditorOwners(state);
+      this.lit(this.freezeButton, !!Settings_default._botsFrozen);
+      this.drawShame(state.me);
+      if (this.tapOn && this.tapConn !== (RynPrivate.ownerSocket && RynPrivate.ownerSocket._conn)) this.installTap();
+      if (this.shown("people")) this.drawPlayers(state);
+      if (this.shown("analyze")) this.drawStats(state);
+      if (this.shown("tools")) this.drawPackets();
+      if (this.shown("world")) this.drawWorldSave();
+    },
+    showTab(id) {
+      this.tab = id;
+      for (const [key, page] of Object.entries(this.pages)) page.style.display = key === id ? "" : "none";
+      for (const [key, b] of Object.entries(this.tabButtons)) b.classList.toggle("ra-cur", key === id);
+      this.moveInk();
+      this.store("_ryn_admin_tab", id);
+      if (this.body) this.body.scrollTop = 0;
+      if (this.open) this.refresh();
+    },
+    // the highlight behind the current tab slides to it
+    moveInk() {
+      const b = this.tabButtons[this.tab];
+      if (b && this.tabInk) this.tabInk.style.translate = "0 " + b.offsetTop + "px";
+    },
+    buildSearch(parent) {
+      const box = this.el("div", "ra-search");
+      const input = this.searchInput = this.text("Search every tab…");
+      input.title = "Find a button by its name, in every tab. Esc clears.";
+      input.addEventListener("input", () => this.search(input.value));
+      input.addEventListener("keydown", e => {
+        if (e.key !== "Escape") return;
+        e.preventDefault();
+        this.search("");
+        input.blur();
+      });
+      box.appendChild(input);
+      parent.appendChild(box);
+      parent.addEventListener("scroll", () => box.classList.toggle("ra-stuck", parent.scrollTop > 2), {
+        passive: true
+      });
+    },
+    // what a row is found by: its label, buttons and placeholders, not the choices in its lists
+    searchText(node) {
+      const parts = [];
+      const walk = n => {
+        if (n.nodeType === 3) {
+          parts.push(n.nodeValue);
+          return;
+        }
+        if (n.nodeType !== 1 || n.tagName === "SELECT" || n.tagName === "CANVAS") return;
+        if (n.tagName === "INPUT" && n.placeholder) parts.push(n.placeholder);
+        if (n.dataset && n.dataset.keys) parts.push(n.dataset.keys);
+        for (const c of n.childNodes) walk(c);
+      };
+      walk(node);
+      return parts.join(" ").toLowerCase();
+    },
+    search(text) {
+      const q = String(text || "").trim().toLowerCase();
+      if (q === "") this.searchInput.value = "";
+      this.query = q;
+      this.body.classList.toggle("ra-searching", q !== "");
+      this.root.classList.toggle("ra-searching-on", q !== "");
+      if (q === "") {
+        for (const b of Object.values(this.tabButtons)) {
+          delete b.dataset.count;
+          b.classList.remove("ra-none");
+        }
+        this.showTab(this.tab);
+        return;
+      }
+      const words = q.split(/\s+/);
+      const counts = {};
+      for (const sec of this.sections) {
+        const title = sec.dataset.title.toLowerCase();
+        const inner = sec.querySelector(".ra-sec-inner");
+        const all = words.every(w => title.includes(w));
+        sec.classList.toggle("ra-hit-all", all);
+        let hits = 0;
+        for (const item of inner.querySelectorAll(".ra-item")) {
+          if (item.parentElement.closest(".ra-item")) continue;
+          const hit = all || words.every(w => (title + " " + this.searchText(item)).includes(w));
+          item.classList.toggle("ra-miss", !hit);
+          if (hit) hits++;
+        }
+        sec.classList.toggle("ra-miss", hits === 0 && !all);
+        if (hits || all) {
+          const tab = sec.dataset.id.split(".")[0];
+          counts[tab] = (counts[tab] || 0) + 1;
+        }
+      }
+      for (const [id, page] of Object.entries(this.pages)) page.style.display = counts[id] ? "" : "none";
+      for (const [id, b] of Object.entries(this.tabButtons)) {
+        if (counts[id]) b.dataset.count = counts[id]; else delete b.dataset.count;
+        b.classList.toggle("ra-none", !counts[id]);
+        b.classList.remove("ra-cur");
+      }
+      this.noMatch.classList.toggle("ra-shown", !Object.keys(counts).length);
+      this.body.scrollTop = 0;
+      if (this.open) this.refresh();
+    },
+    fillLater(fn) {
+      const go = () => {
+        const c = RynPrivate.catalog();
+        if (c === null) return false;
+        fn(c);
+        return true;
+      };
+      if (!go()) {
+        const wait = setInterval(() => {
+          if (go()) clearInterval(wait);
+        }, 1e3);
+      }
+    },
+    option(select, value, label) {
+      const o = this.el("option", "", label);
+      o.value = String(value);
+      select.appendChild(o);
+      return o;
+    },
+    tierOf(xp) {
+      const t = RYN_ADMIN_TIER_XP.find(([, min]) => (xp || 0) >= min);
+      return t ? t[0] : "normal";
+    },
+    weaponName(id) {
+      const c = RynPrivate.catalog();
+      const w = c && c.weapons.find(x => x.id === id);
+      return w ? w.name : "weapon " + id;
+    },
+    drawPanelState(panel) {
+      if (this.tagLine) this.tagLine.textContent = "Private · tick " + panel.time.tick;
+      if (this.liveDot) this.liveDot.classList.toggle("ra-paused", !!panel.time.paused);
+      this.lit(this.pauseButton, !!panel.time.paused);
+      if (this.timeNow) this.timeNow.textContent = (panel.time.paused ? "Paused" : "Running") + " at ×" + panel.time.scale + " · tick " + panel.time.tick;
+      if (this.timeSpeed && document.activeElement !== this.timeSpeed) this.timeSpeed.value = String(panel.time.scale);
+      this.lit(this.sandboxButton, !!panel.rules.sandbox);
+      if (this.rulesNow) this.rulesNow.textContent = "Now: all hits ×" + panel.rules.dmgMult + ", gather ×" + panel.rules.gatherMult + ", " + panel.rules.tickRate + " ticks/s";
+      if (this.kingName) {
+        const k = panel.kings[0];
+        if (!k) {
+          this.kingName.textContent = "No Crab King";
+          this.kingHp.textContent = "";
+          this.kingFill.style.width = "0%";
+        } else {
+          this.kingName.textContent = k.dead ? "Dead · back in " + k.respawnIn + "s" : RYN_ADMIN_PHASES[k.phase] || k.phase;
+          this.kingHp.textContent = k.dead ? "" : Math.round(k.health / 1e3) + "k / " + Math.round(k.maxHealth / 1e3) + "k";
+          const f = k.dead ? 0 : k.health / k.maxHealth;
+          this.kingFill.style.width = Math.round(f * 100) + "%";
+          this.kingBar.classList.toggle("ra-low", f < .4);
+        }
+        if (this.kingSpeed && document.activeElement !== this.kingSpeed) this.kingSpeed.value = String(panel.king.speed);
+        if (this.kingDamage && document.activeElement !== this.kingDamage) this.kingDamage.value = String(panel.king.damage);
+        if (this.kingOnly && document.activeElement !== this.kingOnly) this.kingOnly.value = panel.king.only || "all";
+      }
+      this.drawKingStats(panel.kingStats);
+      this.drawSurvival(panel.survival);
+      this.drawSpawners(panel.spawners || []);
+    },
+    // ---- the target: who Heal, God, Kill and the Player tab act on ----
+    buildTargetBar(root) {
+      const bar = this.el("div", "ra-target");
+      const top = this.el("div", "ra-tg-top");
+      this.targetAvatar = this.el("div", "ra-avatar", "ME");
+      top.appendChild(this.targetAvatar);
+      const who = this.el("div", "ra-tg-who");
+      const line = this.el("div", "ra-tg-line");
+      this.targetSelect = this.select([ [ "", "You" ] ], "");
+      this.targetSelect.title = "Who the buttons below and the Player tab act on. Click a player in People to pick them.";
+      this.targetSelect.addEventListener("change", () => this.setTarget(this.targetSelect.value));
+      line.appendChild(this.targetSelect);
+      this.targetChips = this.el("span", "ra-tg-chips");
+      line.appendChild(this.targetChips);
+      who.appendChild(line);
+      const hp = this.el("div", "ra-tg-hp");
+      this.targetBar = this.el("div", "ra-bar");
+      this.targetFill = this.el("i");
+      this.targetBar.appendChild(this.targetFill);
+      this.targetHp = this.el("span", "", "–");
+      hp.appendChild(this.targetBar);
+      hp.appendChild(this.targetHp);
+      who.appendChild(hp);
+      top.appendChild(who);
+      bar.appendChild(top);
+      const acts = this.el("div", "ra-tg-acts");
+      this.targetActs = {
+        heal: this.button("Heal", () => this.done("!heal" + this.sid()), "ra-go", "Full health"),
+        god: this.liveToggle("God", () => this.done("!god" + this.sid()), "Cannot be hurt"),
+        kill: this.button("Kill", () => this.done(this.target === "" ? "!die" : "!kill" + this.sid(), this.target === "" ? "You died" : "Killed " + this.target), "ra-del"),
+        go: this.button("Go", () => this.done("!tp" + this.sid(), "Went to " + this.target), "", "Teleport to them"),
+        bring: this.button("Bring", () => this.done("!bring" + this.sid()), "", "Bring them in front of you"),
+        remove: this.button("Remove", () => this.done("!dummy remove" + this.sid()), "ra-del", "Remove this dummy")
+      };
+      for (const b of Object.values(this.targetActs)) acts.appendChild(b);
+      bar.appendChild(acts);
+      root.appendChild(bar);
+      this.drawTarget(null);
+    },
+    setTarget(value) {
+      this.target = String(value);
+      if (this.targetSelect.value !== this.target) this.targetSelect.value = this.target;
+      this._plSig = null;
+      this.refresh();
+      if (this.lastState === null) this.drawTarget(null);
+    },
+    drawTarget(state) {
+      const select = this.targetSelect;
+      if (!select) return;
+      if (state) {
+        const me = state.me;
+        const options = [ [ "", "You" + (me && me.name ? " · " + me.name : "") ] ].concat(state.players.filter(p => !me || p.sid !== me.sid).map(p => [ String(p.sid), p.sid + " · " + (p.name || "unknown") + (p.dummy ? " (dummy)" : "") + (p.alive ? "" : " (dead)") ]));
+        const signature = options.map(o => o.join(":")).join("|");
+        if (signature !== this._targetSig) {
+          this._targetSig = signature;
+          const current = this.target;
+          select.innerHTML = "";
+          for (const [v, label] of options) this.option(select, v, label);
+          select.value = options.some(o => o[0] === current) ? current : "";
+          if (this.target !== select.value) {
+            this.target = select.value;
+            this._plSig = null;
+          }
+        }
+      }
+      const mine = this.target === "";
+      const who = !state ? null : mine ? state.players.find(p => state.me && p.sid === state.me.sid) || null : state.players.find(p => String(p.sid) === this.target) || null;
+      const a = this.targetActs;
+      a.go.style.display = a.bring.style.display = mine ? "none" : "";
+      a.remove.style.display = who && who.dummy ? "" : "none";
+      this.lit(a.god, !!(who && who.god));
+      const av = this.targetAvatar;
+      const avText = mine ? "ME" : who ? String(who.sid) : "?";
+      if (av.textContent !== avText) av.textContent = avText;
+      av.className = "ra-avatar" + (who && !who.alive ? " ra-av-dead" : !mine && who ? who.dummy ? " ra-av-dummy" : " ra-av-player" : "");
+      const chips = [];
+      if (who && who.dummy) chips.push([ "dummy", "" ]);
+      if (who && who.god) chips.push([ "god", "ra-chip-god" ]);
+      if (who && !who.alive) chips.push([ "dead", "ra-chip-dead" ]);
+      const sig = chips.map(c => c[0]).join();
+      if (sig !== this._chipSig) {
+        this._chipSig = sig;
+        this.targetChips.innerHTML = "";
+        for (const [text, cls] of chips) this.targetChips.appendChild(this.el("span", "ra-chip " + cls, text));
+      }
+      const f = who && who.alive && who.maxHealth ? Math.max(0, Math.min(1, who.health / who.maxHealth)) : 0;
+      this.targetFill.style.width = Math.round(f * 100) + "%";
+      this.targetBar.classList.toggle("ra-low", f < .4);
+      this.targetHp.textContent = !who ? "not in game" : who.alive ? who.health + " / " + who.maxHealth : "dead";
+    },
+    // ---- Player ----
+    buildVitals(page) {
+      const body = this.section(page, "vitals", "Vitals", "For the target.");
+      const hp = this.number(100, 1, 1);
+      this.row(body, "Health", hp, this.button("Set", () => this.done("!hp " + (Number(hp.value) || 1) + this.sid()), "ra-go")).dataset.keys = "hp";
+      const res = this.number(1e4, 1e3, 0);
+      this.row(body, "Resources", res, this.button("Set", () => this.done("!res " + (Number(res.value) || 0) + this.sid()), "ra-go"), this.button("Max", () => {
+        if (this.target === "") this.done("!s", "Resources maxed"); else this.done("!res 999999" + this.sid());
+      }, "", "As much of everything as there is")).dataset.keys = "res gold wood stone food points";
+      const age = this.number(10, 1, 1);
+      this.row(body, "Age", age, this.button("Set", () => this.done("!age " + (Number(age.value) || 1) + this.sid()), "ra-go")).dataset.keys = "level xp";
+    },
+    buildGear(page) {
+      const body = this.section(page, "gear", "Gear", "For the target. Set held is always you.");
+      const hats = this.select([ [ 0, "No hat" ] ]);
+      const accs = this.select([ [ 0, "No accessory" ] ]);
+      const weapon = this.select([]);
+      const item = this.select([]);
+      this.fillLater(c => {
+        for (const h of c.hats) this.option(hats, h.id, h.id + " · " + h.name);
+        for (const a of c.accessories) this.option(accs, a.id, a.id + " · " + a.name);
+        for (const w of c.weapons) this.option(weapon, w.id, w.id + " · " + w.name + (w.type ? " (2nd)" : ""));
+        for (const it of c.items) this.option(item, it.id, it.id + " · " + it.name);
+      });
+      this.row(body, "Weapon", weapon);
+      const tier = this.chips(RYN_ADMIN_TIERS, "ruby");
+      this.row(body, "", tier.el).dataset.keys = "tier weapon";
+      this.row(body, "", this.button("Give weapon", () => this.done("!give weapon " + weapon.value + " " + tier.value + this.sid()), "ra-go", "Give the target this weapon at this tier"), this.button("Set held", () => this.done("!v " + tier.value, RYN_ADMIN_TIERS.find(t => t[0] === tier.value)[1] + " weapon"), "", "Put this tier on the weapon you hold (only you)")).dataset.keys = "weapon tier";
+      this.row(body, "Hat", hats, this.button("Wear", () => this.done("!hat " + hats.value + this.sid()), "ra-go"));
+      this.row(body, "Accessory", accs, this.button("Wear", () => this.done("!acc " + accs.value + this.sid()), "ra-go"));
+      this.row(body, "Item", item, this.button("Give", () => this.done("!give item " + item.value + this.sid()), "ra-go"));
+    },
+    loadouts() {
+      const mine = this.store("_ryn_admin_loadouts");
+      return Array.isArray(mine) ? mine.filter(l => l && Array.isArray(l.weapons)) : [];
+    },
+    buildLoadouts(page) {
+      const body = this.section(page, "loadouts", "Loadouts", "For the target. Right-click one of yours to delete it.");
+      this.loadoutGrid = this.grid(body, []);
+      this.loadoutGrid.classList.add("ra-grid-2");
+      this.loadoutGrid.dataset.keys = "loadout";
+      this.row(body, "", this.button("Save mine", () => this.saveLoadout(), "", "Save what you wear now")).dataset.keys = "loadout";
+      this.drawLoadouts();
+    },
+    drawLoadouts() {
+      const grid = this.loadoutGrid;
+      grid.innerHTML = "";
+      const mine = this.loadouts();
+      for (const l of RYN_ADMIN_LOADOUTS.concat(mine)) {
+        const b = this.button(l.name, () => this.applyLoadout(l));
+        b.title = l.weapons.map(([id, tier]) => this.weaponName(id) + " " + tier).join(" + ");
+        const index = mine.indexOf(l);
+        if (index !== -1) {
+          b.addEventListener("contextmenu", e => {
+            e.preventDefault();
+            const all = this.loadouts();
+            all.splice(index, 1);
+            this.store("_ryn_admin_loadouts", all);
+            this.drawLoadouts();
+            this.say("Deleted " + l.name);
+          });
+        }
+        grid.appendChild(b);
+      }
+    },
+    applyLoadout(l) {
+      const parts = l.weapons.map(([id, tier]) => "!give weapon " + id + " " + tier + this.sid());
+      parts.push("!hat " + (l.hat || 0) + this.sid(), "!acc " + (l.acc || 0) + this.sid());
+      this.done(parts.join("; "), "Loadout: " + l.name);
+    },
+    saveLoadout() {
+      const me = this.lastState && this.lastState.me;
+      if (!me || !me.weapons || !me.weapons.length) {
+        this.say("Spawn into the game first (press Play).", true);
+        return;
+      }
+      const weapons = me.weapons.map((id, i) => [ id, this.tierOf(me.xp[i]) ]);
+      const all = this.loadouts();
+      const name = weapons.map(([id]) => this.weaponName(id).split(" ")[0]).join(" + ");
+      all.push({
+        name: name,
+        weapons: weapons,
+        hat: me.hat,
+        acc: me.acc
+      });
+      this.store("_ryn_admin_loadouts", all);
+      this.drawLoadouts();
+      this.say("Saved loadout " + name);
+    },
+    buildYou(page) {
+      const body = this.section(page, "you", "You", "Always you, whoever the target is.");
+      const speed = this.number(1, .1, .1);
+      this.you(this.row(body, "Walk ×", speed, this.button("Set", () => this.done("!speed " + .0016 * (Number(speed.value) || 1), "Walk speed ×" + (Number(speed.value) || 1)), "ra-go"))).dataset.keys = "speed move";
+      const card = this.el("div", "ra-pl ra-item");
+      card.dataset.keys = "shame clown";
+      const top = this.el("div", "ra-pl-top");
+      top.appendChild(this.el("span", "ra-pl-name", "Shame"));
+      this.shameText = this.el("span", "ra-pl-hp", "0 / 8");
+      top.appendChild(this.shameText);
+      card.appendChild(top);
+      this.shameBar = this.el("div", "ra-bar");
+      this.shameFill = this.el("i");
+      this.shameBar.appendChild(this.shameFill);
+      card.appendChild(this.shameBar);
+      card.title = "Eating within 120ms of a hit adds 1; a later heal takes 2 off. At 8 you wear the clown hat for 30s and cannot heal.";
+      body.appendChild(card);
+    },
+    drawShame(me) {
+      if (!this.shameText || !me) return;
+      const n = me.shame || 0;
+      const clown = me.shameTimer > 0;
+      this.shameText.textContent = clown ? "Clown · " + Math.ceil(me.shameTimer / 1e3) + "s left" : n + " / 8" + (n >= 6 ? " · careful" : "");
+      this.shameFill.style.width = (clown ? 100 : n / 8 * 100) + "%";
+      this.shameBar.classList.toggle("ra-low", clown || n >= 5);
+    },
+    // ---- People ----
+    buildPlayers(page) {
+      const body = this.section(page, "players", "Players", "Click a player to make them the target.");
+      this.playerList = this.el("div", "ra-plist ra-item");
+      body.appendChild(this.playerList);
+    },
+    // ---- People ----
+    drawPlayers(state) {
+      const list = this.playerList;
+      if (!list) return;
+      const sig = this.target + "/" + state.players.map(p => [ p.sid, p.alive, p.dummy, p.god, p.name ].join(":")).join("|");
+      if (sig !== this._plSig) {
+        this._plSig = sig;
+        list.innerHTML = "";
+        this._plRows = {};
+        for (const p of state.players) {
+          const mine = !!state.me && p.sid === state.me.sid;
+          const picked = mine ? this.target === "" : this.target === String(p.sid);
+          const card = this.el("div", "ra-pl ra-click" + (picked ? " ra-pick" : ""));
+          card.title = picked ? "The target" : "Make " + (mine ? "yourself" : p.name || p.sid) + " the target";
+          card.addEventListener("click", e => {
+            e.stopPropagation();
+            this.setTarget(mine ? "" : String(p.sid));
+          });
+          const top = this.el("div", "ra-pl-top");
+          top.appendChild(this.el("span", "ra-pl-dot" + (mine ? "" : p.dummy ? " ra-av-dummy" : " ra-av-player"), mine ? "ME" : String(p.sid)));
+          top.appendChild(this.el("span", "ra-pl-name", p.name || "unknown"));
+          if (p.dummy) top.appendChild(this.el("span", "ra-chip", "dummy"));
+          if (p.god) top.appendChild(this.el("span", "ra-chip ra-chip-god", "god"));
+          if (!p.alive) top.appendChild(this.el("span", "ra-chip ra-chip-dead", "dead"));
+          const hp = this.el("span", "ra-pl-hp", "");
+          top.appendChild(hp);
+          card.appendChild(top);
+          const bar = this.el("div", "ra-bar");
+          const fill = this.el("i");
+          bar.appendChild(fill);
+          card.appendChild(bar);
+          list.appendChild(card);
+          this._plRows[p.sid] = {
+            hp: hp,
+            bar: bar,
+            fill: fill
+          };
+        }
+      }
+      for (const p of state.players) {
+        const r = this._plRows[p.sid];
+        if (!r) continue;
+        const f = p.alive && p.maxHealth ? Math.max(0, Math.min(1, p.health / p.maxHealth)) : 0;
+        r.fill.style.width = Math.round(f * 100) + "%";
+        r.bar.classList.toggle("ra-low", f < .4);
+        r.hp.textContent = p.alive ? p.health + "/" + p.maxHealth : "";
+      }
+    },
+    buildDummies(page) {
+      const body = this.section(page, "dummies", "Dummies", "Test players the server moves; back 3s after dying.");
+      const kind = this.select([ [ "idle", "Stand still" ], [ "walk", "Walk around" ], [ "circle", "Circle" ], [ "chase", "Chase me" ], [ "attack", "Attack me" ], [ "insta", "Insta me" ] ], "idle");
+      const count = this.number(1, 1, 1, true);
+      count.max = "10";
+      count.title = "How many";
+      const primary = this.select([]);
+      const secondary = this.select([ [ "none", "No 2nd" ] ]);
+      const tier = this.select(RYN_ADMIN_TIERS, "normal");
+      const hat = this.select([ [ 0, "No hat" ] ]);
+      this.fillLater(c => {
+        for (const w of c.weapons) this.option(w.type ? secondary : primary, w.id, w.name);
+        for (const h of c.hats) this.option(hat, h.id, h.name);
+        primary.value = "5";
+      });
+      const delay = this.number(120, 10, 0, true);
+      delay.title = "How long a dummy waits after a hit before it eats (ms)";
+      let heal = true;
+      let god = false;
+      const healButton = this.toggleButton("Auto heal", () => heal, v => heal = v);
+      const godButton = this.toggleButton("God", () => god, v => god = v);
+      kind.addEventListener("change", () => {
+        if (kind.value === "insta") {
+          secondary.value = "15";
+          hat.value = "6";
+        }
+      });
+      this.row(body, "Kind", kind, count);
+      this.row(body, "Weapons", primary, secondary);
+      this.row(body, "Tier / hat", tier, hat);
+      this.row(body, "Heal ms", delay);
+      this.row(body, "", healButton, godButton);
+      this.row(body, "", this.button("Add", () => {
+        const opts = [ "p=" + primary.value, "s=" + secondary.value, "tier=" + tier.value, "hat=" + hat.value, "heal=" + (heal ? 1 : 0), "delay=" + Math.max(0, Number(delay.value) || 0), "god=" + (god ? 1 : 0) ];
+        this.done("!dummy " + kind.value + " " + Math.max(1, Math.min(10, Number(count.value) || 1)) + " " + opts.join(" "));
+      }, "ra-go"), this.button("Remove all", () => this.done("!dummy clear"), "ra-del")).dataset.keys = "dummies";
+    },
+    buildBots(page) {
+      const body = this.section(page, "bots", "Ryn bots", "Your own bots. However many you add spawn together, in one server tick.");
+      const count = this.number(3, 1, 1);
+      count.max = "40";
+      this.row(body, "How many", count, this.button("Spawn", () => this.addBots(Math.max(1, Math.min(40, Number(count.value) || 1))), "ra-go", "They join, wait for each other, then all spawn at once")).dataset.keys = "bots add";
+      this.freezeButton = this.liveToggle("Freeze my bots", () => {
+        const on = !Settings_default._botsFrozen;
+        if (!_rynSetBotsFrozen(client, on)) {
+          this.say("Your bots are not here yet.", true);
+          return;
+        }
+        this.say(on ? "Bots frozen" : "Bots moving again");
+        this.refresh();
+      }, "Only your bots stop; Pause world is in Train");
+      this.row(body, "", this.freezeButton, this.button("Remove all", () => {
+        let n = 0;
+        try {
+          n = _rynRemoveBots(client, true) + _rynRemoveBots(client, false);
+        } catch (_) {}
+        this.say("Removed " + n + " bot(s)");
+      }, "ra-del")).dataset.keys = "bots";
+    },
+    addBots(n) {
+      if (RynFleet.batch !== null) {
+        this.say("Bots are still joining; they spawn together in a moment.", true);
+        return;
+      }
+      RynFleet.start(n, made => this.say(made ? "Spawned " + made + " bot" + (made === 1 ? "" : "s") + " together" : "No bot got in", !made));
+      let got = 0;
+      try {
+        got = _rynSpawnBatch(n);
+      } catch (_) {}
+      if (!got) {
+        RynFleet.cancel();
+        this.say("Bots could not join. Press Play first.", true);
+        return;
+      }
+      RynFleet.expect(got);
+      this.say("Joining " + got + " bot" + (got === 1 ? "" : "s") + "…");
+    },
+    // ---- Train ----
+    buildScenarios(page) {
+      const body = this.section(page, "scenarios", "Scenarios", "Built around you, where you look.");
+      const list = [ [ "trapped", "Enemy trapped" ], [ "push", "Spike push" ], [ "metrapped", "I'm trapped" ], [ "surrounded", "Surrounded" ], [ "duel", "Duel" ] ];
+      const grid = this.grid(body, list.map(([id, label]) => this.button(label, () => this.done("!scenario " + id, label))));
+      grid.classList.add("ra-grid-2");
+      grid.dataset.keys = "scenario";
+    },
+    // ---- Train ----
+    buildTime(page) {
+      const body = this.section(page, "time", "Time", "Pauses or slows the whole server.");
+      this.pauseButton = this.liveToggle("Pause world", () => this.done(this.lastPanel && this.lastPanel.time.paused ? "!time play" : "!time pause"), "Every player, bot and animal stops");
+      this.row(body, "", this.pauseButton, this.button("Step 1", () => this.done("!time step 1"), "", "One server tick, then paused"), this.button("Step 5", () => this.done("!time step 5"), "", "Five server ticks, then paused")).dataset.keys = "play";
+      const speed = this.timeSpeed = this.select([ [ "0.25", "×0.25" ], [ "0.5", "×0.5" ], [ "1", "×1" ], [ "2", "×2" ] ], "1");
+      speed.addEventListener("change", () => this.done("!time speed " + speed.value));
+      this.row(body, "Game speed", speed).dataset.keys = "slow motion";
+      this.timeNow = this.el("div", "ra-note ra-item", "");
+      body.appendChild(this.timeNow);
+    },
+    buildSurvival(page) {
+      const body = this.section(page, "survival", "Survival", "Harder waves until you die; a cleared wave heals you.");
+      this.survivalButton = this.liveToggle("Survival", () => this.done(this.lastPanel && this.lastPanel.survival.on ? "!survival stop" : "!survival start"), "Start or stop the waves");
+      this.survivalText = this.el("span", "ra-pl-hp", "");
+      this.row(body, "", this.survivalButton, this.survivalText).dataset.keys = "survival waves start stop";
+    },
+    drawSurvival(sv) {
+      if (!this.survivalButton || !sv) return;
+      let best = Number(this.store("_ryn_survival_best")) || 0;
+      if (sv.best > best) {
+        best = sv.best;
+        this.store("_ryn_survival_best", best);
+      }
+      this.lit(this.survivalButton, sv.on);
+      this.survivalText.textContent = sv.on ? "Wave " + sv.wave + " · " + sv.left + " left · best " + best : (sv.last ? "Last: " + sv.last.waves + " waves (" + sv.last.why + ") · " : "") + "best " + best;
+    },
+    benchTests() {
+      return [ {
+        id: "insta",
+        name: "Anti-insta ×10",
+        high: true
+      }, {
+        id: "trap",
+        name: "Trapped + insta ×5",
+        high: true
+      }, {
+        id: "surround",
+        name: "Surrounded 20s",
+        high: false
+      }, {
+        id: "kill",
+        name: "Kill a trapped enemy",
+        high: false
+      }, {
+        id: "duel",
+        name: "Duel 30s",
+        high: true
+      } ];
+    },
+    benchName(id) {
+      const t = this.benchTests().find(x => x.id === id);
+      return t ? t.name : id;
+    },
+    buildBench(page) {
+      const body = this.section(page, "bench", "Test bench", "Scores Ryn as it is set now; just stand still.");
+      this.benchSelect = this.select(this.benchTests().map(t => [ t.id, t.name ]), "insta");
+      this.row(body, "Test", this.benchSelect, this.button("Run", () => this.benchRun([ this.benchSelect.value ]), "ra-go"));
+      this.row(body, "", this.button("Run all", () => this.benchRun(this.benchTests().map(t => t.id), true), "ra-go"), this.button("Stop", () => {
+        this.benchStop = true;
+      }, "ra-del")).dataset.keys = "test bench";
+      this.benchSetting = this.select([]);
+      try {
+        const keys = Object.keys(Settings_default).filter(k => typeof Settings_default[k] === "boolean" && /heal|insta|anti|soldier|sync|spike|trap|push|break|plac|gear|velocity|dash|turret|safe|predict|retrap|emp|tail|hat|kb/i.test(k) && !/^_bot|^_chat|render|hitbox|color|bar|ring|frozen|migrated/i.test(k));
+        for (const k of keys.sort()) this.option(this.benchSetting, k, k.replace(/^_/, ""));
+      } catch (_) {}
+      this.row(body, "A/B", this.benchSetting, this.button("Compare", () => this.benchAB(), "ra-go", "Runs the test, flips the setting, runs it again and puts it back")).dataset.keys = "test setting";
+      this.benchStatus = this.el("div", "ra-note ra-item", "");
+      body.appendChild(this.benchStatus);
+      this.benchLines = this.el("div", "ra-lines ra-item");
+      body.appendChild(this.benchLines);
+      this.drawBenchHistory();
+    },
+    benchLine(text, cls) {
+      if (!this.benchLines) return;
+      this.benchLines.prepend(this.el("div", cls || "", text));
+      while (this.benchLines.childNodes.length > 40) this.benchLines.lastChild.remove();
+    },
+    async benchWait(ms) {
+      const end = Date.now() + ms;
+      while (Date.now() < end) {
+        if (this.benchStop) throw new Error("stopped");
+        const st = RynPrivate.state();
+        if (!st || !st.me || !st.me.alive) throw new Error("you left the game");
+        await new Promise(r => setTimeout(r, Math.min(100, end - Date.now())));
+      }
+    },
+    benchCmd(list) {
+      for (const c of list) RynPrivate.command(c);
+    },
+    benchTick() {
+      const p = RynPrivate.call("panel");
+      return p ? p.time.tick : 0;
+    },
+    async benchSetup() {
+      const st = RynPrivate.state();
+      const cmds = [];
+      if (st.me.x < 0) cmds.push("!tp 7200 3000");
+      if (st.me.god) cmds.push("!god");
+      cmds.push("!survival stop", "!dummy clear", "!killmobs 2500", "!clearnear 800", "!time play", "!time speed 1", "!heal");
+      this.benchCmd(cmds);
+      RynPrivate.call("benchGuard", true);
+      await this.benchWait(500);
+      return this.benchTick();
+    },
+    async benchOne(id) {
+      const me = RynPrivate.state().me.sid;
+      const t0 = await this.benchSetup();
+      const events = () => (RynPrivate.call("benchEvents", t0) || []).filter(e => e.sid === me);
+      const deathsIn = (a, b) => events().filter(e => e.kind === "death" && e.tick >= a && e.tick <= b).length;
+      const status = text => {
+        if (this.benchStatus) this.benchStatus.textContent = text;
+      };
+      const sumSince = (a, col) => (RynPrivate.call("series") || []).filter(r => r[0] >= a).reduce((s, r) => s + r[col], 0);
+      status("Running " + this.benchName(id) + "…");
+      if (id === "insta") {
+        this.benchCmd([ "!dummy insta 1 p=5 s=15 tier=ruby hat=7 gap=18" ]);
+        const end = Date.now() + 12e4;
+        const instas = () => events().filter(e => e.kind === "insta");
+        while (Date.now() < end && instas().length < 10) {
+          await this.benchWait(300);
+          status("Anti-insta: " + instas().length + "/10");
+        }
+        await this.benchWait(600);
+        const list = instas().slice(0, 10);
+        const failed = list.filter(e => deathsIn(e.tick, e.tick + 3) > 0).length;
+        const ok = list.length - failed;
+        return {
+          value: list.length ? ok / list.length : 0,
+          text: ok + "/" + list.length + " instas survived"
+        };
+      }
+      if (id === "trap") {
+        let ok = 0;
+        for (let round = 1; round <= 5; round++) {
+          status("Trapped + insta: round " + round + "/5");
+          this.benchCmd([ "!dummy clear", "!clearnear 450", "!heal", "!scenario metrapped" ]);
+          const a = this.benchTick();
+          await this.benchWait(5e3);
+          if (deathsIn(a, this.benchTick()) === 0) ok++;
+        }
+        return {
+          value: ok / 5,
+          text: ok + "/5 rounds survived"
+        };
+      }
+      if (id === "surround") {
+        this.benchCmd([ "!scenario surrounded" ]);
+        const a = this.benchTick();
+        for (let s = 20; s > 0; s--) {
+          status("Surrounded: " + s + "s");
+          await this.benchWait(1e3);
+        }
+        const deaths = deathsIn(a, this.benchTick());
+        const taken = sumSince(a, 4);
+        return {
+          value: deaths * 1e4 + taken,
+          text: deaths + " deaths, " + taken + " damage taken"
+        };
+      }
+      if (id === "kill") {
+        this.benchCmd([ "!scenario trapped" ]);
+        await this.benchWait(300);
+        const dummy = RynPrivate.state().players.find(p => p.dummy);
+        if (!dummy) return {
+          value: 99999,
+          text: "no enemy"
+        };
+        const a = this.benchTick();
+        const start = Date.now();
+        let ms = null;
+        while (Date.now() - start < 25e3) {
+          await this.benchWait(200);
+          status("Kill a trapped enemy: " + ((Date.now() - start) / 1e3).toFixed(0) + "s");
+          if ((RynPrivate.call("log", 200) || []).some(e => !e.ai && e.to === dummy.sid && e.hp <= 0 && e.tick >= a)) {
+            ms = Date.now() - start;
+            break;
+          }
+        }
+        return {
+          value: ms === null ? 99999 : ms,
+          text: ms === null ? "no kill in 25s" : "killed in " + (ms / 1e3).toFixed(1) + "s"
+        };
+      }
+      if (id === "duel") {
+        this.benchCmd([ "!scenario duel" ]);
+        const a = this.benchTick();
+        for (let s = 30; s > 0; s--) {
+          status("Duel: " + s + "s");
+          await this.benchWait(1e3);
+        }
+        const log = (RynPrivate.call("log", 400) || []).filter(e => e.tick >= a && !e.ai);
+        const kills = log.filter(e => e.from === me && !e.fromAi && e.to !== me && e.hp <= 0 && e.amount < 0).length;
+        const deaths = deathsIn(a, this.benchTick());
+        return {
+          value: kills - deaths,
+          text: kills + " kills, " + deaths + " deaths, dealt " + sumSince(a, 3) + ", took " + sumSince(a, 4)
+        };
+      }
+      return {
+        value: 0,
+        text: "unknown test"
+      };
+    },
+    async benchCleanup() {
+      RynPrivate.call("benchGuard", false);
+      this.benchCmd([ "!dummy clear", "!clearnear 800", "!heal" ]);
+    },
+    async benchRun(ids, report) {
+      if (this.benchRunning) {
+        this.say("A test is already running", true);
+        return null;
+      }
+      const st = RynPrivate.state();
+      if (!st || !st.me || !st.me.alive) {
+        this.say("Spawn into the game first (press Play).", true);
+        return null;
+      }
+      this.benchRunning = true;
+      this.benchStop = false;
+      const results = {};
+      try {
+        for (const id of ids) {
+          results[id] = await this.benchOne(id);
+          this.benchLine(this.benchName(id) + ": " + results[id].text);
+        }
+      } catch (e) {
+        this.benchLine("Stopped: " + (e && e.message || e), "ra-hurt");
+      } finally {
+        await this.benchCleanup();
+        this.benchRunning = false;
+        if (this.benchStatus) this.benchStatus.textContent = this.benchStop ? "Stopped" : "Done";
+      }
+      if (report && Object.keys(results).length === ids.length) {
+        let version = "?";
+        try {
+          version = GM_info.script.version;
+        } catch (_) {}
+        const runs = this.store("_ryn_bench_runs");
+        const all = Array.isArray(runs) ? runs : [];
+        all.push({
+          at: Date.now(),
+          version: version,
+          ping: RynPrivate.ping.ms,
+          results: results
+        });
+        while (all.length > 10) all.shift();
+        this.store("_ryn_bench_runs", all);
+        this.drawBenchHistory();
+      }
+      return results;
+    },
+    async benchAB() {
+      const key = this.benchSetting && this.benchSetting.value;
+      if (!key) {
+        this.say("Pick a setting to compare", true);
+        return;
+      }
+      const id = this.benchSelect.value;
+      const before = Settings_default[key];
+      const label = key.replace(/^_/, "");
+      this.benchLine("A/B " + label + " on " + this.benchName(id));
+      try {
+        const a = await this.benchRun([ id ]);
+        if (!a || !a[id] || this.benchStop) return;
+        Settings_default[key] = !before;
+        const b = await this.benchRun([ id ]);
+        if (!b || !b[id]) return;
+        this.benchLine("A/B " + label + ": " + (before ? "on" : "off") + " → " + a[id].text + " | " + (before ? "off" : "on") + " → " + b[id].text, "ra-heal");
+      } finally {
+        Settings_default[key] = before;
+      }
+    },
+    drawBenchHistory() {
+      const runs = this.store("_ryn_bench_runs");
+      if (!Array.isArray(runs) || !runs.length || !this.benchLines) return;
+      const last = runs[runs.length - 1];
+      const prev = runs[runs.length - 2];
+      const tests = this.benchTests();
+      const lines = [];
+      for (const t of tests) {
+        const r = last.results[t.id];
+        if (!r) continue;
+        let mark = "";
+        const p = prev && prev.results[t.id];
+        if (p) mark = r.value === p.value ? " =" : (r.value > p.value) === t.high ? " ▲ better" : " ▼ worse";
+        lines.push(t.name + ": " + r.text + mark);
+      }
+      this.benchLine("Report " + new Date(last.at).toLocaleString() + " · Ryn " + last.version + (prev ? " (vs " + prev.version + ")" : "") + "\n" + lines.join("\n"));
+    },
+    // ---- World ----
+    buildMap(page) {
+      const body = this.section(page, "map", "Map", "Place or Delete, then click the map. Esc stops, Ctrl+Z undoes.");
+      this.sub(body, "Presets");
+      this.grid(body, [ this.button("Forest", () => this.done("!map forest"), "", "Trees and bushes in the 1600 around you"), this.button("Rocks", () => this.done("!map rocks"), "", "Stone and gold in the 1600 around you"), this.button("Duel ring", () => this.done("!map duel"), "", "Clears the 1000 around you, buildings too, inside a ring of stones") ]).dataset.keys = "map preset";
+      this.sub(body, "Editor");
+      const what = this.editWhat = this.select([ [ "tree", "Tree" ], [ "bush", "Bush" ], [ "stone", "Stone" ], [ "gold", "Gold" ] ], "tree");
+      this.fillLater(c => {
+        for (const it of c.items) if (!it.consume) this.option(what, it.id, it.name);
+      });
+      this.editOwner = this.select([ [ "me", "Me" ], [ "none", "Nobody" ] ], "me");
+      this.editOwner.title = "With a dummy as the owner, its spikes and traps work against you";
+      this.editShape = this.select([ [ "point", "One" ], [ "line", "Line" ], [ "circle", "Circle" ], [ "square", "Square" ] ], "point");
+      this.editShape.title = "Line: click the start, then the end";
+      this.editSize = this.number(220, 20, 40, true);
+      this.editCount = this.number(8, 1, 2, true);
+      this.editSize.title = "Circle radius or square side";
+      this.editCount.title = "How many go on a circle";
+      this.editShape.addEventListener("change", () => {
+        this.editStart = null;
+      });
+      this.placeButton = this.liveToggle("Place", () => this.setEdit(this.editMode === "place" ? "" : "place"), "Click the map to place");
+      this.deleteButton = this.liveToggle("Delete", () => this.setEdit(this.editMode === "delete" ? "" : "delete"), "Click something on the map to delete it");
+      this.row(body, "What", what).dataset.keys = "editor";
+      this.row(body, "Owner", this.editOwner).dataset.keys = "editor";
+      this.row(body, "Shape", this.editShape, this.editSize, this.editCount).dataset.keys = "editor size count";
+      this.row(body, "", this.placeButton, this.deleteButton, this.button("Undo", () => this.undo(), "", "Ctrl+Z")).dataset.keys = "editor";
+    },
+    setEdit(mode) {
+      this.editMode = mode;
+      this.editStart = null;
+      this.lit(this.placeButton, mode === "place");
+      this.lit(this.deleteButton, mode === "delete");
+      if (mode) this.say(mode === "place" ? "Click the map to place. Esc stops." : "Click something to delete it. Esc stops.");
+    },
+    buildAnimals(page) {
+      const body = this.section(page, "animals", "Animals", "Spawn puts them in front of you; a spawner keeps making them here.");
+      this.worldButtons = {};
+      const names = {
+        mobs: [ "Animals", "Every animal on the map" ],
+        hostile: [ "Hostile", "Animals that attack" ],
+        bosses: [ "Bosses", "Boss animals" ]
+      };
+      const switches = [];
+      for (const key of [ "mobs", "hostile", "bosses" ]) {
+        const b = this.liveToggle(names[key][0], () => {
+          const on = this.lastState && this.lastState.world && this.lastState.world[key];
+          this.done("!" + key + (on ? " off" : " on"));
+        }, names[key][1]);
+        this.worldButtons[key] = b;
+        switches.push(b);
+      }
+      this.grid(body, switches).dataset.keys = "mobs";
+      const animal = this.select(RYN_ADMIN_ANIMALS, "wolf");
+      this.row(body, "Animal", animal);
+      const count = this.number(1, 1, 1, true);
+      count.max = "20";
+      count.title = "How many";
+      this.row(body, "Spawn", count, this.button("Spawn", () => this.done("!spawn " + animal.value + " " + Math.max(1, Math.min(20, Number(count.value) || 1))), "ra-go")).dataset.keys = "animal";
+      const every = this.number(10, 1, 1, true);
+      const max = this.number(3, 1, 1, true);
+      every.title = "Seconds between animals";
+      max.title = "Most alive at once";
+      every.className = max.className = "ra-tiny";
+      this.row(body, "Spawner", every, this.el("span", "ra-unit", "s"), max, this.el("span", "ra-unit", "max"), this.button("Add", () => this.done("!spawner " + animal.value + " " + (Number(every.value) || 10) + " " + (Number(max.value) || 3)), "ra-go", "A spawner here: one animal every so many seconds, up to max alive")).dataset.keys = "animal spawner every";
+      this.spawnerList = this.el("div", "ra-plist ra-item");
+      this.spawnerList.dataset.keys = "spawner";
+      body.appendChild(this.spawnerList);
+      this.row(body, "", this.button("Remove spawners", () => this.done("!spawner clear"), "ra-del"), this.button("Send away", () => this.done("!killmobs 2000"), "", "Animals within 2000 of you leave")).dataset.keys = "animals spawner";
+    },
+    buildKing(page) {
+      const body = this.section(page, "king", "Crab King", "Practice one attack at a time.");
+      const card = this.el("div", "ra-pl ra-item");
+      card.dataset.keys = "boss";
+      const top = this.el("div", "ra-pl-top");
+      this.kingName = this.el("span", "ra-pl-name", "");
+      this.kingHp = this.el("span", "ra-pl-hp", "");
+      top.appendChild(this.kingName);
+      top.appendChild(this.kingHp);
+      card.appendChild(top);
+      this.kingBar = this.el("div", "ra-bar");
+      this.kingFill = this.el("i");
+      this.kingBar.appendChild(this.kingFill);
+      card.appendChild(this.kingBar);
+      body.appendChild(card);
+      this.grid(body, [ this.button("Arena", () => this.done("!arena"), "ra-go", "Go to the Crab King's arena"), this.button("Respawn", () => this.done("!king respawn"), "", "Full health, or back now if dead"), this.button("Attack now", () => this.done("!king attack")) ]).dataset.keys = "boss";
+      const hp = this.number(24e4, 1e4, 1);
+      this.row(body, "Health", hp, this.button("Set", () => this.done("!king hp " + (Number(hp.value) || 1)), "ra-go")).dataset.keys = "hp boss";
+      const speeds = [ [ "0.5", "×0.5" ], [ "0.75", "×0.75" ], [ "1", "×1" ], [ "1.5", "×1.5" ], [ "2", "×2" ] ];
+      this.kingSpeed = this.select(speeds, "1");
+      this.kingSpeed.addEventListener("change", () => this.done("!king speed " + this.kingSpeed.value));
+      this.kingDamage = this.select([ [ "0", "×0" ] ].concat(speeds), "1");
+      this.kingDamage.addEventListener("change", () => this.done("!king damage " + this.kingDamage.value));
+      this.row(body, "Speed", this.kingSpeed);
+      this.row(body, "Damage", this.kingDamage);
+      this.kingOnly = this.select([ [ "all", "All attacks" ], [ "slam", "Slam only" ], [ "charge", "Charge only" ], [ "ring", "Ring only" ], [ "dive", "Dive only" ] ], "all");
+      this.kingOnly.addEventListener("change", () => this.done("!king only " + this.kingOnly.value));
+      this.row(body, "Practice", this.kingOnly).dataset.keys = "attack";
+      this.kingDodge = this.el("span", "ra-pl-hp", "");
+      this.kingDodge.style.whiteSpace = "normal";
+      this.kingDodge.style.flex = "1";
+      this.row(body, "", this.kingDodge, this.button("Reset counts", () => this.done("!king resetstats"))).dataset.keys = "dodge kill time";
+    },
+    buildRules(page) {
+      const body = this.section(page, "rules", "Rules", "All hits × is everyone; Your hit is a fixed number for you.");
+      const dmg = this.number(1, .25, .1);
+      this.row(body, "All hits ×", dmg, this.button("Set", () => this.done("!rules dmg " + (Number(dmg.value) || 1)), "ra-go")).dataset.keys = "damage";
+      const mine = this.number(100, 10, 0);
+      this.you(this.row(body, "Your hit", mine, this.button("Set", () => this.done("!dmg " + (Number(mine.value) || 0), "Hit damage " + (Number(mine.value) || 0)), "ra-go"), this.button("Normal", () => this.done("!dmg", "Hit damage normal")))).dataset.keys = "damage";
+      const gather = this.number(1, 1, 1);
+      this.row(body, "Gather ×", gather, this.button("Set", () => this.done("!rules gather " + (Number(gather.value) || 1)), "ra-go"));
+      const tick = this.number(9, 1, 1);
+      this.row(body, "Ticks/s", tick, this.button("Set", () => this.done("!rules tick " + Math.max(1, Math.min(30, Number(tick.value) || 9))), "ra-go")).dataset.keys = "tick rate";
+      this.sandboxButton = this.liveToggle("Free build", () => this.done("!rules sandbox " + (this.lastPanel && this.lastPanel.rules.sandbox ? "off" : "on")), "Sandbox: nothing costs anything; building caps as in the game's sandbox (99 of most things)");
+      this.row(body, "", this.sandboxButton, this.button("Reset rules", () => this.done("!rules dmg 1; !rules gather 1; !rules tick 9; !rules sandbox on", "Rules reset"))).dataset.keys = "sandbox";
+      this.rulesNow = this.el("div", "ra-note ra-item", "");
+      body.appendChild(this.rulesNow);
+    },
+    stamps() {
+      const all = this.store("_ryn_stamps");
+      return Array.isArray(all) ? all.filter(s => s && s.stamp && Array.isArray(s.stamp.items)) : [];
+    },
+    saves() {
+      const all = this.store("_ryn_admin_saves");
+      return all && typeof all === "object" && !Array.isArray(all) ? all : {};
+    },
+    buildSaves(page) {
+      const body = this.section(page, "saves", "Saves");
+      this.sub(body, "This world", "saves itself every 5s").dataset.keys = "lobby auto";
+      this.worldSave = this.el("div", "ra-note ra-item", "");
+      this.worldSave.dataset.keys = "lobby world";
+      body.appendChild(this.worldSave);
+      this.sub(body, "Snapshots", "buildings, trees, dummies, rules, your spot").dataset.keys = "save load";
+      const name = this.text("Name this snapshot");
+      this.row(body, "", name, this.button("Save", () => {
+        const label = name.value.trim() || "World " + (Object.keys(this.saves()).length + 1);
+        const snap = RynPrivate.call("snapshot");
+        if (!snap) {
+          this.say("Spawn into the game first (press Play).", true);
+          return;
+        }
+        const all = this.saves();
+        all[label] = {
+          at: Date.now(),
+          snap: snap
+        };
+        this.store("_ryn_admin_saves", all);
+        name.value = "";
+        this.drawSaves();
+        this.say("Saved " + label + " (" + snap.objects.length + " objects, " + snap.dummies.length + " dummies)");
+      }, "ra-go", "Loads back into the world you are in"));
+      this.saveList = this.el("div", "ra-plist ra-item");
+      this.saveList.dataset.keys = "snapshot load";
+      body.appendChild(this.saveList);
+      this.sub(body, "Bases", "your own buildings, stamped where you stand").dataset.keys = "stamp";
+      const stampName = this.text("Name this base");
+      const radius = this.select([ [ "400", "400 around" ], [ "600", "600 around" ], [ "900", "900 around" ] ], "600");
+      this.row(body, "", stampName, radius).dataset.keys = "base stamp";
+      this.row(body, "", this.button("Copy my base", () => {
+        const stamp = RynPrivate.call("copyBase", Number(radius.value));
+        if (!stamp) {
+          this.say("Spawn into the game first (press Play).", true);
+          return;
+        }
+        if (!stamp.items.length) {
+          this.say("No buildings of yours around you", true);
+          return;
+        }
+        const all = this.stamps();
+        const label = stampName.value.trim() || "Base " + (all.length + 1);
+        all.push({
+          name: label,
+          stamp: stamp
+        });
+        this.store("_ryn_stamps", all);
+        stampName.value = "";
+        this.drawStamps();
+        this.say("Copied " + label + ": " + stamp.items.length + " buildings");
+      }, "ra-go"), this.toggleButton("Turn with me", () => !!this.store("_ryn_stamp_turn"), v => this.store("_ryn_stamp_turn", v), "Stamp turned to where you look")).dataset.keys = "stamp";
+      this.stampList = this.el("div", "ra-plist ra-item");
+      this.stampList.dataset.keys = "base stamp";
+      body.appendChild(this.stampList);
+      this.drawSaves();
+      this.drawStamps();
+    },
+    drawWorldSave() {
+      const box = this.worldSave;
+      if (!box) return;
+      let text = "Pick or make a world in the lobby's Worlds list.";
+      try {
+        const w = RynWorlds.applied ? RynWorlds.list().find(x => x.id === RynWorlds.applied) : null;
+        if (w) {
+          const ago = w.played ? Math.max(0, Math.round((Date.now() - w.played) / 1e3)) : null;
+          text = w.name + (ago === null ? "" : " · saved " + (ago < 60 ? ago + "s" : Math.round(ago / 60) + "m") + " ago");
+        }
+      } catch (_) {}
+      if (box.textContent !== text) box.textContent = text;
+    },
+    buildTravel(page) {
+      const body = this.section(page, "travel", "Travel", "Players: Go on the target bar. The arena: Crab King.");
+      const x = this.number(7200, 100);
+      const y = this.number(7200, 100);
+      this.row(body, "X / Y", x, y, this.button("Go", () => this.done("!tp " + (Number(x.value) || 0) + " " + (Number(y.value) || 0), "Teleported"), "ra-go")).dataset.keys = "teleport tp";
+    },
+    buildClear(page) {
+      const body = this.section(page, "clear", "Clear & reset", "Near = around you. Hover a button for what it removes.", true);
+      this.grid(body, [ this.button("Buildings near", () => this.done("!clearnear 600"), "ra-del", "Every building within 600 of you"), this.button("Nature near", () => this.done("!map empty"), "ra-del", "Trees, bushes, stone and gold within 1600 of you"), this.button("All buildings", () => this.done("!b", "Buildings cleared"), "ra-del", "Every building on the map") ]).dataset.keys = "clear delete";
+      this.grid(body, [ this.button("Original map", () => this.done("!map reset"), "ra-del", "The whole map's nature back the way the server made it"), this.button("Fresh start", () => this.done("!dummy clear; !b; !rules dmg 1; !rules gather 1; !rules tick 9; !rules sandbox on; !time play; !time speed 1; !king respawn", "Fresh start: no dummies, no buildings, normal rules"), "ra-del", "No dummies or buildings, normal rules and time, the Crab King back") ]).dataset.keys = "reset clear";
+    },
+    drawEditorOwners(state) {
+      const select = this.editOwner;
+      if (!select) return;
+      const dummies = state.players.filter(p => p.dummy);
+      const sig = dummies.map(p => p.sid + p.name).join("|");
+      if (sig === this._ownerSig) return;
+      this._ownerSig = sig;
+      const current = select.value;
+      select.innerHTML = "";
+      this.option(select, "me", "Me");
+      this.option(select, "none", "Nobody");
+      for (const p of dummies) this.option(select, "d" + p.sid, p.name + " (dummy)");
+      select.value = [ ...select.options ].some(o => o.value === current) ? current : "me";
+    },
+    // How the game draws the world right now: the top-left corner (RYN._offset) and
+    // the screen pixels per world unit it set on its canvas. The 2025 game sizes its
+    // view to the window's shape, so a fixed 16:9 guess lands above or below.
+    view() {
+      try {
+        const off = RYN._offset;
+        let scale = Renderer_default._viewScale;
+        let left = 0, top = 0;
+        const canvas = document.getElementById("gameCanvas");
+        if (canvas) {
+          const r = canvas.getBoundingClientRect();
+          left = r.left;
+          top = r.top;
+        }
+        if (!(scale > 0)) {
+          const {_w: w, _h: h} = ZoomHandler_default._scale.current;
+          scale = Math.max(window.innerWidth / w, window.innerHeight / h);
+          return {
+            scale: scale,
+            left: 0,
+            top: 0,
+            x: off.x + w / 2 - window.innerWidth / 2 / scale,
+            y: off.y + h / 2 - window.innerHeight / 2 / scale
+          };
+        }
+        if (!Number.isFinite(off.x) || !Number.isFinite(off.y)) return null;
+        return { scale: scale, left: left, top: top, x: off.x, y: off.y };
+      } catch (_) {
+        return null;
+      }
+    },
+    worldAt(cx, cy) {
+      const view = this.view();
+      if (view === null) return null;
+      return {
+        x: view.x + (cx - view.left) / view.scale,
+        y: view.y + (cy - view.top) / view.scale
+      };
+    },
+    editTarget(e) {
+      if (!this.editMode || e.button !== 0) return false;
+      const t = e.target;
+      return !!t && t.tagName === "CANVAS" && t.id !== "mapDisplay";
+    },
+    spacingOf(what) {
+      const nature = {
+        tree: 300,
+        bush: 170,
+        stone: 210,
+        gold: 160
+      };
+      if (nature[what]) return nature[what];
+      const c = RynPrivate.catalog();
+      const it = c && c.items.find(i => String(i.id) === String(what));
+      return it && it.scale ? it.scale * 2 + 2 : 100;
+    },
+    shapePoints(shape, at) {
+      const gap = this.spacingOf(this.editWhat.value);
+      const size = Math.max(40, Number(this.editSize.value) || 220);
+      const pts = [];
+      if (shape === "line" && this.editStart) {
+        const s = this.editStart;
+        const len = Math.hypot(at.x - s.x, at.y - s.y);
+        const a = Math.atan2(at.y - s.y, at.x - s.x);
+        const n = Math.min(60, Math.floor(len / gap) + 1);
+        for (let i = 0; i < n; i++) pts.push([ s.x + gap * i * Math.cos(a), s.y + gap * i * Math.sin(a) ]);
+      } else if (shape === "circle") {
+        const n = Math.max(2, Math.min(40, Number(this.editCount.value) || 8));
+        for (let i = 0; i < n; i++) {
+          const a = i / n * Math.PI * 2;
+          pts.push([ at.x + size * Math.cos(a), at.y + size * Math.sin(a) ]);
+        }
+      } else if (shape === "square") {
+        const h = size / 2;
+        const per = Math.max(1, Math.min(15, Math.round(size / gap)));
+        const c = [ [ -h, -h ], [ h, -h ], [ h, h ], [ -h, h ] ];
+        for (let i = 0; i < 4; i++) {
+          const [x1, y1] = c[i];
+          const [x2, y2] = c[(i + 1) % 4];
+          for (let k = 0; k < per; k++) pts.push([ at.x + x1 + (x2 - x1) * k / per, at.y + y1 + (y2 - y1) * k / per ]);
+        }
+      } else {
+        pts.push([ at.x, at.y ]);
+      }
+      return pts.map(([x, y]) => [ Math.round(x), Math.round(y) ]);
+    },
+    onEditPointer(e) {
+      if (!this.editTarget(e)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const at = this.worldAt(e.clientX, e.clientY);
+      if (at === null) return;
+      if (this.editMode === "delete") {
+        const rec = RynPrivate.call("removeAt", {
+          x: at.x,
+          y: at.y,
+          r: 90
+        });
+        if (rec) {
+          this.pushUndo({
+            recs: [ rec ]
+          });
+          this.say("Removed " + this.objName(rec));
+        } else {
+          this.say("Nothing there", true);
+        }
+        return;
+      }
+      const shape = this.editShape.value;
+      if (shape === "line" && !this.editStart) {
+        this.editStart = at;
+        this.say("Now click where the line ends.");
+        return;
+      }
+      const points = this.shapePoints(shape, at);
+      this.editStart = null;
+      const o = this.editOwner.value;
+      const r = RynPrivate.call("placeMany", {
+        what: this.editWhat.value,
+        owner: o === "none" || o === "me" ? o : o.slice(1),
+        points: points
+      });
+      if (!r || !r.sids.length) {
+        this.say(r ? "That can't be placed" : "Spawn into the game first (press Play).", true);
+        return;
+      }
+      this.pushUndo({
+        sids: r.sids
+      });
+      this.say("Placed " + r.sids.length + " " + r.name);
+    },
+    pushUndo(entry) {
+      const stack = this.undoStack || (this.undoStack = []);
+      stack.push(entry);
+      if (stack.length > 40) stack.shift();
+    },
+    undo() {
+      const e = (this.undoStack || []).pop();
+      if (!e) {
+        this.say("Nothing to undo", true);
+        return;
+      }
+      if (e.sids) this.say("Undone: took away " + (RynPrivate.call("removeSids", e.sids) || 0)); else if (e.recs) {
+        RynPrivate.call("restoreObjs", e.recs);
+        this.say("Undone: put back " + e.recs.map(r => this.objName(r)).join(", "));
+      }
+    },
+    objName(rec) {
+      if (rec[5] >= 0) {
+        const c = RynPrivate.catalog();
+        const it = c && c.items.find(i => i.id === rec[5]);
+        return it ? it.name : "item";
+      }
+      return [ "tree", "bush", "stone", "gold" ][rec[4]] || "object";
+    },
+    drawEditPreview(ctx) {
+      const at = this.worldAt(this.mouse.x, this.mouse.y);
+      if (at === null) return;
+      ctx.lineWidth = 3;
+      if (this.editMode === "delete") {
+        ctx.strokeStyle = "rgba(217, 163, 171, 0.95)";
+        ctx.beginPath();
+        ctx.arc(at.x, at.y, 90, 0, Math.PI * 2);
+        ctx.stroke();
+        return;
+      }
+      ctx.strokeStyle = "rgba(166, 215, 178, 0.95)";
+      const shape = this.editShape.value;
+      if (shape === "line" && this.editStart) {
+        ctx.beginPath();
+        ctx.moveTo(this.editStart.x, this.editStart.y);
+        ctx.lineTo(at.x, at.y);
+        ctx.stroke();
+      }
+      const pts = shape === "line" && !this.editStart ? [ [ at.x, at.y ] ] : this.shapePoints(shape, at);
+      const r = Math.max(20, this.spacingOf(this.editWhat.value) / 2 - 4);
+      for (const [x, y] of pts) {
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    },
+    drawStamps() {
+      const list = this.stampList;
+      if (!list) return;
+      list.innerHTML = "";
+      this.stamps().forEach((s, i) => {
+        const card = this.el("div", "ra-pl");
+        const top = this.el("div", "ra-pl-top");
+        top.appendChild(this.el("span", "ra-pl-name", s.name));
+        top.appendChild(this.el("span", "ra-chip", s.stamp.items.length + " items"));
+        card.appendChild(top);
+        const r = this.row(card, "", this.button("Stamp", () => {
+          const sids = RynPrivate.call("pasteBase", {
+            stamp: s.stamp,
+            rotate: !!this.store("_ryn_stamp_turn")
+          });
+          if (!sids) {
+            this.say("Spawn into the game first (press Play).", true);
+            return;
+          }
+          this.pushUndo({
+            sids: sids
+          });
+          this.say("Stamped " + s.name + " (" + sids.length + ")");
+        }, "ra-go"), this.button("Delete", () => {
+          const all = this.stamps();
+          all.splice(i, 1);
+          this.store("_ryn_stamps", all);
+          this.drawStamps();
+        }, "ra-del"));
+        r.style.marginTop = "5px";
+        list.appendChild(card);
+      });
+    },
+    drawSpawners(list) {
+      const box = this.spawnerList;
+      if (!box) return;
+      const sig = list.map(s => [ s.id, s.alive, s.max ].join(":")).join("|");
+      if (sig === this._spawnSig) return;
+      this._spawnSig = sig;
+      box.innerHTML = "";
+      for (const s of list) {
+        const card = this.el("div", "ra-pl");
+        const top = this.el("div", "ra-pl-top");
+        top.appendChild(this.el("span", "ra-pl-name", "#" + s.id + " " + s.kind + " · every " + s.every + "s"));
+        top.appendChild(this.el("span", "ra-chip", s.alive + "/" + s.max));
+        top.appendChild(this.button("Remove", () => this.done("!spawner remove " + s.id), "ra-del"));
+        card.appendChild(top);
+        box.appendChild(card);
+      }
+    },
+    drawSaves() {
+      const list = this.saveList;
+      if (!list) return;
+      list.innerHTML = "";
+      for (const [label, save] of Object.entries(this.saves())) {
+        const card = this.el("div", "ra-pl");
+        const top = this.el("div", "ra-pl-top");
+        top.appendChild(this.el("span", "ra-pl-name", label));
+        top.appendChild(this.el("span", "ra-hint", new Date(save.at).toLocaleString()));
+        card.appendChild(top);
+        const r = this.row(card, "", this.button("Load", () => {
+          const ok = RynPrivate.call("restore", save.snap);
+          this.say(ok ? "Loaded " + label : "Spawn into the game first (press Play).", !ok);
+        }, "ra-go"), this.button("Delete", () => {
+          const all = this.saves();
+          delete all[label];
+          this.store("_ryn_admin_saves", all);
+          this.drawSaves();
+        }, "ra-del"));
+        r.style.marginTop = "5px";
+        list.appendChild(card);
+      }
+    },
+    autoTick() {
+      RynWorlds.save();
+    },
+    drawKingStats(st) {
+      if (!this.kingDodge || !st) return;
+      const names = {
+        slam: "slam",
+        charge: "charge",
+        ring: "ring",
+        dive: "dive"
+      };
+      const kinds = Object.entries(st.kinds).map(([k, [d, h]]) => names[k] + " " + d + "/" + (d + h)).join(", ");
+      let best = Number(this.store("_ryn_king_best")) || null;
+      if (st.bestKill && (!best || st.bestKill < best)) {
+        best = st.bestKill;
+        this.store("_ryn_king_best", best);
+      }
+      const s = ms => (ms / 1e3).toFixed(1) + "s";
+      this.kingDodge.textContent = "Dodged " + st.dodged + " of " + (st.dodged + st.hit) + (kinds ? " (" + kinds + ")" : "") + ". Kill time: " + (st.fighting !== null ? "now " + s(st.fighting) + ", " : "") + "last " + (st.lastKill ? s(st.lastKill) : "–") + ", best " + (best ? s(best) : "–") + ".";
+    },
+    // ---- Analyze ----
+    buildFight(page) {
+      const body = this.section(page, "fight", "Fight", "Your fight, counted by the server.");
+      const grid = this.el("div", "ra-stats ra-item");
+      grid.dataset.keys = "dps stats damage insta heal kill";
+      this.statCells = {};
+      for (const [key, label] of [ [ "dps", "DPS, last 5s" ], [ "burst", "Best tick" ], [ "taken", "Taken, 5s" ], [ "insta", "Insta kills" ], [ "heal", "Heal after hit" ], [ "ttk", "Last kill" ] ]) {
+        const cell = this.el("div", "ra-stat");
+        const value = this.el("b", "", "–");
+        cell.appendChild(value);
+        cell.appendChild(this.el("span", "", label));
+        grid.appendChild(cell);
+        this.statCells[key] = value;
+      }
+      body.appendChild(grid);
+      this.row(body, "", this.button("Reset", () => {
+        RynPrivate.call("clearLog");
+        this.refresh();
+      }, "", "Clears the stats and the combat log"), this.button("Export", () => this.exportFight(false), "", "Save the fight as a text file"), this.button("Copy", () => this.exportFight(true), "", "Copy the fight as text")).dataset.keys = "stats fight";
+    },
+    buildGraph(page) {
+      const body = this.section(page, "graph", "Graph", "Last 60s: green health, purple dealt/s, red taken/s.");
+      this.graph = this.el("canvas", "ra-canvas ra-item");
+      this.graph.width = 576;
+      this.graph.height = 220;
+      body.appendChild(this.graph);
+    },
+    buildCombatLog(page) {
+      const body = this.section(page, "combat", "Combat log");
+      this.combatLines = this.el("div", "ra-lines ra-item");
+      this.combatLines.dataset.keys = "hits damage";
+      body.appendChild(this.combatLines);
+    },
+    buildKnockback(page) {
+      const body = this.section(page, "knockback", "Knockback", "First server tick and total, next to Ryn's model.");
+      this.physLines = this.el("div", "ra-lines ra-item");
+      this.physLines.dataset.keys = "kb push";
+      body.appendChild(this.physLines);
+    },
+    buildReplay(page) {
+      const body = this.section(page, "replay", "Replay", "The last 30 seconds, tick by tick.");
+      this.replayFocus = this.select([ [ "me", "Follow me" ] ], "me");
+      this.replayZoom = this.select([ [ "0.6", "×0.6" ], [ "1", "×1" ], [ "1.5", "×1.5" ], [ "2", "×2" ] ], "1");
+      this.replayZoom.title = "Zoom";
+      this.replayZoom.style.flex = "0 0 auto";
+      this.row(body, "", this.button("Grab 30s", () => this.grabReplay(), "ra-go", "Take the last 30 seconds"), this.replayFocus, this.replayZoom).dataset.keys = "replay";
+      this.replayCanvas = this.el("canvas", "ra-canvas ra-item");
+      this.replayCanvas.width = 576;
+      this.replayCanvas.height = 400;
+      body.appendChild(this.replayCanvas);
+      this.replaySlider = this.el("input", "ra-item");
+      this.replaySlider.type = "range";
+      this.replaySlider.min = "0";
+      this.replaySlider.max = "0";
+      this.replaySlider.value = "0";
+      this.replaySlider.addEventListener("input", () => this.drawReplay());
+      body.appendChild(this.replaySlider);
+      this.replayPlay = this.button("Play", () => this.toggleReplay(), "ra-go");
+      this.replaySpeed = this.select([ [ "0.25", "×0.25" ], [ "0.5", "×0.5" ], [ "1", "×1" ] ], "1");
+      this.replaySpeed.title = "Playback speed";
+      const step = n => () => {
+        this.stopReplay();
+        this.replaySlider.value = String(Math.max(0, Math.min(Number(this.replaySlider.max), Number(this.replaySlider.value) + n)));
+        this.drawReplay();
+      };
+      this.row(body, "", this.button("|<", step(-1e4), "", "First tick"), this.button("<", step(-1), "", "One tick back"), this.replayPlay, this.button(">", step(1), "", "One tick on"), this.button(">|", step(1e4), "", "Last tick"), this.replaySpeed).dataset.keys = "replay play";
+      for (const s of [ this.replayFocus, this.replayZoom ]) s.addEventListener("change", () => this.drawReplay());
+      this.replayInfo = this.el("div", "ra-note ra-item", "Grab to see the last 30 seconds.");
+      body.appendChild(this.replayInfo);
+      this.replayHits = this.el("div", "ra-lines ra-item");
+      body.appendChild(this.replayHits);
+    },
+    buildLayers(page) {
+      const body = this.section(page, "layers", "On screen", "Their own layer over the game; hover for details.");
+      const tips = {
+        truth: "Where the server has everyone (dashed), the server tick under you, and spawners",
+        ranges: "Weapon reach, spikes and turrets",
+        shots: "Projectile paths",
+        desync: "A line from where Ryn predicts you to where the server has you",
+        shame: "Your shame count under you"
+      };
+      const buttons = [];
+      for (const [key, label] of [ [ "truth", "Truth" ], [ "ranges", "Ranges" ], [ "shots", "Shots" ], [ "desync", "Desync" ], [ "shame", "Shame" ] ]) {
+        buttons.push(this.toggleButton(label, () => !!this.layers[key], v => {
+          this.layers[key] = v;
+          this.store("_ryn_admin_layers", this.layers);
+        }, tips[key]));
+      }
+      this.grid(body, buttons).dataset.keys = "overlay layers";
+    },
+    buildDesync(page) {
+      const body = this.section(page, "desync", "Desync", "Ryn's prediction of you against the server.");
+      this.desyncText = this.el("div", "ra-note ra-item", "Needs you in the game.");
+      body.appendChild(this.desyncText);
+    },
+    buildPing(page) {
+      const body = this.section(page, "ping", "Ping", "Changing: jumps between low and high every few seconds.");
+      const ms = this.number(RynPrivate.ping.ms || 100, 10, 0, true);
+      const jitter = this.number(RynPrivate.ping.jitter || 0, 5, 0, true);
+      ms.title = "Ping (ms)";
+      jitter.title = "Jitter, ± ms";
+      this.row(body, "ms / ±", ms, jitter, this.button("Apply", () => this.done("!ping " + (Number(ms.value) || 0) + " " + (Number(jitter.value) || 0)), "ra-go")).dataset.keys = "lag latency";
+      this.pingNow = this.el("span", "ra-pl-hp", "");
+      this.row(body, "", this.button("Off", () => this.done("!ping 0"), "", "No fake ping"), this.pingNow).dataset.keys = "ping lag";
+      const w = this.pingWave;
+      const lo = this.number(w.min, 10, 0, true);
+      const hi = this.number(w.max, 10, 0, true);
+      const every = this.number(w.every, 1, 1, true);
+      lo.title = "Lowest ping (ms)";
+      hi.title = "Highest ping (ms)";
+      every.title = "Change every (seconds)";
+      const save = () => {
+        this.pingWave = {
+          on: !!this.pingWave.on,
+          min: Math.max(0, Number(lo.value) || 0),
+          max: Math.max(0, Number(hi.value) || 0),
+          every: Math.max(1, Number(every.value) || 5)
+        };
+        this.store("_ryn_ping_wave", this.pingWave);
+        this.startPingWave();
+      };
+      for (const i of [ lo, hi, every ]) i.addEventListener("change", save);
+      this.row(body, "Low/high/s", lo, hi, every).dataset.keys = "changing ping";
+      this.row(body, "", this.toggleButton("Changing ping", () => !!this.pingWave.on, v => {
+        if (v) this.pingBase = Object.assign({}, RynPrivate.ping); else if (this.pingBase) RynPrivate.setPing(this.pingBase.ms, this.pingBase.jitter);
+        this.pingWave.on = v;
+        save();
+      }));
+    },
+    buildPackets(page) {
+      const body = this.section(page, "packets", "Packets", "↓ the server to you, ↑ you to the server.");
+      this.packets = [];
+      this.hideSpam = true;
+      this.row(body, "", this.toggleButton("Record", () => !!this.tapOn, v => {
+        this.tapOn = v;
+        this.installTap();
+      }), this.toggleButton("Hide spam", () => this.hideSpam, v => {
+        this.hideSpam = v;
+        this.drawPackets();
+      }, "Leaves out a, I, H, 0, 7, G and your D"), this.button("Clear", () => {
+        this.packets = [];
+        this.drawPackets();
+      })).dataset.keys = "packets";
+      this.packetFilter = this.text("Filter: code or name");
+      this.packetFilter.addEventListener("input", () => this.drawPackets());
+      this.row(body, "", this.packetFilter).dataset.keys = "packets";
+      this.packetRate = this.el("div", "ra-note ra-item", "");
+      body.appendChild(this.packetRate);
+      this.packetLines = this.el("div", "ra-lines ra-item");
+      this.packetLines.style.maxHeight = "260px";
+      body.appendChild(this.packetLines);
+    },
+    buildPrivateLog(page) {
+      const body = this.section(page, "log", "Private log", "Why you were sent to the lobby. Kept across a refresh.");
+      const lines = this.el("div", "ra-lines ra-item");
+      lines.style.maxHeight = "220px";
+      body.appendChild(lines);
+      const draw = () => {
+        lines.innerHTML = "";
+        for (const l of RynPrivate.debugLog.slice(-60).reverse()) lines.appendChild(this.el("div", /closed|died|error|did not start/i.test(l) ? "ra-hurt" : "", l));
+      };
+      RynPrivate.debugListeners.add(draw);
+      draw();
+      this.row(body, "", this.button("Copy", () => {
+        const text = RynPrivate.debugLog.join("\n");
+        try {
+          navigator.clipboard.writeText(text).then(() => this.say("Private log copied"), () => this.say("Could not copy", true));
+        } catch (_) {
+          this.say("Could not copy", true);
+        }
+      }), this.button("Clear", () => {
+        RynPrivate.debugLog.length = 0;
+        try {
+          sessionStorage.removeItem("_ryn_private_log");
+        } catch (_) {}
+        draw();
+      }, "ra-del")).dataset.keys = "private log disconnect";
+    },
+    kindName(kind) {
+      if (!kind) return "";
+      if (kind[0] === "w" && /^w\d+$/.test(kind)) return this.weaponName(Number(kind.slice(1)));
+      return kind;
+    },
+    fmtLog(e) {
+      const from = e.fromName || (e.kind ? this.kindName(e.kind) : "world");
+      const how = e.kind && e.fromName ? " · " + this.kindName(e.kind) : "";
+      return "t" + e.tick + "  " + (e.amount < 0 ? from + " → " + e.toName : e.toName + " healed") + "  " + (e.amount > 0 ? "+" : "") + e.amount + how + "  hp " + e.hp;
+    },
+    mineFilter(state) {
+      const me = state && state.me ? state.me.sid : -1;
+      const dummies = new Set((state ? state.players : []).filter(p => p.dummy).map(p => p.sid));
+      return e => !e.ai && (e.to === me || dummies.has(e.to)) || !e.fromAi && (e.from === me || dummies.has(e.from));
+    },
+    drawStats(state) {
+      const s = RynPrivate.call("stats");
+      if (!s || !this.statCells) return;
+      const c = this.statCells;
+      c.dps.textContent = String(s.dps);
+      c.burst.textContent = String(s.burst);
+      c.taken.textContent = String(s.taken);
+      c.insta.textContent = s.instaKills + " / " + s.instaTries;
+      c.heal.textContent = s.healAvg === null ? "–" : s.healAvg + "ms";
+      const kill = s.kills[s.kills.length - 1];
+      c.ttk.textContent = kill ? kill.ms + "ms" : "–";
+      if (kill) c.ttk.title = kill.name;
+      const log = (RynPrivate.call("log", 120) || []).filter(this.mineFilter(state)).slice(-16).reverse();
+      const lines = this.combatLines;
+      lines.innerHTML = "";
+      for (const e of log) lines.appendChild(this.el("div", e.amount < 0 ? "ra-hurt" : "ra-heal", this.fmtLog(e)));
+      const phys = RynPrivate.call("physics") || [];
+      const pl = this.physLines;
+      pl.innerHTML = "";
+      for (const p of phys.slice().reverse()) {
+        const same = p.ryn !== null && Math.abs(p.first - p.ryn) <= 3;
+        pl.appendChild(this.el("div", same ? "ra-heal" : p.ryn === null ? "" : "ra-hurt", "t" + p.tick + "  " + p.name + " · " + this.kindName(p.kind) + ": " + p.first + "px" + (p.ryn === null ? "" : ", Ryn " + p.ryn + "px" + (same ? " ✓" : "")) + ", total " + p.total + "px"));
+      }
+      this.drawGraph();
+      this.drawDesyncText();
+    },
+    drawGraph() {
+      const cv = this.graph;
+      if (!cv) return;
+      const ctx = cv.getContext("2d");
+      const W = cv.width;
+      const H = cv.height;
+      ctx.clearRect(0, 0, W, H);
+      ctx.font = "18px sans-serif";
+      const data = RynPrivate.call("series") || [];
+      if (data.length < 2) {
+        ctx.fillStyle = "#726f80";
+        ctx.fillText("No data yet", 14, 30);
+        return;
+      }
+      const t1 = data[data.length - 1][1];
+      const t0 = t1 - 6e4;
+      const perSecond = col => {
+        const out = [];
+        let sum = 0;
+        let j = 0;
+        for (let i = 0; i < data.length; i++) {
+          sum += data[i][col];
+          while (data[i][1] - data[j][1] > 1e3) sum -= data[j++][col];
+          out.push(sum);
+        }
+        return out;
+      };
+      const dealt = perSecond(3);
+      const taken = perSecond(4);
+      const top = Math.max(100, ...dealt, ...taken);
+      const X = at => (at - t0) / 6e4 * W;
+      const Y = (v, max) => H - 8 - v / max * (H - 16);
+      ctx.strokeStyle = "rgba(255,255,255,0.07)";
+      ctx.lineWidth = 1;
+      for (const f of [ .25, .5, .75 ]) {
+        ctx.beginPath();
+        ctx.moveTo(0, Y(f * 100, 100));
+        ctx.lineTo(W, Y(f * 100, 100));
+        ctx.stroke();
+      }
+      const line = (values, max, color) => {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        data.forEach((row, i) => {
+          const x = X(row[1]);
+          const y = Y(values[i], max);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      };
+      line(data.map(r => r[2]), 100, "#a6d7b2");
+      line(taken, top, "#d9a3ab");
+      line(dealt, top, "#a894e0");
+      ctx.fillStyle = "#aca9ba";
+      ctx.fillText("max " + Math.round(top) + "/s", W - 130, 24);
+    },
+    trackDesync(me) {
+      let pl = null;
+      try {
+        pl = client.myPlayer;
+      } catch (_) {}
+      if (!me || !me.alive || !pl || !pl.pos || !pl.pos.current || !pl.pos.future) {
+        this.desyncNow = null;
+        return;
+      }
+      const cur = pl.pos.current;
+      const fut = pl.pos.future;
+      const shown = Math.hypot(cur.x - me.x, cur.y - me.y);
+      const pred = Math.hypot(fut.x - me.x, fut.y - me.y);
+      const now = performance.now();
+      this.desyncNow = {
+        shown: shown,
+        pred: pred,
+        fx: fut.x,
+        fy: fut.y
+      };
+      const hist = this.desyncHist || (this.desyncHist = []);
+      hist.push([ now, pred ]);
+      while (hist.length && now - hist[0][0] > 5e3) hist.shift();
+      if (pred > 60) {
+        this.desyncBad = (this.desyncBad || 0) + 1;
+        if (this.desyncBad === 3) this.desyncWarn = (this.desyncWarn || 0) + 1;
+      } else {
+        this.desyncBad = 0;
+      }
+    },
+    drawDesyncText() {
+      if (!this.desyncText) return;
+      const d = this.desyncNow;
+      if (!d) {
+        this.desyncText.textContent = "Needs you in the game.";
+        return;
+      }
+      const peak = Math.max(0, ...(this.desyncHist || []).map(h => h[1]));
+      this.desyncText.textContent = "Ryn shows you " + Math.round(d.shown) + "px from where the server has you; its prediction is " + Math.round(d.pred) + "px off (worst in 5s: " + Math.round(peak) + "px). Over 60px for 3 frames: " + (this.desyncWarn || 0) + " times.";
+    },
+    exportFight(copy) {
+      const state = RynPrivate.state();
+      const s = RynPrivate.call("stats");
+      if (!state || !s) {
+        this.say("Spawn into the game first (press Play).", true);
+        return;
+      }
+      const log = (RynPrivate.call("log", 400) || []).filter(this.mineFilter(state));
+      const phys = RynPrivate.call("physics") || [];
+      let version = "?";
+      try {
+        version = GM_info.script.version;
+      } catch (_) {}
+      const lines = [ "Ryn fight export", new Date().toString(), "Ryn " + version + " · ping " + RynPrivate.ping.ms + "ms ±" + RynPrivate.ping.jitter + " · tick " + s.tick, "", "DPS " + s.dps + " · best tick " + s.burst + " · taken (5s) " + s.taken + " · insta kills " + s.instaKills + "/" + s.instaTries + " · heal after hit " + (s.healAvg === null ? "-" : s.healAvg + "ms") + " · shame " + s.shame, "Kills: " + (s.kills.map(k => k.name + " in " + k.ms + "ms").join(", ") || "-"), "Heals: " + (s.heals.map(h => h.ms + "ms/" + h.ticks + "t").join(", ") || "-"), "", "Combat log:" ].concat(log.map(e => this.fmtLog(e)), [ "", "Knockback (server first tick / Ryn / total):" ], phys.map(p => "t" + p.tick + " " + p.name + " " + this.kindName(p.kind) + ": " + p.first + " / " + (p.ryn === null ? "-" : p.ryn) + " / " + p.total));
+      const text = lines.join("\n");
+      if (copy) {
+        try {
+          navigator.clipboard.writeText(text).then(() => this.say("Fight copied"), () => this.say("Could not copy", true));
+        } catch (_) {
+          this.say("Could not copy", true);
+        }
+        return;
+      }
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([ text ], {
+        type: "text/plain"
+      }));
+      a.download = "ryn-fight-" + new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + ".txt";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 3e3);
+      this.say("Saved " + a.download);
+    },
+    // The overlays draw on a canvas of their own over the game, in their own frame
+    // loop, and never touch the game's canvas or its renderer.
+    overlayCanvas: null,
+    overlayDirty: false,
+    startOverlay() {
+      const loop = () => {
+        try {
+          this.drawOverlay();
+        } catch (_) {}
+        requestAnimationFrame(loop);
+      };
+      requestAnimationFrame(loop);
+    },
+    overlayContext() {
+      let cv = this.overlayCanvas;
+      if (!cv || !cv.isConnected) {
+        if (!document.body) return null;
+        cv = this.overlayCanvas = document.createElement("canvas");
+        cv.id = "ryn-admin-overlay";
+        cv.style.cssText = "position:fixed;left:0;top:0;width:100vw;height:100vh;pointer-events:none;z-index:47;";
+        document.body.appendChild(cv);
+        try {
+          Renderer._keepMenusAbove(47);
+        } catch (_) {}
+      }
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.round(window.innerWidth * dpr);
+      const H = Math.round(window.innerHeight * dpr);
+      if (cv.width !== W || cv.height !== H) {
+        cv.width = W;
+        cv.height = H;
+      }
+      return cv.getContext("2d");
+    },
+    drawOverlay() {
+      const L = this.layers || {};
+      const needWorld = !!(L.truth || L.ranges || L.shots);
+      const needMe = !!(L.shame || L.desync || this.open && this.shown("analyze"));
+      const active = RynPrivate.on && this.root !== null && RynPrivate.ownerSocket !== null && (needWorld || needMe || this.editMode);
+      if (!active) {
+        if (this.overlayDirty && this.overlayCanvas) {
+          const c = this.overlayCanvas.getContext("2d");
+          // the last frame left the world transform on; clear in screen space
+          c.setTransform(1, 0, 0, 1, 0, 0);
+          c.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+          this.overlayDirty = false;
+        }
+        return;
+      }
+      const ctx = this.overlayContext();
+      if (ctx === null) return;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      this.overlayDirty = true;
+      const me = RynPrivate.call("me");
+      if (needMe) this.trackDesync(me);
+      if (!me || !me.alive) return;
+      const view = this.view();
+      if (view === null) return;
+      // world coordinates, the same mapping as the cursor (worldAt)
+      const dpr = window.devicePixelRatio || 1;
+      ctx.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * (view.left - view.x * view.scale), dpr * (view.top - view.y * view.scale));
+      const w = needWorld ? RynPrivate.world() : null;
+      if (w !== null) {
+        if (L.ranges) this.drawRanges(ctx, w, me, true);
+        if (L.shots) this.drawShots(ctx, w);
+        if (L.truth) this.drawTruth(ctx, w, me, true);
+      }
+      ctx.setLineDash([]);
+      if (L.desync && this.desyncNow) this.drawDesync(ctx, me);
+      if (L.shame) this.drawShameMark(ctx, me);
+      if (this.editMode && this.mouse) this.drawEditPreview(ctx);
+    },
+    drawTruth(ctx, w, me, dash) {
+      ctx.lineWidth = 3;
+      if (dash) ctx.setLineDash([ 10, 8 ]);
+      ctx.strokeStyle = "rgba(120, 220, 255, 0.9)";
+      for (const p of w.players) {
+        ctx.beginPath();
+        ctx.arc(p[1], p[2], p[3], 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = "rgba(255, 170, 90, 0.9)";
+      for (const a of w.ais) {
+        ctx.beginPath();
+        ctx.arc(a[2], a[3], a[4], 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      if (dash) ctx.setLineDash([]);
+      ctx.font = "bold 15px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(120, 220, 255, 0.95)";
+      const mine = me ? w.players.find(p => p[0] === me.sid) : null;
+      if (mine) ctx.fillText("server tick " + w.tick, mine[1], mine[2] + mine[3] + 62);
+      const king = w.ais.find(a => a[1] === 11);
+      const k = this.lastPanel && this.lastPanel.kings[0];
+      if (king && k) {
+        ctx.fillStyle = "rgba(255, 170, 90, 0.95)";
+        ctx.fillText(RYN_ADMIN_PHASES[k.phase] || k.phase, king[2], king[3] - king[4] - 30);
+      }
+      for (const [id, x, y, kind, every, max, alive] of w.spawners || []) {
+        ctx.strokeStyle = "rgba(166, 215, 178, 0.9)";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(x, y, 80, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = "rgba(166, 215, 178, 0.95)";
+        ctx.fillText("#" + id + " " + kind + " " + alive + "/" + max, x, y - 92);
+      }
+    },
+    drawRanges(ctx, w, me, dash) {
+      const c = RynPrivate.catalog();
+      const ranges = c && c.weaponRange || [];
+      for (const d of w.danger || []) {
+        const [, x, y, scale, kind, range, owner] = d;
+        const mine = me && owner === me.sid;
+        if (kind === "spike") {
+          ctx.fillStyle = mine ? "rgba(127, 179, 255, 0.10)" : "rgba(230, 90, 90, 0.16)";
+          ctx.beginPath();
+          ctx.arc(x, y, scale + 35, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.strokeStyle = mine ? "rgba(127, 179, 255, 0.5)" : "rgba(255, 170, 90, 0.6)";
+          ctx.lineWidth = 2;
+          if (dash) ctx.setLineDash([ 4, 10 ]);
+          ctx.beginPath();
+          ctx.arc(x, y, range, 0, Math.PI * 2);
+          ctx.stroke();
+          if (dash) ctx.setLineDash([]);
+        }
+      }
+      for (const p of w.players) {
+        const r = ranges[p[7]] || 0;
+        if (!r) continue;
+        const mine = me && p[0] === me.sid;
+        ctx.strokeStyle = mine ? "rgba(127, 179, 255, 0.85)" : "rgba(230, 120, 120, 0.8)";
+        ctx.lineWidth = 2;
+        if (dash) ctx.setLineDash([ 6, 6 ]);
+        ctx.beginPath();
+        ctx.arc(p[1], p[2], r + 35, 0, Math.PI * 2);
+        ctx.stroke();
+        if (dash) ctx.setLineDash([]);
+      }
+    },
+    drawShots(ctx, w) {
+      const now = performance.now();
+      const trails = this.trails || (this.trails = new Map);
+      for (const [sid, x, y] of w.shots || []) {
+        let t = trails.get(sid);
+        const last = t && t.pts[t.pts.length - 1];
+        if (!t || last && Math.hypot(x - last.x, y - last.y) > 400) {
+          t = {
+            pts: [],
+            seen: now
+          };
+          trails.set(sid, t);
+        }
+        if (!last || last.x !== x || last.y !== y) t.pts.push({
+          x: x,
+          y: y,
+          at: now
+        });
+        t.seen = now;
+      }
+      ctx.lineWidth = 3;
+      for (const [sid, t] of trails) {
+        t.pts = t.pts.filter(p => now - p.at < 900);
+        if (!t.pts.length) {
+          if (now - t.seen > 900) trails.delete(sid);
+          continue;
+        }
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.75)";
+        ctx.beginPath();
+        t.pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+        ctx.stroke();
+        const head = t.pts[t.pts.length - 1];
+        ctx.fillStyle = "rgba(255, 230, 120, 0.95)";
+        ctx.beginPath();
+        ctx.arc(head.x, head.y, 7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    },
+    drawDesync(ctx, me) {
+      const d = this.desyncNow;
+      const color = d.pred < 25 ? "rgba(166, 215, 178, 0.95)" : d.pred < 60 ? "rgba(240, 210, 110, 0.95)" : "rgba(230, 100, 100, 0.95)";
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(me.x, me.y);
+      ctx.lineTo(d.fx, d.fy);
+      ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(d.fx, d.fy, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.font = "bold 14px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(Math.round(d.pred) + "px", me.x, me.y - 70);
+    },
+    drawShameMark(ctx, me) {
+      const n = me.shame || 0;
+      const clown = me.shameTimer > 0;
+      if (!clown && n < 3) return;
+      ctx.font = "bold 16px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillStyle = clown || n >= 6 ? "rgba(230, 100, 100, 0.95)" : "rgba(240, 210, 110, 0.95)";
+      ctx.fillText(clown ? "CLOWN " + Math.ceil(me.shameTimer / 1e3) + "s" : "shame " + n + "/8", me.x, me.y + 115);
+    },
+    grabReplay() {
+      const r = RynPrivate.call("replay");
+      if (!r || !r.frames.length) {
+        this.say("Nothing recorded yet. Press Play first.", true);
+        return;
+      }
+      this.stopReplay();
+      this.replay = {
+        rate: r.rate,
+        base: r.base,
+        frames: r.frames,
+        k: -1,
+        objs: null
+      };
+      const names = new Map;
+      for (const f of r.frames) for (const p of f.players) names.set(p[0], p[10] + (p[11] ? " (dummy)" : ""));
+      const current = this.replayFocus.value;
+      this.replayFocus.innerHTML = "";
+      this.option(this.replayFocus, "me", "Follow me");
+      for (const [sid, name] of names) this.option(this.replayFocus, sid, "Follow " + sid + " · " + name);
+      this.replayFocus.value = [ ...this.replayFocus.options ].some(o => o.value === current) ? current : "me";
+      this.replaySlider.max = String(r.frames.length - 1);
+      this.replaySlider.value = String(r.frames.length - 1);
+      this.drawReplay();
+      this.say("Grabbed " + (r.frames.length / r.rate).toFixed(1) + "s");
+    },
+    replayObjects(k) {
+      const R = this.replay;
+      if (!R.objs || k < R.k) {
+        R.objs = new Map(R.base.map(o => [ o[0], o ]));
+        R.k = -1;
+      }
+      for (let i = R.k + 1; i <= k; i++) {
+        const f = R.frames[i];
+        for (const o of f.add) R.objs.set(o[0], o);
+        for (const sid of f.del) R.objs.delete(sid);
+      }
+      R.k = k;
+      return R.objs;
+    },
+    toggleReplay() {
+      if (this.replayTimer) {
+        this.stopReplay();
+        return;
+      }
+      if (!this.replay) return;
+      if (Number(this.replaySlider.value) >= Number(this.replaySlider.max)) this.replaySlider.value = "0";
+      this.replayPlay.textContent = "Pause";
+      const tick = () => {
+        const k = Number(this.replaySlider.value) + 1;
+        if (k > Number(this.replaySlider.max)) {
+          this.stopReplay();
+          return;
+        }
+        this.replaySlider.value = String(k);
+        this.drawReplay();
+        this.replayTimer = setTimeout(tick, 1e3 / this.replay.rate / Number(this.replaySpeed.value));
+      };
+      this.replayTimer = setTimeout(tick, 0);
+    },
+    stopReplay() {
+      clearTimeout(this.replayTimer);
+      this.replayTimer = null;
+      if (this.replayPlay) this.replayPlay.textContent = "Play";
+    },
+    drawReplay() {
+      const R = this.replay;
+      const cv = this.replayCanvas;
+      if (!R || !cv) return;
+      const k = Math.max(0, Math.min(R.frames.length - 1, Number(this.replaySlider.value) || 0));
+      const f = R.frames[k];
+      const objs = this.replayObjects(k);
+      const ctx = cv.getContext("2d");
+      const W = cv.width;
+      const H = cv.height;
+      const focusSid = this.replayFocus.value === "me" ? this.lastState && this.lastState.me ? this.lastState.me.sid : -1 : Number(this.replayFocus.value);
+      const focus = f.players.find(p => p[0] === focusSid) || f.players[0];
+      if (focus) this.replayCenter = {
+        x: focus[1],
+        y: focus[2]
+      };
+      const c = this.replayCenter || {
+        x: 7200,
+        y: 7200
+      };
+      const s = W / (1800 / (Number(this.replayZoom.value) || 1));
+      const X = x => (x - c.x) * s + W / 2;
+      const Y = y => (y - c.y) * s + H / 2;
+      const visible = (x, y, r) => Math.abs(X(x) - W / 2) <= W / 2 + r * s && Math.abs(Y(y) - H / 2) <= H / 2 + r * s;
+      ctx.fillStyle = "#24331f";
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "#2c4a63";
+      ctx.fillRect(X(0), Y(7200 - 362), W * 99, 724 * s);
+      ctx.fillStyle = "rgba(230, 238, 242, 0.12)";
+      ctx.fillRect(0, 0, W, Math.max(0, Y(2400)));
+      ctx.fillStyle = "#111";
+      if (X(0) > 0) ctx.fillRect(0, 0, X(0), H);
+      const natural = [ "#3f7a35", "#2f5f27", "#7d7d7d", "#c9a536", "#4f8f3f" ];
+      for (const o of objs.values()) {
+        const [, x, y, scale, type, id, owner] = o;
+        if (!visible(x, y, scale)) continue;
+        ctx.globalAlpha = type === 0 && id < 0 ? .55 : .95;
+        ctx.fillStyle = id >= 0 ? owner === focusSid ? "#6f9fe8" : owner === -1 ? "#a9a9a9" : "#d97b7b" : natural[type] || "#777";
+        ctx.beginPath();
+        ctx.arc(X(x), Y(y), Math.max(2, scale * s), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      const bar = (x, y, r, hp, max) => {
+        const w = Math.max(24, r * 2 * s);
+        ctx.fillStyle = "rgba(0,0,0,0.6)";
+        ctx.fillRect(X(x) - w / 2, Y(y) + r * s + 4, w, 5);
+        ctx.fillStyle = hp / max < .4 ? "#d9a3ab" : "#a6d7b2";
+        ctx.fillRect(X(x) - w / 2, Y(y) + r * s + 4, w * Math.max(0, hp / max), 5);
+      };
+      for (const a of f.ais) {
+        const [, index, x, y, , hp, max, scale] = a;
+        if (!visible(x, y, scale)) continue;
+        ctx.fillStyle = index === 11 ? "#d9534f" : "#e89a4c";
+        ctx.beginPath();
+        ctx.arc(X(x), Y(y), Math.max(4, scale * s), 0, Math.PI * 2);
+        ctx.fill();
+        bar(x, y, scale, hp, max);
+      }
+      ctx.fillStyle = "#fff4b0";
+      for (const sh of f.shots) {
+        ctx.beginPath();
+        ctx.arc(X(sh[1]), Y(sh[2]), 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      const cat = RynPrivate.catalog();
+      ctx.font = "15px sans-serif";
+      ctx.textAlign = "center";
+      for (const p of f.players) {
+        const [sid, x, y, dir, hp, max, weapon, hat, , scale, name, dummy] = p;
+        if (!visible(x, y, scale)) continue;
+        ctx.fillStyle = sid === focusSid ? "#8e76ce" : dummy ? "#d9a3ab" : "#e8d36a";
+        ctx.beginPath();
+        ctx.arc(X(x), Y(y), Math.max(5, scale * s), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(X(x), Y(y));
+        ctx.lineTo(X(x + (scale + 25) * Math.cos(dir)), Y(y + (scale + 25) * Math.sin(dir)));
+        ctx.stroke();
+        bar(x, y, scale, hp, max);
+        ctx.fillStyle = "#f3f2f7";
+        ctx.fillText(name, X(x), Y(y) - scale * s - 8);
+        const hatName = hat && cat ? (cat.hats.find(h => h.id === hat) || {}).name : "";
+        ctx.fillStyle = "#aca9ba";
+        ctx.fillText(this.weaponName(weapon) + (hatName ? " · " + hatName : ""), X(x), Y(y) + scale * s + 24);
+      }
+      const hitLines = [];
+      ctx.lineWidth = 3;
+      for (const [from, fromName, to, toName, amount, kind, ai] of f.hits) {
+        const t = ai ? f.ais.find(a => a[0] === to) : f.players.find(p => p[0] === to);
+        if (t) {
+          const tx = ai ? t[2] : t[1];
+          const ty = ai ? t[3] : t[2];
+          const ts = ai ? t[7] : t[9];
+          ctx.strokeStyle = amount < 0 ? "#ff5a5a" : "#a6d7b2";
+          ctx.beginPath();
+          ctx.arc(X(tx), Y(ty), ts * s + 6, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = amount < 0 ? "#ff8a8a" : "#a6d7b2";
+          ctx.fillText((amount > 0 ? "+" : "") + amount, X(tx), Y(ty) - ts * s - 26);
+        }
+        hitLines.push((fromName || (kind ? this.kindName(kind) : "world")) + " → " + toName + "  " + amount + (kind && fromName ? " · " + this.kindName(kind) : ""));
+      }
+      const last = R.frames[R.frames.length - 1];
+      this.replayInfo.textContent = "Tick " + f.tick + " · " + ((f.at - last.at) / 1e3).toFixed(2) + "s · frame " + (k + 1) + "/" + R.frames.length;
+      this.replayHits.innerHTML = "";
+      for (const l of hitLines) this.replayHits.appendChild(this.el("div", "ra-hurt", l));
+    },
+    installTap() {
+      const sock = RynPrivate.ownerSocket;
+      const conn = sock && sock._conn;
+      if (this.tapConn && this.tapConn !== conn) this.tapConn.rynTap = null;
+      this.tapConn = conn || null;
+      if (!conn) return;
+      conn.rynTap = this.tapOn ? (dir, code, data) => {
+        this.packets.push([ performance.now(), dir, code, data ]);
+        if (this.packets.length > 1e3) this.packets.splice(0, 250);
+      } : null;
+    },
+    drawPackets() {
+      if (!this.packetLines) return;
+      const cat = RynPrivate.catalog();
+      const names = cat && cat.packets || {
+        in: {},
+        out: {}
+      };
+      const spam = {
+        1: new Set([ "a", "I", "H", "0", "7", "G" ]),
+        0: new Set([ "0", "D" ])
+      };
+      const q = (this.packetFilter.value || "").trim().toLowerCase();
+      const now = performance.now();
+      const counts = {};
+      for (const [t, dir, code] of this.packets) if (now - t <= 1e3) counts[(dir ? "↓" : "↑") + code] = (counts[(dir ? "↓" : "↑") + code] || 0) + 1;
+      this.packetRate.textContent = this.tapOn ? "Last second: " + (Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, n]) => k + " " + n).join(", ") || "nothing") : "Press Record to start.";
+      const shown = [];
+      for (let i = this.packets.length - 1; i >= 0 && shown.length < 80; i--) {
+        const [t, dir, code, data] = this.packets[i];
+        if (this.hideSpam && spam[dir].has(code)) continue;
+        const name = (dir ? names.in : names.out)[code] || "";
+        if (q && code.toLowerCase() !== q && !name.toLowerCase().includes(q)) continue;
+        let text = "";
+        try {
+          text = JSON.stringify(data);
+        } catch (_) {}
+        if (text.length > 140) text = text.slice(0, 140) + "…";
+        shown.push(((t - this.packets[0][0]) / 1e3).toFixed(3) + " " + (dir ? "↓ " : "↑ ") + code + " " + name + " " + text);
+      }
+      this.packetLines.innerHTML = "";
+      for (const l of shown) this.packetLines.appendChild(this.el("div", "", l));
+    },
+    startPingWave() {
+      clearInterval(this.pingWaveTimer);
+      this.pingWaveTimer = null;
+      const w = this.pingWave;
+      if (!w || !w.on) return;
+      const jump = () => {
+        const lo = Math.min(w.min, w.max);
+        const hi = Math.max(w.min, w.max);
+        RynPrivate.setPing(Math.round(lo + Math.random() * (hi - lo)), RynPrivate.ping.jitter);
+      };
+      jump();
+      this.pingWaveTimer = setInterval(jump, Math.max(1, w.every) * 1e3);
+    },
+    onHotkey(e) {
+      if (e.code === "Escape" && this.editMode) {
+        this.setEdit("");
+        this.say("Editing off");
+        return;
+      }
+      if (this.editMode && (e.ctrlKey || e.metaKey) && e.code === "KeyZ") {
+        e.preventDefault();
+        e.stopPropagation();
+        this.undo();
+      }
+    }
+  };
+  // Private mode's worlds: the lobby lists them instead of servers. The one you pick
+  // loads into the in-page server when you spawn, saves itself every few seconds and
+  // right before you leave, and brings you back where you were.
+  const RynWorlds = {
+    INDEX: "_ryn_worlds",
+    SELECTED: "_ryn_world_selected",
+    applied: null,
+    loading: false,
+    listeners: new Set,
+    list() {
+      try {
+        const all = JSON.parse(localStorage.getItem(this.INDEX) || "[]");
+        return Array.isArray(all) ? all.filter(w => w && typeof w.id === "string") : [];
+      } catch (_) {
+        return [];
+      }
+    },
+    writeList(all) {
+      try {
+        localStorage.setItem(this.INDEX, JSON.stringify(all));
+      } catch (_) {}
+      this.changed();
+    },
+    data(id) {
+      try {
+        return JSON.parse(localStorage.getItem("_ryn_world_" + id) || "null");
+      } catch (_) {
+        return null;
+      }
+    },
+    selected() {
+      const all = this.list();
+      let id = null;
+      try {
+        id = localStorage.getItem(this.SELECTED);
+      } catch (_) {}
+      return all.find(w => w.id === id) || all[0] || null;
+    },
+    select(id) {
+      const now = this.selected();
+      if (now && now.id === id) return;
+      if (this.applied !== null) this.save();
+      try {
+        localStorage.setItem(this.SELECTED, id);
+      } catch (_) {}
+      this.changed();
+    },
+    create(name) {
+      const all = this.list();
+      const w = {
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+        name: String(name || "World " + (all.length + 1)).slice(0, 40),
+        created: Date.now(),
+        played: 0,
+        buildings: 0,
+        age: 1
+      };
+      all.push(w);
+      this.writeList(all);
+      this.select(w.id);
+      return w;
+    },
+    rename(id, name) {
+      const all = this.list();
+      const w = all.find(x => x.id === id);
+      if (!w) return;
+      w.name = String(name).slice(0, 40);
+      this.writeList(all);
+    },
+    remove(id) {
+      const all = this.list().filter(w => w.id !== id);
+      try {
+        localStorage.removeItem("_ryn_world_" + id);
+      } catch (_) {}
+      if (this.applied === id) this.applied = "";
+      this.writeList(all);
+      if (!all.length) this.create("World 1");
+    },
+    ensure() {
+      if (!this.list().length) this.create("World 1");
+    },
+    // the first spawn in a world loads it; respawning after a death does not
+    onSpawn() {
+      this.ensure();
+      const w = this.selected();
+      if (!w || this.applied === w.id || this.loading) return;
+      // wait until the game has your player (it arrives with the next server tick)
+      this.loading = true;
+      setTimeout(() => {
+        this.loading = false;
+        try {
+          this.load(w);
+        } catch (e) {
+          RynPrivate.dbg("could not load world " + w.name + ": " + (e && e.message));
+        }
+      }, 350);
+    },
+    load(w) {
+      const st = RynPrivate.state();
+      if (!st || !st.me || !st.me.alive) return;
+      const d = this.data(w.id);
+      if (d && d.snap) {
+        RynPrivate.call("restore", d.snap);
+        if (d.player) RynPrivate.call("applyPlayer", d.player);
+        RynPrivate.dbg("you: loaded world " + w.name + (d.player ? " (age " + d.player.age + ", back where you were)" : ""));
+      } else if (this.applied !== null) {
+        RynPrivate.call("newWorld");
+        RynPrivate.dbg("you: started new world " + w.name);
+      } else {
+        RynPrivate.dbg("you: started new world " + w.name);
+      }
+      this.applied = w.id;
+      setTimeout(() => this.save(), 1500);
+    },
+    save() {
+      const id = this.applied;
+      if (!id) return false;
+      const all = this.list();
+      const w = all.find(x => x.id === id);
+      if (!w) return false;
+      const snap = RynPrivate.call("snapshot");
+      if (!snap) return false;
+      const player = RynPrivate.call("playerState");
+      try {
+        localStorage.setItem("_ryn_world_" + id, JSON.stringify({
+          v: 1,
+          snap: snap,
+          player: player
+        }));
+      } catch (e) {
+        RynPrivate.dbg("could not save world " + w.name + ": " + (e && e.message));
+        return false;
+      }
+      w.played = Date.now();
+      w.buildings = snap.objects.filter(o => o[6] === "me").length;
+      w.age = player ? player.age : 1;
+      this.writeList(all);
+      return true;
+    },
+    beforeLeave() {
+      if (this.applied) this.save();
+      this.applied = null;
+    },
+    changed() {
+      for (const fn of this.listeners) {
+        try {
+          fn();
+        } catch (_) {}
+      }
+    },
+    buildLobby(right, el, statusText) {
+      this.ensure();
+      right.textContent = "";
+      const head = el("div", "rs-head");
+      const titleRow = el("div", "rs-title-row");
+      titleRow.appendChild(el("span", "rs-title", "Worlds"));
+      const count = el("span", "rs-online");
+      titleRow.appendChild(count);
+      head.appendChild(titleRow);
+      head.appendChild(el("div", "rs-note", "Saved in this browser. Your buildings, dummies, progress and where you stand come back when you return."));
+      const actions = el("div", "rs-filters");
+      const add = el("div", "rs-chip", "+ New world");
+      add.addEventListener("click", () => {
+        const name = prompt("Name the new world", "World " + (this.list().length + 1));
+        if (name !== null) this.create(name.trim() || undefined);
+      });
+      actions.appendChild(add);
+      head.appendChild(actions);
+      right.appendChild(head);
+      const list = el("div", "rs-list");
+      right.appendChild(list);
+      const ago = t => {
+        const s = Math.max(0, Math.round((Date.now() - t) / 1e3));
+        if (s < 60) return "just now";
+        if (s < 3600) return Math.round(s / 60) + " min ago";
+        if (s < 86400) return Math.round(s / 3600) + " h ago";
+        return Math.round(s / 86400) + " d ago";
+      };
+      const draw = () => {
+        const all = this.list();
+        const sel = this.selected();
+        count.textContent = all.length + " saved";
+        list.textContent = "";
+        for (const w of all) {
+          const row = el("div", "rs-row" + (sel && sel.id === w.id ? " rs-on" : ""));
+          const id = el("div", "rs-id");
+          id.appendChild(el("span", "rs-name", w.name));
+          id.appendChild(el("span", "rs-region", w.played ? "Played " + ago(w.played) + " · age " + (w.age || 1) + " · " + (w.buildings || 0) + " buildings" : "New world"));
+          row.appendChild(id);
+          const rename = el("span", "rs-tag rw-act", "Rename");
+          rename.addEventListener("click", e => {
+            e.stopPropagation();
+            const name = prompt("Rename the world", w.name);
+            if (name && name.trim()) this.rename(w.id, name.trim());
+          });
+          const del = el("span", "rs-tag rw-act rw-del", "Delete");
+          del.addEventListener("click", e => {
+            e.stopPropagation();
+            if (confirm("Delete " + w.name + "? It cannot be brought back.")) this.remove(w.id);
+          });
+          row.appendChild(rename);
+          row.appendChild(del);
+          row.addEventListener("click", () => this.select(w.id));
+          list.appendChild(row);
+        }
+        statusText.textContent = sel ? "Private · " + sel.name : "Private";
+      };
+      this.listeners.add(draw);
+      draw();
+      setInterval(draw, 3e4);
+    }
+  };
+  window.addEventListener("pagehide", () => {
+    try {
+      if (RynPrivate.on) RynWorlds.save();
+    } catch (_) {}
+  });
+  // Private mode always runs on moomoo.io. A browser keeps each subdomain's storage
+  // apart, so worlds saved on sandbox.moomoo.io would not show on moomoo.io. Opening
+  // Private anywhere else goes to moomoo.io and carries that address's worlds along
+  // in the address hash, which is read and removed before the game loads.
+  const RYN_PRIVATE_HOME = "moomoo.io";
+  const rynPrivateHome = () => location.hostname === RYN_PRIVATE_HOME || location.hostname === "www." + RYN_PRIVATE_HOME;
+  const rynNoPrivate = href => {
+    try {
+      const u = new URL(href, location.href);
+      u.searchParams.set("rynPrivate", "0");
+      return u.href;
+    } catch (_) {
+      return href;
+    }
+  };
+  (() => {
+    try {
+      if (rynPrivateHome()) {
+        const hash = location.hash;
+        if (hash.indexOf("#rynWorlds=") !== 0) return;
+        history.replaceState(null, "", location.pathname + location.search);
+        const pack = JSON.parse(decodeURIComponent(hash.slice("#rynWorlds=".length)));
+        let mine = RynWorlds.list();
+        let brought = 0;
+        for (const w of pack.index || []) {
+          if (!w || typeof w.id !== "string" || !pack.data || typeof pack.data[w.id] !== "string") continue;
+          const have = mine.find(x => x.id === w.id);
+          if (have && (have.played || 0) >= (w.played || 0)) continue;
+          if (!have && mine.some(x => x.name === w.name)) w.name = (w.name + " (" + (pack.from || "sandbox") + ")").slice(0, 40);
+          localStorage.setItem("_ryn_world_" + w.id, pack.data[w.id]);
+          mine = mine.filter(x => x.id !== w.id).concat([ w ]);
+          brought++;
+        }
+        if (brought) {
+          localStorage.setItem(RynWorlds.INDEX, JSON.stringify(mine));
+          if (pack.selected && mine.some(x => x.id === pack.selected)) localStorage.setItem(RynWorlds.SELECTED, pack.selected);
+          RynPrivate.dbg("brought over " + brought + " world(s) from " + (pack.from || "another moomoo address"));
+        }
+        return;
+      }
+      if (!RynPrivate.on || !/(^|\.)moomoo\.io$/.test(location.hostname)) return;
+      RynPrivate.on = false;
+      sessionStorage.removeItem(RYN_PRIVATE_KEY);
+      const pack = {
+        from: location.hostname.split(".")[0],
+        index: [],
+        selected: localStorage.getItem(RynWorlds.SELECTED),
+        data: {}
+      };
+      let size = 0;
+      for (const w of RynWorlds.list().sort((a, b) => (b.played || 0) - (a.played || 0))) {
+        const d = localStorage.getItem("_ryn_world_" + w.id);
+        if (!d || size + d.length > 6e5) continue;
+        pack.data[w.id] = d;
+        pack.index.push(w);
+        size += d.length;
+      }
+      location.replace("https://" + RYN_PRIVATE_HOME + "/?rynPrivate=1" + (pack.index.length ? "#rynWorlds=" + encodeURIComponent(JSON.stringify(pack)) : ""));
+    } catch (e) {
+      try {
+        RynPrivate.dbg("moving worlds failed: " + (e && e.message));
+      } catch (_) {}
+    }
+  })();
   const rynBotNotice = msg => {
     try {
       console.warn("[RYN BOT] " + msg);
@@ -1643,11 +13566,16 @@ window.grbtp = 35;
       signal: signal
     }).then(response => {
       if (response.status === 403 || response.status === 429) {
-        return response.json().catch(() => ({})).then(body => ({
-          ticket: null,
-          error: response.status === 429 ? "busy" : body && body.error === "auth" ? "members" : body && body.error === "vpn" ? "vpn" : "refused",
-          retryAfterMs: response.status === 429 ? rynRetryAfterMs(response, body) : 0
-        }));
+        return response.json().catch(() => ({})).then(body => {
+          const code = body && typeof body.error === "string" ? body.error : "";
+          return {
+            ticket: null,
+            error: response.status === 429 ? "busy" : code === "auth" ? "members" : code === "vpn" ? "vpn" : code === "locked" ? "locked" : "refused",
+            detail: code,
+            seconds: body && Number(body.seconds) > 0 ? Number(body.seconds) : 0,
+            retryAfterMs: response.status === 429 ? rynRetryAfterMs(response, body) : 0
+          };
+        });
       }
       if (!response.ok) return {
         ticket: null,
@@ -3174,6 +15102,12 @@ window.grbtp = 35;
         } else if (joined.error !== "network" || member) {
           RynBotDevices.release(did);
           let reason = RYN_JOIN_REFUSED[joined.error] || "The join API refused this bot (" + joined.error + ").";
+          if (joined.error === "locked") {
+            const secs = joined.seconds || 60;
+            reason = "The game removed this bot and refuses it for " + (secs >= 120 ? Math.ceil(secs / 60) + " minutes" : secs + " seconds") + " — add it again after that.";
+          } else if (joined.error === "refused" && joined.detail) {
+            reason += " (the join API said: " + joined.detail + ")";
+          }
           if (auth) {
             if (joined.error === "members") reason = "This server is members-only, and Bot " + account.slot + "'s account is not verified (confirm its email) — switch server.";
             else if (joined.error === "refused") reason = "The join API refused Bot " + account.slot + "'s account" + (member ? "." : " or its Cloudflare token.");
@@ -5182,7 +17116,7 @@ window.grbtp = 35;
   const Navbar_default = "<div id=\"navbar-container\">\n  <div class=\"rail-brand\">\n    <span class=\"rail-mark\">RYN</span>\n    <span class=\"rail-sub\">Type 2</span>\n  </div>\n\n  <div id=\"ryn-search-wrap\">\n    <input id=\"ryn-search-input\" type=\"text\" placeholder=\"Search settings\" autocomplete=\"off\" spellcheck=\"false\">\n    <span id=\"ryn-search-clear\" title=\"Clear\">&#10005;</span>\n    <div id=\"ryn-search-dropdown\"></div>\n  </div>\n\n  <div class=\"rail-label\">Categories</div>\n  <nav>\n    <button data-id=\"1\" class=\"open-menu active\"><span class=\"nav-index\">01</span><span class=\"nav-label\">Keybinds</span></button>\n    <button data-id=\"3\" class=\"open-menu\"><span class=\"nav-index\">02</span><span class=\"nav-label\">Visual</span></button>\n    <button data-id=\"2\" class=\"open-menu\"><span class=\"nav-index\">03</span><span class=\"nav-label\">Combat</span></button>\n    <button data-id=\"4\" class=\"open-menu\"><span class=\"nav-index\">04</span><span class=\"nav-label\">Misc</span></button>\n    <button data-id=\"7\" class=\"open-menu\"><span class=\"nav-index\">05</span><span class=\"nav-label\">Music</span></button>\n    <button data-id=\"5\" class=\"open-menu\"><span class=\"nav-index\">06</span><span class=\"nav-label\">Bots</span></button>\n  </nav>\n\n  <div class=\"rail-label\">In this category</div>\n  <div id=\"nav-outline\"></div>\n\n  <div class=\"rail-foot\">\n    <span id=\"ryn-version\">Ryn Type 2</span>\n    <svg id=\"close-button\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" title=\"Close menu\">\n      <line x1=\"5\" y1=\"5\" x2=\"19\" y2=\"19\" stroke-linecap=\"round\"/>\n      <line x1=\"19\" y1=\"5\" x2=\"5\" y2=\"19\" stroke-linecap=\"round\"/>\n    </svg>\n  </div>\n</div>";
   const Devtool_default = "";
   const Keybinds_default = "<div class=\"menu-page opened\" data-id=\"1\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Keybinds</h1>\n        <p class=\"page-description\">Click a key to start editing, then press the key or mouse button you want. Backspace clears a binding. A key used twice is marked as a conflict on both rows.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Items &amp; Weapons<span class=\"sec-sub\">Hotbar placement and the weapon slots.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Food</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_food\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Wall</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_wall\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spike\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Windmill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_windmill\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Farm</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_farm\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Trap</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_trap\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Turret</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_turret\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spawn</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spawn\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Client<span class=\"sec-sub\">Opening this menu and firing the instakill sequence.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Menu</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_toggleMenu\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Instakill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_instakill\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Chat Log</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_chatLogKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Quick Actions<span class=\"sec-sub\">One-press build patterns and on/off switches for the automations.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Quad Spikes</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_fourSpikes\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Quad Traps</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_fourTraps\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Boost Spike Rush</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_boostSpikes\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Automill</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoMillKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Dash</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_dashMovementKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Velocity Tick Spacing (hold)</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_velocityTickSpacingKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Auto Grind</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoGrindKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Toggle Autoplacer</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_autoplacerKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Controls<span class=\"sec-sub\">Everything that commands the bots you have connected.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spawn Bot</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_spawnBot\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Kill All Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_killAllBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Hold Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_holdBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Release Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_releaseBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Bot Auto-Attack</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAutoAttack\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Auto Farm</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAutoFarm\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Repel Alts</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_repelAlts\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Bot Random Movement</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_scatterBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Avoid Shield Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botAvoidShieldKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Volley Fire</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_botVolleyKey\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Freeze Bots</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_freezeBots\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\"><span class=\"option-title\">Lock bot position</span></div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_lockBotPosition\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n    <div class=\"section\">\n        <div class=\"section-title\">Possession<span class=\"sec-sub\">Which of your characters you are controlling. These three keys are taken before anything else sees them &mdash; the game maps the arrows to movement, so letting one through would walk the character you just left.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Next character</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessNext\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Previous character</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessPrev\" class=\"hotkeyInput\"></button></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Back to your own character</span>\n                </div>\n                <div class=\"option-content\"><span class=\"key-state\"></span><button id=\"_possessMain\" class=\"hotkeyInput\"></button></div>\n            </div>\n        </div>\n    </div>\n</div>";
-  const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Combat</h1>\n        <p class=\"page-description\">Every automation the client runs during a fight, ordered by the moment it fires: the kill sequence first, then how it places, how it survives, and what it does with the rest of the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Kill Sequences<span class=\"sec-sub\">Timed weapon and hat chains that try to finish a target outright.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_musketBowInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Sync<span class=\"sec-sub\">Landing separate sources of damage on the same server tick.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_velocityTick\">Velocity Tick</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_velocityTick\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSync\">Spike sync</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSyncHammer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeSync2\">Spike Sync 2</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync2\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Placement<span class=\"sec-sub\">Where spikes and traps go, and how fast they get replaced.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacer\">Autoplacer</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoplacer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoplacer radius</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Placer scanners</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerScanners\" type=\"range\" step=\"1\" min=\"1\" max=\"6\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacerResolution\">Placer resolution</label>\n                </div>\n                <select id=\"_autoplacerResolution\" class=\"ryn-select\">\n                    <option value=\"36\">36 - coarse</option>\n                    <option value=\"72\">72 - balanced</option>\n                    <option value=\"144\">144 - original</option>\n                    <option value=\"200\">200 - default</option>\n                </select>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_prePlace\">Preplace</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_prePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_replace\">Replace</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_replace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <span class=\"option-title\">Replace Burst</span>\n                    </div>\n                    <label class=\"slider\">\n                        <span class=\"slider-value\"></span>\n                        <input id=\"_replaceBurst\" type=\"range\" step=\"1\" min=\"3\" max=\"6\">\n                    </label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_placementDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapKB\">Trap KB</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapKB\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeKB\">Spike KB</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeKB\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Healing, shielding and the hats that keep you alive.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoheal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_empDefense\">Emp Defense</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_empDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeSoldier\">Safe Soldier</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeSoldier\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_frostHelmInSnow\">Frost Helm in snow</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_frostHelmInSnow\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeWalk\">Safe walk</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeWalk\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Anti Systems<span class=\"sec-sub\">Reactions to what other players and the world do to you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_antienemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antianimal\">Anti animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antianimal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antispike\">Anti spike</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antispike\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiSpikePush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiRetrap\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you wear, and when it changes.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_biomehats\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_adaptiveGearSwitching\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_tailPriority\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_cowboyWhenSafe\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto Push Range</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_trapStandoff\">Trap Standoff</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_trapStandoff\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Trap Standoff Distance</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_trapStandoffRange\" type=\"range\" step=\"1\" min=\"50\" max=\"90\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_dashMovement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autobreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_breakPosition\">Break Position</label>\n                    </div>\n                    <select id=\"_breakPosition\" class=\"ryn-select\">\n                        <option value=\"inside\">Inside</option>\n                        <option value=\"outside\">Outside</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_automill\">Automill</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_automill\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoGrind\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetPrimary\">Grind Until (primary)</label>\n                    </div>\n                    <select id=\"_autoGrindTargetPrimary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                        <option value=\"emerald\">Emerald (members)</option>\n                    </select>\n                </div>\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetSecondary\">Grind Until (secondary)</label>\n                    </div>\n                    <select id=\"_autoGrindTargetSecondary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                        <option value=\"emerald\">Emerald (members)</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPlay\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_turretSteal\">Turret steal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSteal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapAnimal\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
+  const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Combat</h1>\n        <p class=\"page-description\">Every automation the client runs during a fight, ordered by the moment it fires: the kill sequence first, then how it places, how it survives, and what it does with the rest of the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Kill Sequences<span class=\"sec-sub\">Timed weapon and hat chains that try to finish a target outright.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_musketBowInsta\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Sync<span class=\"sec-sub\">Landing separate sources of damage on the same server tick.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_velocityTick\">Velocity Tick</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_velocityTick\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSync\">Spike sync</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSyncHammer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeSync2\">Spike Sync 2</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeSync2\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Placement<span class=\"sec-sub\">Where spikes and traps go, and how fast they get replaced.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacer\">Autoplacer</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoplacer\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoplacer radius</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Placer scanners</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoplacerScanners\" type=\"range\" step=\"1\" min=\"1\" max=\"6\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoplacerResolution\">Placer resolution</label>\n                </div>\n                <select id=\"_autoplacerResolution\" class=\"ryn-select\">\n                    <option value=\"36\">36 - coarse</option>\n                    <option value=\"72\">72 - balanced</option>\n                    <option value=\"144\">144 - original</option>\n                    <option value=\"200\">200 - default</option>\n                </select>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_prePlace\">Preplace</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_prePlace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_replace\">Replace</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_replace\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <span class=\"option-title\">Replace Burst</span>\n                    </div>\n                    <label class=\"slider\">\n                        <span class=\"slider-value\"></span>\n                        <input id=\"_replaceBurst\" type=\"range\" step=\"1\" min=\"3\" max=\"6\">\n                    </label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_placementDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapKB\">Trap KB</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapKB\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_spikeKB\">Spike KB</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_spikeKB\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Healing, shielding and the hats that keep you alive.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoheal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_empDefense\">Emp Defense</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_empDefense\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeSoldier\">Safe Soldier</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeSoldier\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_frostHelmInSnow\">Frost Helm in snow</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_frostHelmInSnow\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_safeWalk\">Safe walk</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_safeWalk\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Anti Systems<span class=\"sec-sub\">Reactions to what other players and the world do to you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_antienemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antianimal\">Anti animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antianimal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antispike\">Anti spike</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_antispike\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiSpikePush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_antiRetrap\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you wear, and when it changes.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_biomehats\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_adaptiveGearSwitching\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_tailPriority\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_cowboyWhenSafe\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPush\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto Push Range</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_trapStandoff\">Trap Standoff</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_trapStandoff\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Trap Standoff Distance</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_trapStandoffRange\" type=\"range\" step=\"1\" min=\"50\" max=\"90\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_dashMovement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autobreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_breakPosition\">Break Position</label>\n                    </div>\n                    <select id=\"_breakPosition\" class=\"ryn-select\">\n                        <option value=\"inside\">Inside</option>\n                        <option value=\"outside\">Outside</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_automill\">Automill</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_automill\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoGrind\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetPrimary\">Grind Until (primary)</label>\n                    </div>\n                    <select id=\"_autoGrindTargetPrimary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                        <option value=\"emerald\">Emerald (members)</option>\n                    </select>\n                </div>\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_autoGrindTargetSecondary\">Grind Until (secondary)</label>\n                    </div>\n                    <select id=\"_autoGrindTargetSecondary\" class=\"ryn-select\">\n                        <option value=\"gold\">Gold</option>\n                        <option value=\"diamond\">Diamond</option>\n                        <option value=\"ruby\">Ruby</option>\n                        <option value=\"emerald\">Emerald (members)</option>\n                    </select>\n                </div>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_autoPlay\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_turretSteal\">Turret steal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_turretSteal\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label></div>\n                <label class=\"switch-checkbox\"><input id=\"_trapAnimal\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
   const KILL_STYLES = [
     { id: "current",          label: "Current",           life: 0 },
     { id: "bloodMark",        label: "Blood Mark",        life: 1500 },
@@ -5214,8 +17148,8 @@ window.grbtp = 35;
 
   const Visuals_default = "<div class=\"menu-page\" data-id=\"3\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Visual</h1>\n        <p class=\"page-description\">Everything the client draws over the game. Turn off what you do not read during a fight — the fewer overlays are on, the less there is between you and the map.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Names<span class=\"sec-sub\">How players are labelled on the field.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">My Name</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_myNameColorValue\" type=\"color\" title=\"Select Color\">\n                    <label class=\"switch-checkbox\"><input id=\"_myNameColor\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Player ID</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_showPlayerID\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Player HUD<span class=\"sec-sub\">Readouts drawn on and around players.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Weapon Reload Ring</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_weaponReloadRing\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Render HP</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_renderHP\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Boss Health Under It</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_bossHealthUnder\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Position Prediction</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_positionPrediction\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">My Turret Reload Bar</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_playerTurretReloadBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Display player angle</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_displayPlayerAngle\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">World<span class=\"sec-sub\">Tint and weather drawn over the map itself.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Purple Tint</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_objectTint\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Tint Transparency</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_objectTintOpacity\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_weather\">Rain &amp; Snow</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_weather\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Intensity</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_weatherAmount\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_deathCorpse\">Death Corpses</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_deathCorpse\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"sub-options\">\n                <div class=\"content-option\">\n                    <div class=\"opt-main\">\n                        <label class=\"option-title\" for=\"_killAnimation\">Kill Animation</label>\n                    </div>\n                    <select id=\"_killAnimation\" class=\"ryn-select\">" + KILL_STYLE_OPTIONS + "</select>\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Structures<span class=\"sec-sub\">Who owns a building, and how much of it is left.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Structure Readout (Mine/Clan)</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_itemHealthBar\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Structure Readout (Enemy)</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_itemHealthBarEnemy\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Health Bar Colour</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_itemHealthBarColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Structure Colours<span class=\"sec-sub\">Spikes and traps recoloured by who placed them.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_structureColors\">Structure Colours</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_structureColors\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Colour Strength</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_structureColorStrength\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Own Spike</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_ownSpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Ally Spike</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_allySpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enemy Spike</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_enemySpikeColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Own Trap</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_ownTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Ally Trap</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_allyTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enemy Trap</span>\n                </div>\n                <div class=\"option-content\">\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\n                    <input id=\"_enemyTrapColor\" type=\"color\" title=\"Select Color\">\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Hitboxes<span class=\"sec-sub\">Debug outlines. Useful while learning a range, noisy otherwise.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Weapon hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_weaponHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Collision hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_collisionHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Placement hitbox</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_placementHitbox\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Possible placement</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_possiblePlacement\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Interface<span class=\"sec-sub\">The game's own interface and how much it draws.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Hide game HUD</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_hideHUD\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Melee Animation</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_meleeAnimation\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_visualSmoothing\">Visual Smoothing</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_visualSmoothing\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_renderOptimization\">Rendering Optimization</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_renderOptimization\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <label class=\"option-title\" for=\"_performanceOptimization\">Performance Optimization</label>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_performanceOptimization\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Low Quality Mode</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_lowQuality\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n</div>";
   const Misc_default = "<div class=\"menu-page\" data-id=\"4\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Misc</h1>\n        <p class=\"page-description\">Everything around the fight: what happens on a kill, what gets typed into chat for you and for the bots, how this menu behaves, and the counters the client has kept since you installed it.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Match<span class=\"sec-sub\">What the client does when a round starts or ends.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Kill Message</span>\n                </div>\n                <div class=\"option-content\">\n                    <input id=\"_killMessageText\" class=\"input\" type=\"text\" maxlength=\"30\" placeholder=\"Message\">\n                    <label class=\"switch-checkbox\"><input id=\"_killMessage\" type=\"checkbox\"><span></span></label>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autospawn</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autospawn\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Autoaccept</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoaccept\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Auto Chat<span class=\"sec-sub\">Lines you post on a timer. They cycle in the order listed.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enable</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoChat\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Interval</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_autoChatInterval\" type=\"range\" step=\"1\" min=\"1\" max=\"60\" data-suffix=\"s\">\n                </label>\n            </div>\n            <div id=\"autoChatMsgList\"></div>\n            <div class=\"content-option centered\">\n                <button id=\"addAutoChatMsg\" class=\"option-button\">Add message</button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Auto Chat<span class=\"sec-sub\">The same thing, typed by every connected bot.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Enable Player Chat</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoBotChat\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div id=\"autoBotChatMsgList\"></div>\n            <div class=\"content-option centered\">\n                <button id=\"addAutoBotChatMsg\" class=\"option-button\">Add player message</button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Chat Log<span class=\"sec-sub\">The log in the corner: what was said, who arrived, who left, who died, and who formed or joined a clan. Size, opacity, font, filters and mutes live behind the gear on the panel itself.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Show Chat Log</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_chatLogOpen\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot messages</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_chatLogBotMsg\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot events</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_chatLogBotEvents\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Lock position</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_chatLogLock\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Menu<span class=\"sec-sub\">How this interface itself behaves.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">See through the menu</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_menuTransparency\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Session<span class=\"sec-sub\">Counters kept by the client. They persist between games.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Total kills</span></div>\n                <span id=\"_totalKills\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Global kills with bots</span></div>\n                <span id=\"_globalKills\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Deaths</span></div>\n                <span id=\"_deaths\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Autosync</span></div>\n                <span id=\"_autoSyncTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike sync hammer</span></div>\n                <span id=\"_spikeSyncHammerTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Spike sync</span></div>\n                <span id=\"_spikeSyncTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Velocity tick</span></div>\n                <span id=\"_velocityTickTimes\" class=\"text-value\">0</span>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Client</span></div>\n                <span id=\"author\" class=\"text-value\">Ryn Type 2</span>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Reset<span class=\"sec-sub\">Puts every setting on every page back to its shipped value.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Reset all settings</span>\n                </div>\n                <button id=\"resetSettings\" class=\"option-button red\">Reset settings</button>\n            </div>\n        </div>\n    </div>\n</div>";
-  const Bots_default = "<div class=\"menu-page\" data-id=\"5\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Bots</h1>\n        <p class=\"page-description\">Connect alternate clients, name them, and decide how they follow, fight, build and farm. Everything below applies to every bot you have connected.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Fleet<span class=\"sec-sub\">Add a bot, give it a name, connect it. Connected bots appear underneath.</span></div>\n        <div class=\"section-content\">\n            <div id=\"bot-container\"></div>\n            <div id=\"dynamic-bot-list\"></div>\n            <div class=\"content-option stacked\" id=\"_botBulkRow\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Name every bot</span>\n                </div>\n                <div class=\"inline\">\n                    <input id=\"_botBulkName\" class=\"input\" type=\"text\" maxlength=\"15\" placeholder=\"Enter name\" autocomplete=\"off\" spellcheck=\"false\">\n                    <button id=\"_botBulkNameApply\" class=\"option-button\">Apply to all</button>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Fleet numbers</span>\n                </div>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">First number</span></div>\n                <div class=\"inline\"><input id=\"_botNameNumberStart\" class=\"input\" type=\"number\" min=\"0\" max=\"99\" step=\"1\" value=\"1\"></div>\n            </div>\n            <div class=\"content-option centered\">\n                <button id=\"add-bot-dynamic\" class=\"option-button primary tall\">Add bot</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Prefer servers bots can join</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_preferBotServers\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Clan joins</span>\n                </div>\n                <button id=\"_clanRecheck\" class=\"option-button\">Re-check clan joins</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto random bot names</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoRandomBotNames\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bots sign in</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAccounts\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot account password</span>\n                </div>\n                <input id=\"_botAcctPassword\" class=\"input\" type=\"text\" maxlength=\"64\" placeholder=\"Password\" autocomplete=\"off\" spellcheck=\"false\">\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bots own clan</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botIndividualClans\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Clan name stem</span>\n                </div>\n                <input id=\"_botClanPrefix\" class=\"input\" type=\"text\" maxlength=\"6\" placeholder=\"GG1\" autocomplete=\"off\" spellcheck=\"false\">\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\" id=\"_tokenPoolSection\" style=\"display:none;\">\n        <div class=\"section-title\">Spawn<span class=\"sec-sub\">Verification solved ahead of the press, so Spawn Bot buys sockets rather than challenges. One press connects as many bots as there are tokens ready.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\" id=\"_tokenPoolRow\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Tokens ready</span>\n                    <span class=\"opt-desc\" id=\"_tokenPoolStatus\">&mdash;</span>\n                </div>\n                <div class=\"inline\">\n                    <button id=\"_tokenPoolToggle\" class=\"option-button primary\">Stop</button>\n                    <button id=\"_tokenPoolFill\" class=\"option-button\">Fill now</button>\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Target Scan<span class=\"sec-sub\">Everyone this tab has seen, from any of its connections. <b>SCAN</b> sends the fleet looking for them; <b>EXCLUDE</b> takes them off the target list for every bot, everywhere. The two are independent &mdash; a player can be scanned and excluded at once, which tracks them without ever attacking them.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Scan <span id=\"_scanCount\" class=\"scan-count\">none picked</span></span>\n                    <span class=\"opt-desc\" id=\"_scanStatus\">Pick one or more players below.</span>\n                </div>\n                <button id=\"_scanToggle\" class=\"option-button primary\">SCAN ON</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Scan mode</span>\n                </div>\n                <div class=\"seg\">\n                    <button id=\"_scanModeAttack\" class=\"seg-btn\">Attack</button>\n                    <button id=\"_scanModeTrack\" class=\"seg-btn\">Track</button>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bots given <span id=\"_escortCount\" class=\"scan-count\">none</span></span>\n                    <span class=\"opt-desc\" id=\"_escortStatus\">Use <b>&minus; BOTS +</b> on a clan mate below to hand them bots. Those bots follow, guard, fight and build for that player until you take them back or the player leaves your clan.</span>\n                </div>\n            </div>\n            <div class=\"content-option stacked\">\n                <div class=\"scan-bar\">\n                    <input id=\"_scanFilter\" class=\"input scan-filter\" type=\"search\" placeholder=\"Filter by name or id\" autocomplete=\"off\" spellcheck=\"false\">\n                    <button id=\"_scanClearTargets\" class=\"option-button\">Clear picks</button>\n                    <button id=\"_scanClearExcluded\" class=\"option-button\">Clear excluded</button>\n                    <button id=\"_scanClearDex\" class=\"option-button\">Clear list</button>\n                </div>\n                <div id=\"_scanList\"></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Behaviour<span class=\"sec-sub\">What the bots do while they are following you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Follow cursor</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_followCursor\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Stop movement radius</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_movementRadius\" type=\"range\" step=\"25\" min=\"25\" max=\"250\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Auto Break</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAutoBreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Ranged Kiting</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botRangedKite\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Kite distance</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botKiteDistance\" type=\"range\" step=\"25\" min=\"150\" max=\"1200\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Volley Fire</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botVolley\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">First wave size</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botVolleyWave\" type=\"range\" step=\"1\" min=\"1\" max=\"20\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Avoid Shield Bots</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAvoidShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Be Angel</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_botBeAngel\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Crabking movment</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botCrabKing\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Protection<span class=\"sec-sub\">Puts part of the fleet in front of the rest as a screen. This covers your <b>bots</b> &mdash; it is not a bodyguard for you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Protection <span id=\"_protectState\" class=\"scan-count\">off</span></span>\n                    <span class=\"opt-desc\" id=\"_protectStatus\">Off. The whole fleet keeps its normal jobs.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botProtection\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Guards</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botProtectionGuards\" type=\"range\" step=\"1\" min=\"1\" max=\"40\">\n                </label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Advance</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botProtectionAdvance\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Screen shape</span>\n                </div>\n                <div class=\"option-content\"><select id=\"_botProtectionFormation\" class=\"ryn-select\"></select></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Formation<span class=\"sec-sub\">The shape the fleet holds around you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Shape</span>\n                </div>\n                <div id=\"_formationGrid\"></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Circle rotation</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_circleRotation\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Circle radius</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_circleRadius\" type=\"range\" step=\"25\" min=\"50\" max=\"600\">\n                </label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Loadout<span class=\"sec-sub\">What each bot carries. &ldquo;Copy from me&rdquo; mirrors your own weapon.</span></div>\n        <div class=\"section-content\">\n            <div class=\"stack\">\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Primary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-weapon-selector\">\n                        <div class=\"bot-weapon-btn\" data-wid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"0\" title=\"Tool Hammer\">Tool Hammer</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"1\" title=\"Hand Axe\">Hand Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"2\" title=\"Great Axe\">Great Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"3\" title=\"Short Sword\">Short Sword</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"4\" title=\"Katana\">Katana</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"5\" title=\"Polearm\">Polearm</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"6\" title=\"Bat\">Bat</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"7\" title=\"Daggers\">Daggers</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"8\" title=\"Stick\">Stick</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Secondary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-sec-weapon-selector\">\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"9\" title=\"Hunting Bow\">Hunting Bow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"10\" title=\"Great Hammer\">Great Hammer</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"11\" title=\"Wooden Shield\">Wooden Shield</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"12\" title=\"Crossbow\">Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"13\" title=\"Repeater Crossbow\">Repeater Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"14\" title=\"Mc Grabby\">Mc Grabby</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"15\" title=\"Musket\">Musket</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-sec-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Age 4 building</div>\n                    <div class=\"wpn-grid\" id=\"bot-age4-selector\">\n                        <div class=\"bot-weapon-btn\" data-age4id=\"0\" title=\"Trap\">Trap</div>\n                        <div class=\"bot-weapon-btn\" data-age4id=\"1\" title=\"Boost Pad\">Boost Pad</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-age4-label\">Trap (default)</span></div>\n                </div>\n            </div>\n\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Platform w/ Musket</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_platformMusket\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\" id=\"_farmSection\" data-mode=\"nearest\">\n        <div class=\"section-title\">Auto Farm<span class=\"sec-sub\">Sends the fleet to gather. Settings for the other modes stay editable, just dimmed.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto Farm <span class=\"scan-count\" data-farm-state>off</span></span>\n                    <span class=\"opt-desc\" data-farm-key>No key set</span>\n                </div>\n                <label class=\"switch-checkbox\"><input data-farm-toggle type=\"checkbox\" aria-label=\"Auto Farm\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet stacked\">\n                <div class=\"opt-main\"><span class=\"option-title\">Mode</span></div>\n                <div class=\"seg ryn-farm-modes\"><button type=\"button\" class=\"seg-btn\" data-farm-mode=\"nearest\"><span class=\"ryn-farm-mode-name\">Nearest</span><span class=\"ryn-farm-mode-sub\">Closest node, any resource</span></button><button type=\"button\" class=\"seg-btn\" data-farm-mode=\"single\"><span class=\"ryn-farm-mode-name\">One resource</span><span class=\"ryn-farm-mode-sub\">Every bot on one type</span></button><button type=\"button\" class=\"seg-btn\" data-farm-mode=\"sequence\"><span class=\"ryn-farm-mode-name\">Route</span><span class=\"ryn-farm-mode-sub\">Steps in order, with amounts</span></button></div>\n            </div>\n            <div class=\"content-option quiet\" data-farm-for=\"single\">\n                <div class=\"opt-main\"><span class=\"option-title\">Resource</span><span class=\"opt-desc\">Goal 0 keeps gathering until you turn it off.</span></div>\n                <div class=\"inline ryn-farm-pair\"><select id=\"_botFarmType\" class=\"ryn-select\"><option value=\"wood\">Wood</option><option value=\"stone\">Stone</option><option value=\"food\">Food</option><option value=\"gold\">Gold</option></select><input id=\"_botFarmSingleGoal\" class=\"input\" type=\"number\" min=\"0\" max=\"999999\" step=\"50\" placeholder=\"Goal\" aria-label=\"Resource goal\"></div>\n            </div>\n            <div class=\"content-option quiet stacked\" data-farm-for=\"sequence\">\n                <div class=\"opt-main\"><span class=\"option-title\">Route</span><span class=\"opt-desc\">Steps run in order. Each amount is what the fleet gathers before moving on; Skip or 0 skips a step.</span></div>\n                <div class=\"ryn-farm-route\">\n                    <div class=\"ryn-farm-step\"><span class=\"ryn-farm-n\">1</span><select id=\"_botFarmSeq1\" class=\"ryn-select\"><option value=\"none\">Skip</option><option value=\"wood\">Wood</option><option value=\"stone\">Stone</option><option value=\"food\">Food</option><option value=\"gold\">Gold</option></select><input id=\"_botFarmSeqAmount1\" class=\"input\" type=\"number\" min=\"0\" max=\"999999\" step=\"50\" placeholder=\"Amount\" aria-label=\"Step 1 amount\"></div>\n                    <div class=\"ryn-farm-step\"><span class=\"ryn-farm-n\">2</span><select id=\"_botFarmSeq2\" class=\"ryn-select\"><option value=\"none\">Skip</option><option value=\"wood\">Wood</option><option value=\"stone\">Stone</option><option value=\"food\">Food</option><option value=\"gold\">Gold</option></select><input id=\"_botFarmSeqAmount2\" class=\"input\" type=\"number\" min=\"0\" max=\"999999\" step=\"50\" placeholder=\"Amount\" aria-label=\"Step 2 amount\"></div>\n                    <div class=\"ryn-farm-step\"><span class=\"ryn-farm-n\">3</span><select id=\"_botFarmSeq3\" class=\"ryn-select\"><option value=\"none\">Skip</option><option value=\"wood\">Wood</option><option value=\"stone\">Stone</option><option value=\"food\">Food</option><option value=\"gold\">Gold</option></select><input id=\"_botFarmSeqAmount3\" class=\"input\" type=\"number\" min=\"0\" max=\"999999\" step=\"50\" placeholder=\"Amount\" aria-label=\"Step 3 amount\"></div>\n                    <div class=\"ryn-farm-step\"><span class=\"ryn-farm-n\">4</span><select id=\"_botFarmSeq4\" class=\"ryn-select\"><option value=\"none\">Skip</option><option value=\"wood\">Wood</option><option value=\"stone\">Stone</option><option value=\"food\">Food</option><option value=\"gold\">Gold</option></select><input id=\"_botFarmSeqAmount4\" class=\"input\" type=\"number\" min=\"0\" max=\"999999\" step=\"50\" placeholder=\"Amount\" aria-label=\"Step 4 amount\"></div>\n                </div>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Bots per resource</span></div>\n                <div class=\"seg ryn-farm-count\"><button type=\"button\" class=\"seg-btn\" data-farm-cap=\"1\">1</button><button type=\"button\" class=\"seg-btn\" data-farm-cap=\"2\">2</button><button type=\"button\" class=\"seg-btn\" data-farm-cap=\"3\">3</button><button type=\"button\" class=\"seg-btn\" data-farm-cap=\"4\">4</button><button type=\"button\" class=\"seg-btn\" data-farm-cap=\"5\">5</button><button type=\"button\" class=\"seg-btn\" data-farm-cap=\"6\">6</button></div>\n            </div>\n        </div>\n    </div>\n    <div class=\"section\">\n        <div class=\"section-title\">Possession<span class=\"sec-sub\">Switch control into a bot and it becomes your character: its camera, its world, its HUD, its resources, its age, its inventory, its chat. Not a spectator view &mdash; you are that character until you switch back.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Who you are controlling</span>\n                </div>\n                <div id=\"_possessList\"></div>\n            </div>\n        </div>\n    </div>\n\n</div>";
-  const Music_default = "<div class=\"menu-page\" data-id=\"7\">\n<style>\n@keyframes ryn-eq{0%,100%{height:4px;}50%{height:16px;}}\n\n.rm-root{display:flex;flex-direction:column;max-width:1180px;margin:0 auto;}\n\n.rm-player{\n  display:grid;\n  grid-template-columns:auto minmax(0,1fr) auto;\n  grid-template-areas:\"art meta actions\" \"art transport transport\";\n  column-gap:26px;row-gap:22px;align-items:center;\n  padding:26px 0 30px;\n  border-bottom:1px solid var(--line);\n}\n.rm-art{\n  grid-area:art;\n  width:96px;height:96px;flex-shrink:0;\n  display:flex;align-items:flex-end;justify-content:center;gap:4px;\n  padding-bottom:22px;\n  border-radius:var(--r3);\n  background:linear-gradient(150deg,#221D33,#131320);\n  border:1px solid var(--line);\n  position:relative;\n  transition:border-color 260ms var(--ease);\n}\n.rm-art::after{\n  content:'\\266B';\n  position:absolute;inset:0;\n  display:flex;align-items:center;justify-content:center;\n  font-size:30px;color:var(--tx-4);\n  transition:opacity 220ms var(--ease);\n}\n.rm-art.playing{border-color:var(--sage-40);}\n.rm-art.playing::after{opacity:0;}\n.rm-eq{display:none;align-items:flex-end;gap:4px;height:18px;}\n.rm-art.playing .rm-eq{display:flex;}\n.rm-eq-bar{width:3px;border-radius:2px;background:var(--sage);animation:ryn-eq .95s ease-in-out infinite;}\n.rm-eq-bar:nth-child(2){animation-delay:.16s;}\n.rm-eq-bar:nth-child(3){animation-delay:.32s;}\n\n.rm-meta{grid-area:meta;min-width:0;}\n.rm-kicker{\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.24em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:9px;\n}\n.rm-title{\n  font-size:clamp(22px,2.1vw,29px);font-weight:800;line-height:1.12;\n  letter-spacing:-.028em;color:var(--tx-1);\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n}\n.rm-artist{\n  margin-top:7px;font-size:14px;font-weight:600;color:var(--tx-3);\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n}\n.rm-album-badge{\n  display:inline-block;margin-top:10px;\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--iris-hi);\n}\n.rm-album-badge:empty{display:none;}\n\n.rm-actions{grid-area:actions;display:flex;gap:8px;align-self:start;}\n.rm-like-btn,.rm-save-now-btn{\n  width:42px;height:42px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);border:1px solid var(--line);\n  font-size:16px;line-height:1;color:var(--tx-3);cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.rm-like-btn:hover,.rm-save-now-btn:hover{background:rgba(255,255,255,.08);color:var(--tx-1);border-color:var(--line-2);}\n.rm-like-btn.liked,.rm-like-btn.on{color:var(--rose);border-color:rgba(217,163,171,.4);background:var(--rose-12);}\n.rm-save-now-btn.on{color:var(--sky);border-color:var(--sky-45);background:var(--sky-12);}\n\n.rm-transport{grid-area:transport;display:flex;align-items:center;gap:24px;min-width:0;}\n.rm-ctrl{display:flex;align-items:center;gap:8px;flex-shrink:0;}\n.rm-btn{\n  width:38px;height:38px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r2);\n  background:transparent;border:1px solid transparent;\n  color:var(--tx-3);font-size:12.5px;cursor:pointer;\n  transition:background 150ms var(--ease),color 150ms var(--ease),border-color 150ms var(--ease);\n}\n.rm-btn:hover{background:rgba(255,255,255,.06);color:var(--tx-1);}\n.rm-btn.rm-on,.rm-btn.on{color:var(--sage);border-color:var(--sage-40);background:var(--sage-14);}\n.rm-play-btn{\n  width:52px;height:52px;flex-shrink:0;\n  border-radius:16px;\n  background:var(--tx-1);border:none;color:#0A0A0D;\n  font-size:15.5px;\n  transition:transform 150ms var(--ease),background 150ms var(--ease);\n}\n.rm-play-btn:hover{background:#FFFFFF;transform:scale(1.04);}\n.rm-play-btn:active{transform:scale(.97);}\n\n.rm-prog-wrap{flex:1;min-width:0;display:flex;align-items:center;gap:14px;}\n.rm-prog-rail{\n  flex:1;min-width:0;height:5px;border-radius:999px;cursor:pointer;\n  background:rgba(255,255,255,.08);position:relative;\n}\n.rm-prog-fill{\n  height:100%;border-radius:999px;width:0;\n  background:var(--sky);position:relative;\n  transition:width 120ms linear;\n}\n.rm-prog-fill::after{\n  content:'';position:absolute;right:-5px;top:50%;\n  width:11px;height:11px;border-radius:50%;background:#EEF4FA;\n  transform:translateY(-50%) scale(0);\n  transition:transform 150ms var(--ease);\n  box-shadow:0 1px 4px rgba(0,0,0,.6);\n}\n.rm-prog-wrap:hover .rm-prog-fill::after{transform:translateY(-50%) scale(1);}\n.rm-time{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);flex-shrink:0;\n}\n.rm-vol{display:flex;align-items:center;gap:10px;flex-shrink:0;}\n.rm-vol-icon{font-size:13px;color:var(--tx-4);}\n#music-volume{\n  -webkit-appearance:none;appearance:none;\n  width:110px;height:18px;background:transparent;cursor:pointer;\n}\n#music-volume::-webkit-slider-runnable-track{height:4px;border-radius:999px;background:rgba(255,255,255,.09);}\n#music-volume::-webkit-slider-thumb{\n  -webkit-appearance:none;width:12px;height:12px;margin-top:-4px;\n  border-radius:50%;background:#EEF4FA;border:1px solid rgba(0,0,0,.35);\n  transition:transform 130ms var(--ease);\n}\n#music-volume:hover::-webkit-slider-thumb{transform:scale(1.15);}\n.rm-vol-val{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);min-width:34px;text-align:right;\n}\n\n.rm-sec{border-bottom:1px solid var(--line);}\n.rm-sec-head{\n  display:flex;align-items:center;gap:12px;\n  padding:22px 2px;cursor:pointer;user-select:none;\n}\n.rm-sec-dot{\n  width:5px;height:5px;border-radius:50%;flex-shrink:0;\n  background:var(--tx-4);transition:background 200ms var(--ease);\n}\n.rm-sec.open .rm-sec-dot{background:var(--iris-hi);}\n.rm-sec-title{\n  flex:1;font-family:var(--mono);font-size:11.5px;font-weight:700;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-2);\n}\n.rm-sec.open .rm-sec-title{color:var(--iris-hi);}\n.rm-sec-arrow{font-size:9px;color:var(--tx-4);transition:transform 200ms var(--ease);}\n.rm-sec.open .rm-sec-arrow{transform:rotate(180deg);}\n.rm-sec-body{display:none;flex-direction:column;gap:14px;padding:0 2px 26px;}\n.rm-sec.open .rm-sec-body{display:flex;animation:soft-in 180ms var(--ease);}\n\n.rm-filter-bar{display:flex;gap:7px;flex-wrap:wrap;}\n.rm-filter-btn{\n  height:34px;padding:0 16px;border-radius:999px;\n  background:rgba(255,255,255,.04);border:1px solid var(--line);\n  font-size:12.5px;font-weight:700;color:var(--tx-3);cursor:pointer;\n  transition:background 150ms var(--ease),color 150ms var(--ease),border-color 150ms var(--ease);\n}\n.rm-filter-btn:hover{background:rgba(255,255,255,.08);color:var(--tx-1);}\n.rm-filter-btn.active{background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;}\n\n#song-list{display:flex;flex-direction:column;}\n.rm-song-row{\n  display:flex;align-items:center;gap:15px;\n  padding:12px 13px;border-radius:var(--r2);cursor:pointer;\n  position:relative;\n  transition:background 140ms var(--ease);\n}\n.rm-song-row:hover{background:rgba(255,255,255,.035);}\n.rm-song-row.active{background:var(--sage-14);}\n.rm-song-row.active::before{\n  content:'';position:absolute;left:0;top:10px;bottom:10px;\n  width:2px;border-radius:0 2px 2px 0;background:var(--sage);\n}\n.rm-snum{\n  width:23px;flex-shrink:0;text-align:center;\n  font-family:var(--mono);font-size:12.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);\n}\n.rm-song-row.active .rm-snum{color:var(--sage);}\n.rm-stitle{\n  flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n}\n.rm-sartist{\n  flex-shrink:1;min-width:0;max-width:30%;\n  font-size:12.5px;font-weight:500;color:var(--tx-4);\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n}\n.rm-s-icons{display:flex;gap:4px;flex-shrink:0;opacity:0;transition:opacity 150ms var(--ease);}\n.rm-song-row:hover .rm-s-icons,.rm-song-row.active .rm-s-icons{opacity:1;}\n.rm-s-like,.rm-s-save,.rm-sdel{\n  width:30px;height:30px;flex-shrink:0;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r1);font-size:12.5px;line-height:1;\n  color:var(--tx-4);cursor:pointer;\n  transition:background 140ms var(--ease),color 140ms var(--ease);\n}\n.rm-s-like:hover,.rm-sdel:hover{background:var(--rose-12);color:var(--rose);}\n.rm-s-save:hover{background:var(--sky-12);color:var(--sky);}\n.rm-s-like.on{color:var(--rose);}\n.rm-s-save.on{color:var(--sky);}\n.rm-song-row:not(:hover) .rm-s-icons:has(.on){opacity:1;}\n.rm-empty{\n  padding:26px 0;text-align:center;\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n\n.rm-album-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}\n.rm-album-card{\n  position:relative;padding:14px;border-radius:var(--r3);cursor:pointer;\n  background:rgba(255,255,255,.03);border:1px solid var(--line);\n  transition:background 160ms var(--ease),border-color 160ms var(--ease),transform 160ms var(--ease);\n}\n.rm-album-card:hover{background:rgba(255,255,255,.06);border-color:var(--line-2);transform:translateY(-2px);}\n.rm-album-card.active{background:var(--iris-12);border-color:var(--iris-45);}\n.rm-album-icon{\n  display:flex;align-items:center;justify-content:center;\n  width:100%;aspect-ratio:1.6;border-radius:var(--r2);margin-bottom:11px;\n  font-size:22px;\n  background:linear-gradient(150deg,#221D33,#131320);\n}\n.rm-album-name{font-size:13.5px;font-weight:700;color:var(--tx-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}\n.rm-album-count{margin-top:3px;font-size:11.5px;font-weight:500;color:var(--tx-4);}\n.rm-album-del{\n  position:absolute;top:8px;right:8px;\n  width:22px;height:22px;border-radius:var(--r1);\n  display:flex;align-items:center;justify-content:center;\n  background:rgba(0,0,0,.55);color:var(--tx-3);\n  font-size:10px;cursor:pointer;opacity:0;\n  transition:opacity 150ms var(--ease),color 150ms var(--ease);\n}\n.rm-album-card:hover .rm-album-del{opacity:1;}\n.rm-album-del:hover{color:var(--rose);}\n\n.rm-form{display:flex;flex-direction:column;gap:9px;max-width:620px;}\n.rm-inp{\n  width:100%;height:42px;padding:0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);border:1px solid var(--line-2);\n  color:var(--tx-1);font-size:13.5px;font-weight:600;\n  outline:none;\n  transition:border-color 150ms var(--ease),background 150ms var(--ease);\n}\n.rm-inp::placeholder{color:var(--tx-4);font-weight:500;}\n.rm-inp:focus{border-color:var(--sky-45);background:var(--sky-12);}\ninput[type=\"file\"].rm-inp{padding:10px 12px;height:auto;font-size:12.5px;font-weight:500;cursor:pointer;}\n.rm-lrc{\n  padding:14px;border-radius:var(--r3);\n  background:rgba(255,255,255,.022);border:1px solid var(--line);\n}\n.rm-lrc-head{\n  display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n#lrc-status{font-family:var(--mono);font-size:11.5px;letter-spacing:0;text-transform:none;color:var(--sky);}\ntextarea.rm-inp{\n  height:98px;padding:11px 13px;resize:vertical;\n  font-family:var(--mono);font-size:12.5px;font-weight:500;line-height:1.6;\n}\n.rm-check{\n  display:flex;align-items:center;gap:9px;margin-top:11px;\n  font-size:12.5px;font-weight:600;color:var(--tx-3);cursor:pointer;\n}\n.rm-check input{accent-color:#A6D7B2;width:15px;height:15px;cursor:pointer;}\n.rm-row{display:flex;gap:9px;}\n\n.rm-sync-row{\n  display:flex;align-items:center;justify-content:space-between;gap:16px;\n  padding:12px 14px;border-radius:var(--r2);\n  transition:background 140ms var(--ease);\n}\n.rm-sync-row:hover{background:rgba(255,255,255,.028);}\n.rm-sync-label{flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);}\n.rm-sync-note{padding:0 14px 8px;font-size:12.5px;font-weight:500;line-height:1.5;color:var(--tx-4);}\n.rm-badge{\n  display:inline-block;margin-left:9px;padding:2px 8px;border-radius:999px;\n  background:var(--iris-12);color:var(--iris-hi);\n  font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;\n  vertical-align:middle;\n}\n.rm-divider{height:1px;background:var(--line);margin:6px 0;}\n.rm-status{\n  font-family:var(--mono);font-size:11.5px;font-weight:500;\n  color:var(--tx-4);min-height:16px;\n}\n#bm-dbg-box{\n  margin:0;padding:11px 13px;border-radius:var(--r2);\n  background:rgba(0,0,0,.4);border:1px solid var(--line);\n  font-family:var(--mono);font-size:11.5px;color:var(--tx-3);\n  white-space:pre-wrap;max-height:150px;overflow-y:auto;\n}\n\n.rm-toast{\n  display:none;position:fixed;left:50%;bottom:28px;\n  transform:translateX(-50%);\n  padding:11px 20px;border-radius:999px;z-index:99999;\n  background:var(--tx-1);color:#0A0A0D;\n  font-size:12.5px;font-weight:700;\n  box-shadow:0 16px 40px -12px rgba(0,0,0,.8);\n}\n.rm-guide{\n  padding:18px 20px;margin-bottom:4px;\n  border-radius:var(--r3);\n  background:rgba(255,255,255,.022);border:1px solid var(--line);\n}\n.rm-guide summary{\n  cursor:pointer;list-style:none;\n  font-size:13.5px;font-weight:700;color:var(--tx-2);\n  display:flex;align-items:center;gap:10px;\n}\n.rm-guide summary::-webkit-details-marker{display:none;}\n.rm-guide summary::before{\n  content:'?';flex-shrink:0;width:20px;height:20px;border-radius:50%;\n  background:var(--iris-12);color:var(--iris-hi);\n  font-family:var(--mono);font-size:11px;font-weight:700;\n  display:grid;place-items:center;\n}\n.rm-guide[open] summary{margin-bottom:14px;color:var(--tx-1);}\n.rm-guide ol{margin:0;padding-left:20px;color:var(--tx-3);font-size:12.5px;line-height:2;}\n.rm-guide code{\n  background:rgba(255,255,255,.06);color:var(--sky);\n  padding:2px 7px;border-radius:5px;font-family:var(--mono);font-size:11.5px;\n}\n.rm-guide a{color:var(--sky);border-bottom:1px solid rgba(155,197,232,.35);}\n.rm-guide a:hover{color:var(--tx-1);border-bottom-color:var(--tx-1);}\n.rm-guide-note{margin-top:14px;color:var(--tx-4);font-size:11.5px;line-height:1.75;}\n</style>\n\n<div id=\"rm-toast\" class=\"rm-toast\"></div>\n\n<div class=\"page-head\">\n    <h1 class=\"page-title\">Music</h1>\n    <p class=\"page-description\">A local library that plays inside the client and can type synced lyrics into chat for you, for your bots, or for both at once.</p>\n</div>\n\n<div class=\"rm-root\">\n\n  <div class=\"rm-player\">\n    <div class=\"rm-art\" id=\"rm-art\">\n      <div class=\"rm-eq\"><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div></div>\n    </div>\n    <div class=\"rm-meta\">\n      <div class=\"rm-kicker\">Now playing</div>\n      <div id=\"music-title\" class=\"rm-title\">No song selected</div>\n      <div id=\"music-artist\" class=\"rm-artist\">--</div>\n      <div id=\"music-album-badge\" class=\"rm-album-badge\"></div>\n    </div>\n    <div class=\"rm-actions\">\n      <button id=\"rm-like-now\" class=\"rm-like-btn\" title=\"Like\">&#9825;</button>\n      <button id=\"rm-save-now\" class=\"rm-save-now-btn\" title=\"Save\">&#9733;</button>\n    </div>\n    <div class=\"rm-transport\">\n      <div class=\"rm-ctrl\">\n        <button id=\"music-prev\" class=\"rm-btn\" title=\"Previous\">&#9664;&#9664;</button>\n        <button id=\"music-play\" class=\"rm-btn rm-play-btn\" title=\"Play / pause\">&#9654;</button>\n        <button id=\"music-next\" class=\"rm-btn\" title=\"Next\">&#9654;&#9654;</button>\n        <button id=\"music-loop\" class=\"rm-btn\" title=\"Loop\">&#8635;</button>\n        <button id=\"music-shuffle\" class=\"rm-btn\" title=\"Shuffle\" style=\"font-size:10px;letter-spacing:.08em;font-weight:700;\">SHF</button>\n      </div>\n      <div class=\"rm-prog-wrap\">\n        <span id=\"music-time-current\" class=\"rm-time\">0:00</span>\n        <div id=\"music-progress-bar\" class=\"rm-prog-rail\"><div id=\"music-progress-fill\" class=\"rm-prog-fill\"></div></div>\n        <span id=\"music-time-total\" class=\"rm-time\">0:00</span>\n      </div>\n      <div class=\"rm-vol\">\n        <span class=\"rm-vol-icon\">&#9834;</span>\n        <input id=\"music-volume\" type=\"range\" min=\"0\" max=\"100\" value=\"70\">\n        <span id=\"music-volume-label\" class=\"rm-vol-val\">70%</span>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec open\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Library</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div id=\"rm-filter-bar\" class=\"rm-filter-bar\">\n        <button class=\"rm-filter-btn active\" data-filter=\"\">All songs</button>\n        <button class=\"rm-filter-btn\" data-filter=\"__liked\">&#9829; Liked</button>\n      </div>\n      <div id=\"song-list\"></div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec open\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Albums</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div id=\"rm-album-grid\" class=\"rm-album-grid\"></div>\n      <div class=\"rm-row\" style=\"max-width:480px;\">\n        <input id=\"album-name-input\" class=\"rm-inp\" type=\"text\" placeholder=\"New album name\" maxlength=\"30\">\n        <button id=\"add-album\" class=\"option-button\">Add</button>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Add song</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <details class=\"rm-guide\">\n        <summary>How to add a song with its lyrics</summary>\n        <ol>\n          <li>Find the song on <a href=\"https://www.youtube.com/\" target=\"_blank\" rel=\"noreferrer\">youtube.com</a> and copy its link.</li>\n          <li>Turn the link into a file on <a href=\"https://ytmp3.gl/\" target=\"_blank\" rel=\"noreferrer\">ytmp3.gl</a> and download the <code>.mp3</code>.</li>\n          <li>Search the same song on <a href=\"https://lrclib.net/\" target=\"_blank\" rel=\"noreferrer\">lrclib.net</a> and download the <b>synced</b> lyrics as <code>.lrc</code>.</li>\n          <li>Fill in the <b>Title</b> below and pick the <code>.mp3</code> in the file box, or paste a direct link in <b>URL</b>.</li>\n          <li>In the <b>LRC sync</b> box, pick the <code>.lrc</code> file &mdash; or paste its lines into the text area.</li>\n          <li>Press <b>Add song</b>. It shows up in the library with its lyrics attached.</li>\n        </ol>\n        <div class=\"rm-guide-note\">The <code>.lrc</code> has to be the synced kind &mdash; the one whose lines start with a timestamp like <code>[01:23.45]</code>. Plain lyrics still show up, but they will not follow the song. If the words drift, an <code>.lrc</code> from a different release of the track is usually the reason.</div>\n      </details>\n      <div class=\"rm-form\">\n        <input id=\"song-title-input\" class=\"rm-inp\" type=\"text\" placeholder=\"Title *\" maxlength=\"50\">\n        <input id=\"song-url-input\" class=\"rm-inp\" type=\"text\" placeholder=\"URL (.mp3  .ogg  .wav)\">\n        <input id=\"song-file-input\" class=\"rm-inp\" type=\"file\" accept=\".mp3,.ogg,.wav,.flac,.aac,.m4a\">\n        <select id=\"song-album-select\" class=\"rm-inp ryn-select\"><option value=\"\">No album</option></select>\n        <div class=\"rm-lrc\">\n          <div class=\"rm-lrc-head\"><span>LRC sync</span><span id=\"lrc-status\"></span></div>\n          <input id=\"lrc-file-input\" class=\"rm-inp\" type=\"file\" accept=\".lrc,.txt\" style=\"margin-bottom:9px;\">\n          <textarea id=\"song-lyrics-input\" class=\"rm-inp\" placeholder=\"[0:15] Line 1&#10;[0:30] Line 2\"></textarea>\n          <label class=\"rm-check\"><input id=\"song-autosync\" type=\"checkbox\"> Auto-play and sync when added</label>\n        </div>\n        <div class=\"rm-row\">\n          <button id=\"add-song\" class=\"option-button primary wide\">Add song</button>\n          <button id=\"save-song-btn\" class=\"option-button\">Save lyrics</button>\n        </div>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Chat sync</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Enable chat sync</span><label class=\"switch-checkbox\"><input id=\"music-chat-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Mixed sync<span class=\"rm-badge\">Me + bots</span></span><label class=\"switch-checkbox\"><input id=\"music-mixed-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">You: line &#8594; bots: line &#8594; you &hellip;</div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Bots only sync<span class=\"rm-badge\">Bots</span></span><label class=\"switch-checkbox\"><input id=\"music-bots-only-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">Bot 1: line 1 &bull; bot 2: line 2 &bull; bot 3: line 3 &hellip;</div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Unified sync<span class=\"rm-badge\">All</span></span><label class=\"switch-checkbox\"><input id=\"music-unified-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">You and every bot post the same line at the same moment.</div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Auto delay<span id=\"bm-auto-delay-badge\" class=\"rm-badge\">off</span></span><label class=\"switch-checkbox\"><input id=\"music-auto-delay\" type=\"checkbox\" checked><span></span></label></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Sync bot<span id=\"bm-sync-bot-badge\" class=\"rm-badge\">off</span></span><button id=\"music-sync-bot-btn\" class=\"option-button\">OFF</button></div>\n      <div id=\"bm-manual-delay-row\" class=\"rm-sync-row\" style=\"display:none;\"><span class=\"rm-sync-label\">Delay</span><label class=\"slider\"><span class=\"slider-value\">0ms</span><input id=\"music-sync-delay\" type=\"range\" min=\"-3000\" max=\"3000\" step=\"50\" value=\"0\"></label></div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-row\" style=\"align-items:center;\">\n        <button id=\"bm-test-chat\" class=\"option-button\">Test chat</button>\n        <span id=\"bm-test-chat-status\" class=\"rm-status\" style=\"align-self:center;\"></span>\n      </div>\n      <div id=\"bm-bot-chat-status\" class=\"rm-sync-note\" style=\"padding-left:0;\">Test chat also sends a line from every bot and reports whether the server let it through.</div>\n      <button id=\"bm-send-all-lyrics\" class=\"option-button wide\">&#9836; Send All Lyrics: OFF</button>\n      <div id=\"bm-send-lyrics-status\" class=\"rm-status\" style=\"text-align:center;\"></div>\n      <div id=\"bm-dbg-wrap\" style=\"display:none;\"><pre id=\"bm-dbg-box\"></pre></div>\n      <button id=\"bm-dbg-toggle\" class=\"option-button wide\">Show Debug Log</button>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Backup &amp; restore</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <p class=\"rm-sync-note\" style=\"padding-left:0;\">Export the whole library to a JSON file and bring it back on another machine.</p>\n      <div class=\"rm-row\" style=\"max-width:420px;\">\n        <button id=\"music-export-btn\" class=\"option-button wide\">Export</button>\n        <button id=\"music-import-btn\" class=\"option-button wide\">Import</button>\n        <input id=\"music-import-file\" type=\"file\" accept=\".json\" style=\"display:none;\">\n      </div>\n      <div id=\"music-backup-status\" class=\"rm-status\"></div>\n    </div>\n  </div>\n\n</div>\n</div>";
+  const Bots_default = "<div class=\"menu-page\" data-id=\"5\">\n    <div class=\"page-head\">\n        <h1 class=\"page-title\">Bots</h1>\n        <p class=\"page-description\">Connect alternate clients, name them, and decide how they follow, fight, build and farm. Everything below applies to every bot you have connected.</p>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Fleet<span class=\"sec-sub\">Add a bot, give it a name, connect it. Connected bots appear underneath.</span></div>\n        <div class=\"section-content\">\n            <div id=\"bot-container\"></div>\n            <div id=\"dynamic-bot-list\"></div>\n            <div class=\"content-option stacked\" id=\"_botBulkRow\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Name every bot</span>\n                </div>\n                <div class=\"inline\">\n                    <input id=\"_botBulkName\" class=\"input\" type=\"text\" maxlength=\"15\" placeholder=\"Enter name\" autocomplete=\"off\" spellcheck=\"false\">\n                    <button id=\"_botBulkNameApply\" class=\"option-button\">Apply to all</button>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Fleet numbers</span>\n                </div>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">First number</span></div>\n                <div class=\"inline\"><input id=\"_botNameNumberStart\" class=\"input\" type=\"number\" min=\"0\" max=\"99\" step=\"1\" value=\"1\"></div>\n            </div>\n            <div class=\"content-option centered\">\n                <button id=\"add-bot-dynamic\" class=\"option-button primary tall\">Add bot</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Prefer servers bots can join</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_preferBotServers\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Clan joins</span>\n                </div>\n                <button id=\"_clanRecheck\" class=\"option-button\">Re-check clan joins</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto random bot names</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_autoRandomBotNames\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bots sign in</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAccounts\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot account password</span>\n                </div>\n                <input id=\"_botAcctPassword\" class=\"input\" type=\"text\" maxlength=\"64\" placeholder=\"Password\" autocomplete=\"off\" spellcheck=\"false\">\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bots own clan</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botIndividualClans\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Clan name stem</span>\n                </div>\n                <input id=\"_botClanPrefix\" class=\"input\" type=\"text\" maxlength=\"6\" placeholder=\"GG1\" autocomplete=\"off\" spellcheck=\"false\">\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\" id=\"_tokenPoolSection\" style=\"display:none;\">\n        <div class=\"section-title\">Spawn<span class=\"sec-sub\">Verification solved ahead of the press, so Spawn Bot buys sockets rather than challenges. One press connects as many bots as there are tokens ready.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\" id=\"_tokenPoolRow\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Tokens ready</span>\n                    <span class=\"opt-desc\" id=\"_tokenPoolStatus\">&mdash;</span>\n                </div>\n                <div class=\"inline\">\n                    <button id=\"_tokenPoolToggle\" class=\"option-button primary\">Stop</button>\n                    <button id=\"_tokenPoolFill\" class=\"option-button\">Fill now</button>\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Target Scan<span class=\"sec-sub\">Everyone this tab has seen, from any of its connections. <b>SCAN</b> sends the fleet looking for them; <b>EXCLUDE</b> takes them off the target list for every bot, everywhere. The two are independent &mdash; a player can be scanned and excluded at once, which tracks them without ever attacking them.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Scan <span id=\"_scanCount\" class=\"scan-count\">none picked</span></span>\n                    <span class=\"opt-desc\" id=\"_scanStatus\">Pick one or more players below.</span>\n                </div>\n                <button id=\"_scanToggle\" class=\"option-button primary\">SCAN ON</button>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Scan mode</span>\n                </div>\n                <div class=\"seg\">\n                    <button id=\"_scanModeAttack\" class=\"seg-btn\">Attack</button>\n                    <button id=\"_scanModeTrack\" class=\"seg-btn\">Track</button>\n                </div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bots given <span id=\"_escortCount\" class=\"scan-count\">none</span></span>\n                    <span class=\"opt-desc\" id=\"_escortStatus\">Use <b>&minus; BOTS +</b> on a clan mate below to hand them bots. Those bots follow, guard, fight and build for that player until you take them back or the player leaves your clan.</span>\n                </div>\n            </div>\n            <div class=\"content-option stacked\">\n                <div class=\"scan-bar\">\n                    <input id=\"_scanFilter\" class=\"input scan-filter\" type=\"search\" placeholder=\"Filter by name or id\" autocomplete=\"off\" spellcheck=\"false\">\n                    <button id=\"_scanClearTargets\" class=\"option-button\">Clear picks</button>\n                    <button id=\"_scanClearExcluded\" class=\"option-button\">Clear excluded</button>\n                    <button id=\"_scanClearDex\" class=\"option-button\">Clear list</button>\n                </div>\n                <div id=\"_scanList\"></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Behaviour<span class=\"sec-sub\">What the bots do while they are following you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Follow cursor</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_followCursor\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Stop movement radius</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_movementRadius\" type=\"range\" step=\"25\" min=\"25\" max=\"250\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Auto Break</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAutoBreak\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Ranged Kiting</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botRangedKite\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Kite distance</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botKiteDistance\" type=\"range\" step=\"25\" min=\"150\" max=\"1200\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Volley Fire</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botVolley\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">First wave size</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botVolleyWave\" type=\"range\" step=\"1\" min=\"1\" max=\"20\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Avoid Shield Bots</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botAvoidShield\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Be Angel</span></div>\n                <label class=\"switch-checkbox\"><input id=\"_botBeAngel\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Crabking movment</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botCrabKing\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Protection<span class=\"sec-sub\">Puts part of the fleet in front of the rest as a screen. This covers your <b>bots</b> &mdash; it is not a bodyguard for you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Bot Protection <span id=\"_protectState\" class=\"scan-count\">off</span></span>\n                    <span class=\"opt-desc\" id=\"_protectStatus\">Off. The whole fleet keeps its normal jobs.</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_botProtection\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Guards</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botProtectionGuards\" type=\"range\" step=\"1\" min=\"1\" max=\"40\">\n                </label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Advance</span>\n                </div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_botProtectionAdvance\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\n                </label>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Screen shape</span>\n                </div>\n                <div class=\"option-content\"><select id=\"_botProtectionFormation\" class=\"ryn-select\"></select></div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Formation<span class=\"sec-sub\">The shape the fleet holds around you.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Shape</span>\n                </div>\n                <div id=\"_formationGrid\"></div>\n            </div>\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Circle rotation</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_circleRotation\" type=\"checkbox\"><span></span></label>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Circle radius</span></div>\n                <label class=\"slider\">\n                    <span class=\"slider-value\"></span>\n                    <input id=\"_circleRadius\" type=\"range\" step=\"25\" min=\"50\" max=\"600\">\n                </label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Loadout<span class=\"sec-sub\">What each bot carries. &ldquo;Copy from me&rdquo; mirrors your own weapon.</span></div>\n        <div class=\"section-content\">\n            <div class=\"stack\">\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Primary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-weapon-selector\">\n                        <div class=\"bot-weapon-btn\" data-wid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"0\" title=\"Tool Hammer\">Tool Hammer</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"1\" title=\"Hand Axe\">Hand Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"2\" title=\"Great Axe\">Great Axe</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"3\" title=\"Short Sword\">Short Sword</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"4\" title=\"Katana\">Katana</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"5\" title=\"Polearm\">Polearm</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"6\" title=\"Bat\">Bat</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"7\" title=\"Daggers\">Daggers</div>\n                        <div class=\"bot-weapon-btn\" data-wid=\"8\" title=\"Stick\">Stick</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Secondary weapon</div>\n                    <div class=\"wpn-grid\" id=\"bot-sec-weapon-selector\">\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"-1\" title=\"Copy from me\">Copy from me</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"9\" title=\"Hunting Bow\">Hunting Bow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"10\" title=\"Great Hammer\">Great Hammer</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"11\" title=\"Wooden Shield\">Wooden Shield</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"12\" title=\"Crossbow\">Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"13\" title=\"Repeater Crossbow\">Repeater Crossbow</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"14\" title=\"Mc Grabby\">Mc Grabby</div>\n                        <div class=\"bot-sec-weapon-btn\" data-swid=\"15\" title=\"Musket\">Musket</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-sec-weapon-label\">Copy from me (default)</span></div>\n                </div>\n\n                <div class=\"field\">\n                    <div class=\"wpn-label\">Age 4 building</div>\n                    <div class=\"wpn-grid\" id=\"bot-age4-selector\">\n                        <div class=\"bot-weapon-btn\" data-age4id=\"0\" title=\"Trap\">Trap</div>\n                        <div class=\"bot-weapon-btn\" data-age4id=\"1\" title=\"Boost Pad\">Boost Pad</div>\n                    </div>\n                    <div class=\"wpn-selected-bar\"><span class=\"wpn-selected-dot\"></span><span class=\"wpn-selected-text\" id=\"bot-age4-label\">Trap (default)</span></div>\n                </div>\n            </div>\n\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Platform w/ Musket</span>\n                </div>\n                <label class=\"switch-checkbox\"><input id=\"_platformMusket\" type=\"checkbox\"><span></span></label>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section ryn-farm-section\" id=\"_farmSection\">\n        <div class=\"section-title\">Auto Farm<span class=\"sec-sub\">Bots gather resources on their own while it is on.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Auto Farm</span>\n                    <span class=\"ryn-farm-state\" data-farm-state>Off</span>\n                </div>\n                <label class=\"switch-checkbox\"><input data-farm-toggle type=\"checkbox\" aria-label=\"Auto Farm\"><span></span></label>\n            </div>\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\"><span class=\"option-title\">Mode</span></div>\n                <div class=\"seg ryn-farm-modes\">\n                    <button type=\"button\" class=\"seg-btn\" data-farm-mode=\"nearest\">Nearest<small>closest free node</small></button>\n                    <button type=\"button\" class=\"seg-btn\" data-farm-mode=\"single\">One resource<small>every bot on one type</small></button>\n                    <button type=\"button\" class=\"seg-btn\" data-farm-mode=\"sequence\">Route<small>steps in order</small></button>\n                </div>\n            </div>\n            <div class=\"ryn-farm-panel\" data-farm-panel=\"single\">\n                <div class=\"content-option stacked\">\n                    <div class=\"opt-main\"><span class=\"option-title\">Resource</span></div>\n                    <div class=\"seg ryn-farm-res\">\n                        <button type=\"button\" class=\"seg-btn\" data-farm-res=\"wood\"><i></i>Wood</button>\n                        <button type=\"button\" class=\"seg-btn\" data-farm-res=\"stone\"><i></i>Stone</button>\n                        <button type=\"button\" class=\"seg-btn\" data-farm-res=\"food\"><i></i>Food</button>\n                        <button type=\"button\" class=\"seg-btn\" data-farm-res=\"gold\"><i></i>Gold</button>\n                    </div>\n                </div>\n                <div class=\"content-option quiet\">\n                    <div class=\"opt-main\"><span class=\"option-title\">Goal</span></div>\n                    <div class=\"ryn-farm-num\"><span>0 = no limit</span><input id=\"_botFarmSingleGoal\" class=\"input\" type=\"number\" min=\"0\" max=\"999999\" step=\"50\" placeholder=\"0\" aria-label=\"Goal\"></div>\n                </div>\n            </div>\n            <div class=\"ryn-farm-panel\" data-farm-panel=\"sequence\">\n                <div class=\"content-option stacked\">\n                    <div class=\"opt-main\"><span class=\"option-title\">Route</span></div>\n                    <div class=\"ryn-farm-route\">\n                        <div class=\"ryn-farm-step\"><span class=\"ryn-farm-idx\">1</span><select id=\"_botFarmSeq1\" class=\"ryn-select\" aria-label=\"Step 1 resource\"><option value=\"none\">Skip</option><option value=\"wood\">Wood</option><option value=\"stone\">Stone</option><option value=\"food\">Food</option><option value=\"gold\">Gold</option></select><input id=\"_botFarmSeqAmount1\" class=\"input\" type=\"number\" min=\"0\" max=\"999999\" step=\"50\" placeholder=\"Amount\" aria-label=\"Step 1 amount\"></div>\n                        <div class=\"ryn-farm-step\"><span class=\"ryn-farm-idx\">2</span><select id=\"_botFarmSeq2\" class=\"ryn-select\" aria-label=\"Step 2 resource\"><option value=\"none\">Skip</option><option value=\"wood\">Wood</option><option value=\"stone\">Stone</option><option value=\"food\">Food</option><option value=\"gold\">Gold</option></select><input id=\"_botFarmSeqAmount2\" class=\"input\" type=\"number\" min=\"0\" max=\"999999\" step=\"50\" placeholder=\"Amount\" aria-label=\"Step 2 amount\"></div>\n                        <div class=\"ryn-farm-step\"><span class=\"ryn-farm-idx\">3</span><select id=\"_botFarmSeq3\" class=\"ryn-select\" aria-label=\"Step 3 resource\"><option value=\"none\">Skip</option><option value=\"wood\">Wood</option><option value=\"stone\">Stone</option><option value=\"food\">Food</option><option value=\"gold\">Gold</option></select><input id=\"_botFarmSeqAmount3\" class=\"input\" type=\"number\" min=\"0\" max=\"999999\" step=\"50\" placeholder=\"Amount\" aria-label=\"Step 3 amount\"></div>\n                        <div class=\"ryn-farm-step\"><span class=\"ryn-farm-idx\">4</span><select id=\"_botFarmSeq4\" class=\"ryn-select\" aria-label=\"Step 4 resource\"><option value=\"none\">Skip</option><option value=\"wood\">Wood</option><option value=\"stone\">Stone</option><option value=\"food\">Food</option><option value=\"gold\">Gold</option></select><input id=\"_botFarmSeqAmount4\" class=\"input\" type=\"number\" min=\"0\" max=\"999999\" step=\"50\" placeholder=\"Amount\" aria-label=\"Step 4 amount\"></div>\n                    </div>\n                </div>\n            </div>\n            <div class=\"content-option quiet\">\n                <div class=\"opt-main\"><span class=\"option-title\">Bots per resource</span></div>\n                <div class=\"seg ryn-farm-cap\"><button type=\"button\" class=\"seg-btn\" data-farm-cap=\"1\">1</button><button type=\"button\" class=\"seg-btn\" data-farm-cap=\"2\">2</button><button type=\"button\" class=\"seg-btn\" data-farm-cap=\"3\">3</button><button type=\"button\" class=\"seg-btn\" data-farm-cap=\"4\">4</button><button type=\"button\" class=\"seg-btn\" data-farm-cap=\"5\">5</button><button type=\"button\" class=\"seg-btn\" data-farm-cap=\"6\">6</button></div>\n            </div>\n        </div>\n    </div>\n    <div class=\"section\">\n        <div class=\"section-title\">Possession<span class=\"sec-sub\">Switch control into a bot and it becomes your character: its camera, its world, its HUD, its resources, its age, its inventory, its chat. Not a spectator view &mdash; you are that character until you switch back.</span></div>\n        <div class=\"section-content\">\n            <div class=\"content-option stacked\">\n                <div class=\"opt-main\">\n                    <span class=\"option-title\">Who you are controlling</span>\n                </div>\n                <div id=\"_possessList\"></div>\n            </div>\n        </div>\n    </div>\n\n</div>";
+  const Music_default = "<div class=\"menu-page\" data-id=\"7\">\n<style>\n@keyframes ryn-eq{0%,100%{height:4px;}50%{height:16px;}}\n\n.rm-root{display:flex;flex-direction:column;max-width:1180px;margin:0 auto;}\n\n.rm-player{\n  display:grid;\n  grid-template-columns:auto minmax(0,1fr) auto;\n  grid-template-areas:\"art meta actions\" \"art transport transport\";\n  column-gap:26px;row-gap:22px;align-items:center;\n  padding:26px 0 30px;\n  border-bottom:1px solid var(--line);\n}\n.rm-art{\n  grid-area:art;\n  width:96px;height:96px;flex-shrink:0;\n  display:flex;align-items:flex-end;justify-content:center;gap:4px;\n  padding-bottom:22px;\n  border-radius:var(--r3);\n  background:linear-gradient(150deg,#221D33,#131320);\n  border:1px solid var(--line);\n  position:relative;\n  transition:border-color 260ms var(--ease);\n}\n.rm-art::after{\n  content:'\\266B';\n  position:absolute;inset:0;\n  display:flex;align-items:center;justify-content:center;\n  font-size:30px;color:var(--tx-4);\n  transition:opacity 220ms var(--ease);\n}\n.rm-art.playing{border-color:var(--sage-40);}\n.rm-art.playing::after{opacity:0;}\n.rm-eq{display:none;align-items:flex-end;gap:4px;height:18px;}\n.rm-art.playing .rm-eq{display:flex;}\n.rm-eq-bar{width:3px;border-radius:2px;background:var(--sage);animation:ryn-eq .95s ease-in-out infinite;}\n.rm-eq-bar:nth-child(2){animation-delay:.16s;}\n.rm-eq-bar:nth-child(3){animation-delay:.32s;}\n\n.rm-meta{grid-area:meta;min-width:0;}\n.rm-kicker{\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.24em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:9px;\n}\n.rm-title{\n  font-size:clamp(22px,2.1vw,29px);font-weight:800;line-height:1.12;\n  letter-spacing:-.028em;color:var(--tx-1);\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n}\n.rm-artist{\n  margin-top:7px;font-size:14px;font-weight:600;color:var(--tx-3);\n  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\n}\n.rm-album-badge{\n  display:inline-block;margin-top:10px;\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--iris-hi);\n}\n.rm-album-badge:empty{display:none;}\n\n.rm-actions{grid-area:actions;display:flex;gap:8px;align-self:start;}\n.rm-like-btn,.rm-save-now-btn{\n  width:42px;height:42px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);border:1px solid var(--line);\n  font-size:16px;line-height:1;color:var(--tx-3);cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.rm-like-btn:hover,.rm-save-now-btn:hover{background:rgba(255,255,255,.08);color:var(--tx-1);border-color:var(--line-2);}\n.rm-like-btn.liked,.rm-like-btn.on{color:var(--rose);border-color:rgba(217,163,171,.4);background:var(--rose-12);}\n.rm-save-now-btn.on{color:var(--sky);border-color:var(--sky-45);background:var(--sky-12);}\n\n.rm-transport{grid-area:transport;display:flex;align-items:center;gap:24px;min-width:0;}\n.rm-ctrl{display:flex;align-items:center;gap:8px;flex-shrink:0;}\n.rm-btn{\n  width:38px;height:38px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r2);\n  background:transparent;border:1px solid transparent;\n  color:var(--tx-3);font-size:12.5px;cursor:pointer;\n  transition:background 150ms var(--ease),color 150ms var(--ease),border-color 150ms var(--ease);\n}\n.rm-btn:hover{background:rgba(255,255,255,.06);color:var(--tx-1);}\n.rm-btn.rm-on,.rm-btn.on{color:var(--sage);border-color:var(--sage-40);background:var(--sage-14);}\n.rm-play-btn{\n  width:52px;height:52px;flex-shrink:0;\n  border-radius:16px;\n  background:var(--tx-1);border:none;color:#0A0A0D;\n  font-size:15.5px;\n  transition:transform 150ms var(--ease),background 150ms var(--ease);\n}\n.rm-play-btn:hover{background:#FFFFFF;transform:scale(1.04);}\n.rm-play-btn:active{transform:scale(.97);}\n\n.rm-prog-wrap{flex:1;min-width:0;display:flex;align-items:center;gap:14px;}\n.rm-prog-rail{\n  flex:1;min-width:0;height:5px;border-radius:999px;cursor:pointer;\n  background:rgba(255,255,255,.08);position:relative;\n}\n.rm-prog-fill{\n  height:100%;border-radius:999px;width:0;\n  background:var(--sky);position:relative;\n  transition:width 120ms linear;\n}\n.rm-prog-fill::after{\n  content:'';position:absolute;right:-5px;top:50%;\n  width:11px;height:11px;border-radius:50%;background:#EEF4FA;\n  transform:translateY(-50%) scale(0);\n  transition:transform 150ms var(--ease);\n  box-shadow:0 1px 4px rgba(0,0,0,.6);\n}\n.rm-prog-wrap:hover .rm-prog-fill::after{transform:translateY(-50%) scale(1);}\n.rm-time{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);flex-shrink:0;\n}\n.rm-vol{display:flex;align-items:center;gap:10px;flex-shrink:0;}\n.rm-vol-icon{font-size:13px;color:var(--tx-4);}\n#music-volume{\n  -webkit-appearance:none;appearance:none;\n  width:110px;height:18px;background:transparent;cursor:pointer;\n}\n#music-volume::-webkit-slider-runnable-track{height:4px;border-radius:999px;background:rgba(255,255,255,.09);}\n#music-volume::-webkit-slider-thumb{\n  -webkit-appearance:none;width:12px;height:12px;margin-top:-4px;\n  border-radius:50%;background:#EEF4FA;border:1px solid rgba(0,0,0,.35);\n  transition:transform 130ms var(--ease);\n}\n#music-volume:hover::-webkit-slider-thumb{transform:scale(1.15);}\n.rm-vol-val{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);min-width:34px;text-align:right;\n}\n\n.rm-sec{border-bottom:1px solid var(--line);}\n.rm-sec-head{\n  display:flex;align-items:center;gap:12px;\n  padding:22px 2px;cursor:pointer;user-select:none;\n}\n.rm-sec-dot{\n  width:5px;height:5px;border-radius:50%;flex-shrink:0;\n  background:var(--tx-4);transition:background 200ms var(--ease);\n}\n.rm-sec.open .rm-sec-dot{background:var(--iris-hi);}\n.rm-sec-title{\n  flex:1;font-family:var(--mono);font-size:11.5px;font-weight:700;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-2);\n}\n.rm-sec.open .rm-sec-title{color:var(--iris-hi);}\n.rm-sec-arrow{font-size:9px;color:var(--tx-4);transition:transform 200ms var(--ease);}\n.rm-sec.open .rm-sec-arrow{transform:rotate(180deg);}\n.rm-sec-body{display:none;flex-direction:column;gap:14px;padding:0 2px 26px;}\n.rm-sec.open .rm-sec-body{display:flex;animation:soft-in 180ms var(--ease);}\n\n.rm-filter-bar{display:flex;gap:7px;flex-wrap:wrap;}\n.rm-filter-btn{\n  height:34px;padding:0 16px;border-radius:999px;\n  background:rgba(255,255,255,.04);border:1px solid var(--line);\n  font-size:12.5px;font-weight:700;color:var(--tx-3);cursor:pointer;\n  transition:background 150ms var(--ease),color 150ms var(--ease),border-color 150ms var(--ease);\n}\n.rm-filter-btn:hover{background:rgba(255,255,255,.08);color:var(--tx-1);}\n.rm-filter-btn.active{background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;}\n\n#song-list{display:flex;flex-direction:column;}\n.rm-song-row{\n  display:flex;align-items:center;gap:15px;\n  padding:12px 13px;border-radius:var(--r2);cursor:pointer;\n  position:relative;\n  transition:background 140ms var(--ease);\n}\n.rm-song-row:hover{background:rgba(255,255,255,.035);}\n.rm-song-row.active{background:var(--sage-14);}\n.rm-song-row.active::before{\n  content:'';position:absolute;left:0;top:10px;bottom:10px;\n  width:2px;border-radius:0 2px 2px 0;background:var(--sage);\n}\n.rm-snum{\n  width:23px;flex-shrink:0;text-align:center;\n  font-family:var(--mono);font-size:12.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;color:var(--tx-4);\n}\n.rm-song-row.active .rm-snum{color:var(--sage);}\n.rm-stitle{\n  flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n}\n.rm-sartist{\n  flex-shrink:1;min-width:0;max-width:30%;\n  font-size:12.5px;font-weight:500;color:var(--tx-4);\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n}\n.rm-s-icons{display:flex;gap:4px;flex-shrink:0;opacity:0;transition:opacity 150ms var(--ease);}\n.rm-song-row:hover .rm-s-icons,.rm-song-row.active .rm-s-icons{opacity:1;}\n.rm-s-like,.rm-s-save,.rm-sdel{\n  width:30px;height:30px;flex-shrink:0;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r1);font-size:12.5px;line-height:1;\n  color:var(--tx-4);cursor:pointer;\n  transition:background 140ms var(--ease),color 140ms var(--ease);\n}\n.rm-s-like:hover,.rm-sdel:hover{background:var(--rose-12);color:var(--rose);}\n.rm-s-save:hover{background:var(--sky-12);color:var(--sky);}\n.rm-s-like.on{color:var(--rose);}\n.rm-s-save.on{color:var(--sky);}\n.rm-song-row:not(:hover) .rm-s-icons:has(.on){opacity:1;}\n.rm-empty{\n  padding:26px 0;text-align:center;\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n\n.rm-album-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}\n.rm-album-card{\n  position:relative;padding:14px;border-radius:var(--r3);cursor:pointer;\n  background:rgba(255,255,255,.03);border:1px solid var(--line);\n  transition:background 160ms var(--ease),border-color 160ms var(--ease),transform 160ms var(--ease);\n}\n.rm-album-card:hover{background:rgba(255,255,255,.06);border-color:var(--line-2);transform:translateY(-2px);}\n.rm-album-card.active{background:var(--iris-12);border-color:var(--iris-45);}\n.rm-album-icon{\n  display:flex;align-items:center;justify-content:center;\n  width:100%;aspect-ratio:1.6;border-radius:var(--r2);margin-bottom:11px;\n  font-size:22px;\n  background:linear-gradient(150deg,#221D33,#131320);\n}\n.rm-album-name{font-size:13.5px;font-weight:700;color:var(--tx-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}\n.rm-album-count{margin-top:3px;font-size:11.5px;font-weight:500;color:var(--tx-4);}\n.rm-album-del{\n  position:absolute;top:8px;right:8px;\n  width:22px;height:22px;border-radius:var(--r1);\n  display:flex;align-items:center;justify-content:center;\n  background:rgba(0,0,0,.55);color:var(--tx-3);\n  font-size:10px;cursor:pointer;opacity:0;\n  transition:opacity 150ms var(--ease),color 150ms var(--ease);\n}\n.rm-album-card:hover .rm-album-del{opacity:1;}\n.rm-album-del:hover{color:var(--rose);}\n\n.rm-form{display:flex;flex-direction:column;gap:9px;max-width:620px;}\n.rm-inp{\n  width:100%;height:42px;padding:0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);border:1px solid var(--line-2);\n  color:var(--tx-1);font-size:13.5px;font-weight:600;\n  outline:none;\n  transition:border-color 150ms var(--ease),background 150ms var(--ease);\n}\n.rm-inp::placeholder{color:var(--tx-4);font-weight:500;}\n.rm-inp:focus{border-color:var(--sky-45);background:var(--sky-12);}\ninput[type=\"file\"].rm-inp{padding:10px 12px;height:auto;font-size:12.5px;font-weight:500;cursor:pointer;}\n.rm-lrc{\n  padding:14px;border-radius:var(--r3);\n  background:rgba(255,255,255,.022);border:1px solid var(--line);\n}\n.rm-lrc-head{\n  display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n#lrc-status{font-family:var(--mono);font-size:11.5px;letter-spacing:0;text-transform:none;color:var(--sky);}\ntextarea.rm-inp{\n  height:98px;padding:11px 13px;resize:vertical;\n  font-family:var(--mono);font-size:12.5px;font-weight:500;line-height:1.6;\n}\n.rm-check{\n  display:flex;align-items:center;gap:9px;margin-top:11px;\n  font-size:12.5px;font-weight:600;color:var(--tx-3);cursor:pointer;\n}\n.rm-check input{accent-color:#A6D7B2;width:15px;height:15px;cursor:pointer;}\n.rm-row{display:flex;gap:9px;}\n\n.rm-sync-row{\n  display:flex;align-items:center;justify-content:space-between;gap:16px;\n  padding:12px 14px;border-radius:var(--r2);\n  transition:background 140ms var(--ease);\n}\n.rm-sync-row:hover{background:rgba(255,255,255,.028);}\n.rm-sync-label{flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);}\n.rm-sync-note{padding:0 14px 8px;font-size:12.5px;font-weight:500;line-height:1.5;color:var(--tx-4);}\n.rm-badge{\n  display:inline-block;margin-left:9px;padding:2px 8px;border-radius:999px;\n  background:var(--iris-12);color:var(--iris-hi);\n  font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;\n  vertical-align:middle;\n}\n.rm-divider{height:1px;background:var(--line);margin:6px 0;}\n.rm-status{\n  font-family:var(--mono);font-size:11.5px;font-weight:500;\n  color:var(--tx-4);min-height:16px;\n}\n#bm-dbg-box{\n  margin:0;padding:11px 13px;border-radius:var(--r2);\n  background:rgba(0,0,0,.4);border:1px solid var(--line);\n  font-family:var(--mono);font-size:11.5px;color:var(--tx-3);\n  white-space:pre-wrap;max-height:150px;overflow-y:auto;\n}\n\n.rm-toast{\n  display:none;position:fixed;left:50%;bottom:28px;\n  transform:translateX(-50%);\n  padding:11px 20px;border-radius:999px;z-index:99999;\n  background:var(--tx-1);color:#0A0A0D;\n  font-size:12.5px;font-weight:700;\n  box-shadow:0 16px 40px -12px rgba(0,0,0,.8);\n}\n.rm-guide{\n  padding:18px 20px;margin-bottom:4px;\n  border-radius:var(--r3);\n  background:rgba(255,255,255,.022);border:1px solid var(--line);\n}\n.rm-guide summary{\n  cursor:pointer;list-style:none;\n  font-size:13.5px;font-weight:700;color:var(--tx-2);\n  display:flex;align-items:center;gap:10px;\n}\n.rm-guide summary::-webkit-details-marker{display:none;}\n.rm-guide summary::before{\n  content:'?';flex-shrink:0;width:20px;height:20px;border-radius:50%;\n  background:var(--iris-12);color:var(--iris-hi);\n  font-family:var(--mono);font-size:11px;font-weight:700;\n  display:grid;place-items:center;\n}\n.rm-guide[open] summary{margin-bottom:14px;color:var(--tx-1);}\n.rm-guide ol{margin:0;padding-left:20px;color:var(--tx-3);font-size:12.5px;line-height:2;}\n.rm-guide code{\n  background:rgba(255,255,255,.06);color:var(--sky);\n  padding:2px 7px;border-radius:5px;font-family:var(--mono);font-size:11.5px;\n}\n.rm-guide a{color:var(--sky);border-bottom:1px solid rgba(155,197,232,.35);}\n.rm-guide a:hover{color:var(--tx-1);border-bottom-color:var(--tx-1);}\n.rm-guide-note{margin-top:14px;color:var(--tx-4);font-size:11.5px;line-height:1.75;}\n</style>\n\n<div id=\"rm-toast\" class=\"rm-toast\"></div>\n\n<div class=\"page-head\">\n    <h1 class=\"page-title\">Music</h1>\n    <p class=\"page-description\">A local library that plays inside the client and can type synced lyrics into chat for you, for your bots, or for both at once.</p>\n</div>\n\n<div class=\"rm-root\">\n\n  <div class=\"rm-player\">\n    <div class=\"rm-art\" id=\"rm-art\">\n      <div class=\"rm-eq\"><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div></div>\n    </div>\n    <div class=\"rm-meta\">\n      <div class=\"rm-kicker\">Now playing</div>\n      <div id=\"music-title\" class=\"rm-title\">No song selected</div>\n      <div id=\"music-artist\" class=\"rm-artist\">--</div>\n      <div id=\"music-album-badge\" class=\"rm-album-badge\"></div>\n    </div>\n    <div class=\"rm-actions\">\n      <button id=\"rm-like-now\" class=\"rm-like-btn\" title=\"Like\">&#9825;</button>\n      <button id=\"rm-save-now\" class=\"rm-save-now-btn\" title=\"Save\">&#9733;</button>\n    </div>\n    <div class=\"rm-transport\">\n      <div class=\"rm-ctrl\">\n        <button id=\"music-prev\" class=\"rm-btn\" title=\"Previous\">&#9664;&#9664;</button>\n        <button id=\"music-play\" class=\"rm-btn rm-play-btn\" title=\"Play / pause\">&#9654;</button>\n        <button id=\"music-next\" class=\"rm-btn\" title=\"Next\">&#9654;&#9654;</button>\n        <button id=\"music-loop\" class=\"rm-btn\" title=\"Loop\">&#8635;</button>\n        <button id=\"music-shuffle\" class=\"rm-btn\" title=\"Shuffle\" style=\"font-size:10px;letter-spacing:.08em;font-weight:700;\">SHF</button>\n      </div>\n      <div class=\"rm-prog-wrap\">\n        <span id=\"music-time-current\" class=\"rm-time\">0:00</span>\n        <div id=\"music-progress-bar\" class=\"rm-prog-rail\"><div id=\"music-progress-fill\" class=\"rm-prog-fill\"></div></div>\n        <span id=\"music-time-total\" class=\"rm-time\">0:00</span>\n      </div>\n      <div class=\"rm-vol\">\n        <span class=\"rm-vol-icon\">&#9834;</span>\n        <input id=\"music-volume\" type=\"range\" min=\"0\" max=\"100\" value=\"70\">\n        <span id=\"music-volume-label\" class=\"rm-vol-val\">70%</span>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec open\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Library</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div id=\"rm-filter-bar\" class=\"rm-filter-bar\">\n        <button class=\"rm-filter-btn active\" data-filter=\"\">All songs</button>\n        <button class=\"rm-filter-btn\" data-filter=\"__liked\">&#9829; Liked</button>\n      </div>\n      <div id=\"song-list\"></div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec open\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Albums</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div id=\"rm-album-grid\" class=\"rm-album-grid\"></div>\n      <div class=\"rm-row\" style=\"max-width:480px;\">\n        <input id=\"album-name-input\" class=\"rm-inp\" type=\"text\" placeholder=\"New album name\" maxlength=\"30\">\n        <button id=\"add-album\" class=\"option-button\">Add</button>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Add song</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <details class=\"rm-guide\">\n        <summary>How to add a song with its lyrics</summary>\n        <ol>\n          <li>Find the song on <a href=\"https://www.youtube.com/\" target=\"_blank\" rel=\"noreferrer\">youtube.com</a> and copy its link.</li>\n          <li>Turn the link into a file on <a href=\"https://ytmp3.gl/\" target=\"_blank\" rel=\"noreferrer\">ytmp3.gl</a> and download the <code>.mp3</code>.</li>\n          <li>Search the same song on <a href=\"https://lrclib.net/\" target=\"_blank\" rel=\"noreferrer\">lrclib.net</a> and download the <b>synced</b> lyrics as <code>.lrc</code>.</li>\n          <li>Fill in the <b>Title</b> below and pick the <code>.mp3</code> in the file box, or paste a direct link in <b>URL</b>.</li>\n          <li>In the <b>LRC sync</b> box, pick the <code>.lrc</code> file &mdash; or paste its lines into the text area.</li>\n          <li>Press <b>Add song</b>. It shows up in the library with its lyrics attached.</li>\n        </ol>\n        <div class=\"rm-guide-note\">The <code>.lrc</code> has to be the synced kind &mdash; the one whose lines start with a timestamp like <code>[01:23.45]</code>. Plain lyrics still show up, but they will not follow the song. If the words drift, an <code>.lrc</code> from a different release of the track is usually the reason.</div>\n      </details>\n      <div class=\"rm-form\">\n        <input id=\"song-title-input\" class=\"rm-inp\" type=\"text\" placeholder=\"Title *\" maxlength=\"50\">\n        <input id=\"song-url-input\" class=\"rm-inp\" type=\"text\" placeholder=\"URL (.mp3  .ogg  .wav)\">\n        <input id=\"song-file-input\" class=\"rm-inp\" type=\"file\" accept=\".mp3,.ogg,.wav,.flac,.aac,.m4a\">\n        <select id=\"song-album-select\" class=\"rm-inp ryn-select\"><option value=\"\">No album</option></select>\n        <div class=\"rm-lrc\">\n          <div class=\"rm-lrc-head\"><span>LRC sync</span><span id=\"lrc-status\"></span></div>\n          <input id=\"lrc-file-input\" class=\"rm-inp\" type=\"file\" accept=\".lrc,.txt\" style=\"margin-bottom:9px;\">\n          <textarea id=\"song-lyrics-input\" class=\"rm-inp\" placeholder=\"[0:15] Line 1&#10;[0:30] Line 2\"></textarea>\n          <label class=\"rm-check\"><input id=\"song-autosync\" type=\"checkbox\"> Auto-play and sync when added</label>\n        </div>\n        <div class=\"rm-row\">\n          <button id=\"add-song\" class=\"option-button primary wide\">Add song</button>\n          <button id=\"save-song-btn\" class=\"option-button\">Save lyrics</button>\n        </div>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Chat sync</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Enable chat sync</span><label class=\"switch-checkbox\"><input id=\"music-chat-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Mixed sync<span class=\"rm-badge\">Me + bots</span></span><label class=\"switch-checkbox\"><input id=\"music-mixed-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">You: line &#8594; bots: line &#8594; you &hellip;</div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Bots only sync<span class=\"rm-badge\">Bots</span></span><label class=\"switch-checkbox\"><input id=\"music-bots-only-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">Bot 1: line 1 &bull; bot 2: line 2 &bull; bot 3: line 3 &hellip;</div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Unified sync<span class=\"rm-badge\">All</span></span><label class=\"switch-checkbox\"><input id=\"music-unified-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">You and every bot post the same line at the same moment.</div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Wave sync<span class=\"rm-badge\">Bots</span></span><label class=\"switch-checkbox\"><input id=\"music-wave-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">Bot after bot around you, timed to the song: the wave ends as the next line starts.</div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Duet sync<span class=\"rm-badge\">Bots</span></span><label class=\"switch-checkbox\"><input id=\"music-duet-sync\" type=\"checkbox\"><span></span></label></div>\n      <div class=\"rm-sync-note\">The bots split into two sides around you; the sides take turns, one line each.</div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Auto delay<span id=\"bm-auto-delay-badge\" class=\"rm-badge\">off</span></span><label class=\"switch-checkbox\"><input id=\"music-auto-delay\" type=\"checkbox\" checked><span></span></label></div>\n      <div class=\"rm-sync-row\"><span class=\"rm-sync-label\">Sync bot<span id=\"bm-sync-bot-badge\" class=\"rm-badge\">off</span></span><button id=\"music-sync-bot-btn\" class=\"option-button\">OFF</button></div>\n      <div id=\"bm-manual-delay-row\" class=\"rm-sync-row\" style=\"display:none;\"><span class=\"rm-sync-label\">Delay</span><label class=\"slider\"><span class=\"slider-value\">0ms</span><input id=\"music-sync-delay\" type=\"range\" min=\"-3000\" max=\"3000\" step=\"50\" value=\"0\"></label></div>\n      <div class=\"rm-divider\"></div>\n      <div class=\"rm-row\" style=\"align-items:center;\">\n        <button id=\"bm-test-chat\" class=\"option-button\">Test chat</button>\n        <span id=\"bm-test-chat-status\" class=\"rm-status\" style=\"align-self:center;\"></span>\n      </div>\n      <div id=\"bm-bot-chat-status\" class=\"rm-sync-note\" style=\"padding-left:0;\">Test chat also sends a line from every bot and reports whether the server let it through.</div>\n      <button id=\"bm-send-all-lyrics\" class=\"option-button wide\">&#9836; Send All Lyrics: OFF</button>\n      <div id=\"bm-send-lyrics-status\" class=\"rm-status\" style=\"text-align:center;\"></div>\n      <div id=\"bm-dbg-wrap\" style=\"display:none;\"><pre id=\"bm-dbg-box\"></pre></div>\n      <button id=\"bm-dbg-toggle\" class=\"option-button wide\">Show Debug Log</button>\n    </div>\n  </div>\n\n  <div class=\"rm-sec\">\n    <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\">Backup &amp; restore</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\n    <div class=\"rm-sec-body\">\n      <p class=\"rm-sync-note\" style=\"padding-left:0;\">Export the whole library to a JSON file and bring it back on another machine.</p>\n      <div class=\"rm-row\" style=\"max-width:420px;\">\n        <button id=\"music-export-btn\" class=\"option-button wide\">Export</button>\n        <button id=\"music-import-btn\" class=\"option-button wide\">Import</button>\n        <input id=\"music-import-file\" type=\"file\" accept=\".json\" style=\"display:none;\">\n      </div>\n      <div id=\"music-backup-status\" class=\"rm-status\"></div>\n    </div>\n  </div>\n\n</div>\n</div>";
   const styles_default = "@import url(\"https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap\");\n\n\n:root{\n  --ink-0:#07070A;\n  --ink-1:#0C0C11;\n  --ink-2:#101016;\n  --ink-3:#15151C;\n  --ink-4:#1B1B24;\n\n  --line:rgba(255,255,255,0.055);\n  --line-2:rgba(255,255,255,0.10);\n  --line-3:rgba(255,255,255,0.16);\n\n  --iris:#8E76CE;\n  --iris-hi:#A894E0;\n  --iris-05:rgba(142,118,206,0.05);\n  --iris-12:rgba(142,118,206,0.12);\n  --iris-18:rgba(142,118,206,0.18);\n  --iris-45:rgba(142,118,206,0.45);\n\n  --sage:#A6D7B2;\n  --sage-14:rgba(166,215,178,0.14);\n  --sage-40:rgba(166,215,178,0.40);\n\n  --sky:#9BC5E8;\n  --sky-12:rgba(155,197,232,0.12);\n  --sky-45:rgba(155,197,232,0.45);\n\n  --rose:#D9A3AB;\n  --rose-12:rgba(217,163,171,0.12);\n\n  --tx-1:#F3F2F7;\n  --tx-2:#ACA9BA;\n  --tx-3:#726F80;\n  --tx-4:#4E4B5A;\n\n  --r1:6px;\n  --r2:10px;\n  --r3:14px;\n  --r4:22px;\n\n  --s1:4px;  --s2:8px;   --s3:12px;  --s4:16px;\n  --s5:24px; --s6:32px;  --s7:44px;  --s8:64px;\n\n  --ease:cubic-bezier(.2,.8,.3,1);\n  --font:'Manrope','Segoe UI',system-ui,sans-serif;\n  --mono:'Space Grotesk','Manrope',system-ui,sans-serif;\n\n  --accent:#8E76CE;\n  --accent2:#9BC5E8;\n  --border:rgba(255,255,255,0.055);\n  --text:#F3F2F7;\n  --text-muted:#ACA9BA;\n  --text-dim:#726F80;\n}\n\n*{box-sizing:border-box;-webkit-user-select:none;user-select:none;}\nhtml,body{margin:0;padding:0;height:100%;overflow:hidden;background:transparent;}\nbody{font-family:var(--font);color:var(--tx-1);-webkit-font-smoothing:antialiased;}\nh1,h2,h3,p{margin:0;}\nbutton{font-family:inherit;border:none;outline:none;background:none;cursor:pointer;color:inherit;}\ninput,textarea,select{font-family:inherit;}\ninput,textarea{-webkit-user-select:text;user-select:text;}\na{color:var(--sky);text-decoration:none;}\n\n@keyframes toopen{from{opacity:0;transform:translateY(8px) scale(.994);}to{opacity:1;transform:none;}}\n@keyframes toclose{from{opacity:1;transform:none;}to{opacity:0;transform:translateY(6px) scale(.994);}}\n@keyframes page-in{from{opacity:0;transform:translateX(10px);}to{opacity:1;transform:none;}}\n@keyframes cap-pulse{0%,100%{opacity:1;}50%{opacity:.55;}}\n@keyframes ripple{from{opacity:.22;transform:scale(0);}to{opacity:0;transform:scale(1.3);}}\n@keyframes soft-in{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:none;}}\n\n\n#menu-container{\n  position:absolute;inset:0;\n  display:flex;align-items:center;justify-content:center;\n  padding:18px;\n}\n\n#menu-wrapper{\n  position:relative;\n  width:min(1100px,100%);\n  height:min(690px,100%);\n  min-width:860px;min-height:520px;\n  display:flex;\n  background:var(--ink-1);\n  border:1px solid var(--line-2);\n  border-radius:var(--r4);\n  overflow:hidden;\n  box-shadow:0 48px 110px -34px rgba(0,0,0,.92),0 0 0 1px rgba(0,0,0,.4);\n  transform:scale(var(--ryn-scale,1));\n  transform-origin:center center;\n}\n#menu-container.transparent #menu-wrapper{background:rgba(12,12,17,0.90);}\n#menu-wrapper.toopen{animation:180ms var(--ease) toopen both;}\n#menu-wrapper.toclose{animation:140ms ease-in toclose both;}\n\nmain{display:flex;flex:1;min-width:0;min-height:0;}\n\nheader{display:none;}\n\n\n#navbar-container{\n  width:236px;min-width:236px;flex-shrink:0;\n  display:flex;flex-direction:column;\n  background:var(--ink-2);\n  border-right:1px solid var(--line);\n  padding:22px 12px 12px;\n}\n\n.rail-brand{display:flex;align-items:baseline;gap:9px;padding:0 12px 18px;}\n.rail-mark{\n  font-family:var(--mono);font-weight:700;font-size:25px;line-height:1;\n  letter-spacing:-.02em;color:var(--tx-1);\n}\n.rail-sub{\n  font-family:var(--mono);font-weight:600;font-size:10.5px;line-height:1;\n  letter-spacing:.24em;text-transform:uppercase;color:var(--iris-hi);\n}\n\n.rail-label{\n  font-family:var(--mono);font-weight:600;font-size:10px;\n  letter-spacing:.22em;text-transform:uppercase;color:var(--tx-4);\n  padding:0 12px;margin:20px 0 7px;\n}\n\n#navbar-container nav{display:flex;flex-direction:column;gap:2px;}\n\n.open-menu{\n  position:relative;\n  display:flex;align-items:center;gap:13px;\n  width:100%;padding:12px 13px;\n  border-radius:var(--r2);\n  background:transparent;\n  color:var(--tx-2);\n  text-align:left;\n  overflow:hidden;\n  transition:background 150ms var(--ease),color 150ms var(--ease);\n}\n.open-menu .nav-index{\n  font-family:var(--mono);font-weight:600;font-size:11px;line-height:1;\n  letter-spacing:.06em;color:var(--tx-4);\n  width:20px;flex-shrink:0;\n  transition:color 150ms var(--ease);\n}\n.open-menu .nav-label{\n  font-weight:800;font-size:15px;line-height:1.1;letter-spacing:-.012em;\n}\n.open-menu:hover{background:rgba(255,255,255,.035);color:var(--tx-1);}\n.open-menu:active{background:rgba(255,255,255,.06);}\n.open-menu.active{background:var(--iris-12);color:#FFFFFF;}\n.open-menu.active .nav-index{color:var(--iris-hi);}\n.open-menu.active::before{\n  content:'';position:absolute;left:0;top:11px;bottom:11px;\n  width:3px;border-radius:0 3px 3px 0;background:var(--iris);\n}\n.open-menu .ripple{\n  position:absolute;border-radius:50%;\n  background:rgba(255,255,255,.07);\n  opacity:0;pointer-events:none;\n  animation:ripple 420ms ease-out;\n}\n\n#nav-outline{\n  display:flex;flex-direction:column;gap:1px;\n  margin-top:4px;padding-left:6px;\n  overflow-y:auto;flex:1;min-height:0;\n}\n#nav-outline::-webkit-scrollbar{width:6px;}\n#nav-outline::-webkit-scrollbar-thumb{background:rgba(255,255,255,.07);border-radius:6px;}\n.outline-item{\n  position:relative;\n  padding:7px 10px 7px 16px;\n  border-radius:var(--r1);\n  font-size:12.5px;font-weight:600;line-height:1.3;\n  color:var(--tx-3);text-align:left;\n  transition:color 140ms var(--ease),background 140ms var(--ease);\n}\n.outline-item::before{\n  content:'';position:absolute;left:4px;top:50%;\n  width:4px;height:4px;margin-top:-2px;border-radius:50%;\n  background:var(--tx-4);\n  transition:background 160ms var(--ease),transform 160ms var(--ease);\n}\n.outline-item:hover{color:var(--tx-1);background:rgba(255,255,255,.03);}\n.outline-item.current{color:var(--tx-1);}\n.outline-item.current::before{background:var(--iris-hi);transform:scale(1.35);}\n\n.rail-foot{\n  margin-top:auto;padding-top:16px;\n  border-top:1px solid var(--line);\n  display:flex;align-items:center;gap:10px;\n}\n#ryn-version{\n  font-family:var(--mono);font-size:10.5px;font-weight:500;\n  letter-spacing:.14em;text-transform:uppercase;color:var(--tx-4);\n  padding-left:12px;margin-right:auto;\n}\n#close-button{\n  width:34px;height:34px;padding:8px;flex-shrink:0;\n  border-radius:var(--r2);\n  fill:none;stroke:var(--tx-3);stroke-width:1.9;\n  background:transparent;cursor:pointer;\n  transition:background 150ms var(--ease),stroke 150ms var(--ease);\n}\n#close-button:hover{background:rgba(255,255,255,.06);stroke:var(--tx-1);}\n#close-button:active{background:rgba(255,255,255,.09);}\n\n#ryn-search-wrap{\n  position:relative;\n  display:flex;align-items:center;gap:8px;\n  height:40px;padding:0 13px;\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line-2);\n  border-radius:var(--r2);\n  transition:border-color 160ms var(--ease),background 160ms var(--ease),box-shadow 160ms var(--ease);\n}\n#ryn-search-wrap:focus-within{\n  border-color:var(--sky-45);\n  background:var(--sky-12);\n  box-shadow:0 0 0 3px rgba(155,197,232,.10);\n}\n#ryn-search-wrap::before{\n  content:'';flex-shrink:0;width:15px;height:15px;\n  background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23726F80' stroke-width='1.6' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='4.6'/%3E%3Cpath d='M10.4 10.4L14 14'/%3E%3C/svg%3E\");\n  background-repeat:no-repeat;background-position:center;background-size:contain;\n}\n#ryn-search-input{\n  flex:1;min-width:0;\n  background:transparent;border:none;outline:none;\n  font-size:13.5px;font-weight:600;color:var(--tx-1);\n}\n#ryn-search-input::placeholder{color:var(--tx-4);font-weight:500;}\n#ryn-search-clear{\n  display:none;flex-shrink:0;\n  font-size:11px;line-height:1;color:var(--tx-4);cursor:pointer;\n  transition:color 140ms;\n}\n#ryn-search-clear:hover{color:var(--tx-1);}\n#ryn-search-dropdown{\n  display:none;position:absolute;top:calc(100% + 8px);left:0;\n  width:320px;max-height:340px;overflow-y:auto;\n  padding:6px;\n  background:var(--ink-3);\n  border:1px solid var(--line-2);\n  border-radius:var(--r3);\n  box-shadow:0 26px 60px -18px rgba(0,0,0,.9);\n  z-index:9999;\n  animation:soft-in 150ms var(--ease);\n}\n#ryn-search-dropdown::-webkit-scrollbar{width:8px;}\n#ryn-search-dropdown::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:8px;border:2px solid transparent;background-clip:padding-box;}\n.ryn-si{\n  display:flex;flex-direction:column;gap:3px;\n  padding:9px 11px;border-radius:var(--r2);cursor:pointer;\n  transition:background 130ms var(--ease);\n}\n.ryn-si:hover,.ryn-si.ryn-fx{background:var(--iris-12);}\n.ryn-st{font-size:13px;font-weight:700;color:var(--tx-1);line-height:1.3;}\n.ryn-st mark{background:var(--iris-45);color:#fff;border-radius:3px;padding:0 2px;}\n.ryn-sp{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--tx-4);}\n.ryn-se{text-align:center;padding:22px 12px;font-size:12.5px;font-weight:600;color:var(--tx-4);}\n.ryn-sl{\n  font-family:var(--mono);font-size:9.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--iris-hi);\n  padding:9px 11px 4px;\n}\n\n\n#page-container{\n  flex:1;min-width:0;\n  overflow-y:auto;overflow-x:hidden;\n  background:var(--ink-1);\n}\n#page-container::-webkit-scrollbar{width:12px;}\n#page-container::-webkit-scrollbar-track{background:transparent;}\n#page-container::-webkit-scrollbar-thumb{\n  background:rgba(255,255,255,.09);\n  border-radius:12px;\n  border:4px solid transparent;\n  background-clip:padding-box;\n}\n#page-container::-webkit-scrollbar-thumb:hover{background:rgba(142,118,206,.55);background-clip:padding-box;}\n\n.menu-page{display:none;}\n.menu-page.opened{\n  display:block;\n  padding:34px clamp(20px,2.6vw,38px) 92px;\n  animation:page-in 190ms var(--ease);\n}\n.page-head{\n  max-width:1180px;margin:0 auto 6px;\n  padding-bottom:24px;\n  border-bottom:1px solid var(--line);\n}\n.menu-page .page-title{\n  font-size:clamp(27px,2.5vw,33px);font-weight:800;line-height:1.03;\n  letter-spacing:-.03em;color:var(--tx-1);\n}\n.page-description{\n  margin-top:12px;max-width:74ch;\n  font-size:13.5px;font-weight:500;line-height:1.6;color:var(--tx-3);\n}\n\n.section{max-width:1180px;margin:0 auto;padding-top:36px;}\n.section-title{\n  display:flex;flex-direction:column;gap:7px;\n  padding:0 2px 13px;\n  border-bottom:1px solid var(--line);\n  font-family:var(--mono);font-size:11.5px;font-weight:700;\n  letter-spacing:.19em;text-transform:uppercase;color:var(--iris-hi);\n}\nh2.section-title{font-family:var(--mono);}\n.sec-sub{\n  font-family:var(--font);font-size:12.5px;font-weight:500;\n  letter-spacing:0;text-transform:none;line-height:1.55;color:var(--tx-3);\n}\n.section-content{display:flex;flex-direction:column;padding-top:4px;}\n\n\n.content-option{\n  position:relative;\n  display:flex;align-items:center;justify-content:space-between;gap:24px;\n  min-height:60px;\n  padding:13px 15px 13px 17px;\n  border-radius:var(--r2);\n  border-bottom:1px solid rgba(255,255,255,.032);\n  transition:background 150ms var(--ease);\n}\n.content-option:last-child{border-bottom:none;}\n.content-option:hover{background:rgba(255,255,255,.026);}\n.content-option::before{\n  content:'';position:absolute;left:0;top:14px;bottom:14px;\n  width:2px;border-radius:0 2px 2px 0;\n  background:var(--sage);\n  opacity:0;\n  transition:opacity 190ms var(--ease);\n}\n.content-option:has(input[type=\"checkbox\"]:checked)::before{opacity:.85;}\n\n.content-option.centered{justify-content:center;}\n.content-option.left-flex{justify-content:flex-start;gap:14px;}\n.content-option.text{justify-content:flex-start;}\n.content-option.stacked{flex-direction:column;align-items:stretch;gap:14px;}\n\n.opt-main{display:flex;flex-direction:column;gap:5px;min-width:0;flex:1;}\n.option-title{\n  font-size:15.5px;font-weight:700;line-height:1.32;\n  letter-spacing:-.008em;color:var(--tx-1);\n}\nlabel.option-title{cursor:pointer;}\nlabel.option-title:active{opacity:.75;}\n.opt-desc{\n  font-size:12.5px;font-weight:500;line-height:1.5;\n  color:var(--tx-3);max-width:74ch;\n}\n.content-option.quiet .option-title{font-size:14.5px;font-weight:600;color:var(--tx-2);}\n.content-option.quiet{min-height:54px;}\n.content-option.quiet:hover .option-title{color:var(--tx-1);}\n.option-content{display:flex;align-items:center;gap:12px;flex-shrink:0;}.ryn-select{appearance:none;-webkit-appearance:none;background:rgba(255,255,255,.06);color:inherit;border:1px solid rgba(255,255,255,.18);border-radius:7px;padding:5px 26px 5px 10px;font:inherit;font-size:12px;cursor:pointer;flex-shrink:0;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 14px) calc(50% + 1px),calc(100% - 9px) calc(50% + 1px);background-size:5px 5px,5px 5px;background-repeat:no-repeat;}.ryn-select:hover{border-color:rgba(255,255,255,.32);}.ryn-select:focus{outline:none;border-color:var(--iris);}.ryn-select option{background:#1a1526;color:#fff;}\n\n.text-value{\n  font-family:var(--mono);font-size:15px;font-weight:700;\n  color:var(--sky);font-variant-numeric:tabular-nums;\n}\n.simplified{font-size:12.5px;font-weight:500;color:var(--tx-3);line-height:1.6;}\n.highlight{color:var(--iris-hi);}\n\n.sub-options{\n  margin:2px 0 6px 18px;\n  padding-left:16px;\n  border-left:1px solid var(--line-2);\n  transition:opacity 200ms var(--ease);\n}\n.sub-options .content-option{min-height:50px;padding-top:9px;padding-bottom:9px;}\n.sub-options .option-title{font-size:14px;font-weight:600;color:var(--tx-2);}\n.sub-options .content-option:hover .option-title{color:var(--tx-1);}\n.content-option:has(> .switch-checkbox > input:not(:checked)) + .sub-options{\n  opacity:.32;pointer-events:none;\n}\n\n\n.switch-checkbox{position:relative;width:48px;height:27px;flex-shrink:0;}\n.switch-checkbox input{position:absolute;opacity:0;width:0;height:0;}\n.switch-checkbox span{\n  position:absolute;inset:0;\n  border-radius:10px;cursor:pointer;\n  background:rgba(255,255,255,.06);\n  border:1px solid rgba(255,255,255,.11);\n  transition:background 180ms var(--ease),border-color 180ms var(--ease);\n}\n.switch-checkbox span::before{\n  content:'';position:absolute;left:4px;top:50%;\n  width:18px;height:18px;border-radius:6px;\n  background:rgba(255,255,255,.32);\n  transform:translateY(-50%);\n  transition:transform 190ms var(--ease),background 190ms var(--ease);\n}\n.switch-checkbox span:hover{border-color:rgba(255,255,255,.2);}\n.switch-checkbox input:checked + span{\n  background:var(--sage-14);\n  border-color:var(--sage-40);\n}\n.switch-checkbox input:checked + span::before{\n  transform:translateY(-50%) translateX(21px);\n  background:var(--sage);\n}\n.switch-checkbox input:focus-visible + span{box-shadow:0 0 0 3px rgba(155,197,232,.20);}\n\n.hotkeyInput{\n  display:flex;align-items:center;justify-content:center;\n  min-width:82px;height:42px;padding:0 15px;\n  border-radius:10px;\n  background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.028));\n  border:1px solid rgba(255,255,255,.115);\n  box-shadow:0 2px 0 rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.10);\n  font-family:var(--mono);font-size:13.5px;font-weight:700;\n  letter-spacing:.07em;text-transform:uppercase;color:var(--tx-1);\n  transition:transform 120ms var(--ease),border-color 150ms var(--ease),\n             background 150ms var(--ease),box-shadow 150ms var(--ease),color 150ms var(--ease);\n}\n.hotkeyInput:hover{border-color:var(--sky-45);color:#fff;}\n.hotkeyInput:active{transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.06);}\n.hotkeyInput.active{\n  border-color:var(--iris);background:var(--iris-18);color:var(--iris-hi);\n  box-shadow:inset 0 1px 0 rgba(255,255,255,.08);\n  transform:translateY(2px);\n  animation:cap-pulse 1.15s ease-in-out infinite;\n}\n.hotkeyInput.red{\n  border-color:rgba(217,163,171,.5);background:var(--rose-12);color:var(--rose);\n}\n.key-state{\n  font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--tx-4);\n  min-width:78px;text-align:right;\n}\n.key-state::after{content:'';}\n.content-option:has(.hotkeyInput.red) .key-state::after{content:'Conflict';color:var(--rose);}\n.content-option:has(.hotkeyInput.active) .key-state::after{content:'Press a key';color:var(--iris-hi);}\n.content-option:has(.hotkeyInput.red) .key-state,\n.content-option:has(.hotkeyInput.active) .key-state{color:inherit;}\n\n.option-button{\n  display:inline-flex;align-items:center;justify-content:center;gap:8px;\n  height:42px;padding:0 21px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.05);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);\n  font-size:13.5px;font-weight:700;letter-spacing:.005em;\n  white-space:nowrap;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),\n             transform 110ms var(--ease),color 150ms var(--ease);\n}\n.option-button:hover{background:rgba(255,255,255,.085);border-color:var(--line-3);}\n.option-button:active{transform:translateY(1px);background:rgba(255,255,255,.11);}\n.option-button:disabled{opacity:.4;pointer-events:none;}\n.option-button.primary{\n  background:var(--iris-18);border-color:var(--iris-45);color:#EFEAFF;\n}\n.option-button.primary:hover{background:rgba(142,118,206,.26);border-color:rgba(142,118,206,.7);}\n.option-button.wide{width:100%;}\n.option-button.tall{height:48px;padding:0 28px;font-size:14.5px;}\n.option-button.red,.option-button.danger{\n  background:transparent;border-color:rgba(217,163,171,.28);color:var(--rose);\n}\n.option-button.red:hover,.option-button.danger:hover{\n  background:var(--rose-12);border-color:rgba(217,163,171,.5);color:#F0CDD2;\n}\n.option-button.icon-only{width:42px;padding:0;}\n\n.seg{display:flex;gap:6px;flex-wrap:wrap;max-width:680px;}\n.seg-btn,.farm-type-btn{\n  flex:1;min-width:92px;height:44px;padding:0 15px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line);\n  color:var(--tx-3);\n  font-family:var(--font);font-size:13.5px;font-weight:700;\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.seg-btn:hover,.farm-type-btn:hover{background:rgba(255,255,255,.06);color:var(--tx-1);}\n.seg-btn.seg-active,.farm-type-btn.seg-active{\n  background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;\n}\n\n.input{\n  height:42px;width:235px;padding:0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);\n  font-size:13.5px;font-weight:600;text-align:left;\n  transition:border-color 150ms var(--ease),background 150ms var(--ease),box-shadow 150ms var(--ease);\n}\n.input::placeholder{color:var(--tx-4);font-weight:500;}\n.input:focus{\n  outline:none;border-color:var(--sky-45);\n  background:var(--sky-12);\n  box-shadow:0 0 0 3px rgba(155,197,232,.11);\n}\ninput[type=\"number\"].input{width:122px;font-family:var(--mono);font-variant-numeric:tabular-nums;}\n.input.invalid{border-color:rgba(217,163,171,.6);background:var(--rose-12);}\n\n.chat-row{min-height:58px;}\n.chat-row .input{flex:1;min-width:0;}\n\ninput[id][type=\"color\"]{\n  width:36px;height:36px;padding:0;\n  border:none;border-radius:9px;background:transparent;cursor:pointer;\n  box-shadow:0 0 0 1px rgba(255,255,255,.16);\n  transition:box-shadow 160ms var(--ease),transform 160ms var(--ease);\n}\ninput[id][type=\"color\"]::-webkit-color-swatch-wrapper{padding:3px;}\ninput[id][type=\"color\"]::-webkit-color-swatch{border:none;border-radius:7px;}\ninput[id][type=\"color\"]:hover{transform:scale(1.06);box-shadow:0 0 0 1px rgba(255,255,255,.34);}\n.reset-color{\n  width:15px;height:15px;flex-shrink:0;\n  border-radius:50%;border:1px solid rgba(255,255,255,.22);\n  background:var(--data-color,var(--iris));\n  opacity:0;cursor:pointer;\n  transition:opacity 160ms var(--ease),transform 160ms var(--ease);\n}\n.content-option:hover .reset-color{opacity:.85;}\n.reset-color:hover{opacity:1;transform:scale(1.2);}\n\n.slider{display:flex;align-items:center;gap:18px;flex-shrink:0;}\n.slider input[type=\"range\"]{order:1;}\n.slider-value{\n  order:2;\n  font-family:var(--mono);font-size:13.5px;font-weight:600;\n  font-variant-numeric:tabular-nums;\n  color:var(--sky);min-width:58px;text-align:right;\n}\n.slider input[type=\"range\"]{\n  -webkit-appearance:none;appearance:none;\n  width:clamp(150px,17vw,250px);height:22px;\n  background:transparent;cursor:pointer;outline:none;border:none;\n}\n.slider input[type=\"range\"]::-webkit-slider-runnable-track{\n  height:4px;border-radius:999px;\n  background:linear-gradient(90deg,var(--sky) var(--val,0%),rgba(255,255,255,.09) var(--val,0%));\n}\n.slider input[type=\"range\"]::-webkit-slider-thumb{\n  -webkit-appearance:none;\n  width:15px;height:15px;margin-top:-5.5px;\n  border-radius:50%;background:#EEF4FA;\n  border:1px solid rgba(0,0,0,.35);\n  box-shadow:0 1px 4px rgba(0,0,0,.55);\n  transition:transform 130ms var(--ease),box-shadow 130ms var(--ease);\n}\n.slider input[type=\"range\"]:hover::-webkit-slider-thumb{transform:scale(1.14);}\n.slider input[type=\"range\"]:active::-webkit-slider-thumb{\n  transform:scale(1.06);box-shadow:0 0 0 6px rgba(155,197,232,.16);\n}\n\nselect.ryn-select{\n  height:42px;padding:0 38px 0 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.04);\n  border:1px solid var(--line-2);\n  color:var(--tx-1);font-size:13.5px;font-weight:600;\n  -webkit-appearance:none;appearance:none;cursor:pointer;\n  background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7' viewBox='0 0 11 7'%3E%3Cpath d='M1 1l4.5 4.5L10 1' stroke='%239BC5E8' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\");\n  background-repeat:no-repeat;background-position:right 14px center;\n  transition:border-color 150ms var(--ease);\n}\nselect.ryn-select:focus{outline:none;border-color:var(--sky-45);}\nselect.ryn-select option{background:var(--ink-3);color:var(--tx-1);}\n\n.icon{width:20px;height:20px;}\n.small-icon{width:15px;height:15px;}\n.key-badge{\n  display:inline-flex;align-items:center;justify-content:center;\n  min-width:26px;height:20px;padding:0 6px;\n  border-radius:var(--r1);\n  background:rgba(255,255,255,.05);border:1px solid var(--line-2);\n  font-family:var(--mono);font-size:10.5px;font-weight:600;color:var(--tx-2);\n}\n.note{\n  max-width:1180px;margin:14px auto 0;\n  padding:14px 18px;\n  border-left:2px solid var(--line-2);\n  font-size:12.5px;font-weight:500;line-height:1.6;color:var(--tx-3);\n}\n\n\n#bot-container{display:flex;flex-direction:column;}\n#bot-container:empty{display:none;}\n.content-option[data-bot-id]{\n  background:rgba(255,255,255,.028);\n  border:1px solid var(--line);border-bottom:1px solid var(--line);\n  margin-bottom:6px;min-height:52px;\n}\n.content-option[data-bot-id] .option-title{font-family:var(--mono);font-size:13.5px;font-weight:600;}\n.disconnect-button{\n  width:16px;height:16px;flex-shrink:0;\n  fill:var(--tx-4);cursor:pointer;\n  transition:fill 150ms var(--ease);\n}\n.content-option:hover .disconnect-button{fill:var(--tx-2);}\n.disconnect-button:hover{fill:var(--rose)!important;}\n\n#connectingBot{\n  padding:14px 18px;margin-bottom:6px;\n  border-radius:var(--r2);\n  border:1px dashed var(--line-2);\n  font-family:var(--mono);font-size:12px;font-weight:600;\n  letter-spacing:.16em;text-transform:uppercase;color:var(--tx-4);\n}\n\n#dynamic-bot-list{display:flex;flex-direction:column;gap:8px;}\n.bot-row{\n  display:flex;align-items:center;gap:10px;\n  padding:10px 12px;\n  background:rgba(255,255,255,.028);\n  border:1px solid var(--line);\n  border-radius:var(--r2);\n  transition:border-color 150ms var(--ease),opacity 150ms var(--ease);\n}\n.bot-row:hover{border-color:var(--line-2);}\n.bot-row.connected{background:var(--sage-14);border-color:var(--sage-40);}\n.bot-row-label{\n  font-family:var(--mono);font-size:11.5px;font-weight:600;\n  letter-spacing:.12em;text-transform:uppercase;color:var(--tx-4);\n  min-width:74px;flex-shrink:0;\n}\n.bot-row-name{flex:1;min-width:0;font-size:14.5px;font-weight:700;color:var(--tx-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}\n.bot-row-name .pending{color:var(--tx-4);font-weight:600;}\n.bot-row .input{flex:1;min-width:0;width:auto;}\n.bot-row-check{width:17px;height:17px;flex-shrink:0;fill:var(--sage);}\n.icon-btn{\n  display:flex;align-items:center;justify-content:center;\n  width:42px;height:42px;flex-shrink:0;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.045);\n  border:1px solid var(--line-2);\n  font-size:15px;line-height:1;color:var(--tx-2);\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.icon-btn:hover{background:rgba(255,255,255,.08);border-color:var(--line-3);color:var(--tx-1);}\n.icon-btn.danger:hover{background:var(--rose-12);border-color:rgba(217,163,171,.45);color:var(--rose);}\n\n.wpn-label{\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:12px;\n}\n.wpn-grid{\n  display:grid;grid-template-columns:repeat(auto-fill,minmax(124px,1fr));\n  gap:8px;\n}\n.bot-weapon-btn,.bot-sec-weapon-btn{\n  display:flex;align-items:center;justify-content:center;\n  min-height:54px;padding:10px 12px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.03);\n  border:1px solid var(--line);\n  color:var(--tx-3);\n  font-size:13px;font-weight:600;text-align:center;line-height:1.3;\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.bot-weapon-btn:hover,.bot-sec-weapon-btn:hover{\n  background:rgba(255,255,255,.06);border-color:var(--line-2);color:var(--tx-1);\n}\n.bot-weapon-btn.wpn-active,.bot-sec-weapon-btn.wpn-active{\n  background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;\n}\n.wpn-selected-bar{\n  display:flex;align-items:center;gap:10px;\n  margin-top:12px;padding:11px 14px;\n  border-radius:var(--r2);\n  background:rgba(255,255,255,.025);\n  border:1px solid var(--line);\n}\n.wpn-selected-dot{\n  width:6px;height:6px;flex-shrink:0;border-radius:50%;background:var(--iris-hi);\n}\n.wpn-selected-text{font-size:13px;font-weight:600;color:var(--tx-2);}\n\n.stack{display:flex;flex-direction:column;gap:22px;padding-top:8px;}\n.field{display:flex;flex-direction:column;gap:0;}\n.field-head{\n  font-family:var(--mono);font-size:11px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n  margin-bottom:10px;\n}\n.field-note{margin-top:10px;font-size:12.5px;font-weight:500;line-height:1.55;color:var(--tx-3);}\n.field-note b{color:var(--tx-2);font-weight:700;}\n.inline{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}\n#_botBulkRow .input{flex:1;min-width:180px;width:auto;}\n.bot-row-id{\n  font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.06em;\n  color:var(--tx-4);flex-shrink:0;padding:0 9px;height:25px;\n  display:flex;align-items:center;white-space:nowrap;\n  border:1px solid var(--line);border-radius:var(--r2);\n}\n\n#_formationGrid{width:100%;}\n\n\n.fsel-trigger{\n  display:flex;align-items:center;gap:12px;\n  width:100%;padding:13px 14px;max-width:680px;\n  background:rgba(255,255,255,.035);\n  border:1px solid var(--line-2);\n  border-radius:var(--r2);\n  cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease);\n}\n.fsel-trigger:hover{background:rgba(255,255,255,.06);border-color:var(--line-3);}\n.fsel-trigger.open{border-color:var(--iris-45);background:var(--iris-12);}\n.fsel-trigger .fsel-icon{width:26px;flex-shrink:0;text-align:center;font-size:16px;color:var(--iris-hi);}\n.fsel-trigger .fsel-label{flex:1;font-size:14.5px;font-weight:700;color:var(--tx-1);}\n.fsel-trigger .fsel-arrow{font-size:10px;color:var(--tx-4);transition:transform 170ms var(--ease);}\n.fsel-trigger.open .fsel-arrow{transform:rotate(180deg);}\n\n.fsel-popup{\n  position:fixed;z-index:99999;width:300px;\n  display:flex;flex-direction:column;overflow:hidden;\n  background:var(--ink-3);\n  border:1px solid var(--line-2);\n  border-radius:var(--r3);\n  box-shadow:0 30px 70px -20px rgba(0,0,0,.92);\n}\n.fsel-popup.toopen{animation:soft-in 160ms var(--ease);}\n.fsel-popup-header{\n  display:flex;align-items:center;gap:10px;\n  padding:12px 14px;\n  border-bottom:1px solid var(--line);\n  cursor:grab;\n}\n.fsel-popup-header:active{cursor:grabbing;}\n.fsel-popup-title{\n  flex:1;font-family:var(--mono);font-size:10.5px;font-weight:600;\n  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);\n}\n.fsel-popup-close{\n  width:22px;height:22px;flex-shrink:0;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:var(--r1);font-size:11px;color:var(--tx-4);cursor:pointer;\n  transition:background 140ms,color 140ms;\n}\n.fsel-popup-close:hover{background:rgba(255,255,255,.07);color:var(--tx-1);}\n.fsel-popup-body{\n  display:grid;grid-template-columns:repeat(4,1fr);gap:8px;\n  padding:12px;max-height:280px;overflow-y:auto;\n}\n.fsel-popup-body::-webkit-scrollbar{width:8px;}\n.fsel-popup-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:8px;border:2px solid transparent;background-clip:padding-box;}\n.fcat-btn{\n  position:relative;\n  display:flex;align-items:center;justify-content:center;\n  aspect-ratio:1;border-radius:var(--r2);\n  background:rgba(255,255,255,.03);\n  border:1px solid var(--line);\n  color:var(--tx-2);font-size:17px;cursor:pointer;\n  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);\n}\n.fcat-btn:hover{background:rgba(255,255,255,.07);border-color:var(--line-2);color:var(--tx-1);}\n.fcat-btn.active{background:var(--iris-18);border-color:var(--iris-45);color:#fff;}\n.fcat-tip{\n  display:none;position:absolute;top:calc(100% + 6px);left:50%;\n  transform:translateX(-50%);\n  padding:4px 9px;border-radius:var(--r1);\n  background:var(--ink-4);border:1px solid var(--line-2);\n  font-family:var(--font);font-size:11px;font-weight:600;color:var(--tx-1);\n  white-space:nowrap;pointer-events:none;z-index:5;\n}\n.fcat-btn:hover .fcat-tip{display:block;}\n.fcat-key{\n  position:absolute;top:3px;right:3px;\n  min-width:17px;height:15px;padding:0 3px;\n  display:flex;align-items:center;justify-content:center;\n  border-radius:4px;\n  background:rgba(0,0,0,.45);border:1px solid var(--line);\n  font-family:var(--mono);font-size:8.5px;font-weight:600;color:var(--tx-3);\n  line-height:1;cursor:pointer;\n  transition:background 130ms,border-color 130ms,color 130ms;\n}\n.fcat-key:hover{background:rgba(255,255,255,.10);color:var(--tx-1);}\n.fcat-key.set{background:var(--iris-18);border-color:var(--iris-45);color:#EFEAFF;}\n.fcat-key.recording{background:var(--sky-12);border-color:var(--sky-45);color:var(--sky);animation:cap-pulse 1.1s ease-in-out infinite;}\n.fcat-reset{\n  position:absolute;bottom:3px;left:3px;\n  width:15px;height:15px;display:none;\n  align-items:center;justify-content:center;\n  border-radius:4px;\n  background:var(--rose-12);border:1px solid rgba(217,163,171,.3);\n  font-size:9px;line-height:1;color:var(--rose);cursor:pointer;\n}\n.fcat-reset.show{display:flex;}\n.fcat-reset:hover{background:rgba(217,163,171,.24);}\n.fsel-popup-footer{padding:10px 12px;border-top:1px solid var(--line);}\n.fsel-reset-all{\n  width:100%;padding:9px 0;\n  border-radius:var(--r2);\n  background:transparent;border:1px solid rgba(217,163,171,.26);\n  font-family:var(--font);font-size:12px;font-weight:700;\n  color:var(--rose);text-align:center;cursor:pointer;\n  transition:background 140ms,border-color 140ms;\n}\n.fsel-reset-all:hover{background:var(--rose-12);border-color:rgba(217,163,171,.48);}\n\n\n.scan-count{\n  font:600 10px/1 var(--mono);\n  letter-spacing:.08em;\n  text-transform:uppercase;\n  color:var(--tx-3);\n  background:var(--ink-4);\n  border:1px solid var(--line);\n  border-radius:999px;\n  padding:3px 8px;\n  margin-left:8px;\n  vertical-align:middle;\n}\n\n.scan-bar{\n  display:flex;\n  gap:var(--s2);\n  align-items:center;\n  width:100%;\n  margin-bottom:var(--s3);\n}\n.scan-filter{flex:1;min-width:0;}\n.scan-bar .option-button{flex:0 0 auto;white-space:nowrap;}\n\n#_scanList{\n  display:flex;\n  flex-direction:column;\n  gap:3px;\n  width:100%;\n  max-height:340px;\n  overflow-y:auto;\n  padding-right:2px;\n}\n#_scanList::-webkit-scrollbar{width:6px;}\n#_scanList::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:3px;}\n\n.scan-row{\n  display:flex;\n  align-items:center;\n  gap:var(--s3);\n  padding:8px 10px;\n  border-radius:var(--r2);\n  border:1px solid transparent;\n  background:var(--ink-2);\n  cursor:pointer;\n  transition:background 140ms var(--ease),border-color 140ms var(--ease);\n}\n.scan-row:hover{background:var(--ink-3);border-color:var(--line-2);}\n.scan-row.picked{background:var(--sky-12);border-color:var(--sky-45);}\n.scan-row.live{background:var(--sage-14);border-color:var(--sage-40);}\n\n.scan-tick{\n  flex:0 0 auto;\n  width:17px;\n  height:17px;\n  display:flex;\n  align-items:center;\n  justify-content:center;\n  border-radius:5px;\n  border:1px solid var(--line-3);\n  background:var(--ink-0);\n  font:700 11px/1 var(--font);\n  color:var(--ink-0);\n}\n.scan-row.picked .scan-tick{background:var(--sky);border-color:var(--sky);}\n.scan-row.live .scan-tick{background:var(--sage);border-color:var(--sage);}\n\n.scan-main{\n  flex:1;\n  min-width:0;\n  display:flex;\n  flex-direction:column;\n  gap:2px;\n}\n.scan-name{\n  font:600 13px/1.2 var(--font);\n  color:var(--tx-1);\n  overflow:hidden;\n  text-overflow:ellipsis;\n  white-space:nowrap;\n}\n.scan-meta{\n  font:500 10px/1.2 var(--mono);\n  color:var(--tx-3);\n  overflow:hidden;\n  text-overflow:ellipsis;\n  white-space:nowrap;\n}\n\n.scan-chip{\n  flex:0 0 auto;\n  font:700 9px/1 var(--mono);\n  letter-spacing:.1em;\n  color:var(--ink-0);\n  background:var(--sage);\n  border-radius:999px;\n  padding:4px 8px;\n}\n\n\n.scan-actions{\n  flex:0 0 auto;\n  display:flex;\n  gap:6px;\n  align-items:center;\n}\n.scan-act{\n  font:700 9px/1 var(--mono);\n  letter-spacing:.09em;\n  padding:6px 9px;\n  border-radius:var(--r1);\n  border:1px solid var(--line-3);\n  background:var(--ink-0);\n  color:var(--tx-2);\n  cursor:pointer;\n  transition:background 140ms var(--ease),border-color 140ms var(--ease),color 140ms var(--ease);\n}\n.scan-act:hover{border-color:var(--line-3);background:var(--ink-4);color:var(--tx-1);}\n.scan-act.on-scan{background:var(--sky);border-color:var(--sky);color:var(--ink-0);}\n.scan-act.on-excl{background:var(--rose);border-color:var(--rose);color:var(--ink-0);}\n\n.scan-row.excluded{background:var(--rose-12);border-color:rgba(217,163,171,.45);}\n.scan-row.excluded .scan-name{color:var(--rose);}\n.scan-chip.excl{background:var(--rose);}\n.scan-give{\n  flex:0 0 auto;\n  display:flex;\n  align-items:center;\n  gap:2px;\n  border:1px solid var(--line-3);\n  border-radius:var(--r1);\n  background:var(--ink-0);\n  padding:1px;\n}\n.scan-give.on{border-color:var(--iris-45);background:var(--iris-18);}\n.scan-give.off{opacity:.45;}\n.scan-give-btn{\n  font:700 11px/1 var(--mono);\n  color:var(--tx-2);\n  padding:4px 6px;\n  border-radius:var(--r1);\n  cursor:pointer;\n  user-select:none;\n}\n.scan-give-btn:hover{background:var(--ink-4);color:var(--tx-1);}\n.scan-give-val{\n  font:700 9px/1 var(--mono);\n  letter-spacing:.08em;\n  color:var(--tx-2);\n  padding:0 3px;\n  white-space:nowrap;\n}\n.scan-give.on .scan-give-val{color:#FFFFFF;}\n.scan-row.given{border-color:var(--iris-45);}\n.scan-chip.given{background:var(--iris-45);color:#FFFFFF;}\n\n.scan-empty{\n  font:500 12px/1.5 var(--font);\n  color:var(--tx-3);\n  padding:14px 10px;\n  text-align:center;\n  border:1px dashed var(--line-2);\n  border-radius:var(--r2);\n}\n";
   const RynBotAcctStyles = `
 .bot-acct{flex-shrink:0;height:30px;max-width:130px;padding:0 10px;border:1px solid rgba(155,197,232,.3);border-radius:8px;background:rgba(155,197,232,.08);color:var(--sky);font:700 11px/1 var(--font);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;}
@@ -5236,30 +17170,39 @@ window.grbtp = 35;
 #ryn-acct-dialog .ryn-acct-note{font-size:10.5px;line-height:1.45;color:var(--tx-4);}
 `;
   const RynFarmStyles = `
-#_farmSection [data-farm-for]{transition:opacity 150ms ease;}
-#_farmSection[data-mode="nearest"] [data-farm-for],
-#_farmSection[data-mode="single"] [data-farm-for="sequence"],
-#_farmSection[data-mode="sequence"] [data-farm-for="single"]{opacity:.45;}
-#_farmSection [data-farm-for]:hover,#_farmSection [data-farm-for]:focus-within{opacity:1;}
-.ryn-farm-count{flex-wrap:nowrap;flex-shrink:0;}
-.ryn-farm-modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;max-width:none;width:100%;}
-.ryn-farm-modes .seg-btn{position:relative;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:4px;min-width:0;height:auto;min-height:58px;padding:10px 14px 10px 16px;text-align:left;overflow:hidden;}
-.ryn-farm-modes .seg-btn::before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--iris);opacity:0;transition:opacity 150ms ease;}
-.ryn-farm-modes .seg-btn.seg-active::before{opacity:1;}
-.ryn-farm-mode-name{font-size:14px;font-weight:700;color:inherit;}
-.ryn-farm-mode-sub{font-size:11px;font-weight:500;line-height:1.35;color:var(--tx-4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
-.ryn-farm-modes .seg-btn.seg-active .ryn-farm-mode-sub{color:var(--tx-3);}
-.ryn-farm-count .seg-btn{flex:0 0 34px;min-width:0;width:34px;height:34px;padding:0;font-family:var(--mono);font-size:12.5px;}
-#_farmSection .scan-count[data-on="1"]{color:var(--sage);border-color:var(--sage-40);background:var(--sage-14);}
-.ryn-farm-pair{gap:8px;flex-wrap:nowrap;}
-.ryn-farm-pair input[type="number"].input,.ryn-farm-step input[type="number"].input{width:88px;flex:0 0 88px;}
-.ryn-farm-route{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px;}
-.ryn-farm-step{display:flex;align-items:center;gap:8px;min-width:0;}
-.ryn-farm-n{flex:0 0 14px;font:700 10px/1 var(--mono);color:var(--tx-4);text-align:center;}
-.ryn-farm-step .ryn-select{flex:1;min-width:0;}
+.ryn-farm-panel[hidden]{display:none;}
+.ryn-farm-state{display:inline-flex;align-items:center;gap:7px;align-self:flex-start;height:22px;padding:0 9px;border-radius:999px;border:1px solid var(--line-2);background:rgba(255,255,255,.035);font:700 10.5px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--tx-3);}
+.ryn-farm-state::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--tx-4);}
+.ryn-farm-state.on{color:var(--sage);border-color:var(--sage-40);background:var(--sage-14);}
+.ryn-farm-state.on::before{background:var(--sage);box-shadow:0 0 7px var(--sage);}
+.ryn-farm-state kbd{font:inherit;color:var(--tx-2);margin-left:2px;padding-left:8px;border-left:1px solid var(--line-2);}
+.ryn-farm-modes .seg-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:56px;}
+.ryn-farm-modes .seg-btn small{font-size:10.5px;font-weight:600;letter-spacing:.01em;color:var(--tx-4);}
+.ryn-farm-modes .seg-btn.seg-active small{color:var(--tx-2);}
+.ryn-farm-res .seg-btn{display:flex;align-items:center;justify-content:center;gap:9px;}
+.ryn-farm-res [data-farm-res="wood"]{--res:#C99A66;--res-bg:rgba(201,154,102,.14);}
+.ryn-farm-res [data-farm-res="stone"]{--res:#AEB6C2;--res-bg:rgba(174,182,194,.14);}
+.ryn-farm-res [data-farm-res="food"]{--res:#E58A8A;--res-bg:rgba(229,138,138,.14);}
+.ryn-farm-res [data-farm-res="gold"]{--res:#E8C766;--res-bg:rgba(232,199,102,.14);}
+.ryn-farm-res .seg-btn i{width:10px;height:10px;border-radius:3px;background:var(--res);opacity:.75;}
+.ryn-farm-res .seg-btn.seg-active{background:var(--res-bg);border-color:var(--res);color:var(--tx-1);}
+.ryn-farm-res .seg-btn.seg-active i{opacity:1;box-shadow:0 0 8px var(--res);}
+.ryn-farm-num{display:flex;align-items:center;gap:12px;flex-shrink:0;}
+.ryn-farm-num span{font-size:12px;font-weight:600;color:var(--tx-4);}
+.ryn-farm-num input[type="number"].input{width:140px;text-align:right;}
+.ryn-farm-route{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;max-width:680px;}
+.ryn-farm-step{display:grid;grid-template-columns:28px minmax(0,1fr) 104px;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--line);border-radius:var(--r2);background:rgba(255,255,255,.025);transition:opacity 150ms var(--ease),border-color 150ms var(--ease);}
+.ryn-farm-step:hover{border-color:var(--line-2);}
+.ryn-farm-step.off{opacity:.5;}
+.ryn-farm-idx{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:var(--iris-12);border:1px solid var(--iris-45);color:var(--iris-hi);font:700 12px/1 var(--mono);}
+.ryn-farm-step .ryn-select{width:100%;height:36px;font-size:13px;}
+.ryn-farm-step input[type="number"].input{width:100%;min-width:0;height:36px;padding:0 10px;text-align:right;}
+.ryn-farm-cap{flex-wrap:nowrap;flex-shrink:0;gap:6px;max-width:none;}
+.ryn-farm-cap .seg-btn{flex:0 0 38px;min-width:0;width:38px;height:36px;padding:0;font-family:var(--mono);font-size:13px;}
+.ryn-farm-section input[type=number]{-moz-appearance:textfield;}
+.ryn-farm-section input[type=number]::-webkit-inner-spin-button,.ryn-farm-section input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
 @media(max-width:680px){
   .ryn-farm-route{grid-template-columns:1fr;}
-  .ryn-farm-mode-sub{white-space:normal;}
 }
 `;
   const Game_default = "#ryn-menu-frame {\r\n    position: absolute;\r\n    top: 0;\r\n    left: 0;\r\n    bottom: 0;\r\n    right: 0;\r\n    width: 100%;\r\n    height: 100%;\r\n    border: none;\r\n    outline: none;\r\n    z-index: 10;\r\n}\r\n\r\n#promoImgHolder,\r\n.menuHeader,\r\n.menuText,\r\n#guideCard,\r\n#gameName,\r\n#pingDisplay,\r\n#partyButton,\r\n#onetrust-consent-sdk,\r\n.adMenuCard,\r\n#topInfoHolder > div:not([id]):not([class]),\r\n#touch-controls-fullscreen,\r\n#altcha,\r\n#joinPartyButton {\r\n    display: none!important;\r\n}\r\n\r\n.menuCard {\r\n    box-shadow: none;\r\n}\r\n\r\n#setupCard {\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 12px;\r\n    background: rgba(25,25,25,0.45);\r\n    backdrop-filter: blur(25px);\r\n    -webkit-backdrop-filter: blur(25px);\r\n    border: 1px solid rgba(255,255,255,0.2);\r\n    border-radius: 20px;\r\n    box-shadow: 0 8px 32px 0 rgba(0,0,0,0.2), inset 0 1px 1px rgba(255,255,255,0.1);\r\n    max-height: auto;\r\n    width: 280px;\r\n}\r\n\r\n#setupCard > * {\r\n    margin: 0!important;\r\n}\r\n\r\n#linksContainer2 {\r\n    background: #6d6d6d77;\r\n}\r\n\r\n#bottomContainer {\r\n    bottom: 20px;\r\n}\r\n\r\n#topInfoHolder {\r\n    display: flex;\r\n    flex-direction: column;\r\n    justify-content: right;\r\n    align-items: flex-end;\r\n    gap: 10px;\r\n}\r\n\r\n#killCounter, #totalKillCounter {\r\n    position: static;\r\n    margin: 0;\r\n    background-image: url(../img/icons/skull.png);\r\n}\r\n\r\n.actionBarItem {\r\n    position: relative;\r\n    margin: 3px 5px !important;\r\n    border: 1.5px solid rgba(255,255,255,0.16) !important;\r\n    border-radius: 13px !important;\r\n    background-color: rgba(18,17,24,0.40) !important;\r\n    box-shadow: 0 3px 10px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.07) !important;\r\n    transition: transform 130ms ease, border-color 130ms ease, box-shadow 130ms ease !important;\r\n}\r\n\r\n.actionBarItem:hover {\r\n    transform: translateY(-2px) !important;\r\n    border-color: rgba(255,255,255,0.38) !important;\r\n    box-shadow: 0 6px 16px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.10) !important;\r\n}\r\n\r\n.ryn-reload-ring {\r\n    position: absolute !important;\r\n    top: -1px !important;\r\n    left: -1px !important;\r\n    width: calc(100% + 2px) !important;\r\n    height: calc(100% + 2px) !important;\r\n    display: block !important;\r\n    overflow: visible !important;\r\n    pointer-events: none !important;\r\n    z-index: 9 !important;\r\n    filter: drop-shadow(0 0 2px rgba(0,0,0,0.75)) !important;\r\n}\r\n.ryn-reload-edge {\r\n    fill: none;\r\n    stroke: #ffffff;\r\n    stroke-width: 6;\r\n    stroke-linecap: butt;\r\n    transition: stroke-dashoffset 110ms linear;\r\n}\r\n.ryn-upgrade-edge {\r\n    fill: none;\r\n    stroke-width: 4;\r\n    stroke-linecap: butt;\r\n    transition: stroke-dashoffset 110ms linear;\r\n}\r\n\r\n.itemCounter {\r\n    position: absolute;\r\n    top: 3px;\r\n    right: 3px;\r\n    font-size: 0.95em;\r\n    color: white;\r\n    text-shadow: #3d3f42 2px 0px 0px, #3d3f42 1.75517px 0.958851px 0px, #3d3f42 1.0806px 1.68294px 0px, #3d3f42 0.141474px 1.99499px 0px, #3d3f42 -0.832294px 1.81859px 0px, #3d3f42 -1.60229px 1.19694px 0px, #3d3f42 -1.97998px 0.28224px 0px, #3d3f42 -1.87291px -0.701566px 0px, #3d3f42 -1.30729px -1.5136px 0px, #3d3f42 -0.421592px -1.95506px 0px, #3d3f42 0.567324px -1.91785px 0px, #3d3f42 1.41734px -1.41108px 0px, #3d3f42 1.92034px -0.558831px 0px;\r\n}\r\n\r\n.itemCounter.hidden {\r\n    display: none;\r\n}\r\n\r\n#ryn-topright-hud { position: fixed; top: 12px; right: 12px; z-index: 9999; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; pointer-events: none; font-family: \"Hammersmith One\", Arial, sans-serif; }\r\n.ryn-hud-row { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 160px; }\r\n.ryn-hud-bar-bg { width: 160px; height: 8px; background: rgba(0,0,0,0.55); border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }\r\n.ryn-hud-bar-fill { height: 100%; border-radius: 4px; transition: width 0.15s ease; }\r\n#ryn-hud-hp-fill { background: linear-gradient(90deg,#cc5151,#e05151); }\r\n#ryn-hud-r1-fill { background: linear-gradient(90deg,#f0b429,#f0c060); }\r\n#ryn-hud-r2-fill { background: linear-gradient(90deg,#51cc88,#60e0a0); }\r\n.ryn-hud-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.6); text-shadow: 0 1px 3px rgba(0,0,0,0.9); }\r\n.ryn-hud-val { font-size: 11px; color: rgba(255,255,255,0.9); text-shadow: 0 1px 4px rgba(0,0,0,0.9); letter-spacing: 0.05em; }\r\n\r\n#rynStats {\r\n    position: absolute;\r\n    top: 6px;\r\n    left: 50%;\r\n    transform: translateX(-50%);\r\n    z-index: 9;\r\n    pointer-events: none;\r\n\r\n    display: flex;\r\n    flex-direction: row;\r\n    align-items: baseline;\r\n    gap: 7px;\r\n    white-space: nowrap;\r\n\r\n    color: #ffffff;\r\n    font: 12px \"Hammersmith One\", Arial, sans-serif;\r\n    letter-spacing: 0.03em;\r\n}\r\n\r\n#rynStats > span + span::before {\r\n    content: \"|\";\r\n    margin-right: 7px;\r\n    color: rgba(255,255,255,0.34);\r\n}\r\n\r\n.hidden {\r\n    display: none!important;\r\n}";
@@ -6973,7 +18916,7 @@ window.grbtp = 35;
       return this.trappedIn === null && this.trappedInPrev !== null;
     }
     get shameLocked() {
-      return this.shameObserved >= HEAL_SHAME_LIMIT;
+      return this.shameObserved >= NS_SHAME_LIMIT;
     }
     addFound(projectile) {
       projectile.ownerClient = this;
@@ -7788,7 +19731,9 @@ window.grbtp = 35;
     _glLastFault="";
     _gameResize=null;
     _rasterAt=null;
+    _viewScale=0;
     _viewport(canvas, cssW, cssH, dpr, M, scale) {
+      this._viewScale = scale;
       const pw = cssW * dpr, ph = cssH * dpr;
       let changed = false;
       if (canvas.width !== pw) {
@@ -10103,7 +22048,6 @@ window.grbtp = 35;
   }();
   let _RYN_Z = null;
   const RynBotChat = {
-    GAP_MS: 50,
     NOTICE_WINDOW_MS: 4e3,
     _lastLog: { text: "", at: 0 },
     _lastToast: "",
@@ -10133,11 +22077,10 @@ window.grbtp = 35;
         return false;
       }
     },
+    // every bot in the same moment: each has its own socket, so nothing is gained by spacing them out
     sayAll(owner, text) {
       const bots = this.bots(owner);
-      bots.forEach((bot, i) => {
-        if (i === 0) this.say(bot, text); else setTimeout(() => this.say(bot, text), i * this.GAP_MS);
-      });
+      for (const bot of bots) this.say(bot, text);
       return bots.length;
     },
     noteEcho(bot, text) {
@@ -10259,7 +22202,7 @@ window.grbtp = 35;
         this._watchSocket(gameNet.socket);
         const crypto = this.client._gameCrypto;
         const cryptoReady = crypto && crypto.key && crypto.tables && (crypto._bundle || crypto._ready || !this.client.isOwner);
-        if (!cryptoReady) {
+        if (!cryptoReady && !this.client._plainWire) {
           return;
         }
         try {
@@ -10528,13 +22471,16 @@ window.grbtp = 35;
       const {autoHat: autoHat} = ModuleHandler.staticModules;
       const pos = this.getPos();
       const skin = Hats[autoHat.getNextHat()];
-      const tail = Accessories[autoHat.getNextAcc()];
+      const accID = autoHat.getNextAcc();
+      const tail = Accessories[accID];
       const weapon = DataHandler_default.getWeapon(autoHat.getNextWeaponID());
       const weaponSpd = weapon.spdMult || 1;
       const skinSpd = "spdMult" in skin ? skin.spdMult : 1;
-      const tailSpd = "spdMult" in tail ? tail.spdMult : 1;
-      const inSnow = pos.y <= Config_default.snowBiomeTop && !("coldM" in skin);
-      const snowMult = inSnow ? Config_default.snowSpeed : 1;
+      // capes whose effect is only in the store text: Dash 5% faster, Winter no snow
+      // slowdown, Snowball half of it
+      const tailSpd = ("spdMult" in tail ? tail.spdMult : 1) * (accID === 5 ? 1.05 : 1);
+      const inSnow = pos.y <= Config_default.snowBiomeTop && !("coldM" in skin) && accID !== 6;
+      const snowMult = inSnow ? accID === 12 ? 1 - (1 - Config_default.snowSpeed) / 2 : Config_default.snowSpeed : 1;
       const buildMult = autoHat.getNextItemID() >= 0 ? .5 : 1;
       if (this.lockMove) {
         this.xVel = 0;
@@ -10838,6 +22784,8 @@ window.grbtp = 35;
     }
     playerInit(id) {
       this.id = id;
+      // listed from here on, so its weapons and reloads must be set even before its "D"
+      if (this.weapon.primary === void 0) this.init();
       const {PlayerManager: PlayerManager} = this.client;
       const held = PlayerManager.playerData.get(id);
       if (held !== this) {
@@ -12505,6 +24453,8 @@ window.grbtp = 35;
     known: new Map(),
     taken(name) {
       if (this.known.has(name)) return Promise.resolve(this.known.get(name));
+      // the in-page server reserves no names
+      if (RynPrivate.on) return Promise.resolve(false);
       if (typeof fetch !== "function") return Promise.resolve(false);
       const signal = typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(4e3) : void 0;
       return fetch(RYN_API_BASE + "/name-check?name=" + encodeURIComponent(name), {
@@ -12838,6 +24788,7 @@ window.grbtp = 35;
        case "io-init":
         this.client.connectSuccess = true;
         this.client.clientID = temp[1];
+        this.client._plainWire = !Array.isArray(decoded[1]) || decoded[1][1] === undefined || decoded[1][2] === undefined;
         this._seenPlayers.clear();
         this._seenAnimals.clear();
         this.proto2025 = null;
@@ -12896,6 +24847,14 @@ window.grbtp = 35;
               tries: 0
             };
             Logger.test("Bot connected — HOLDING (press ] to release)");
+          } else if (RynFleet.wants()) {
+            this.socket.dispatchEvent(new Event("connected"));
+            this.client._rynEntry = {
+              phase: "held",
+              at: Date.now(),
+              tries: 0
+            };
+            RynFleet.take(this.client);
           } else {
             this.socket.dispatchEvent(new Event("connected"));
             this.client.myPlayer.spawn();
@@ -13619,23 +25578,7 @@ window.grbtp = 35;
       }
       if (event.code === Settings_default._freezeBots && Settings_default._freezeBots !== "") {
         try {
-          const {isOwner: _fbIsOwner, clients: _fbClients} = this.client;
-          if (_fbIsOwner) {
-            Settings_default._botsFrozen = !Settings_default._botsFrozen;
-            for (const _fbBot of _fbClients) {
-              const _fbMH = _fbBot._ModuleHandler;
-              if (!_fbMH) continue;
-              if (Settings_default._botsFrozen) {
-                _fbMH.move_dir = null;
-                _fbMH.startMovement(null, true);
-                _fbBot.PacketManager.move(null);
-                try {
-                  const _fbMov = _fbMH.modules && _fbMH.modules.find(m => m.moduleName === "movement");
-                  if (_fbMov) _fbMov.isStopped = true;
-                } catch (_) {}
-              }
-            }
-          }
+          _rynSetBotsFrozen(this.client, !Settings_default._botsFrozen);
         } catch (_) {}
       }
       if (Settings_default._scatterBots && Settings_default._scatterBots !== "..." && event.code === Settings_default._scatterBots) {
@@ -16079,6 +28022,7 @@ window.grbtp = 35;
 
   const PLACER_ANGLE_RESOLUTIONS = [ 36, 72, 144, 200 ];
   const PLACER_ANGLE_STEPS_DEFAULT = 200;
+  const PLACER_PLACE_COST = 5;
 
 
   const PLACER_BAN_TICKS = 18;
@@ -16673,46 +28617,34 @@ window.grbtp = 35;
       }
 
       const typeOf = obj => obj.id === trapId ? PLACER_TRAP_TYPE : PLACER_SPIKE_TYPE;
+      const outOfBudget = () => ModuleHandler.packetCount + PLACER_PLACE_COST > ModuleHandler.packetLimit;
+      const emit = obj => {
+        const type = typeOf(obj);
+        if (!myPlayer.canPlace(type)) return;
+        if (RynCrab.noBuild(myPos)) return;
+        ModuleHandler.place(type, obj.angle);
+        ModuleHandler.placedOnce = true;
+        ModuleHandler.placeAngles[0] = type;
+        ModuleHandler.placeAngles[1].push({
+          angle: obj.angle,
+          type: type
+        });
+        ModuleHandler.moduleActive = true;
+        this._placedSlots.push({
+          id: obj.id,
+          x: obj.x,
+          y: obj.y,
+          scale: obj.scale,
+          tick: this._tick
+        });
+      };
 
       this._lastProduced = this._predictObjects.length > 0;
 
-      const byType = new Map;
       for (const obj of this._predictObjects) {
         if (obj.preplace) continue;
-        const type = typeOf(obj);
-        if (!byType.has(type)) byType.set(type, []);
-        byType.get(type).push(obj);
-      }
-      for (const [type, objs] of byType) {
-        if (!myPlayer.canPlace(type)) continue;
-        if (!Array.isArray(ModuleHandler.placeAngles[1])) ModuleHandler.placeAngles[1] = [];
-        const list = ModuleHandler.placeAngles[1];
-        const from = list.length;
-        const sent = ModuleHandler.requestPlaceMany(type, objs.map(o => o.angle), "autoPlacer");
-        if (!sent) continue;
-        const went = ModuleHandler.placeAngles[1] === list ? list.slice(from) : [];
-        const taken = new Set;
-        for (const angle of went) {
-          let best = -1, bestDist = .05;
-          for (let k = 0; k < objs.length; k++) {
-            if (taken.has(k)) continue;
-            const d = GeometrySolver.angleDist(objs[k].angle, angle);
-            if (d < bestDist) {
-              bestDist = d;
-              best = k;
-            }
-          }
-          if (best === -1) continue;
-          taken.add(best);
-          const obj = objs[best];
-          this._placedSlots.push({
-            id: obj.id,
-            x: obj.x,
-            y: obj.y,
-            scale: obj.scale,
-            tick: this._tick
-          });
-        }
+        if (outOfBudget()) break;
+        emit(obj);
       }
     }
   }
@@ -20262,25 +32194,23 @@ window.grbtp = 35;
     }
   }
   const Placer_default = Placer;
-  const RYN_HOLD_EARLY = 2;
   class PreAttack {
     moduleName="preAttack";
     client;
     constructor(client2) {
       this.client = client2;
     }
-    isReloadedByType(type, early = 0) {
+    isReloadedByType(type) {
       const {weapon: weapon, staticModules: staticModules} = this.client._ModuleHandler;
       const weaponType = type !== null ? type : weapon;
-      return staticModules.reloading.isReloaded(weaponType, early);
+      return staticModules.reloading.isReloaded(weaponType);
     }
     postTick() {
       const {_ModuleHandler: ModuleHandler} = this.client;
       const {useWeapon: useWeapon, weapon: weapon, forceWeapon: forceWeapon} = ModuleHandler;
       const nextWeapon = forceWeapon !== null ? forceWeapon : useWeapon;
-      const early = ModuleHandler.holdAttack ? RYN_HOLD_EARLY : 0;
-      const forceReloaded = this.isReloadedByType(nextWeapon, early);
-      const canAttack = ModuleHandler.shouldAttack && (forceReloaded && this.isReloadedByType(weapon, early) || forceWeapon !== null && forceReloaded);
+      const forceReloaded = this.isReloadedByType(nextWeapon);
+      const canAttack = ModuleHandler.shouldAttack && (forceReloaded && this.isReloadedByType(weapon) || forceWeapon !== null && forceReloaded);
       ModuleHandler.shouldAttack = canAttack;
     }
   }
@@ -20397,7 +32327,6 @@ window.grbtp = 35;
     moduleName="updateAttack";
     client;
     didReset=false;
-    holding=false;
     constructor(client2) {
       this.client = client2;
     }
@@ -20432,12 +32361,7 @@ window.grbtp = 35;
       if (ModuleHandler.shouldAttack) {
         const angle = this.getAttackAngle();
         ModuleHandler.attack(angle);
-        if (ModuleHandler.holdAttack && ModuleHandler.holdingWeapon) {
-          this.holding = true;
-        } else {
-          ModuleHandler.stopAttack();
-          this.holding = false;
-        }
+        ModuleHandler.stopAttack();
         const weaponType = ModuleHandler.weapon;
         if (ModuleHandler.attacked) {
           reloading.updateMaxReload(weaponType);
@@ -20445,9 +32369,6 @@ window.grbtp = 35;
           ModuleHandler._rynFiredTick = ModuleHandler.tickCount;
         }
         reloading.resetByType(weaponType);
-      } else if (this.holding) {
-        this.holding = false;
-        ModuleHandler.stopAttack();
       } else if (!attacking && sentAngle !== 0) {
         ModuleHandler.stopAttack();
         this.didReset = true;
@@ -20521,7 +32442,6 @@ window.grbtp = 35;
         ModuleHandler.useAngle = angle;
       }
       ModuleHandler.shouldAttack = true;
-      ModuleHandler.holdAttack = true;
     }
   }
   class UseDestroying {
@@ -20542,7 +32462,6 @@ window.grbtp = 35;
       const type = myPlayer.getBestDestroyingWeapon(nearestObject);
       ModuleHandler.forceWeapon = type;
       ModuleHandler.shouldAttack = true;
-      ModuleHandler.holdAttack = true;
     }
   }
   class UseFastest {
@@ -20571,6 +32490,12 @@ window.grbtp = 35;
       }
     }
   }
+  const ANTI_ENEMY_RANGE = 400;
+  const antiEnemyNear = client => {
+    if (!Settings_default._antienemy) return false;
+    const enemy = client.EnemyManager.nearestEnemy;
+    return enemy !== null && client.myPlayer.pos.current.distance(enemy.pos.current) <= ANTI_ENEMY_RANGE;
+  };
   class UtilityHat {
     moduleName="utilityHat";
     client;
@@ -20619,7 +32544,7 @@ window.grbtp = 35;
       const weaponType = forceWeapon !== null ? forceWeapon : useWeapon !== null ? useWeapon : weapon;
       let hat = this.getBestUtilityHat(weaponType);
       const {reloading: reloading} = ModuleHandler.staticModules;
-      const isReloaded = reloading.isReloaded(weaponType, ModuleHandler.attackingState !== 0 && ModuleHandler.attacking !== 0 ? RYN_HOLD_EARLY : 0);
+      const isReloaded = reloading.isReloaded(weaponType);
       const isEmptyReload = reloading.isEmptyReload(weaponType);
       const turretReloaded = reloading.isReloaded(2);
       if (!isReloaded) {
@@ -20734,6 +32659,9 @@ window.grbtp = 35;
         if (useActual && actual !== 11) return actual;
         return 0;
       }
+      if (useShadow && antiEnemyNear(this.client)) {
+        return 19;
+      }
       if (Settings_default._tailPriority && !Settings_default._cowboyWhenSafe && useTail && this.shouldUseTail()) {
         return 11;
       }
@@ -20741,7 +32669,7 @@ window.grbtp = 35;
       if (soldierActive && useShadow) {
         return 19;
       }
-      if (EnemyManager2.detectedEnemy || EnemyManager2.nearestEnemyInRangeOf(300, EnemyManager2.nearestEntity)) {
+      if (EnemyManager2.detectedEnemy || EnemyManager2.nearestEnemyInRangeOf(ANTI_ENEMY_RANGE, EnemyManager2.nearestEntity)) {
         const isEnemy = EnemyManager2.nearestEntity === EnemyManager2.nearestEnemy;
         if (useShadow) {
           return 19;
@@ -20809,6 +32737,10 @@ window.grbtp = 35;
             }
           }
         });
+      }
+      if (useSoldier && antiEnemyNear(this.client)) {
+        ModuleHandler.shouldEquipSoldier = true;
+        return 6;
       }
       if (!ModuleHandler.isMoving && myPlayer.speed <= 5 && !_empNearbyTurret) {
         const _nearestStill = EnemyManager2.nearestEnemy;
@@ -20923,30 +32855,37 @@ window.grbtp = 35;
     postTick() {}
   }
   const ShameReset_default = ShameReset;
-  const HEAL_POT_CEILING = 140;
-  const HEAL_SOLDIER_ANTI = 100;
-  const HEAL_SHAME_LIMIT = 7;
-  const HEAL_DOT_PERIOD = 9;
-  const HEAL_POISON_DAMAGE = 5;
-  const HEAL_CACTUS_DAMAGE = 35;
-  const HEAL_TURRET_DAMAGE = Projectiles[1].damage;
-  const HEAL_INSTA_RANGE = 400;
-  const HEAL_TURRET_RANGE = 350;
-  const HEAL_VELOCITY_MIN = 150;
-  const HEAL_VELOCITY_MAX = 350;
-  const HEAL_TURRET_GEAR = 53;
-  const HEAL_SPIKE_TICK_ID = 9;
-  const HEAL_SPIKE_ANGLES = 36;
-  const HEAL_LOW_HEALTH = 70;
-  const HEAL_MOVE_EPSILON = 2;
-  const HEAL_COLLIDE_PAD = 10;
-  const HEAL_EPS = .02;
-  const HEAL_DAMAGE_MEMORY = 64;
-  const HEAL_SIM_TICKS = 10;
-  const HEAL_SIM_ANGLE_THRESHOLD = 0.35;
-  const HEAL_SIM_RANGE_PAD = 25;
-  const HEAL_SPIKE_DAMAGES = (() => {
-    const out = [ HEAL_CACTUS_DAMAGE ];
+  const NS_POT_CEILING = 140;
+  const NS_SOLDIER_ANTI = 100;
+  const NS_SHAME_LIMIT = 7;
+  const NS_DOT_PERIOD = 9;
+  const NS_POISON_DAMAGE = 5;
+  const NS_CACTUS_DAMAGE = 35;
+  const NS_TURRET_DAMAGE = Projectiles[1].damage;
+  const NS_INSTA_RANGE = 400;
+  const NS_TURRET_RANGE = 350;
+  const NS_VELOCITY_MIN = 150;
+  const NS_VELOCITY_MAX = 350;
+  const NS_TURRET_GEAR = 53;
+  const NS_SPIKE_TICK_ID = 9;
+  const NS_SPIKE_ANGLES = 36;
+  const NS_LOW_HEALTH = 70;
+  const NS_MOVE_EPSILON = 2;
+  const NS_COLLIDE_PAD = 10;
+  const NS_EPS = .02;
+  const NS_DAMAGE_MEMORY = 64;
+  const NS_SIM_TICKS = 10;
+  const NS_SIM_ANGLE_THRESHOLD = 0.35;
+  const NS_SIM_RANGE_PAD = 25;
+  // The server takes two off the shame count for a heal it sees more than 120 ms after the hit, and adds one inside
+  // that window.
+  const NS_SLOW_HEAL_MS = 120;
+  const NS_HEAL_PACKETS = 4;
+  // `[20, 30, 35, 45]` and the same four through a soldier helmet, which is how
+  // novastorm recognises a spike. Read off the item table rather than written
+  // down, and the 0.75 off the helmet.
+  const NS_SPIKE_DAMAGES = (() => {
+    const out = [ NS_CACTUS_DAMAGE ];
     for (const item of Items) {
       if (item && item.itemGroup === 2 && typeof item.damage === "number" && out.indexOf(item.damage) === -1) {
         out.push(item.damage);
@@ -20957,24 +32896,38 @@ window.grbtp = 35;
   class AutoHeal {
     moduleName="autoHeal";
     client;
+    // Novastorm's `tick`, incremented once per server update exactly as `tick++`
+    // at the top of updatePlayers is, and `damageTick`, which is `tick + 1` at
+    // the moment health dropped.
     tick=0;
     scanTick=-1;
     damageTick=0;
+    // `damages` is novastorm's, and it is sticky on purpose: distributionDamages
+    // only ever splices out the values it can explain, and nothing clears the
+    // rest. Capped here because the alternative is an array that grows for the
+    // length of a session; the cap cannot change a decision, because the only
+    // thing that ever reads an old entry is the poison scan and `sawPoison`
+    // carries that answer separately.
     damages=[];
     observed=[];
     damagesByHits=[];
     damagesByShoots=[];
     spikeDamages=[];
+    // Declared in novastorm and never filled. It appears in exactly one
+    // condition — the movement gate — where it is therefore always false. Kept
+    // so that condition reads the way novastorm's reads.
     damagesByTurrets=[];
     deathDamages=[];
     damageByPoisonTick=0;
     sawPoison=false;
+    // The five buckets.
     spikeDmgPot=0;
     hitDmgPot=0;
     turretDmgPot=0;
     secDmgPot=0;
     poisonDmgPot=0;
     totalDmgPot=0;
+    // The flags, with novastorm's names.
     healing=false;
     healCommit=false;
     soldierAnti=false;
@@ -20995,11 +32948,17 @@ window.grbtp = 35;
     lastPosY=0;
     currentHat=0;
     healedThisTick=0;
+    // Novastorm's `lastPrimaryReload`: whether this enemy's primary was ready at
+    // the end of the previous tick. RYN's `reload[].previous` is not that — it
+    // is overwritten to equal `current` at the end of every update — so the
+    // engine keeps the snapshot itself, which is what novastorm does too.
     wasPrimaryReady=new Map;
     _simHitIDs;
     _simFrame;
     _simScratch;
     _simResult;
+    _slowHealFor=-1;
+    _slowHealTimer=0;
     constructor(client2) {
       this.client = client2;
       this._simHitIDs = new Set();
@@ -21046,7 +33005,25 @@ window.grbtp = 35;
       this.currentHat = 0;
       this.healedThisTick = 0;
       this.wasPrimaryReady.clear();
+      clearTimeout(this._slowHealTimer);
+      this._slowHealTimer = 0;
+      this._slowHealFor = -1;
     }
+    // ── observation ───────────────────────────────────────────────────────
+    //
+    //     if (damage > 0) {
+    //         damageTick = (tick + 1);
+    //         damages.push(fixTo(damage, 2));
+    //         deathDamages.push({ damage: fixTo(damage, 2), tick: damageTick });
+    //     } else if (tmpObj == myPlayer && tmpObj.health == 100) {
+    //         deathDamages = []; spikeDmg = 0;
+    //     }
+    //
+    // The push is buffered rather than written straight into `damages`, because
+    // the server does not promise whether the health frame or the player frame
+    // comes first and the two orderings put the same damage a tick apart. The
+    // scan drains the buffer, so what it reads is what landed since the last
+    // decision either way.
     healthUpdate(previous, current) {
       const myPlayer = this.client.myPlayer;
       if (current < previous) {
@@ -21065,6 +33042,8 @@ window.grbtp = 35;
         this.spikeDmg = 0;
       }
     }
+    //     addChatLog(`Mod: Predict Damages before death ${totalDmgPot}`)
+    //     addChatLog(`Mod: Damages before death ${deathDamages}`)
     reportDeath() {
       if (!this.client.isOwner || this.deathDamages.length === 0) {
         return;
@@ -21073,6 +33052,13 @@ window.grbtp = 35;
       Logger.log(`[autoheal] damages before death ${JSON.stringify(this.deathDamages)}`);
       this.deathDamages.length = 0;
     }
+    // ── getPlayerInfo ─────────────────────────────────────────────────────
+    //
+    // Novastorm's helper. `primaryDmg` is `weapon.dmg * 1.5 * variant` — the 1.5
+    // is the bull multiplier and it is applied to every enemy whether or not
+    // they are wearing it, because the pot is a worst case and the hat can go on
+    // between the read and the swing. That is a decision, not a missing check,
+    // and it is kept.
     _primaryID(player) {
       const id = player.weapon.primary;
       return id === null || id === void 0 ? 5 : id;
@@ -21091,12 +33077,18 @@ window.grbtp = 35;
     _primaryRange(player) {
       return DataHandler_default.getWeapon(this._primaryID(player)).range;
     }
+    // `111 * (.3 + knock)`, one server tick of knockback travel. RYN's weapon
+    // table already holds that product in `knockback`, so it is read rather
+    // than recomputed: 33.3 for a bare weapon, 55.6 for a polearm, 111.1 for a
+    // bat, 44.4 for daggers.
     _primaryKnockback(player) {
       return DataHandler_default.getWeapon(this._primaryID(player)).knockback;
     }
     _isHammer(player) {
       return this._secondaryID(player) === 10;
     }
+    // hammer, musket, crossbow, repeater crossbow, bow — novastorm's list, which
+    // is every secondary that can deal damage.
     _secondaryDangerous(player) {
       const id = this._secondaryID(player);
       return id === 10 || DataHandler_default.isShootable(id);
@@ -21111,6 +33103,12 @@ window.grbtp = 35;
       }
       return 0;
     }
+    // ── reloads ───────────────────────────────────────────────────────────
+    //
+    // Novastorm carries `primaryReload[sid]`, `secondaryReload[sid]` and
+    // `turretReload[sid]` as fractions where 1 is ready; RYN carries the same
+    // three per player as ticks where `current >= max` is ready. `== 1` and
+    // `< 1` below are those two tests.
     _primaryReady(player) {
       return player.reload[0].current >= player.reload[0].max;
     }
@@ -21126,9 +33124,14 @@ window.grbtp = 35;
     _mySecondaryReady() {
       return this.client._ModuleHandler.staticModules.reloading.isReloaded(1);
     }
+    // ── damage distribution ───────────────────────────────────────────────
+    //
+    // distributionDamages, all three branches. A number that landed is matched
+    // against what could have produced it and taken out of the list; whatever
+    // cannot be explained stays, which is what makes the poison latch below.
     _take(value) {
       for (let i = 0; i < this.damages.length; i++) {
-        if (Math.abs(this.damages[i] - value) < HEAL_EPS) {
+        if (Math.abs(this.damages[i] - value) < NS_EPS) {
           this.damages.splice(i, 1);
           return true;
         }
@@ -21136,23 +33139,20 @@ window.grbtp = 35;
       return false;
     }
     _spikeLike(value) {
-      const mult = Hats[6].dmgMult, frost = Hats[60].dmgMult;
-      for (let i = 0; i < HEAL_SPIKE_DAMAGES.length; i++) {
-        const base = HEAL_SPIKE_DAMAGES[i];
-        if (Math.abs(value - base) < HEAL_EPS || Math.abs(value - base * mult) < HEAL_EPS || Math.abs(value - base * frost) < HEAL_EPS) {
+      const mult = Hats[6].dmgMult;
+      for (let i = 0; i < NS_SPIKE_DAMAGES.length; i++) {
+        const base = NS_SPIKE_DAMAGES[i];
+        if (Math.abs(value - base) < NS_EPS || Math.abs(value - base * mult) < NS_EPS) {
           return true;
         }
       }
       return false;
     }
     _reversed(value) {
-      const mult = Hats[6].dmgMult, frost = Hats[60].dmgMult;
-      for (let i = 0; i < HEAL_SPIKE_DAMAGES.length; i++) {
-        const base = HEAL_SPIKE_DAMAGES[i];
-        if (Math.abs(value - base * frost) < HEAL_EPS) {
-          return value / frost;
-        }
-        if (Math.abs(value - base * mult) < HEAL_EPS) {
+      const mult = Hats[6].dmgMult;
+      for (let i = 0; i < NS_SPIKE_DAMAGES.length; i++) {
+        const base = NS_SPIKE_DAMAGES[i];
+        if (Math.abs(value - base * mult) < NS_EPS) {
           return value / mult;
         }
       }
@@ -21167,11 +33167,15 @@ window.grbtp = 35;
         this.damages.push(this.observed[i]);
       }
       this.observed.length = 0;
-      while (this.damages.length > HEAL_DAMAGE_MEMORY) {
+      while (this.damages.length > NS_DAMAGE_MEMORY) {
         this.damages.shift();
       }
       const myHat = Hats[myPlayer.hatID] || Hats[0];
       const myMult = "dmgMult" in myHat ? myHat.dmgMult : 1;
+      //     damage = items.weapons[weapon].dmg * config.weaponVariants[...].val
+      //     damage *= getHatInStore(player.skinIndex).dmgMultO || 1
+      //     damage *= getAccInStore(player.tailIndex).dmgMultO || 1
+      //     damage *= getHatInStore(myPlayer.skinIndex).dmgMult || 1
       for (let i = 0; i < PlayerManager2.enemies.length; i++) {
         const enemy = PlayerManager2.enemies[i];
         if (enemy.lastAttacked !== myPlayer.tickCount) {
@@ -21199,6 +33203,13 @@ window.grbtp = 35;
           });
         }
       }
+      //     damage = projectile.dmg * (getHatInStore(myPlayer.skinIndex).dmgMult || 1)
+      //
+      // Novastorm runs this over the projectiles the server has just removed.
+      // RYN clears that list before the modules run, so the match is made
+      // against the projectiles the projectile manager is holding as aimed at
+      // us, which is the same set one tick earlier. The only reader of the
+      // result is the movement gate below.
       for (const projectile of ProjectileManager2.dangerProjectiles) {
         const damage = fixTo(projectile.damage * myMult, 2);
         if (this._take(damage)) {
@@ -21221,13 +33232,21 @@ window.grbtp = 35;
       }
       if (!this.sawPoison) {
         for (let i = 0; i < this.damages.length; i++) {
-          if (Math.abs(this.damages[i] - HEAL_POISON_DAMAGE) < HEAL_EPS || Math.abs(this.damages[i] - HEAL_POISON_DAMAGE * Hats[6].dmgMult) < HEAL_EPS || Math.abs(this.damages[i] - HEAL_POISON_DAMAGE * Hats[60].dmgMult) < HEAL_EPS) {
+          if (Math.abs(this.damages[i] - NS_POISON_DAMAGE) < NS_EPS || Math.abs(this.damages[i] - NS_POISON_DAMAGE * Hats[6].dmgMult) < NS_EPS) {
             this.sawPoison = true;
             break;
           }
         }
       }
     }
+    // ── hazards ───────────────────────────────────────────────────────────
+    //
+    // Novastorm keeps `spikes_enemy` and `cactuses` as arrays rebuilt every tick
+    // out of everything inside 1000 units, and then only ever asks geometric
+    // questions about the few that are near. RYN keeps the same objects in a
+    // grid, so the question goes to the grid — the same objects answer it, and
+    // the filter is the same one: an enemy-owned item in the spike group, or a
+    // cactus.
     _forEachHazard(x, y, search, fn) {
       const {ObjectManager: ObjectManager2, myPlayer: myPlayer} = this.client;
       ObjectManager2.grid2D.query(x, y, search, id => {
@@ -21242,10 +33261,11 @@ window.grbtp = 35;
           return fn(object, DataHandler_default.getItem(object.type).damage, true);
         }
         if (object instanceof Resource && object.isCactus) {
-          return fn(object, HEAL_CACTUS_DAMAGE, false);
+          return fn(object, NS_CACTUS_DAMAGE, false);
         }
       });
     }
+    // ── the scan ──────────────────────────────────────────────────────────
     scan() {
       const {myPlayer: myPlayer, PlayerManager: PlayerManager2, EnemyManager: EnemyManager2, _ModuleHandler: ModuleHandler} = this.client;
       if (this.scanTick === myPlayer.tickCount) {
@@ -21253,6 +33273,8 @@ window.grbtp = 35;
       }
       this.scanTick = myPlayer.tickCount;
       this.tick += 1;
+      //     if (soldierAnti) soldierAnti = false;
+      //     healing = false;
       this.soldierAnti = false;
       this.healing = false;
       this.spikeDmgPot = 0;
@@ -21272,6 +33294,9 @@ window.grbtp = 35;
         return;
       }
       this._distribute();
+      //     distributionDamages({ type: "spikes" });
+      //     if (spikeDamages.length > 0) { spikeDmgCount++; for (i in spikeDamages) spikeDmg++; }
+      //     else spikeDmgCount = 0;
       if (this.spikeDamages.length > 0) {
         this.spikeDmgCount += 1;
         this.spikeDmg += this.spikeDamages.length;
@@ -21282,35 +33307,77 @@ window.grbtp = 35;
       const pos = myPlayer.pos.current;
       const vel = myPlayer.pos.future;
       const myScale = myPlayer.scale;
+      // ── DAMAGE BY POISON / PREDICT POISON DAMAGE ──────────────────────
+      //
+      //     for (damage of damages) if (damage == 5 || damage == 3.75) damageByPoisonTick = tick;
+      //     if ((tick - damageByPoisonTick) % 9 == 8 || (tick - damageByPoisonTick) % 9 == 9) poisonDmgPot = 5;
+      //
+      // distributionDamages has no branch that explains a poison tick, so the 5
+      // stays in `damages` and this loop rewrites damageByPoisonTick to the
+      // current tick on every tick after the first one. The remainder is then
+      // always zero and the prediction stops firing; before any poison has ever
+      // landed it fires once every nine ticks. That is novastorm's behaviour,
+      // and `sawPoison` is how the latch is reproduced without keeping an array
+      // that grows for the length of the session.
+      //
+      // `% 9 == 9` cannot be true. It is novastorm's, and it is left as written.
       if (this.sawPoison) {
         this.damageByPoisonTick = this.tick;
       }
-      const poisonStep = (this.tick - this.damageByPoisonTick) % HEAL_DOT_PERIOD;
-      if (poisonStep === HEAL_DOT_PERIOD - 1 || poisonStep === HEAL_DOT_PERIOD) {
-        this.poisonDmgPot = HEAL_POISON_DAMAGE;
+      const poisonStep = (this.tick - this.damageByPoisonTick) % NS_DOT_PERIOD;
+      if (poisonStep === NS_DOT_PERIOD - 1 || poisonStep === NS_DOT_PERIOD) {
+        this.poisonDmgPot = NS_POISON_DAMAGE;
       }
+      // ── COLLISION WHILE TRAPPED ───────────────────────────────────────
+      //
+      //     if (imTrapped) if (spikeDamages.length > 0)
+      //         for (spike of spikes_enemy)
+      //             if (getDistance(myPlayer, spike) <= spike.scale + myPlayer.scale + 10)
+      //                 collidingspike = true;
       this.collidingspike = false;
       if (this.imTrapped && this.spikeDamages.length > 0) {
         this._forEachHazard(pos.x, pos.y, 2, (object, damage, isSpike) => {
           if (!isSpike || this.collidingspike) {
             return;
           }
-          if (pos.distance(object.pos.current) <= object.scale + myScale + HEAL_COLLIDE_PAD) {
+          if (pos.distance(object.pos.current) <= object.scale + myScale + NS_COLLIDE_PAD) {
             this.collidingspike = true;
             return true;
           }
         });
       }
+      //     if (collidingspike && spikeDamages.length > 0)
+      //         for (dmg of spikeDamages)
+      //             spikeDmgPot += (dmg is a 0.75 value) ? dmg / 0.75 : dmg;
+      //
+      // The reversal is the whole point: the pot is multiplied by 0.75 again
+      // once the helmet is chosen, and adding an already-reduced number would
+      // apply the helmet twice and under-read the spike by a quarter.
       if (this.collidingspike && this.spikeDamages.length > 0) {
         for (let i = 0; i < this.spikeDamages.length; i++) {
           this.spikeDmgPot += this._reversed(this.spikeDamages[i]);
         }
       }
+      // ── KNOCKBACKS PREDICTIONS ────────────────────────────────────────
+      //
+      //     if (!(imTrapped && collidingspike)) {
+      //         distance = |lastPos - pos|
+      //         if (distance > 2 || damagesByHits.length || damagesByShoots.length
+      //             || damagesByTurrets.length || spikeDamages.length) {
+      //             for (spike of spikes_enemy)
+      //                 if (lineInRect(spike ± (myScale + spike.scale), x2,y2, xVel,yVel))
+      //                     { willcollide = true; spikeDmgPot += spike.dmg; }
+      //             for (cactus of cactuses)
+      //                 if (lineInRect(cactus ± (myScale + cactus.scale), x2,y2, xVel,yVel))
+      //                     { willcollide = true; spikeDmgPot += 35; }
+      //         }
+      //     }
+      //     lastPosX = x2; lastPosY = y2;
       if (!(this.imTrapped && this.collidingspike)) {
         const dx = this.lastPosX - pos.x;
         const dy = this.lastPosY - pos.y;
         const moved = Math.sqrt(dx * dx + dy * dy);
-        if (moved > HEAL_MOVE_EPSILON || this.damagesByHits.length > 0 || this.damagesByShoots.length > 0 || this.damagesByTurrets.length > 0 || this.spikeDamages.length > 0) {
+        if (moved > NS_MOVE_EPSILON || this.damagesByHits.length > 0 || this.damagesByShoots.length > 0 || this.damagesByTurrets.length > 0 || this.spikeDamages.length > 0) {
           this._forEachHazard((pos.x + vel.x) / 2, (pos.y + vel.y) / 2, 2, (object, damage) => {
             const p = object.pos.current;
             const r = myScale + object.scale;
@@ -21323,6 +33390,7 @@ window.grbtp = 35;
       }
       this.lastPosX = pos.x;
       this.lastPosY = pos.y;
+      // ── PREDICTION FOR ALL ENEMIES ────────────────────────────────────
       for (let i = 0; i < PlayerManager2.enemies.length; i++) {
         const enemy = PlayerManager2.enemies[i];
         const enemyPos = enemy.pos.current;
@@ -21330,10 +33398,21 @@ window.grbtp = 35;
         const hitBeforeEnemy = this.hitDmgPot;
         const primaryDamage = this._primaryDamage(enemy);
         const primaryReady = this._primaryReady(enemy);
-        if (enemy.shameLocked && pos.distance(enemyPos) <= HEAL_INSTA_RANGE) {
+        if (enemy.shameLocked && pos.distance(enemyPos) <= NS_INSTA_RANGE) {
           this.healCommit = true;
         }
         const inPrimaryRange = pos.distance(enemyPos) <= myPlayer.hitScale + this._primaryRange(enemy);
+        // ── PREDICT HIT ──────────────────────────────────────────────
+        //
+        //     if (primaryReload[enemy] == 1 && inPrimaryRange) {
+        //         if (collidingspike) {
+        //             if (!lastcolliding) hitDmgPot += primaryDmg;
+        //             else if (enemy.lastPrimaryReload < 1) hitDmgPot += primaryDmg;
+        //             else if (secondaryReload[me] == 1 && !lastPredicted) { predicted = true; hitDmgPot += primaryDmg; }
+        //         }
+        //         else if (willcollide) hitDmgPot += primaryDmg;
+        //         else if (myPlayer.health <= primaryDmg) hitDmgPot += primaryDmg;
+        //     }
         if (primaryReady && inPrimaryRange) {
           if (this.collidingspike) {
             if (!this.lastcolliding) {
@@ -21350,33 +33429,73 @@ window.grbtp = 35;
             this.hitDmgPot += primaryDamage;
           }
         }
-        if (pos.distance(enemyPos) <= HEAL_TURRET_RANGE && this._turretReady(enemy)) {
+        // ── PREDICT TURRET HIT ───────────────────────────────────────
+        //
+        //     if (getDistance(enemy, me) <= 350 && turretReload[enemy] == 1) {
+        //         if (collidingspike && enemy.lastPrimaryReload == 1 && primaryReload[enemy] < 1) turretDmgPot += 25;
+        //         else if (willcollide && primaryReload[enemy] < 1) turretDmgPot += 25;
+        //         else if (myPlayer.health <= 25 && (hitDmgPot + turretDmgPot + spikeDmgPot) < 25) turretDmgPot += 25;
+        //     }
+        if (pos.distance(enemyPos) <= NS_TURRET_RANGE && this._turretReady(enemy)) {
           if (this.collidingspike && this._wasPrimaryReady(enemy) && !primaryReady) {
-            this.turretDmgPot += HEAL_TURRET_DAMAGE;
+            this.turretDmgPot += NS_TURRET_DAMAGE;
           } else if (this.willcollide && !primaryReady) {
-            this.turretDmgPot += HEAL_TURRET_DAMAGE;
-          } else if (myPlayer.currentHealth <= HEAL_TURRET_DAMAGE && this.hitDmgPot + this.turretDmgPot + this.spikeDmgPot < HEAL_TURRET_DAMAGE) {
-            this.turretDmgPot += HEAL_TURRET_DAMAGE;
+            this.turretDmgPot += NS_TURRET_DAMAGE;
+          } else if (myPlayer.currentHealth <= NS_TURRET_DAMAGE && this.hitDmgPot + this.turretDmgPot + this.spikeDmgPot < NS_TURRET_DAMAGE) {
+            this.turretDmgPot += NS_TURRET_DAMAGE;
           }
         }
+        // ── VELOCITY TICK ANTI ───────────────────────────────────────
+        //
+        //     if (getDistance(enemy.xVel, enemy.yVel, myPlayer.xVel, myPlayer.yVel) > 150 && < 350)
+        //         if (turretReload[enemy] < 1 && primaryReload[enemy] == 1 && enemy.skinIndex == 53)
+        //             { turretDmgPot += 25; hitDmgPot += primaryDmg; }
         const closing = enemyVel.distance(vel);
-        if (closing > HEAL_VELOCITY_MIN && closing < HEAL_VELOCITY_MAX) {
-          if (!this._turretReady(enemy) && primaryReady && enemy.hatID === HEAL_TURRET_GEAR) {
-            this.turretDmgPot += HEAL_TURRET_DAMAGE;
+        if (closing > NS_VELOCITY_MIN && closing < NS_VELOCITY_MAX) {
+          if (!this._turretReady(enemy) && primaryReady && enemy.hatID === NS_TURRET_GEAR) {
+            this.turretDmgPot += NS_TURRET_DAMAGE;
             this.hitDmgPot += primaryDamage;
           }
         }
+        // ── KNOCKBACK ANTI ───────────────────────────────────────────
+        //
+        // Twice, from the extrapolated position and then from the interpolated
+        // one, because which of the two is right depends on whether the swing
+        // lands before or after the server has moved us. Both are novastorm's,
+        // in this order, and each adds the spike and the swing that put us on
+        // it. The cactus box is the cactus alone here, and the spike box is the
+        // spike plus our own scale — the two loops do not use the same radius
+        // in novastorm, and they do not here.
+        //
+        //     canStillGather = false;
+        //     if (!imTrapped && primaryReload[enemy] == 1 && inPrimaryRange) { ... }
         this.canStillGather = false;
         if (!this.imTrapped && primaryReady && inPrimaryRange) {
           const knock = this._primaryKnockback(enemy);
           this._knockbackSweep(vel, enemyVel, knock, primaryDamage, myScale);
           this._knockbackSweep(pos, enemyPos, knock, primaryDamage, myScale);
         }
+        // ── ANTI NORMAL INSTAKILL ────────────────────────────────────
+        //
+        //     if (enemy secondary is hammer/musket/crossbow/repeater/bow) {
+        //         if (damagesByHits.length > 0 && getDistance(enemy, me) <= 400) {
+        //             if (turretReload[enemy] == 1) {
+        //                 turretDmgPot += 25;
+        //                 if (secondaryReload[enemy] == 1)
+        //                     secDmgPot += hammer ? secondaryDmg / 1.5 : secondaryDmg;
+        //             }
+        //             else if (secondaryReload[enemy] == 1) secDmgPot += secondaryDmg;
+        //         }
+        //     }
+        //
+        // The `/ 1.5` on the hammer takes the bull multiplier back off, because
+        // getPlayerInfo put it there and a follow-up swing is not the bull
+        // swing.
         if (this._secondaryDangerous(enemy)) {
-          if (this.damagesByHits.length > 0 && pos.distance(enemyPos) <= HEAL_INSTA_RANGE) {
+          if (this.damagesByHits.length > 0 && pos.distance(enemyPos) <= NS_INSTA_RANGE) {
             const secondaryDamage = this._secondaryDamage(enemy);
             if (this._turretReady(enemy)) {
-              this.turretDmgPot += HEAL_TURRET_DAMAGE;
+              this.turretDmgPot += NS_TURRET_DAMAGE;
               if (this._secondaryReady(enemy)) {
                 this.secDmgPot += this._isHammer(enemy) ? secondaryDamage / Hats[7].dmgMultO : secondaryDamage;
               }
@@ -21385,6 +33504,24 @@ window.grbtp = 35;
             }
           }
         }
+        // ── ANTI SPIKE TICK ──────────────────────────────────────────
+        //
+        //     if (!collidingspike) for (i = 0; i < 36; i++) {
+        //         angle = toRad(i * 10); id = 9;
+        //         config = enemy + (35 + items[9].scale + placeOffset) * dir(angle)
+        //         if (checkItemLocation(config, 0.6, 9, false, enemy, visibleObjects))
+        //             if (getDistance(myPlayer.xVel, myPlayer.yVel, config) <= 35 + config.scale) {
+        //                 if (inPrimaryRange && primaryReload[enemy] == 1) {
+        //                     if (100 <= primaryDmg + 45) spikeTickAnti = true;
+        //                     if (myPlayer.health / 0.75 <= primaryDmg + 45)
+        //                         { spikeDmgPot += 45; hitDmgPot += primaryDmg; break; }
+        //                 }
+        //                 else if (myPlayer.health <= 70 && damagesByHits.length > 0) {
+        //                     spikeDmgPot += 45;
+        //                     if (turretReload[enemy]) turretDmgPot += 25;
+        //                 }
+        //             }
+        //     }
         if (!this.collidingspike) {
           this._antiSpikeTick(enemy, inPrimaryRange, primaryReady, primaryDamage, vel);
         }
@@ -21392,6 +33529,9 @@ window.grbtp = 35;
           this._simHitIDs.add(enemy.id);
         }
       }
+      // Forward one-tick simulation is deliberately additive and bounded to a
+      // single earliest impact. Enemies already represented in the existing hit
+      // bucket are excluded so the same swing cannot be counted twice.
       const frame = this._simFrame;
       frame.playerX = pos.x;
       frame.playerY = pos.y;
@@ -21399,7 +33539,7 @@ window.grbtp = 35;
       frame.playerStepY = vel.y - pos.y;
       frame.hitScale = myPlayer.hitScale;
       let simulatedEnemy = null;
-      let simulatedImpactTick = HEAL_SIM_TICKS + 1;
+      let simulatedImpactTick = NS_SIM_TICKS + 1;
       for (let i = 0; i < PlayerManager2.enemies.length; i++) {
         const enemy = PlayerManager2.enemies[i];
         if (this._simHitIDs.has(enemy.id)) continue;
@@ -21415,6 +33555,9 @@ window.grbtp = 35;
         EnemyManager2.detect.oneTick = this._simResult;
         this.hitDmgPot += this._primaryDamage(simulatedEnemy);
       }
+      //     lastcolliding = collidingspike;
+      //     iWasTrapped = imTrapped;
+      //     lastPredicted = predicted;
       this.lastcolliding = this.collidingspike;
       this.iWasTrapped = this.imTrapped;
       this.lastPredicted = this.predicted;
@@ -21423,32 +33566,61 @@ window.grbtp = 35;
         const enemy = PlayerManager2.enemies[i];
         this.wasPrimaryReady.set(enemy.id, this._primaryReady(enemy));
       }
+      //     totalDmgPot = spikeDmgPot + hitDmgPot + turretDmgPot + secDmgPot + poisonDmgPot;
+      //     if (totalDmgPot > 140) totalDmgPot = 140;
+      //     if (totalDmgPot >= 100) soldierAnti = true;
       let total = this.spikeDmgPot + this.hitDmgPot + this.turretDmgPot + this.secDmgPot + this.poisonDmgPot;
-      if (total > HEAL_POT_CEILING) {
-        total = HEAL_POT_CEILING;
+      if (total > NS_POT_CEILING) {
+        total = NS_POT_CEILING;
       }
       this.totalDmgPot = total;
-      if (total >= HEAL_SOLDIER_ANTI) {
+      if (total >= NS_SOLDIER_ANTI) {
         this.soldierAnti = true;
       }
-      if (myPlayer.shameCount > 0 && !this.soldierAnti && !this.collidingspike && this.poisonDmgPot === 0 && this.totalDmgPot === 0) {
+      //     if (myPlayer.shameCount > 0 && !soldierAnti && !collidingspike
+      //         && poisonDmgPot == 0 && totalDmgPot == 0) shouldResetShame = true;
+      if (myPlayer.shameCount > 0 && !this.soldierAnti && !this.collidingspike && this.poisonDmgPot === 0 && this.totalDmgPot === 0 && !antiEnemyNear(this.client)) {
         this.shouldResetShame = true;
       }
+      // ── hatFc ─────────────────────────────────────────────────────────
+      //
+      // The three rules in hatFc that belong to the survival block, in
+      // novastorm's order:
+      //
+      //     if (isBoughtHat(7,0)) if (shouldResetShame) currentHat = 7;
+      //     if (((imTrapped && spikeDmgCount > 0) || spikeTickAnti) && isBoughtHat(6,0)) currentHat = 6;
+      //     ...
+      //     if (isBoughtHat(6,0)) if (soldierAnti) currentHat = 6;
+      //
+      // The first two sit above the gather branch and the insta rules, so an
+      // insta that has already claimed the hat this tick keeps it — which is
+      // what setForceHat means here. The third is the last line of hatFc and
+      // beats everything, so it goes to the override ModuleHandler applies after
+      // every module has run. The first two cannot both hold: the drain needs
+      // totalDmgPot to be zero and being held on a spike is never zero.
       if (this.shouldResetShame && ModuleHandler.canBuy(0, 7)) {
         ModuleHandler.setForceHat(7);
       }
-      if ((this.imTrapped && this.spikeDmgCount > 0 || this.spikeTickAnti) && ModuleHandler.canBuy(0, ModuleHandler.defenseHat())) {
+      if ((this.imTrapped && this.spikeDmgCount > 0 || this.spikeTickAnti) && ModuleHandler.canBuy(0, 6)) {
         ModuleHandler.setForceHat(6);
       }
-      if (this.soldierAnti && ModuleHandler.canBuy(0, ModuleHandler.defenseHat())) {
+      if (this.soldierAnti && ModuleHandler.canBuy(0, 6)) {
         ModuleHandler.soldierAnti = true;
       }
+      //     spikeTickAnti = false; shouldResetShame = false;
+      //
+      // Both, after hatFc has read them. The drain's answer is kept in
+      // `lastShouldResetShame` because the module that reports it runs later in
+      // the tick and novastorm has no module to report to.
       this.lastShouldResetShame = this.shouldResetShame;
       this.spikeTickAnti = false;
       this.shouldResetShame = false;
+      //     if (currentHat == 6) totalDmgPot *= 0.75;
+      //     if (currentHat == 7) totalDmgPot += 5;
+      //     if (myPlayer.health <= totalDmgPot) healing = true;
       this.currentHat = ModuleHandler.plannedHat();
-      if (this.currentHat === 6 || this.currentHat === 60) {
-        this.totalDmgPot *= Hats[this.currentHat].dmgMult;
+      if (this.currentHat === 6) {
+        this.totalDmgPot *= Hats[6].dmgMult;
       }
       if (this.currentHat === 7) {
         this.totalDmgPot += Math.abs(Hats[7].healthRegen);
@@ -21457,6 +33629,9 @@ window.grbtp = 35;
         this.healing = true;
       }
     }
+    // One half of the knockback anti: project where the swing puts us and sweep
+    // the segment. Spikes take our scale into the box, cactuses do not — that
+    // difference is novastorm's and it is deliberate enough to keep.
     _knockbackSweep(fromPos, enemyPos, knock, primaryDamage, myScale) {
       if (!(knock > 0)) {
         return;
@@ -21484,6 +33659,15 @@ window.grbtp = 35;
         this.canStillGather = true;
       });
     }
+    // The 36-angle scan. Novastorm walks every angle around the enemy looking
+    // for a spinning spike it could legally place that would reach our velocity
+    // point; the loop only breaks out of the branch that pays.
+    //
+    // The scan is skipped when no angle can possibly qualify: the spike is
+    // placed 82 units from the enemy and has to land within 87 of our velocity
+    // point, so an enemy further than the sum of those two cannot reach it. That
+    // is an exact short-circuit, not an approximation — no angle inside the loop
+    // could have passed.
     _simulateOneTick(enemy, frame) {
       const weaponID = this._primaryID(enemy);
       if (weaponID !== 5 || enemy.getWeaponVariant(weaponID).current < 2) return 0;
@@ -21494,13 +33678,13 @@ window.grbtp = 35;
       if (!primary || !turret) return 0;
       const primaryReadyTick = Math.max(1, Math.ceil(primary.max - primary.current));
       const turretReadyTick = Math.max(1, Math.ceil(turret.max - turret.current));
-      if (primaryReadyTick > HEAL_SIM_TICKS || turretReadyTick > HEAL_SIM_TICKS) return 0;
+      if (primaryReadyTick > NS_SIM_TICKS || turretReadyTick > NS_SIM_TICKS) return 0;
       const weaponRange = this._primaryRange(enemy);
       const initialDX = enemy.pos.current.x - frame.playerX;
       const initialDY = enemy.pos.current.y - frame.playerY;
       const searchRange = weaponRange + 200;
       if (initialDX * initialDX + initialDY * initialDY > searchRange * searchRange) return 0;
-      const reach = weaponRange + frame.hitScale + HEAL_SIM_RANGE_PAD;
+      const reach = weaponRange + frame.hitScale + NS_SIM_RANGE_PAD;
       const reachSq = reach * reach;
       const scratch = this._simScratch;
       scratch.playerX = frame.playerX;
@@ -21509,7 +33693,7 @@ window.grbtp = 35;
       scratch.enemyY = enemy.pos.current.y;
       const enemyStepX = enemy.pos.future.x - enemy.pos.current.x;
       const enemyStepY = enemy.pos.future.y - enemy.pos.current.y;
-      for (let tick = 1; tick <= HEAL_SIM_TICKS; tick++) {
+      for (let tick = 1; tick <= NS_SIM_TICKS; tick++) {
         scratch.playerX += frame.playerStepX;
         scratch.playerY += frame.playerStepY;
         scratch.enemyX += enemyStepX;
@@ -21519,27 +33703,30 @@ window.grbtp = 35;
         const dy = scratch.playerY - scratch.enemyY;
         if (dx * dx + dy * dy > reachSq) continue;
         const aimAngle = Math.atan2(dy, dx);
-        if (getAngleDist(enemy.angle, aimAngle) <= HEAL_SIM_ANGLE_THRESHOLD) return tick;
+        if (getAngleDist(enemy.angle, aimAngle) <= NS_SIM_ANGLE_THRESHOLD) return tick;
       }
       return 0;
     }
     _antiSpikeTick(enemy, inPrimaryRange, primaryReady, primaryDamage, vel) {
       const {myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
-      const spike = Items[HEAL_SPIKE_TICK_ID];
-      const placeLength = enemy.getItemPlaceScale(HEAL_SPIKE_TICK_ID);
+      const spike = Items[NS_SPIKE_TICK_ID];
+      const placeLength = enemy.getItemPlaceScale(NS_SPIKE_TICK_ID);
       const reach = myPlayer.scale + spike.scale;
       const enemyPos = enemy.pos.current;
       if (enemyPos.distance(vel) > placeLength + reach) {
         return;
       }
       const turretReady = this._turretReady(enemy);
-      for (let i = 0; i < HEAL_SPIKE_ANGLES; i++) {
-        const angle = toRadians(i * (360 / HEAL_SPIKE_ANGLES));
+      for (let i = 0; i < NS_SPIKE_ANGLES; i++) {
+        const angle = toRadians(i * (360 / NS_SPIKE_ANGLES));
         const config = enemyPos.addDirection(angle, placeLength);
+        // Novastorm asks these two the other way round. They are both pure and
+        // the body needs both, so the cheap one goes first: a grid query for an
+        // angle that could not reach us either way is work for nothing.
         if (vel.distance(config) > reach) {
           continue;
         }
-        if (!ObjectManager2.canPlaceItem(HEAL_SPIKE_TICK_ID, config)) {
+        if (!ObjectManager2.canPlaceItem(NS_SPIKE_TICK_ID, config)) {
           continue;
         }
         if (inPrimaryRange && primaryReady) {
@@ -21551,14 +33738,15 @@ window.grbtp = 35;
             this.hitDmgPot += primaryDamage;
             break;
           }
-        } else if (myPlayer.currentHealth <= HEAL_LOW_HEALTH && this.damagesByHits.length > 0) {
+        } else if (myPlayer.currentHealth <= NS_LOW_HEALTH && this.damagesByHits.length > 0) {
           this.spikeDmgPot += spike.damage;
           if (turretReady) {
-            this.turretDmgPot += HEAL_TURRET_DAMAGE;
+            this.turretDmgPot += NS_TURRET_DAMAGE;
           }
         }
       }
     }
+    // ── the decision ──────────────────────────────────────────────────────
     postTick() {
       const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
       this.healedThisTick = 0;
@@ -21566,9 +33754,17 @@ window.grbtp = 35;
         return;
       }
       this.scan();
-      if (this.healCommit) {
-        return;
-      }
+      //     let damageHealed = false;
+      //     if (((healing && myPlayer.shameCount < 7) || (tick - damageTick) > 0)
+      //         && myPlayer.health < 100) {
+      //         heal(100 - myPlayer.health);
+      //         damageHealed = true;
+      //     }
+      //
+      // No packet budget and no wall clock. Novastorm gates its placer on
+      // `packets + 5 > 119` and never gates the heal, and the only timing on the
+      // free branch is `(tick - damageTick) > 0` — one whole server tick since
+      // the damage landed.
       if (myPlayer.currentHealth >= myPlayer.maxHealth) {
         return;
       }
@@ -21578,11 +33774,16 @@ window.grbtp = 35;
       if (!myPlayer.canPlace(2)) {
         return;
       }
-      const healing = this.healing && myPlayer.shameCount < HEAL_SHAME_LIMIT;
+      const healing = this.healing && myPlayer.shameCount < NS_SHAME_LIMIT;
       const clean = this.tick - this.damageTick > 0;
       if (!healing && !clean) {
+        this._slowHeal();
         return;
       }
+      //     function heal(value) {
+      //         for (let i = 0; i < value; i += items.list[myPlayer.items[0]].heal)
+      //             place(myPlayer.items[0], null);
+      //     }
       const count = this._healCount(myPlayer.maxHealth - myPlayer.currentHealth);
       if (count <= 0) {
         return;
@@ -21591,7 +33792,26 @@ window.grbtp = 35;
         ModuleHandler.heal();
       }
       this.healedThisTick = count;
+      //     if (predictObjects.length > 0 || damageHealed) io.send("D", angle);
       ModuleHandler.healedOnce = true;
+    }
+    // A hit that cannot kill is healed 120 ms after it arrives, so it takes shame off instead of adding it; a hit
+    // that can kill is still healed at once by the branch above.
+    _slowHeal() {
+      if (this._slowHealFor === this.damageTick) return;
+      this._slowHealFor = this.damageTick;
+      clearTimeout(this._slowHealTimer);
+      this._slowHealTimer = setTimeout(() => {
+        this._slowHealTimer = 0;
+        const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+        if (!Settings_default._autoheal || !myPlayer.inGame || !myPlayer.canPlace(2)) return;
+        if (myPlayer.currentHealth >= myPlayer.maxHealth) return;
+        const count = this._healCount(myPlayer.maxHealth - myPlayer.currentHealth);
+        if (count <= 0 || ModuleHandler.packetCount + count * NS_HEAL_PACKETS > ModuleHandler.packetLimit) return;
+        for (let i = 0; i < count; i++) {
+          ModuleHandler.heal();
+        }
+      }, NS_SLOW_HEAL_MS);
     }
     _healCount(missing) {
       const myPlayer = this.client.myPlayer;
@@ -21608,6 +33828,11 @@ window.grbtp = 35;
       for (let i = 0; i < missing; i += restore) {
         count += 1;
       }
+      // Novastorm has no resource test: the loop runs and the server refuses the
+      // ones there is no food for. The refusals are free on the wire but they
+      // are not free in the packet count, and RYN knows what it is carrying, so
+      // the ones that could not land are not sent. Nothing else about the chain
+      // changes.
       if (!myPlayer.isSandbox) {
         const cost = item.cost.food;
         if (cost > 0) {
@@ -21855,13 +34080,12 @@ window.grbtp = 35;
       const middleAngle = Math.atan2(centerY - myPlayer.pos.current.y, centerX - myPlayer.pos.current.x);
       const action = this.getGrindAction(nearestTurret);
       if (action === null) return;
-      if (reloading.isReloaded(action.weapon, RYN_HOLD_EARLY)) {
+      if (reloading.isReloaded(action.weapon)) {
         ModuleHandler.moduleActive = true;
         ModuleHandler.useAngle = middleAngle;
         ModuleHandler.forceHat = action.hat;
         ModuleHandler.forceWeapon = action.weapon;
         ModuleHandler.shouldAttack = true;
-        ModuleHandler.holdAttack = true;
       }
     }
   }
@@ -25290,8 +37514,9 @@ window.grbtp = 35;
     }
     _pump() {
       if (this.timer !== null) return;
-      while (this.queue.length > 0 && this.active < RYN_ENTRY_CONCURRENCY) {
-        const wait = this.lastStart + RYN_ENTRY_SPACING_MS - Date.now();
+      // the pacing is for moomoo's servers; the in-page server takes every bot at once
+      while (this.queue.length > 0 && (RynPrivate.on || this.active < RYN_ENTRY_CONCURRENCY)) {
+        const wait = RynPrivate.on ? 0 : this.lastStart + RYN_ENTRY_SPACING_MS - Date.now();
         if (wait > 0) {
           this.timer = setTimeout(() => {
             this.timer = null;
@@ -27419,7 +39644,6 @@ window.grbtp = 35;
     prevMoveTo="disable";
     autoattack=false;
     shouldAttack=false;
-    holdAttack=false;
     mouse={
       sentAngle: 0
     };
@@ -27953,7 +40177,6 @@ window.grbtp = 35;
       this.useAcc = null;
       this.useAngle = null;
       this.shouldAttack = false;
-      this.holdAttack = false;
       this._rynStrikeTarget = null;
       this.prevMoveTo = this.moveTo;
       this.moveTo = "disable";
@@ -28551,6 +40774,8 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 }
 #clanCard.ryn-lift, #clanCard.ryn-lift-fixed { border-color: rgba(155,197,232,0.30) !important; }
 #accountCard.ryn-lift, #accountCard.ryn-lift-fixed { border-color: rgba(142,118,206,0.40) !important; }
+#verifyDialog #verifyText { color: #F3F2F7 !important; }
+#ryn-player-check { display: flex; justify-content: center; min-height: 65px; margin: 10px 0; }
 .ryn-lift input, .ryn-lift-fixed input {
     background: rgba(255,255,255,0.04) !important;
     color: #F3F2F7 !important;
@@ -28970,6 +41195,17 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     white-space: nowrap;
 }
 .rs-tag[hidden] { display: none; }
+.rs-tag.rw-act {
+    cursor: pointer;
+    opacity: 0;
+    border-color: var(--rl-line-2);
+    background: rgba(255,255,255,0.04);
+    color: var(--rl-tx-3);
+    transition: opacity 140ms var(--rl-ease), color 140ms var(--rl-ease);
+}
+.rs-row:hover .rs-tag.rw-act, .rs-row.rs-on .rs-tag.rw-act { opacity: 1; }
+.rs-tag.rw-act:hover { color: var(--rl-tx-1); }
+.rs-tag.rw-del:hover { color: #E7BCC3; border-color: rgba(217,163,171,0.45); }
 .rs-pref {
     display: flex;
     align-items: center;
@@ -30494,24 +42730,23 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       };
     }
     _attachFarmUI() {
-      const typeSelect = this.querySelector("#_botFarmType");
-      const legacyTypes = ["wood", "food", "stone", "gold"];
+      const doc = this.frame.document;
+      const legacyTypes = [ "wood", "food", "stone", "gold" ];
       const rawType = Settings_default._botFarmType;
       if (typeof rawType === "number" || /^[0-3]$/.test(String(rawType))) {
         Settings_default._botFarmType = legacyTypes[Number(rawType)] || "wood";
-        if (typeSelect) typeSelect.value = Settings_default._botFarmType;
         SaveSettings();
       }
-      const ids = ["_botFarmSingleGoal", "_botFarmSeqAmount1", "_botFarmSeqAmount2", "_botFarmSeqAmount3", "_botFarmSeqAmount4"];
+      const ids = [ "_botFarmSingleGoal", "_botFarmSeqAmount1", "_botFarmSeqAmount2", "_botFarmSeqAmount3", "_botFarmSeqAmount4" ];
       for (const id of ids) {
-        const input = this.querySelector("#" + id);
+        const input = doc.getElementById(id);
         if (!input) continue;
         input.value = String(Math.max(0, Number(Settings_default[id]) || 0));
         input.onfocus = () => {
           this.activeInput = input;
         };
         input.onblur = () => {
-          this.activeInput = null;
+          if (this.activeInput === input) this.activeInput = null;
         };
         input.onchange = () => {
           const parsed = Number.parseInt(input.value, 10);
@@ -30519,23 +42754,30 @@ html.ryn-in-lobby .ryn-v2-wrapper {
           input.value = String(value);
           Settings_default[id] = value;
           SaveSettings();
+          this._farmRefresh();
         };
       }
-      const panel = this.querySelector("#_farmSection");
+      const panel = doc.getElementById("_farmSection");
       if (panel) {
         panel.addEventListener("click", event => {
-          const btn = event.target && event.target.closest ? event.target.closest("[data-farm-mode],[data-farm-cap]") : null;
+          const btn = event.target && event.target.closest ? event.target.closest("[data-farm-mode],[data-farm-res],[data-farm-cap]") : null;
           if (!btn || !panel.contains(btn)) return;
           if (btn.hasAttribute("data-farm-mode")) {
             Settings_default._botFarmMode = btn.getAttribute("data-farm-mode");
+          } else if (btn.hasAttribute("data-farm-res")) {
+            Settings_default._botFarmType = btn.getAttribute("data-farm-res");
           } else {
             Settings_default._botFarmMaxPerNode = Number(btn.getAttribute("data-farm-cap"));
           }
           SaveSettings();
           this._farmRefresh();
         });
+        for (let i = 1; i <= 4; i++) {
+          const select = doc.getElementById("_botFarmSeq" + i);
+          if (select) select.addEventListener("change", () => this._farmRefresh());
+        }
       }
-      const toggle = this.querySelector("[data-farm-toggle]");
+      const toggle = doc.querySelector("[data-farm-toggle]");
       if (toggle) {
         toggle.onchange = () => _rynFarmSetEnabled(toggle.checked);
       }
@@ -30547,18 +42789,6 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     _farmRefresh() {
       const doc = this.frame && this.frame.document;
       if (!doc) return;
-      const panel = doc.getElementById("_farmSection");
-      if (panel) {
-        const mode = [ "nearest", "single", "sequence" ].includes(Settings_default._botFarmMode) ? Settings_default._botFarmMode : "nearest";
-        const cap = String(_rynFarmMaxPerNode());
-        if (panel.dataset.mode !== mode) panel.dataset.mode = mode;
-        for (const btn of panel.querySelectorAll("[data-farm-mode]")) {
-          btn.classList.toggle("seg-active", btn.getAttribute("data-farm-mode") === mode);
-        }
-        for (const btn of panel.querySelectorAll("[data-farm-cap]")) {
-          btn.classList.toggle("seg-active", btn.getAttribute("data-farm-cap") === cap);
-        }
-      }
       const on = !!Settings_default._botAutoFarmEnabled;
       const toggle = doc.querySelector("[data-farm-toggle]");
       if (toggle && toggle.checked !== on) toggle.checked = on;
@@ -30573,14 +42803,40 @@ html.ryn-in-lobby .ryn-v2-wrapper {
           }
           text = farming > 0 ? "On · " + farming + (farming === 1 ? " bot" : " bots") : "On · waiting";
         }
-        if (state.textContent !== text) state.textContent = text;
-        state.dataset.on = on ? "1" : "0";
+        const key = Settings_default._botAutoFarm ? formatCode(Settings_default._botAutoFarm) : "";
+        if (state.dataset.text !== text || state.dataset.key !== key) {
+          state.dataset.text = text;
+          state.dataset.key = key;
+          state.textContent = text;
+          if (key) {
+            const kbd = doc.createElement("kbd");
+            kbd.textContent = key;
+            state.appendChild(kbd);
+          }
+        }
+        state.classList.toggle("on", on);
       }
-      const key = doc.querySelector("[data-farm-key]");
-      if (key) {
-        const code = Settings_default._botAutoFarm;
-        const text = code ? "Key · " + formatCode(code) : "No key set";
-        if (key.textContent !== text) key.textContent = text;
+      const panel = doc.getElementById("_farmSection");
+      if (!panel) return;
+      const mode = [ "nearest", "single", "sequence" ].includes(Settings_default._botFarmMode) ? Settings_default._botFarmMode : "nearest";
+      const cap = String(_rynFarmMaxPerNode());
+      for (const btn of panel.querySelectorAll("[data-farm-mode]")) {
+        btn.classList.toggle("seg-active", btn.getAttribute("data-farm-mode") === mode);
+      }
+      for (const box of panel.querySelectorAll("[data-farm-panel]")) {
+        const hide = box.getAttribute("data-farm-panel") !== mode;
+        if (box.hidden !== hide) box.hidden = hide;
+      }
+      for (const btn of panel.querySelectorAll("[data-farm-res]")) {
+        btn.classList.toggle("seg-active", btn.getAttribute("data-farm-res") === Settings_default._botFarmType);
+      }
+      for (const btn of panel.querySelectorAll("[data-farm-cap]")) {
+        btn.classList.toggle("seg-active", btn.getAttribute("data-farm-cap") === cap);
+      }
+      for (let i = 1; i <= 4; i++) {
+        const select = doc.getElementById("_botFarmSeq" + i);
+        const row = select && select.closest(".ryn-farm-step");
+        if (row) row.classList.toggle("off", Settings_default["_botFarmSeq" + i] === "none" || !(Number(Settings_default["_botFarmSeqAmount" + i]) > 0));
       }
     }
     attachButtons() {
@@ -31790,9 +44046,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     _autoMillKey: "KeyN",
     _boostSpikes: "Space",
     _biomehats: true,
-    _antienemy: true,
     _cowboyWhenSafe: false,
-    _antianimal: true,
     _antispike: true,
     _empDefense: true,
     _autoheal: true,
@@ -31804,6 +44058,8 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     _spikeSyncHammer: true,
     _spikeSync: true,
     _spikeSync2: true,
+    _antienemy: true,
+    _antianimal: true,
     _safeSoldier: true,
     _frostHelmInSnow: true,
     _trapKB: true,
@@ -33971,7 +46227,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       title.appendChild(el("span", "rl-t1", "RYN"));
       title.appendChild(el("span", "rl-t2", "Type 2"));
       body.appendChild(title);
-      body.appendChild(el("div", "rl-tagline", "Pick a server · Press Enter to drop in"));
+      body.appendChild(el("div", "rl-tagline", RynPrivate.on ? "Pick a world · Press Enter to drop in" : "Pick a server · Press Enter to drop in"));
 
       const group = label => {
         const wrap = el("div", "rl-group");
@@ -34012,7 +46268,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       const modeGroup = group("Mode");
       const seg = el("div", "rl-seg");
       let leaving = false;
-      const addMode = (name, active, href) => {
+      const addMode = (name, active, href, privateMode = false) => {
         const button = el("div", "rl-seg-btn" + (active ? " rl-on" : ""), name);
         if (!active && href) {
           button.addEventListener("click", () => {
@@ -34020,13 +46276,21 @@ html.ryn-in-lobby .ryn-v2-wrapper {
               return;
             }
             leaving = true;
-            location.href = href;
+            RynPrivate.setMode(privateMode);
+            if (href === "reload") location.reload(); else location.href = href;
           });
         }
         seg.appendChild(button);
       };
-      addMode("Normal", !isSandbox, isSandbox ? altHref || "//moomoo.io/" : null);
-      addMode("Sandbox", isSandbox, isSandbox ? null : altHref || "//sandbox.moomoo.io/");
+      if (RynPrivate.on) {
+        // Private runs on moomoo.io; leaving it for sandbox must not bring an old Private flag back there
+        addMode("Normal", false, isSandbox ? rynNoPrivate(altHref || "//moomoo.io/") : "reload");
+        addMode("Sandbox", false, isSandbox ? "reload" : rynNoPrivate(altHref || "//sandbox.moomoo.io/"));
+      } else {
+        addMode("Normal", !isSandbox, isSandbox ? altHref || "//moomoo.io/" : null);
+        addMode("Sandbox", isSandbox, isSandbox ? null : altHref || "//sandbox.moomoo.io/");
+      }
+      addMode("Private", RynPrivate.on, "reload", true);
       modeGroup.appendChild(seg);
 
       const gate = el("div", "rl-gate");
@@ -34095,6 +46359,15 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         if (node !== null) stash.appendChild(node);
       });
 
+      // Private mode: the panel lists your saved worlds instead of servers
+      const privateWorlds = RynPrivate.on;
+      if (privateWorlds) {
+        try {
+          RynWorlds.buildLobby(right, el, statusText);
+        } catch (e) {
+          RynPrivate.dbg("lobby worlds: " + (e && e.message));
+        }
+      }
       lobby.appendChild(left);
       lobby.appendChild(right);
       lobby.appendChild(stash);
@@ -34172,7 +46445,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       };
 
       const startLive = () => {
-        if (liveTimer !== 0) {
+        if (liveTimer !== 0 || privateWorlds) {
           return;
         }
         readLive();
@@ -34531,6 +46804,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 
       const sync = () => {
         queued = false;
+        if (privateWorlds) return;
         if (!visible) {
           dirty = true;
           return;
@@ -37896,24 +50170,32 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       saveResumeWorld();
     }
   });
+  if (RynPrivate.on) {
+    RynPrivate.patchNativeSend();
+    RynPrivate.patchJoin();
+    RynAdminPanel.start();
+  }
   window.WebSocket = new window.Proxy(window.WebSocket, {
     construct(target, args) {
-      const socket = new target(...args);
-      if (_rynOwnSocket) {
-        return socket;
-      }
       const url = args && args[0] ? String(args[0]) : "";
       const isNonGame = /frvr|analytics|google|doubleclick|sentry|datadog|cloudflareinsights|hotjar|amplitude|segment/i.test(url);
       const isGameSocket = !isNonGame && /^wss?:\/\//i.test(url);
+      const toPrivate = RynPrivate.on && isGameSocket;
+      const socket = toPrivate ? new RynPrivateSocket(RYN_PRIVATE_URL, !_rynOwnSocket) : new target(...args);
+      if (_rynOwnSocket) {
+        return socket;
+      }
       if (isGameSocket) {
         Logger.test("Found game socket! Socket initialization..");
         if (client.SocketManager.socket !== null) {
           client._newConnection();
         }
         client.SocketManager.init(socket);
-        try {
-          window.WebSocket = target;
-        } catch (e) {}
+        if (!toPrivate) {
+          try {
+            window.WebSocket = target;
+          } catch (e) {}
+        }
       }
       return socket;
     }
@@ -38175,7 +50457,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     if (!socket || socket._rynGated) {
       return;
     }
-    const native = Object.getOwnPropertyDescriptor(WebSocket.prototype, "onmessage");
+    const native = Object.getOwnPropertyDescriptor(socket instanceof RynPrivateSocket ? RynPrivateSocket.prototype : WebSocket.prototype, "onmessage");
     if (!native || typeof native.set !== "function") {
       return;
     }
@@ -40493,6 +52775,8 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     _mixedSync=false;
     _botsOnlySync=false;
     _unifiedSync=false;
+    _waveSync=false;
+    _duetSync=false;
     _mixedTurn=0;
     _volume=0.7;
     _frameDoc=null;
@@ -40684,7 +52968,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       }
     }
     _tickSync() {
-      const anyActive = this._chatSync || this._mixedSync || this._botsOnlySync || this._unifiedSync;
+      const anyActive = this._chatSync || this._mixedSync || this._botsOnlySync || this._unifiedSync || this._waveSync || this._duetSync;
       if (!anyActive) return;
       if (!this._audio || this._audio.paused) return;
       if (!this._lyrics.length) return;
@@ -40702,6 +52986,15 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       const text = this._lyrics[next].text;
       this._lyricIndex = next;
       this._lastSentWall = wallNow;
+      if (this._duetSync) {
+        this._sendLyricDuet(text, next);
+        return;
+      }
+      if (this._waveSync) {
+        const after = this._lyrics[next + 1];
+        this._sendLyricWave(text, after ? after.ms - nowMs : 2500);
+        return;
+      }
       if (this._unifiedSync) {
         this._sendLyricUnified(text);
         return;
@@ -40824,6 +53117,61 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         if (this._songSessionId !== sid) return;
         RynBotChat.say(bot, c);
       }, i * 2200));
+    }
+    // the bots in order around you, starting straight above and going clockwise
+    _waveOrder() {
+      const bots = RynBotChat.bots(client);
+      const me = client && client.myPlayer;
+      if (bots.length < 2 || !me || !me.inGame || !me.pos) return bots;
+      const c = me.pos.current;
+      const turn = bot => {
+        const p = bot.myPlayer.pos.current;
+        let a = Math.atan2(p.y - c.y, p.x - c.x) + Math.PI / 2;
+        if (a < 0) a += Math.PI * 2;
+        return a;
+      };
+      return bots.map(bot => [ turn(bot), bot ]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
+    }
+    // The wave follows the song: the bots share out the time until the next line, so
+    // the last one posts just before it (an instrumental gap is capped at 5 s). A long
+    // line's parts each get an equal share, never under 1.1 s, so no bot posts twice
+    // faster than that.
+    _sendLyricWave(text, windowMs) {
+      const bots = this._waveOrder();
+      if (!bots.length) return;
+      const chunks = this._splitLine(text);
+      if (!chunks.length) return;
+      const span = Math.max(0, Math.min(5e3, Number(windowMs) || 0));
+      const slot = chunks.length > 1 ? Math.max(1100, span / chunks.length) : span;
+      const gap = slot / bots.length;
+      const sid = this._songSessionId;
+      chunks.forEach((c, i) => {
+        bots.forEach((bot, k) => {
+          const at = Math.round(i * slot + k * gap);
+          const say = () => {
+            if (this._songSessionId === sid) RynBotChat.say(bot, c);
+          };
+          if (at === 0) say(); else setTimeout(say, at);
+        });
+      });
+    }
+    // Two sides around you, the first half of the circle and the second, take the lines in
+    // turns by the line's number, so a seek keeps the same side on the same line. Everyone on
+    // a side posts at the same moment; one bot alone sings every line.
+    _sendLyricDuet(text, index) {
+      const bots = this._waveOrder();
+      if (!bots.length) return;
+      const half = Math.ceil(bots.length / 2);
+      const side = bots.length < 2 ? bots : index % 2 === 0 ? bots.slice(0, half) : bots.slice(half);
+      const chunks = this._splitLine(text);
+      const sid = this._songSessionId;
+      chunks.forEach((c, i) => {
+        const say = () => {
+          if (this._songSessionId !== sid) return;
+          for (const bot of side) RynBotChat.say(bot, c);
+        };
+        if (i === 0) say(); else setTimeout(say, i * 2200);
+      });
     }
     _doSendPacket(chunk) {
       try {
@@ -41212,7 +53560,9 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         [ "#music-chat-sync",      "_chatSync"      ],
         [ "#music-mixed-sync",     "_mixedSync"     ],
         [ "#music-bots-only-sync", "_botsOnlySync"  ],
-        [ "#music-unified-sync",   "_unifiedSync"   ]
+        [ "#music-unified-sync",   "_unifiedSync"   ],
+        [ "#music-wave-sync",      "_waveSync"      ],
+        [ "#music-duet-sync",      "_duetSync"      ]
       ];
       const setSyncMode = active => {
         SYNC_MODES.forEach(([ sel, flag ]) => {
@@ -41764,7 +54114,7 @@ const RynLRC = (function () {
     chatSyncActive: function () {
       const mp = Host.mp;
       if (!mp) return false;
-      return !!(mp._chatSync || mp._mixedSync || mp._botsOnlySync || mp._unifiedSync);
+      return !!(mp._chatSync || mp._mixedSync || mp._botsOnlySync || mp._unifiedSync || mp._waveSync || mp._duetSync);
     },
 
     handoff: function (timeline, seedIndex) {
