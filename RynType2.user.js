@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.4-fix23
+// @version         2.9.4-fix24
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -1270,6 +1270,8 @@ window.grbtp = 35;
     try {
       ready = TokenPool.size;
     } catch (_) {}
+    // the in-page server needs no Cloudflare tokens: a count from the admin panel is made in full
+    if (RynPrivate.on && limit > 0) ready = Infinity;
     let room = RYN_FLEET_CAP;
     try {
       room = Math.max(0, RYN_FLEET_CAP - client.clients.size);
@@ -9838,214 +9840,261 @@ module.exports.PACKETCODE = PACKETCODE
   }
   const RYN_ADMIN_CSS = `
 #ryn-admin {
-  --ra-ink: 12, 12, 17;
-  --ra-line: rgba(255, 255, 255, 0.08);
-  --ra-line-2: rgba(255, 255, 255, 0.14);
+  --ra-ink: 13, 13, 19;
+  --ra-line: rgba(255, 255, 255, 0.075);
+  --ra-line-2: rgba(255, 255, 255, 0.13);
+  --ra-card: rgba(255, 255, 255, 0.028);
   --ra-iris: #8e76ce;
-  --ra-iris-hi: #a894e0;
+  --ra-iris-hi: #b19ee8;
+  --ra-iris-glow: rgba(142, 118, 206, 0.35);
   --ra-sage: #a6d7b2;
-  --ra-rose: #d9a3ab;
-  --ra-tx-1: #f3f2f7;
-  --ra-tx-2: #aca9ba;
-  --ra-tx-3: #726f80;
+  --ra-rose: #e0a7b0;
+  --ra-tx-1: #f4f3f8;
+  --ra-tx-2: #b4b1c2;
+  --ra-tx-3: #7c7990;
+  --ra-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   position: fixed;
   left: 0;
   top: 0;
   z-index: 9999;
-  width: 312px;
+  width: 540px;
   max-width: calc(100vw - 16px);
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--ra-line);
-  border-radius: 12px;
-  background: rgba(var(--ra-ink), 0.86);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  box-shadow: 0 18px 44px -18px rgba(0, 0, 0, 0.8);
+  border: 1px solid var(--ra-line-2);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(142, 118, 206, 0.07), rgba(142, 118, 206, 0) 160px), rgba(var(--ra-ink), 0.9);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   font-family: 'Manrope', 'Segoe UI', system-ui, sans-serif;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--ra-tx-1);
   -webkit-user-select: none;
   user-select: none;
+  overflow: hidden;
+  transform-origin: top right;
+  animation: ra-pop 220ms var(--ra-ease);
+  transition: width 260ms var(--ra-ease);
 }
+@keyframes ra-pop { from { opacity: 0; scale: 0.96; } to { opacity: 1; scale: 1; } }
+@keyframes ra-page { from { opacity: 0; translate: 0 8px; } to { opacity: 1; translate: 0 0; } }
+@keyframes ra-flash { from { background: rgba(142, 118, 206, 0.22); } to { background: transparent; } }
+@keyframes ra-flash-bad { from { background: rgba(224, 167, 176, 0.2); } to { background: transparent; } }
 #ryn-admin.ra-hidden { display: none; }
-#ryn-admin.ra-wide { width: 660px; }
+#ryn-admin.ra-wide { width: 880px; }
 #ryn-admin, #ryn-admin * { box-sizing: border-box; }
-#ryn-admin .ra-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 6px 0 12px;
-  border-bottom: 1px solid var(--ra-line);
-  cursor: grab;
-  flex-shrink: 0;
-}
+#ryn-admin svg { display: block; flex-shrink: 0; }
+
+#ryn-admin .ra-head { display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 8px 0 16px; cursor: grab; flex-shrink: 0; }
 #ryn-admin.ra-drag .ra-head { cursor: grabbing; }
-#ryn-admin .ra-title { font-family: 'Space Grotesk', 'Manrope', sans-serif; font-weight: 700; font-size: 11px; letter-spacing: 0.16em; color: var(--ra-iris-hi); }
-#ryn-admin .ra-tag { font-size: 9.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ra-tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ryn-admin .ra-logo { width: 10px; height: 10px; border-radius: 3px; background: linear-gradient(135deg, var(--ra-iris-hi), var(--ra-iris)); box-shadow: 0 0 12px var(--ra-iris-glow); rotate: 45deg; }
+#ryn-admin .ra-title { font-family: 'Space Grotesk', 'Manrope', sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.18em; color: var(--ra-tx-1); }
+#ryn-admin .ra-tag { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ra-tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ryn-admin .ra-tick { font-family: 'Space Grotesk', 'Manrope', sans-serif; font-variant-numeric: tabular-nums; }
+#ryn-admin .ra-live { width: 7px; height: 7px; border-radius: 50%; background: var(--ra-sage); box-shadow: 0 0 8px rgba(166, 215, 178, 0.9); flex-shrink: 0; transition: background 200ms ease, box-shadow 200ms ease; }
+#ryn-admin .ra-live.ra-paused { background: #e8c872; box-shadow: 0 0 8px rgba(232, 200, 114, 0.8); }
+#ryn-admin .ra-live.ra-off { background: var(--ra-tx-3); box-shadow: none; }
 #ryn-admin .ra-spacer { flex: 1; }
-#ryn-admin .ra-ic {
-  width: 24px; height: 24px; display: grid; place-items: center; flex-shrink: 0;
-  border: none; border-radius: 6px; background: none; padding: 0; cursor: pointer;
-  color: var(--ra-tx-3); font: inherit; font-size: 15px; line-height: 1;
-}
-#ryn-admin .ra-ic:hover { color: var(--ra-tx-1); background: rgba(255, 255, 255, 0.07); }
-#ryn-admin .ra-ic.ra-on { color: var(--ra-iris-hi); }
-#ryn-admin .ra-log {
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--ra-line);
-  font-size: 11px;
-  color: var(--ra-tx-2);
-  min-height: 27px;
-  cursor: pointer;
-  overflow-wrap: anywhere;
-  flex-shrink: 0;
-}
-#ryn-admin .ra-log.ra-bad { color: var(--ra-rose); }
-#ryn-admin .ra-loglist { max-height: 140px; overflow-y: auto; padding: 4px 12px 8px; border-bottom: 1px solid var(--ra-line); font-size: 10.5px; color: var(--ra-tx-3); flex-shrink: 0; }
-#ryn-admin .ra-loglist div { padding: 1px 0; overflow-wrap: anywhere; }
+#ryn-admin .ra-ic { width: 32px; height: 32px; display: grid; place-items: center; flex-shrink: 0; border: none; border-radius: 9px; background: none; padding: 0; cursor: pointer; color: var(--ra-tx-3); font: inherit; font-size: 17px; line-height: 1; transition: color 140ms ease, background 140ms ease; }
+#ryn-admin .ra-ic:hover { color: var(--ra-tx-1); background: rgba(255, 255, 255, 0.08); }
+#ryn-admin .ra-ic.ra-on { color: var(--ra-iris-hi); background: rgba(142, 118, 206, 0.16); }
 
-#ryn-admin .ra-target { padding: 8px 12px 9px; border-bottom: 1px solid var(--ra-line); flex-shrink: 0; background: rgba(142, 118, 206, 0.06); }
-#ryn-admin .ra-tg-top { display: flex; align-items: center; gap: 6px; }
-#ryn-admin .ra-tg-top select { font-weight: 700; }
-#ryn-admin .ra-tg-chips { display: flex; gap: 4px; flex-shrink: 0; }
-#ryn-admin .ra-tg-hp { display: flex; align-items: center; gap: 8px; margin: 6px 0 7px; }
-#ryn-admin .ra-tg-hp .ra-bar { flex: 1; height: 5px; margin: 0; }
-#ryn-admin .ra-tg-hp span { font-family: 'Space Grotesk', 'Manrope', sans-serif; font-size: 11px; color: var(--ra-tx-2); min-width: 52px; text-align: right; }
-#ryn-admin .ra-tg-acts { display: flex; gap: 4px; flex-wrap: wrap; }
-#ryn-admin .ra-tg-acts .ra-btn { flex: 1 1 auto; height: 24px; padding: 0 7px; font-size: 10.5px; }
+#ryn-admin .ra-target { margin: 0 12px 10px; padding: 12px 14px 14px; border: 1px solid var(--ra-line-2); border-radius: 14px; background: linear-gradient(135deg, rgba(142, 118, 206, 0.16), rgba(142, 118, 206, 0.03)); flex-shrink: 0; }
+#ryn-admin .ra-tg-top { display: flex; align-items: center; gap: 12px; }
+#ryn-admin .ra-avatar { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; flex-shrink: 0; font-family: 'Space Grotesk', 'Manrope', sans-serif; font-weight: 700; font-size: 14px; color: #fff; background: linear-gradient(135deg, #9a83dc, #6f58b4); box-shadow: 0 6px 16px -6px var(--ra-iris-glow); transition: background 240ms ease; }
+#ryn-admin .ra-avatar.ra-av-dummy { background: linear-gradient(135deg, #c9939c, #8f5e67); }
+#ryn-admin .ra-avatar.ra-av-player { background: linear-gradient(135deg, #d0b46a, #8c7536); }
+#ryn-admin .ra-avatar.ra-av-dead { background: #3a3946; color: var(--ra-tx-3); box-shadow: none; }
+#ryn-admin .ra-tg-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+#ryn-admin .ra-tg-line { display: flex; align-items: center; gap: 8px; }
+#ryn-admin .ra-tg-line select { flex: 1; height: 32px; font-size: 14px; font-weight: 700; background-color: rgba(0, 0, 0, 0.18); }
+#ryn-admin .ra-tg-chips { display: flex; gap: 5px; flex-shrink: 0; }
+#ryn-admin .ra-tg-hp { display: flex; align-items: center; gap: 10px; }
+#ryn-admin .ra-tg-hp .ra-bar { flex: 1; height: 8px; margin: 0; border-radius: 4px; }
+#ryn-admin .ra-tg-hp span { font-family: 'Space Grotesk', 'Manrope', sans-serif; font-size: 12.5px; font-weight: 600; color: var(--ra-tx-2); min-width: 70px; text-align: right; font-variant-numeric: tabular-nums; }
+#ryn-admin .ra-tg-acts { display: flex; gap: 6px; margin-top: 12px; }
+#ryn-admin .ra-tg-acts .ra-btn { flex: 1 1 0; height: 36px; padding: 0 6px; font-size: 13px; }
 
-#ryn-admin .ra-search { padding: 7px 12px; border-bottom: 1px solid var(--ra-line); flex-shrink: 0; }
-#ryn-admin .ra-search input { width: 100%; height: 26px; padding-left: 26px; background: rgba(255, 255, 255, 0.05) no-repeat 8px 50% / 12px 12px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='7' cy='7' r='5' fill='none' stroke='%23726f80' stroke-width='2'/%3E%3Cpath d='M11 11l4 4' stroke='%23726f80' stroke-width='2'/%3E%3C/svg%3E"); }
+#ryn-admin .ra-main { display: flex; min-height: 0; border-top: 1px solid var(--ra-line); flex: 1; }
+#ryn-admin .ra-tabs { position: relative; display: flex; flex-direction: column; gap: 4px; width: 132px; flex-shrink: 0; padding: 12px 10px; border-right: 1px solid var(--ra-line); }
+#ryn-admin .ra-tab { position: relative; z-index: 1; display: flex; align-items: center; gap: 10px; height: 42px; padding: 0 12px; border: none; border-radius: 10px; background: none; color: var(--ra-tx-2); font: inherit; font-size: 13.5px; font-weight: 700; text-align: left; cursor: pointer; white-space: nowrap; transition: color 160ms ease, background 160ms ease; }
+#ryn-admin .ra-tab svg { width: 18px; height: 18px; opacity: 0.8; transition: opacity 160ms ease, transform 200ms var(--ra-ease); }
+#ryn-admin .ra-tab:hover { color: var(--ra-tx-1); background: rgba(255, 255, 255, 0.05); }
+#ryn-admin .ra-tab:hover svg { transform: translateX(1px); }
+#ryn-admin .ra-tab.ra-cur { color: #fff; }
+#ryn-admin .ra-tab.ra-cur svg { opacity: 1; color: var(--ra-iris-hi); }
+#ryn-admin .ra-tab[data-count]::after { content: attr(data-count); margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; display: grid; place-items: center; font-size: 11px; background: rgba(142, 118, 206, 0.3); color: #fff; }
+#ryn-admin .ra-tab.ra-none { opacity: 0.35; }
+#ryn-admin .ra-tab-ink { position: absolute; left: 10px; right: 10px; top: 0; height: 42px; border-radius: 10px; background: linear-gradient(90deg, rgba(142, 118, 206, 0.32), rgba(142, 118, 206, 0.14)); box-shadow: inset 3px 0 0 var(--ra-iris-hi); transition: translate 260ms var(--ra-ease), opacity 200ms ease; pointer-events: none; }
+#ryn-admin .ra-searching-on .ra-tab-ink { opacity: 0; }
 
-#ryn-admin .ra-tabs { display: flex; gap: 2px; padding: 0 8px; border-bottom: 1px solid var(--ra-line); flex-shrink: 0; }
-#ryn-admin .ra-tab { flex: 1; height: 28px; border: none; border-bottom: 2px solid transparent; background: none; color: var(--ra-tx-3); font: inherit; font-size: 10px; font-weight: 700; cursor: pointer; padding: 0 1px; white-space: nowrap; }
-#ryn-admin .ra-tab:hover { color: var(--ra-tx-1); }
-#ryn-admin .ra-tab.ra-cur { color: var(--ra-iris-hi); border-bottom-color: var(--ra-iris); }
-#ryn-admin .ra-tab[data-count]::after { content: attr(data-count); margin-left: 3px; font-size: 9px; color: var(--ra-iris-hi); }
-#ryn-admin .ra-tab.ra-none { opacity: 0.4; }
-#ryn-admin.ra-min .ra-body, #ryn-admin.ra-min .ra-loglist, #ryn-admin.ra-min .ra-tabs, #ryn-admin.ra-min .ra-target, #ryn-admin.ra-min .ra-search { display: none; }
-
-#ryn-admin .ra-body { overflow-y: auto; max-height: min(60vh, 620px); padding: 2px 10px 10px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.16) transparent; }
-#ryn-admin .ra-page-label { display: none; font-size: 9.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ra-iris-hi); margin: 10px 2px 0; }
-#ryn-admin .ra-searching .ra-page-label { display: block; }
-#ryn-admin .ra-empty { display: none; padding: 14px 4px; color: var(--ra-tx-3); font-size: 11px; text-align: center; }
+#ryn-admin .ra-body { flex: 1; min-width: 0; overflow-y: auto; max-height: min(62vh, 680px); padding: 0 14px 14px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.18) transparent; scroll-behavior: smooth; }
+#ryn-admin .ra-search { position: sticky; top: 0; z-index: 3; margin: 0 -14px; padding: 12px 14px 8px; transition: background 180ms ease, box-shadow 180ms ease; }
+#ryn-admin .ra-search.ra-stuck { background: rgba(var(--ra-ink), 0.96); box-shadow: 0 10px 14px -12px rgba(0, 0, 0, 0.7); }
+#ryn-admin .ra-search input { width: 100%; height: 36px; padding-left: 36px; font-size: 13.5px; border-radius: 11px; background: rgba(255, 255, 255, 0.05) no-repeat 12px 50% / 15px 15px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='7' cy='7' r='5' fill='none' stroke='%237c7990' stroke-width='1.8'/%3E%3Cpath d='M11 11l4 4' stroke='%237c7990' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E"); }
+#ryn-admin .ra-page { animation: ra-page 260ms var(--ra-ease) both; }
+#ryn-admin .ra-page-label { display: none; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ra-iris-hi); margin: 14px 2px 2px; }
+#ryn-admin .ra-searching .ra-page-label { display: flex; }
+#ryn-admin .ra-empty { display: none; padding: 28px 4px; color: var(--ra-tx-3); font-size: 13px; text-align: center; }
 #ryn-admin .ra-searching .ra-empty.ra-shown { display: block; }
 
-#ryn-admin .ra-section { margin-top: 8px; border: 1px solid var(--ra-line); border-radius: 9px; background: rgba(255, 255, 255, 0.018); }
-#ryn-admin .ra-sec-head { display: flex; align-items: center; gap: 6px; width: 100%; height: 30px; padding: 0 9px; border: none; background: none; cursor: pointer; font: inherit; color: var(--ra-tx-2); text-align: left; }
-#ryn-admin .ra-sec-head:hover { color: var(--ra-tx-1); }
-#ryn-admin .ra-sec-title { flex: 1; font-size: 9.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
-#ryn-admin .ra-chev { width: 7px; height: 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform 120ms ease; opacity: 0.7; }
+#ryn-admin .ra-section { margin-top: 10px; border: 1px solid var(--ra-line); border-radius: 13px; background: var(--ra-card); transition: border-color 200ms ease, background 200ms ease; }
+#ryn-admin .ra-section:hover { border-color: var(--ra-line-2); }
+#ryn-admin .ra-sec-head { display: flex; align-items: center; gap: 10px; width: 100%; height: 44px; padding: 0 14px; border: none; background: none; cursor: pointer; font: inherit; color: var(--ra-tx-1); text-align: left; }
+#ryn-admin .ra-sec-title { flex: 1; font-size: 12px; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase; }
+#ryn-admin .ra-chev { width: 8px; height: 8px; border-right: 2px solid var(--ra-tx-3); border-bottom: 2px solid var(--ra-tx-3); transform: translateY(-2px) rotate(45deg); transition: transform 240ms var(--ra-ease); }
 #ryn-admin .ra-folded .ra-chev { transform: rotate(-45deg); }
-#ryn-admin .ra-sec-body { padding: 0 9px 9px; }
-#ryn-admin .ra-folded .ra-sec-body { display: none; }
-#ryn-admin .ra-section.ra-danger { border-color: rgba(217, 163, 171, 0.32); background: rgba(217, 163, 171, 0.045); }
-#ryn-admin .ra-danger .ra-sec-head { color: var(--ra-rose); }
+#ryn-admin .ra-sec-body { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 260ms var(--ra-ease); }
+#ryn-admin .ra-sec-inner { min-height: 0; overflow: hidden; padding: 0 14px 14px; transition: opacity 200ms ease, visibility 0s; }
+#ryn-admin .ra-folded .ra-sec-body { grid-template-rows: 0fr; }
+#ryn-admin .ra-folded .ra-sec-inner { opacity: 0; visibility: hidden; transition: opacity 160ms ease, visibility 0s linear 260ms; }
+#ryn-admin .ra-section.ra-danger { border-color: rgba(224, 167, 176, 0.3); background: rgba(224, 167, 176, 0.05); }
+#ryn-admin .ra-danger .ra-sec-title { color: var(--ra-rose); }
 
-#ryn-admin .ra-searching .ra-section.ra-folded .ra-sec-body { display: block; }
+#ryn-admin .ra-searching .ra-section.ra-folded .ra-sec-body { grid-template-rows: 1fr; }
+#ryn-admin .ra-searching .ra-section.ra-folded .ra-sec-inner { opacity: 1; visibility: visible; }
 #ryn-admin .ra-searching .ra-section.ra-folded .ra-chev { transform: translateY(-2px) rotate(45deg); }
 #ryn-admin .ra-searching .ra-section.ra-miss, #ryn-admin .ra-searching .ra-item.ra-miss { display: none; }
-#ryn-admin .ra-searching .ra-section:not(.ra-hit-all) .ra-sec-body > :not(.ra-item) { display: none; }
+#ryn-admin .ra-searching .ra-section:not(.ra-hit-all) .ra-sec-inner > :not(.ra-item) { display: none; }
 
-#ryn-admin .ra-hint { font-size: 10px; color: var(--ra-tx-3); margin: 0 0 4px; line-height: 1.4; }
-#ryn-admin .ra-note { font-size: 10px; color: var(--ra-tx-2); margin: 4px 0 0; line-height: 1.4; }
-#ryn-admin .ra-sub { display: flex; align-items: baseline; gap: 6px; margin: 9px 0 3px; font-size: 10.5px; font-weight: 700; color: var(--ra-tx-2); }
-#ryn-admin .ra-sub small { font-weight: 500; font-size: 9.5px; color: var(--ra-tx-3); }
-#ryn-admin .ra-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 5px 0; }
-#ryn-admin .ra-lbl { width: 62px; flex-shrink: 0; color: var(--ra-tx-2); font-size: 11px; white-space: nowrap; }
-#ryn-admin .ra-you { margin-left: 3px; font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ra-iris-hi); vertical-align: 1px; }
+#ryn-admin .ra-hint { font-size: 12px; color: var(--ra-tx-3); margin: -2px 0 8px; line-height: 1.45; }
+#ryn-admin .ra-note { font-size: 12px; color: var(--ra-tx-2); margin: 6px 0 0; line-height: 1.45; font-variant-numeric: tabular-nums; }
+#ryn-admin .ra-sub { display: flex; align-items: baseline; gap: 8px; margin: 14px 0 4px; font-size: 12.5px; font-weight: 800; color: var(--ra-tx-1); }
+#ryn-admin .ra-sub:first-of-type { margin-top: 4px; }
+#ryn-admin .ra-sub small { font-weight: 500; font-size: 11.5px; color: var(--ra-tx-3); }
+#ryn-admin .ra-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+#ryn-admin .ra-lbl { width: 96px; flex-shrink: 0; color: var(--ra-tx-2); font-size: 13px; font-weight: 600; white-space: nowrap; }
+#ryn-admin .ra-you { margin-left: 5px; padding: 1px 5px; border-radius: 5px; font-size: 9.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ra-iris-hi); background: rgba(142, 118, 206, 0.18); vertical-align: 1px; }
+#ryn-admin .ra-unit { margin-left: -3px; font-size: 12px; color: var(--ra-tx-3); }
 
 #ryn-admin input, #ryn-admin select {
-  height: 26px;
+  height: 34px;
   min-width: 0;
   border: 1px solid var(--ra-line-2);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.05);
+  border-radius: 9px;
+  background-color: rgba(255, 255, 255, 0.05);
   color: var(--ra-tx-1);
   font: inherit;
-  font-size: 11.5px;
-  padding: 0 7px;
+  font-size: 13px;
+  padding: 0 10px;
   outline: none;
   -webkit-user-select: text;
   user-select: text;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
 }
-#ryn-admin input:focus, #ryn-admin select:focus { border-color: var(--ra-iris); }
-#ryn-admin input[type=number] { width: 70px; }
-#ryn-admin input.ra-narrow { width: 58px; }
-#ryn-admin input.ra-tiny { width: 46px; }
+#ryn-admin input:hover, #ryn-admin select:hover { border-color: rgba(255, 255, 255, 0.22); }
+#ryn-admin input:focus, #ryn-admin select:focus { border-color: var(--ra-iris); box-shadow: 0 0 0 3px rgba(142, 118, 206, 0.22); }
+#ryn-admin input[type=number] { width: 88px; font-variant-numeric: tabular-nums; }
+#ryn-admin input.ra-narrow { width: 68px; }
+#ryn-admin input.ra-tiny { width: 58px; }
 #ryn-admin input[type=text] { flex: 1; }
 #ryn-admin select { flex: 1; cursor: pointer; }
-#ryn-admin select option { background: #101016; color: #f3f2f7; }
-#ryn-admin input[type=range] { width: 100%; height: 20px; padding: 0; border: none; background: none; accent-color: var(--ra-iris); }
+#ryn-admin select option { background: #111118; color: #f4f3f8; }
+#ryn-admin input[type=range] { width: 100%; height: 24px; padding: 0; border: none; background: none; box-shadow: none; accent-color: var(--ra-iris); }
 
 #ryn-admin .ra-btn {
-  height: 26px;
-  padding: 0 10px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 14px;
   border: 1px solid var(--ra-line-2);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.045);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.05);
   color: var(--ra-tx-1);
   font: inherit;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 160ms ease, scale 120ms ease;
 }
-#ryn-admin .ra-btn:hover { background: rgba(255, 255, 255, 0.09); border-color: rgba(255, 255, 255, 0.24); }
-#ryn-admin .ra-btn:active { transform: translateY(1px); }
-#ryn-admin .ra-btn.ra-go { background: rgba(142, 118, 206, 0.22); border-color: rgba(142, 118, 206, 0.55); }
-#ryn-admin .ra-btn.ra-go:hover { background: rgba(142, 118, 206, 0.34); }
-#ryn-admin .ra-btn.ra-del { color: var(--ra-rose); border-color: rgba(217, 163, 171, 0.35); }
-#ryn-admin .ra-btn.ra-del:hover { background: rgba(217, 163, 171, 0.12); }
-#ryn-admin .ra-btn.ra-tog::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--ra-tx-3); vertical-align: 1px; }
-#ryn-admin .ra-btn.ra-on { background: rgba(166, 215, 178, 0.16); border-color: rgba(166, 215, 178, 0.55); color: var(--ra-sage); }
-#ryn-admin .ra-btn.ra-tog.ra-on::before { background: var(--ra-sage); box-shadow: 0 0 6px rgba(166, 215, 178, 0.8); }
-#ryn-admin .ra-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin: 5px 0; }
-#ryn-admin .ra-grid .ra-btn { padding: 0 6px; overflow: hidden; text-overflow: ellipsis; }
-#ryn-admin.ra-wide .ra-grid { grid-template-columns: repeat(5, 1fr); }
+#ryn-admin .ra-btn:hover { background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.26); }
+#ryn-admin .ra-btn:active { scale: 0.97; }
+#ryn-admin .ra-btn:focus-visible, #ryn-admin .ra-tab:focus-visible, #ryn-admin .ra-sec-head:focus-visible, #ryn-admin .ra-ic:focus-visible { outline: 2px solid var(--ra-iris-hi); outline-offset: 2px; }
+#ryn-admin .ra-btn.ra-go { background: linear-gradient(180deg, rgba(160, 138, 222, 0.42), rgba(142, 118, 206, 0.3)); border-color: rgba(168, 148, 224, 0.6); }
+#ryn-admin .ra-btn.ra-go:hover { background: linear-gradient(180deg, rgba(160, 138, 222, 0.56), rgba(142, 118, 206, 0.42)); box-shadow: 0 6px 18px -8px var(--ra-iris-glow); }
+#ryn-admin .ra-btn.ra-del { color: var(--ra-rose); border-color: rgba(224, 167, 176, 0.38); }
+#ryn-admin .ra-btn.ra-del:hover { background: rgba(224, 167, 176, 0.14); }
+#ryn-admin .ra-btn.ra-lit { background: rgba(166, 215, 178, 0.16); border-color: rgba(166, 215, 178, 0.55); color: var(--ra-sage); }
+#ryn-admin .ra-btn.ra-tog { justify-content: space-between; gap: 12px; padding: 0 10px 0 14px; }
+#ryn-admin .ra-btn.ra-tog > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ryn-admin .ra-sw { position: relative; width: 30px; height: 18px; border-radius: 9px; background: rgba(255, 255, 255, 0.14); flex-shrink: 0; transition: background 200ms ease; }
+#ryn-admin .ra-sw::after { content: ""; position: absolute; left: 3px; top: 3px; width: 12px; height: 12px; border-radius: 50%; background: #d8d6e2; transition: translate 220ms var(--ra-ease), background 200ms ease; }
+#ryn-admin .ra-btn.ra-on { border-color: rgba(166, 215, 178, 0.5); color: var(--ra-sage); background: rgba(166, 215, 178, 0.1); }
+#ryn-admin .ra-on .ra-sw { background: rgba(166, 215, 178, 0.75); }
+#ryn-admin .ra-on .ra-sw::after { translate: 12px 0; background: #fff; }
+#ryn-admin .ra-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0; }
+#ryn-admin .ra-grid .ra-btn { padding: 0 10px; overflow: hidden; text-overflow: ellipsis; }
+#ryn-admin .ra-grid .ra-btn.ra-tog { padding: 0 8px 0 12px; }
 #ryn-admin .ra-grid.ra-grid-2 { grid-template-columns: repeat(2, 1fr); }
+#ryn-admin.ra-wide .ra-grid { grid-template-columns: repeat(5, 1fr); }
 #ryn-admin.ra-wide .ra-grid.ra-grid-2 { grid-template-columns: repeat(3, 1fr); }
-#ryn-admin .ra-unit { margin-left: -2px; font-size: 10px; color: var(--ra-tx-3); }
-#ryn-admin .ra-seg { display: flex; gap: 3px; flex: 1; min-width: 0; }
-#ryn-admin .ra-seg .ra-btn { flex: 1; min-width: 0; padding: 0 3px; font-size: 10px; overflow: hidden; text-overflow: ellipsis; }
-#ryn-admin .ra-seg .ra-btn.ra-pick { background: rgba(142, 118, 206, 0.3); border-color: var(--ra-iris); color: var(--ra-tx-1); }
-#ryn-admin .ra-key { font-size: 9px; color: var(--ra-tx-3); margin-left: 4px; }
-#ryn-admin .ra-edit { border: 1px solid var(--ra-line); border-radius: 9px; padding: 8px; margin-top: 6px; background: rgba(255, 255, 255, 0.025); }
+#ryn-admin .ra-seg { display: flex; gap: 4px; flex: 1; min-width: 0; padding: 3px; border-radius: 11px; background: rgba(0, 0, 0, 0.2); border: 1px solid var(--ra-line); }
+#ryn-admin .ra-seg .ra-btn { flex: 1; min-width: 0; height: 30px; padding: 0 4px; border-color: transparent; background: none; font-size: 12.5px; color: var(--ra-tx-2); }
+#ryn-admin .ra-seg .ra-btn:hover { color: var(--ra-tx-1); background: rgba(255, 255, 255, 0.06); }
+#ryn-admin .ra-seg .ra-btn.ra-pick { background: linear-gradient(180deg, rgba(160, 138, 222, 0.5), rgba(142, 118, 206, 0.36)); color: #fff; box-shadow: 0 4px 12px -6px var(--ra-iris-glow); }
 
-#ryn-admin .ra-plist { display: flex; flex-direction: column; gap: 5px; margin: 5px 0; }
+#ryn-admin .ra-plist { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
 #ryn-admin .ra-plist:empty { display: none; }
-#ryn-admin .ra-pl { border: 1px solid var(--ra-line); border-radius: 8px; padding: 6px 7px; background: rgba(255, 255, 255, 0.02); }
+#ryn-admin .ra-pl { border: 1px solid var(--ra-line); border-radius: 11px; padding: 9px 11px; background: rgba(255, 255, 255, 0.025); transition: border-color 160ms ease, background 160ms ease, translate 160ms var(--ra-ease); }
 #ryn-admin .ra-pl.ra-click { cursor: pointer; }
-#ryn-admin .ra-pl.ra-click:hover { border-color: rgba(255, 255, 255, 0.2); }
-#ryn-admin .ra-pl.ra-pick { border-color: var(--ra-iris); background: rgba(142, 118, 206, 0.12); }
-#ryn-admin .ra-pl-top { display: flex; align-items: center; gap: 6px; font-size: 11px; }
-#ryn-admin .ra-pl-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#ryn-admin .ra-pl-hp { font-size: 10px; color: var(--ra-tx-3); white-space: nowrap; }
-#ryn-admin .ra-pl .ra-row { margin: 5px 0 0; gap: 4px; }
-#ryn-admin .ra-pl .ra-btn { height: 22px; padding: 0 7px; font-size: 10.5px; }
-#ryn-admin .ra-chip { font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ra-tx-3); border: 1px solid var(--ra-line-2); border-radius: 5px; padding: 1px 4px; white-space: nowrap; }
-#ryn-admin .ra-chip.ra-chip-god { color: var(--ra-sage); border-color: rgba(166, 215, 178, 0.45); }
-#ryn-admin .ra-chip.ra-chip-dead { color: var(--ra-rose); border-color: rgba(217, 163, 171, 0.45); }
-#ryn-admin .ra-bar { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); margin: 5px 0 0; overflow: hidden; }
-#ryn-admin .ra-bar > i { display: block; height: 100%; width: 0; background: var(--ra-sage); transition: width 160ms ease; }
-#ryn-admin .ra-bar.ra-low > i { background: var(--ra-rose); }
+#ryn-admin .ra-pl.ra-click:hover { border-color: rgba(255, 255, 255, 0.22); background: rgba(255, 255, 255, 0.05); translate: 2px 0; }
+#ryn-admin .ra-pl.ra-pick { border-color: var(--ra-iris); background: rgba(142, 118, 206, 0.14); box-shadow: inset 3px 0 0 var(--ra-iris-hi); }
+#ryn-admin .ra-pl-top { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+#ryn-admin .ra-pl-dot { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; flex-shrink: 0; font-family: 'Space Grotesk', 'Manrope', sans-serif; font-size: 11.5px; font-weight: 700; color: #fff; background: rgba(142, 118, 206, 0.5); }
+#ryn-admin .ra-pl-dot.ra-av-dummy { background: rgba(201, 147, 156, 0.55); }
+#ryn-admin .ra-pl-dot.ra-av-player { background: rgba(208, 180, 106, 0.55); }
+#ryn-admin .ra-pl-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+#ryn-admin .ra-pl-hp { font-size: 12px; color: var(--ra-tx-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+#ryn-admin .ra-pl .ra-row { margin: 8px 0 0; gap: 6px; }
+#ryn-admin .ra-pl .ra-btn { height: 30px; padding: 0 12px; font-size: 12.5px; }
+#ryn-admin .ra-chip { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ra-tx-2); border: 1px solid var(--ra-line-2); border-radius: 6px; padding: 2px 6px; white-space: nowrap; }
+#ryn-admin .ra-chip.ra-chip-god { color: var(--ra-sage); border-color: rgba(166, 215, 178, 0.45); background: rgba(166, 215, 178, 0.08); }
+#ryn-admin .ra-chip.ra-chip-dead { color: var(--ra-rose); border-color: rgba(224, 167, 176, 0.45); background: rgba(224, 167, 176, 0.08); }
+#ryn-admin .ra-bar { height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); margin: 8px 0 0; overflow: hidden; }
+#ryn-admin .ra-bar > i { display: block; height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, #8fcf9f, var(--ra-sage)); transition: width 320ms var(--ra-ease), background 240ms ease; }
+#ryn-admin .ra-bar.ra-low > i { background: linear-gradient(90deg, #d68792, var(--ra-rose)); }
 
-#ryn-admin .ra-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin: 5px 0; }
+#ryn-admin .ra-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0; }
 #ryn-admin.ra-wide .ra-stats { grid-template-columns: repeat(6, 1fr); }
-#ryn-admin .ra-stat { border: 1px solid var(--ra-line); border-radius: 8px; padding: 5px 7px; min-width: 0; }
-#ryn-admin .ra-stat b { display: block; font-family: 'Space Grotesk', 'Manrope', sans-serif; font-size: 15px; color: var(--ra-tx-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#ryn-admin .ra-stat span { font-size: 9.5px; color: var(--ra-tx-3); }
-#ryn-admin .ra-lines { font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; font-size: 10px; color: var(--ra-tx-2); line-height: 1.55; max-height: 170px; overflow-y: auto; border: 1px solid var(--ra-line); border-radius: 8px; padding: 5px 7px; margin-top: 5px; -webkit-user-select: text; user-select: text; }
+#ryn-admin .ra-stat { border: 1px solid var(--ra-line); border-radius: 11px; padding: 9px 11px; min-width: 0; background: rgba(0, 0, 0, 0.12); }
+#ryn-admin .ra-stat b { display: block; font-family: 'Space Grotesk', 'Manrope', sans-serif; font-size: 19px; color: var(--ra-tx-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#ryn-admin .ra-stat span { font-size: 11.5px; color: var(--ra-tx-3); }
+#ryn-admin .ra-lines { font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; font-size: 11.5px; color: var(--ra-tx-2); line-height: 1.6; max-height: 210px; overflow-y: auto; border: 1px solid var(--ra-line); border-radius: 11px; padding: 8px 10px; margin-top: 8px; background: rgba(0, 0, 0, 0.16); -webkit-user-select: text; user-select: text; }
 #ryn-admin .ra-lines:empty::before { content: "Nothing yet"; color: var(--ra-tx-3); }
 #ryn-admin .ra-lines .ra-hurt { color: var(--ra-rose); }
 #ryn-admin .ra-lines .ra-heal { color: var(--ra-sage); }
 #ryn-admin .ra-lines div { white-space: pre-line; overflow-wrap: anywhere; }
-#ryn-admin.ra-wide .ra-lines { max-height: 260px; }
-#ryn-admin canvas.ra-canvas { display: block; width: 100%; height: auto; border: 1px solid var(--ra-line); border-radius: 8px; background: #0e1410; margin-top: 5px; }
-#adminButton.ryn-admin-open { box-shadow: inset 0 0 0 2px rgba(168, 148, 224, 0.75); }
+#ryn-admin.ra-wide .ra-lines { max-height: 320px; }
+#ryn-admin canvas.ra-canvas { display: block; width: 100%; height: auto; border: 1px solid var(--ra-line); border-radius: 11px; background: #0e1410; margin-top: 8px; }
+
+#ryn-admin .ra-foot { border-top: 1px solid var(--ra-line); flex-shrink: 0; background: rgba(0, 0, 0, 0.14); }
+#ryn-admin .ra-log { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 8px 16px; font-size: 13px; color: var(--ra-tx-2); cursor: pointer; overflow-wrap: anywhere; }
+#ryn-admin .ra-log::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ra-iris-hi); flex-shrink: 0; }
+#ryn-admin .ra-log.ra-new { animation: ra-flash 900ms ease; }
+#ryn-admin .ra-log.ra-bad { color: var(--ra-rose); }
+#ryn-admin .ra-log.ra-bad::before { background: var(--ra-rose); }
+#ryn-admin .ra-log.ra-bad.ra-new { animation: ra-flash-bad 900ms ease; }
+#ryn-admin .ra-loglist { max-height: 0; overflow-y: auto; padding: 0 16px 0 32px; font-size: 12px; color: var(--ra-tx-3); transition: max-height 260ms var(--ra-ease), padding 260ms var(--ra-ease); }
+#ryn-admin .ra-loglist.ra-open { max-height: 170px; padding: 0 16px 10px 32px; }
+#ryn-admin .ra-loglist div { padding: 2px 0; overflow-wrap: anywhere; }
+
+#ryn-admin.ra-min .ra-main, #ryn-admin.ra-min .ra-target, #ryn-admin.ra-min .ra-loglist { display: none; }
+#adminButton.ryn-admin-open { box-shadow: inset 0 0 0 2px rgba(177, 158, 232, 0.8); }
+@media (max-width: 600px) {
+  #ryn-admin .ra-tabs { width: 58px; }
+  #ryn-admin .ra-tab span { display: none; }
+  #ryn-admin .ra-tab[data-count]::after { display: none; }
+  #ryn-admin .ra-lbl { width: 78px; }
+  #ryn-admin .ra-grid, #ryn-admin .ra-stats { grid-template-columns: repeat(2, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #ryn-admin, #ryn-admin * { animation: none !important; transition: none !important; }
+}
 `;
   const RYN_ADMIN_ANIMALS = [ [ "cow", "Cow" ], [ "pig", "Pig" ], [ "sheep", "Sheep" ], [ "bull", "Bull" ], [ "bully", "Bully" ], [ "wolf", "Wolf" ], [ "duck", "Quack" ], [ "boar", "Boar" ], [ "yeti", "Yeti" ], [ "moostafa", "MOOSTAFA" ], [ "moofie", "MOOFIE" ], [ "treasure", "Treasure" ], [ "king", "Crab King" ], [ "crab", "Crab" ], [ "crabling", "Crabling" ] ];
   const RYN_ADMIN_TIERS = [ [ "normal", "Normal" ], [ "gold", "Gold" ], [ "diamond", "Diamond" ], [ "ruby", "Ruby" ], [ "emerald", "Emerald" ] ];
@@ -10076,8 +10125,19 @@ module.exports.PACKETCODE = PACKETCODE
     dive2: "Under water, healing",
     dive3: "Coming up"
   };
-  // tabs, most used first, and the sections each one is built from
-  const RYN_ADMIN_TABS = [ [ "player", "Player", [ "buildVitals", "buildGear", "buildLoadouts", "buildYou" ] ], [ "people", "People", [ "buildPlayers", "buildDummies", "buildBots" ] ], [ "train", "Train", [ "buildScenarios", "buildTime", "buildSurvival", "buildBench" ] ], [ "world", "World", [ "buildMap", "buildAnimals", "buildKing", "buildRules", "buildSaves", "buildTravel", "buildClear" ] ], [ "analyze", "Analyze", [ "buildFight", "buildGraph", "buildCombatLog", "buildKnockback", "buildReplay", "buildLayers", "buildDesync" ] ], [ "tools", "Tools", [ "buildCustom", "buildPing", "buildPackets", "buildPrivateLog" ] ] ];
+  // tabs, most important first, and the sections each one is built from (most used on top)
+  const RYN_ADMIN_TABS = [ [ "player", "Player", [ "buildVitals", "buildGear", "buildLoadouts", "buildYou" ] ], [ "people", "People", [ "buildPlayers", "buildBots", "buildDummies" ] ], [ "world", "World", [ "buildMap", "buildAnimals", "buildKing", "buildRules", "buildSaves", "buildTravel", "buildClear" ] ], [ "train", "Train", [ "buildScenarios", "buildTime", "buildSurvival", "buildBench" ] ], [ "analyze", "Analyze", [ "buildFight", "buildGraph", "buildCombatLog", "buildReplay", "buildLayers", "buildKnockback", "buildDesync" ] ], [ "tools", "Tools", [ "buildPing", "buildPackets", "buildPrivateLog" ] ] ];
+  const RYN_ADMIN_ICONS = (() => {
+    const svg = d => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + d + "</svg>";
+    return {
+      player: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>'),
+      people: svg('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 3.5-5.5 6.5-5.5s5.5 2 6.5 5.5"/><circle cx="17" cy="7" r="2.8"/><path d="M17 12.5c2.4 0 4 1.6 4.8 4.5"/>'),
+      world: svg('<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.7 2.6 4 5.6 4 9s-1.3 6.4-4 9c-2.7-2.6-4-5.6-4-9s1.3-6.4 4-9z"/>'),
+      train: svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/>'),
+      analyze: svg('<path d="M3 20h18"/><path d="M6 16v-5"/><path d="M11 16V6"/><path d="M16 16v-8"/><path d="M21 16v-3"/>'),
+      tools: svg('<path d="M4 6h9"/><path d="M19 6h1"/><circle cx="16" cy="6" r="2.2"/><path d="M4 12h3"/><path d="M13 12h7"/><circle cx="10" cy="12" r="2.2"/><path d="M4 18h11"/><circle cx="18" cy="18" r="2.2"/>')
+    };
+  })();
   // what _ryn_admin_tab held before the tabs were regrouped
   const RYN_ADMIN_OLD_TABS = {
     me: "player",
@@ -10088,13 +10148,94 @@ module.exports.PACKETCODE = PACKETCODE
     lab: "analyze",
     mine: "tools"
   };
+  // Private: the bots added from the admin panel wait as they get in, then all spawn at
+  // once, so the in-page server takes every spawn in the same tick
+  const RynFleet = {
+    batch: null,
+    start(n, done) {
+      this.cancel();
+      this.batch = {
+        want: n,
+        held: [],
+        done: done,
+        timer: setTimeout(() => this.release(), 15e3)
+      };
+    },
+    // how many really started joining (the fleet has a cap)
+    expect(n) {
+      const b = this.batch;
+      if (b === null) return;
+      b.want = n;
+      if (b.held.length >= n) this.release();
+    },
+    cancel() {
+      if (this.batch !== null) clearTimeout(this.batch.timer);
+      this.batch = null;
+    },
+    wants() {
+      return RynPrivate.on && this.batch !== null && this.batch.held.length < this.batch.want;
+    },
+    take(bot) {
+      if (!this.wants()) return false;
+      // a bot out of the game spawns itself on the next server update; not while it waits
+      bot.PlayerManager._spawnAskedAt = Infinity;
+      this.batch.held.push(bot);
+      if (this.batch.held.length >= this.batch.want) this.release();
+      return true;
+    },
+    release() {
+      const b = this.batch;
+      if (b === null) return;
+      this.batch = null;
+      clearTimeout(b.timer);
+      const open = c => c.SocketManager.socket !== null && c.SocketManager.socket.readyState === 1;
+      const bots = b.held.filter(open);
+      // the ones that closed: their auto-respawn comes back with them
+      for (const c of b.held) if (!open(c)) c.PlayerManager._spawnAskedAt = 0;
+      if (!bots.length) {
+        if (b.done) b.done(0);
+        return;
+      }
+      // one trip of the fake ping, then a moment when no bot has a packet still on its way
+      // (a packet in flight would hold its spawn back behind it)
+      let tries = 0;
+      const clear = () => {
+        const now = performance.now();
+        const late = Math.max(0, ...bots.filter(open).map(c => (c.SocketManager.socket._upAt || 0) - now));
+        if (late > 0 && ++tries < 40) setTimeout(clear, late + 1); else go();
+      };
+      setTimeout(clear, Math.max(0, RynPrivate.oneWay()));
+      const go = () => {
+        // every spawn leaves in this one moment with no extra delay, so the in-page
+        // server reads them all in one go (its name check needs no network in Private)
+        const oneWay = RynPrivate.oneWay;
+        RynPrivate.oneWay = () => 0;
+        let made = 0;
+        for (const c of bots) {
+          if (!open(c)) continue;
+          try {
+            c._rynEntry = {
+              phase: "spawning",
+              at: Date.now(),
+              tries: 0
+            };
+            c.PlayerManager._spawnAskedAt = Date.now();
+            c.myPlayer.spawn();
+            made++;
+          } catch (_) {}
+        }
+        setTimeout(() => {
+          if (RynPrivate.oneWay !== oneWay) RynPrivate.oneWay = oneWay;
+        }, 0);
+        if (b.done) b.done(made);
+      };
+    }
+  };
   const RynAdminPanel = {
     root: null,
     icon: null,
     open: false,
     target: "",
-    custom: [],
-    editing: null,
     stateTimer: null,
     lastState: null,
     lastPanel: null,
@@ -10149,8 +10290,6 @@ module.exports.PACKETCODE = PACKETCODE
     start() {
       if (!RynPrivate.on || this.root !== null) return;
       this.watchPage();
-      const custom = this.store("_ryn_admin_buttons");
-      this.custom = Array.isArray(custom) ? custom.filter(b => b && typeof b.label === "string" && typeof b.cmd === "string") : [];
       window.addEventListener("keydown", e => this.onHotkey(e), true);
       RynPrivate.noteListeners.add(text => this.say(text));
       const layers = this.store("_ryn_admin_layers");
@@ -10276,7 +10415,6 @@ module.exports.PACKETCODE = PACKETCODE
       parent.appendChild(s);
       return s;
     },
-    // one section: a title that folds it (remembered), one short hint, then its rows
     section(page, id, title, hint, danger = false) {
       const sec = this.el("section", "ra-section" + (danger ? " ra-danger" : ""));
       sec.dataset.id = page.dataset.tab + "." + id;
@@ -10285,8 +10423,11 @@ module.exports.PACKETCODE = PACKETCODE
       head.type = "button";
       head.appendChild(this.el("span", "ra-sec-title", title));
       head.appendChild(this.el("span", "ra-chev"));
+      // the body folds by animating its grid row; the inner box holds the rows
       const body = this.el("div", "ra-sec-body");
-      if (hint) body.appendChild(this.el("div", "ra-hint", hint));
+      const inner = this.el("div", "ra-sec-inner");
+      if (hint) inner.appendChild(this.el("div", "ra-hint", hint));
+      body.appendChild(inner);
       sec.appendChild(head);
       sec.appendChild(body);
       page.appendChild(sec);
@@ -10305,20 +10446,24 @@ module.exports.PACKETCODE = PACKETCODE
         if (!on) this.refresh();
       });
       this.sections.push(sec);
-      return body;
+      return inner;
     },
     toggleButton(label, get, set, title = "") {
-      const b = this.button(label, () => {
+      const b = this.liveToggle(label, () => {
         set(!get());
         draw();
-      }, "ra-tog", title);
+      }, title);
       const draw = () => this.lit(b, !!get());
       draw();
       return b;
     },
-    // an on/off button whose state comes from the server
+    // an on/off switch whose state is drawn by lit()
     liveToggle(label, onClick, title = "") {
-      return this.button(label, onClick, "ra-tog", title);
+      const b = this.button("", onClick, "ra-tog", title);
+      b.appendChild(this.el("span", "", label));
+      b.appendChild(this.el("i", "ra-sw"));
+      b.setAttribute("aria-pressed", "false");
+      return b;
     },
     lit(b, on) {
       if (!b) return;
@@ -10363,64 +10508,68 @@ module.exports.PACKETCODE = PACKETCODE
       const folds = this.store("_ryn_admin_folds");
       this.folds = folds && typeof folds === "object" && !Array.isArray(folds) ? folds : {};
       const head = this.el("div", "ra-head");
+      head.appendChild(this.el("span", "ra-logo"));
       head.appendChild(this.el("span", "ra-title", "ADMIN"));
+      this.liveDot = this.el("span", "ra-live ra-off");
+      this.liveDot.title = "Green: the server is running. Yellow: paused.";
+      head.appendChild(this.liveDot);
       this.tagLine = this.el("span", "ra-tag", "Private");
       head.appendChild(this.tagLine);
       head.appendChild(this.el("span", "ra-spacer"));
-      const big = this.bigButton = this.el("button", "ra-ic", "⤢");
-      big.type = "button";
-      big.title = "Big";
-      big.addEventListener("click", e => {
-        e.stopPropagation();
-        this.setBig(!root.classList.contains("ra-wide"));
-      });
-      const min = this.el("button", "ra-ic", "–");
-      min.type = "button";
-      min.title = "Minimise";
-      min.addEventListener("click", e => {
-        e.stopPropagation();
+      const icon = (text, title, fn) => {
+        const b = this.el("button", "ra-ic", text);
+        b.type = "button";
+        b.title = title;
+        b.addEventListener("click", e => {
+          e.stopPropagation();
+          fn();
+        });
+        head.appendChild(b);
+        return b;
+      };
+      this.bigButton = icon("⤢", "Wider", () => this.setBig(!root.classList.contains("ra-wide")));
+      icon("–", "Minimise", () => {
         root.classList.toggle("ra-min");
         this.store("_ryn_admin_min", root.classList.contains("ra-min"));
       });
-      const close = this.el("button", "ra-ic", "×");
-      close.type = "button";
-      close.title = "Close";
-      close.addEventListener("click", e => {
-        e.stopPropagation();
-        this.toggle(false);
-      });
-      head.appendChild(big);
-      head.appendChild(min);
-      head.appendChild(close);
+      icon("×", "Close", () => this.toggle(false));
       root.appendChild(head);
       this.makeDraggable(head);
       this.buildTargetBar(root);
-      this.logLine = this.el("div", "ra-log", "Press Play, then use the buttons below.");
-      this.logList = this.el("div", "ra-loglist");
-      this.logList.style.display = "none";
-      this.logLine.title = "Show the last messages";
-      this.logLine.addEventListener("click", () => {
-        this.logList.style.display = this.logList.style.display === "none" ? "" : "none";
-      });
-      root.appendChild(this.logLine);
-      root.appendChild(this.logList);
-      this.buildSearch(root);
-      const tabs = this.el("div", "ra-tabs");
-      root.appendChild(tabs);
+      const main = this.el("div", "ra-main");
+      const tabs = this.el("nav", "ra-tabs");
+      this.tabInk = this.el("div", "ra-tab-ink");
+      tabs.appendChild(this.tabInk);
+      main.appendChild(tabs);
       const body = this.body = this.el("div", "ra-body");
-      root.appendChild(body);
+      main.appendChild(body);
+      root.appendChild(main);
+      this.buildSearch(body);
+      const foot = this.el("div", "ra-foot");
+      this.logLine = this.el("div", "ra-log", "Press Play, then use the buttons above.");
+      this.logLine.title = "Show the last messages";
+      this.logList = this.el("div", "ra-loglist");
+      this.logLine.addEventListener("click", () => this.logList.classList.toggle("ra-open"));
+      foot.appendChild(this.logLine);
+      foot.appendChild(this.logList);
+      root.appendChild(foot);
       if (this.store("_ryn_admin_min")) root.classList.add("ra-min");
       if (this.store("_ryn_admin_big")) root.classList.add("ra-wide");
-      this.lit(big, root.classList.contains("ra-wide"));
+      this.lit(this.bigButton, root.classList.contains("ra-wide"));
       for (const [id, label, parts] of RYN_ADMIN_TABS) {
         const page = this.el("div", "ra-page");
         page.dataset.tab = id;
-        page.appendChild(this.el("div", "ra-page-label", label));
+        const pageLabel = this.el("div", "ra-page-label");
+        pageLabel.innerHTML = RYN_ADMIN_ICONS[id];
+        pageLabel.appendChild(this.el("span", "", label));
+        page.appendChild(pageLabel);
         for (const part of parts) this[part](page);
         body.appendChild(page);
         this.pages[id] = page;
-        const b = this.el("button", "ra-tab", label);
+        const b = this.el("button", "ra-tab");
         b.type = "button";
+        b.innerHTML = RYN_ADMIN_ICONS[id];
+        b.appendChild(this.el("span", "", label));
         b.addEventListener("click", e => {
           e.stopPropagation();
           if (this.query) this.search("");
@@ -10436,7 +10585,7 @@ module.exports.PACKETCODE = PACKETCODE
       this.showTab(this.pages[tab] ? tab : "player");
       document.body.appendChild(root);
       const pos = this.store("_ryn_admin_pos");
-      this.place(pos && Number.isFinite(pos.x) ? pos.x : window.innerWidth - 340, pos && Number.isFinite(pos.y) ? pos.y : 90);
+      this.place(pos && Number.isFinite(pos.x) ? pos.x : window.innerWidth - 560, pos && Number.isFinite(pos.y) ? pos.y : 70);
       window.addEventListener("resize", () => this.place(this.x, this.y));
     },
     setBig(on) {
@@ -10493,6 +10642,7 @@ module.exports.PACKETCODE = PACKETCODE
       clearInterval(this.stateTimer);
       if (this.open) {
         this.place(this.x, this.y);
+        this.moveInk();
         this.refresh();
         this.stateTimer = setInterval(() => this.refresh(), 1e3);
       }
@@ -10501,10 +10651,13 @@ module.exports.PACKETCODE = PACKETCODE
       if (!this.logLine) return;
       // the test bench sends many commands; their replies would bury its own lines
       if (this.benchRunning && /^\[Admin\]/.test(text)) return;
-      this.logLine.textContent = text;
-      this.logLine.classList.toggle("ra-bad", bad);
-      const line = this.el("div", "", text);
-      this.logList.prepend(line);
+      const line = this.logLine;
+      line.textContent = text;
+      line.classList.toggle("ra-bad", bad);
+      line.classList.remove("ra-new");
+      void line.offsetWidth;
+      line.classList.add("ra-new");
+      this.logList.prepend(this.el("div", "", text));
       while (this.logList.childNodes.length > 30) this.logList.lastChild.remove();
     },
     run(text) {
@@ -10535,6 +10688,7 @@ module.exports.PACKETCODE = PACKETCODE
     refresh() {
       const state = RynPrivate.state();
       this.lastState = state;
+      if (this.liveDot) this.liveDot.classList.toggle("ra-off", state === null);
       if (state === null) return;
       this.drawTarget(state);
       for (const [key, b] of Object.entries(this.worldButtons || {})) this.lit(b, !!(state.world && state.world[key]));
@@ -10555,12 +10709,19 @@ module.exports.PACKETCODE = PACKETCODE
       this.tab = id;
       for (const [key, page] of Object.entries(this.pages)) page.style.display = key === id ? "" : "none";
       for (const [key, b] of Object.entries(this.tabButtons)) b.classList.toggle("ra-cur", key === id);
+      this.moveInk();
       this.store("_ryn_admin_tab", id);
+      if (this.body) this.body.scrollTop = 0;
       if (this.open) this.refresh();
     },
-    buildSearch(root) {
+    // the highlight behind the current tab slides to it
+    moveInk() {
+      const b = this.tabButtons[this.tab];
+      if (b && this.tabInk) this.tabInk.style.translate = "0 " + b.offsetTop + "px";
+    },
+    buildSearch(parent) {
       const box = this.el("div", "ra-search");
-      const input = this.searchInput = this.text("Search…");
+      const input = this.searchInput = this.text("Search every tab…");
       input.title = "Find a button by its name, in every tab. Esc clears.";
       input.addEventListener("input", () => this.search(input.value));
       input.addEventListener("keydown", e => {
@@ -10570,7 +10731,10 @@ module.exports.PACKETCODE = PACKETCODE
         input.blur();
       });
       box.appendChild(input);
-      root.appendChild(box);
+      parent.appendChild(box);
+      parent.addEventListener("scroll", () => box.classList.toggle("ra-stuck", parent.scrollTop > 2), {
+        passive: true
+      });
     },
     // what a row is found by: its label, buttons and placeholders, not the choices in its lists
     searchText(node) {
@@ -10593,6 +10757,7 @@ module.exports.PACKETCODE = PACKETCODE
       if (q === "") this.searchInput.value = "";
       this.query = q;
       this.body.classList.toggle("ra-searching", q !== "");
+      this.root.classList.toggle("ra-searching-on", q !== "");
       if (q === "") {
         for (const b of Object.values(this.tabButtons)) {
           delete b.dataset.count;
@@ -10605,11 +10770,11 @@ module.exports.PACKETCODE = PACKETCODE
       const counts = {};
       for (const sec of this.sections) {
         const title = sec.dataset.title.toLowerCase();
-        const body = sec.querySelector(".ra-sec-body");
+        const inner = sec.querySelector(".ra-sec-inner");
         const all = words.every(w => title.includes(w));
         sec.classList.toggle("ra-hit-all", all);
         let hits = 0;
-        for (const item of body.querySelectorAll(".ra-item")) {
+        for (const item of inner.querySelectorAll(".ra-item")) {
           if (item.parentElement.closest(".ra-item")) continue;
           const hit = all || words.every(w => (title + " " + this.searchText(item)).includes(w));
           item.classList.toggle("ra-miss", !hit);
@@ -10661,10 +10826,8 @@ module.exports.PACKETCODE = PACKETCODE
     },
     drawPanelState(panel) {
       if (this.tagLine) this.tagLine.textContent = "Private · tick " + panel.time.tick;
-      if (this.pauseButton) {
-        this.pauseButton.textContent = panel.time.paused ? "Play world" : "Pause world";
-        this.lit(this.pauseButton, panel.time.paused);
-      }
+      if (this.liveDot) this.liveDot.classList.toggle("ra-paused", !!panel.time.paused);
+      this.lit(this.pauseButton, !!panel.time.paused);
       if (this.timeNow) this.timeNow.textContent = (panel.time.paused ? "Paused" : "Running") + " at ×" + panel.time.scale + " · tick " + panel.time.tick;
       if (this.timeSpeed && document.activeElement !== this.timeSpeed) this.timeSpeed.value = String(panel.time.scale);
       this.lit(this.sandboxButton, !!panel.rules.sandbox);
@@ -10694,13 +10857,17 @@ module.exports.PACKETCODE = PACKETCODE
     buildTargetBar(root) {
       const bar = this.el("div", "ra-target");
       const top = this.el("div", "ra-tg-top");
+      this.targetAvatar = this.el("div", "ra-avatar", "ME");
+      top.appendChild(this.targetAvatar);
+      const who = this.el("div", "ra-tg-who");
+      const line = this.el("div", "ra-tg-line");
       this.targetSelect = this.select([ [ "", "You" ] ], "");
-      this.targetSelect.title = "Who the target buttons and the Player tab act on. Click a player in People to pick them.";
+      this.targetSelect.title = "Who the buttons below and the Player tab act on. Click a player in People to pick them.";
       this.targetSelect.addEventListener("change", () => this.setTarget(this.targetSelect.value));
-      top.appendChild(this.targetSelect);
+      line.appendChild(this.targetSelect);
       this.targetChips = this.el("span", "ra-tg-chips");
-      top.appendChild(this.targetChips);
-      bar.appendChild(top);
+      line.appendChild(this.targetChips);
+      who.appendChild(line);
       const hp = this.el("div", "ra-tg-hp");
       this.targetBar = this.el("div", "ra-bar");
       this.targetFill = this.el("i");
@@ -10708,10 +10875,12 @@ module.exports.PACKETCODE = PACKETCODE
       this.targetHp = this.el("span", "", "–");
       hp.appendChild(this.targetBar);
       hp.appendChild(this.targetHp);
-      bar.appendChild(hp);
+      who.appendChild(hp);
+      top.appendChild(who);
+      bar.appendChild(top);
       const acts = this.el("div", "ra-tg-acts");
       this.targetActs = {
-        heal: this.button("Heal", () => this.done("!heal" + this.sid()), "", "Full health"),
+        heal: this.button("Heal", () => this.done("!heal" + this.sid()), "ra-go", "Full health"),
         god: this.liveToggle("God", () => this.done("!god" + this.sid()), "Cannot be hurt"),
         kill: this.button("Kill", () => this.done(this.target === "" ? "!die" : "!kill" + this.sid(), this.target === "" ? "You died" : "Killed " + this.target), "ra-del"),
         go: this.button("Go", () => this.done("!tp" + this.sid(), "Went to " + this.target), "", "Teleport to them"),
@@ -10755,6 +10924,10 @@ module.exports.PACKETCODE = PACKETCODE
       a.go.style.display = a.bring.style.display = mine ? "none" : "";
       a.remove.style.display = who && who.dummy ? "" : "none";
       this.lit(a.god, !!(who && who.god));
+      const av = this.targetAvatar;
+      const avText = mine ? "ME" : who ? String(who.sid) : "?";
+      if (av.textContent !== avText) av.textContent = avText;
+      av.className = "ra-avatar" + (who && !who.alive ? " ra-av-dead" : !mine && who ? who.dummy ? " ra-av-dummy" : " ra-av-player" : "");
       const chips = [];
       if (who && who.dummy) chips.push([ "dummy", "" ]);
       if (who && who.god) chips.push([ "god", "ra-chip-god" ]);
@@ -10775,12 +10948,12 @@ module.exports.PACKETCODE = PACKETCODE
       const body = this.section(page, "vitals", "Vitals", "For the target.");
       const hp = this.number(100, 1, 1);
       this.row(body, "Health", hp, this.button("Set", () => this.done("!hp " + (Number(hp.value) || 1) + this.sid()), "ra-go")).dataset.keys = "hp";
-      const age = this.number(10, 1, 1);
-      this.row(body, "Age", age, this.button("Set", () => this.done("!age " + (Number(age.value) || 1) + this.sid()), "ra-go")).dataset.keys = "level xp";
       const res = this.number(1e4, 1e3, 0);
       this.row(body, "Resources", res, this.button("Set", () => this.done("!res " + (Number(res.value) || 0) + this.sid()), "ra-go"), this.button("Max", () => {
         if (this.target === "") this.done("!s", "Resources maxed"); else this.done("!res 999999" + this.sid());
       }, "", "As much of everything as there is")).dataset.keys = "res gold wood stone food points";
+      const age = this.number(10, 1, 1);
+      this.row(body, "Age", age, this.button("Set", () => this.done("!age " + (Number(age.value) || 1) + this.sid()), "ra-go")).dataset.keys = "level xp";
     },
     buildGear(page) {
       const body = this.section(page, "gear", "Gear", "For the target. Set held is always you.");
@@ -10794,13 +10967,12 @@ module.exports.PACKETCODE = PACKETCODE
         for (const w of c.weapons) this.option(weapon, w.id, w.id + " · " + w.name + (w.type ? " (2nd)" : ""));
         for (const it of c.items) this.option(item, it.id, it.id + " · " + it.name);
       });
-      this.row(body, "Hat", hats, this.button("Wear", () => this.done("!hat " + hats.value + this.sid()), "ra-go"));
-      this.row(body, "Accessory", accs, this.button("Wear", () => this.done("!acc " + accs.value + this.sid()), "ra-go"));
       this.row(body, "Weapon", weapon);
       const tier = this.chips(RYN_ADMIN_TIERS, "ruby");
       this.row(body, "", tier.el).dataset.keys = "tier weapon";
-      const give = this.row(body, "", this.button("Give", () => this.done("!give weapon " + weapon.value + " " + tier.value + this.sid()), "ra-go", "Give the target this weapon at this tier"), this.button("Set held", () => this.done("!v " + tier.value, RYN_ADMIN_TIERS.find(t => t[0] === tier.value)[1] + " weapon"), "", "Put this tier on the weapon you hold (only you)"));
-      give.dataset.keys = "weapon tier";
+      this.row(body, "", this.button("Give weapon", () => this.done("!give weapon " + weapon.value + " " + tier.value + this.sid()), "ra-go", "Give the target this weapon at this tier"), this.button("Set held", () => this.done("!v " + tier.value, RYN_ADMIN_TIERS.find(t => t[0] === tier.value)[1] + " weapon"), "", "Put this tier on the weapon you hold (only you)")).dataset.keys = "weapon tier";
+      this.row(body, "Hat", hats, this.button("Wear", () => this.done("!hat " + hats.value + this.sid()), "ra-go"));
+      this.row(body, "Accessory", accs, this.button("Wear", () => this.done("!acc " + accs.value + this.sid()), "ra-go"));
       this.row(body, "Item", item, this.button("Give", () => this.done("!give item " + item.value + this.sid()), "ra-go"));
     },
     loadouts() {
@@ -10862,6 +11034,8 @@ module.exports.PACKETCODE = PACKETCODE
     },
     buildYou(page) {
       const body = this.section(page, "you", "You", "Always you, whoever the target is.");
+      const speed = this.number(1, .1, .1);
+      this.you(this.row(body, "Walk ×", speed, this.button("Set", () => this.done("!speed " + .0016 * (Number(speed.value) || 1), "Walk speed ×" + (Number(speed.value) || 1)), "ra-go"))).dataset.keys = "speed move";
       const card = this.el("div", "ra-pl ra-item");
       card.dataset.keys = "shame clown";
       const top = this.el("div", "ra-pl-top");
@@ -10875,8 +11049,6 @@ module.exports.PACKETCODE = PACKETCODE
       card.appendChild(this.shameBar);
       card.title = "Eating within 120ms of a hit adds 1; a later heal takes 2 off. At 8 you wear the clown hat for 30s and cannot heal.";
       body.appendChild(card);
-      const speed = this.number(1, .1, .1);
-      this.you(this.row(body, "Walk ×", speed, this.button("Set", () => this.done("!speed " + .0016 * (Number(speed.value) || 1), "Walk speed ×" + (Number(speed.value) || 1)), "ra-go"))).dataset.keys = "speed move";
     },
     drawShame(me) {
       if (!this.shameText || !me) return;
@@ -10892,6 +11064,7 @@ module.exports.PACKETCODE = PACKETCODE
       this.playerList = this.el("div", "ra-plist ra-item");
       body.appendChild(this.playerList);
     },
+    // ---- People ----
     drawPlayers(state) {
       const list = this.playerList;
       if (!list) return;
@@ -10910,8 +11083,8 @@ module.exports.PACKETCODE = PACKETCODE
             this.setTarget(mine ? "" : String(p.sid));
           });
           const top = this.el("div", "ra-pl-top");
-          top.appendChild(this.el("span", "ra-pl-name", p.sid + " · " + (p.name || "unknown")));
-          if (mine) top.appendChild(this.el("span", "ra-chip", "you"));
+          top.appendChild(this.el("span", "ra-pl-dot" + (mine ? "" : p.dummy ? " ra-av-dummy" : " ra-av-player"), mine ? "ME" : String(p.sid)));
+          top.appendChild(this.el("span", "ra-pl-name", p.name || "unknown"));
           if (p.dummy) top.appendChild(this.el("span", "ra-chip", "dummy"));
           if (p.god) top.appendChild(this.el("span", "ra-chip ra-chip-god", "god"));
           if (!p.alive) top.appendChild(this.el("span", "ra-chip ra-chip-dead", "dead"));
@@ -10977,10 +11150,10 @@ module.exports.PACKETCODE = PACKETCODE
       }, "ra-go"), this.button("Remove all", () => this.done("!dummy clear"), "ra-del")).dataset.keys = "dummies";
     },
     buildBots(page) {
-      const body = this.section(page, "bots", "Ryn bots", "Your own bots. Freeze stops only them.");
+      const body = this.section(page, "bots", "Ryn bots", "Your own bots. However many you add spawn together, in one server tick.");
       const count = this.number(3, 1, 1);
       count.max = "40";
-      this.row(body, "Bots", count, this.button("Add", () => this.addBots(Math.max(1, Math.min(40, Number(count.value) || 1))), "ra-go"));
+      this.row(body, "How many", count, this.button("Spawn", () => this.addBots(Math.max(1, Math.min(40, Number(count.value) || 1))), "ra-go", "They join, wait for each other, then all spawn at once")).dataset.keys = "bots add";
       this.freezeButton = this.liveToggle("Freeze my bots", () => {
         const on = !Settings_default._botsFrozen;
         if (!_rynSetBotsFrozen(client, on)) {
@@ -10989,7 +11162,7 @@ module.exports.PACKETCODE = PACKETCODE
         }
         this.say(on ? "Bots frozen" : "Bots moving again");
         this.refresh();
-      });
+      }, "Only your bots stop; Pause world is in Train");
       this.row(body, "", this.freezeButton, this.button("Remove all", () => {
         let n = 0;
         try {
@@ -10999,21 +11172,22 @@ module.exports.PACKETCODE = PACKETCODE
       }, "ra-del")).dataset.keys = "bots";
     },
     addBots(n) {
-      let made = 0;
-      const one = () => {
-        let got = 0;
-        try {
-          got = _rynSpawnBatch(n - made);
-        } catch (_) {}
-        if (!got) {
-          if (!made) this.say("Bots could not join. Press Play first.", true);
-          return;
-        }
-        made += got;
-        this.say("Adding bots " + made + "/" + n);
-        if (made < n) setTimeout(one, 350);
-      };
-      one();
+      if (RynFleet.batch !== null) {
+        this.say("Bots are still joining; they spawn together in a moment.", true);
+        return;
+      }
+      RynFleet.start(n, made => this.say(made ? "Spawned " + made + " bot" + (made === 1 ? "" : "s") + " together" : "No bot got in", !made));
+      let got = 0;
+      try {
+        got = _rynSpawnBatch(n);
+      } catch (_) {}
+      if (!got) {
+        RynFleet.cancel();
+        this.say("Bots could not join. Press Play first.", true);
+        return;
+      }
+      RynFleet.expect(got);
+      this.say("Joining " + got + " bot" + (got === 1 ? "" : "s") + "…");
     },
     // ---- Train ----
     buildScenarios(page) {
@@ -11023,9 +11197,10 @@ module.exports.PACKETCODE = PACKETCODE
       grid.classList.add("ra-grid-2");
       grid.dataset.keys = "scenario";
     },
+    // ---- Train ----
     buildTime(page) {
       const body = this.section(page, "time", "Time", "Pauses or slows the whole server.");
-      this.pauseButton = this.liveToggle("Pause world", () => this.done(this.lastPanel && this.lastPanel.time.paused ? "!time play" : "!time pause"));
+      this.pauseButton = this.liveToggle("Pause world", () => this.done(this.lastPanel && this.lastPanel.time.paused ? "!time play" : "!time pause"), "Every player, bot and animal stops");
       this.row(body, "", this.pauseButton, this.button("Step 1", () => this.done("!time step 1"), "", "One server tick, then paused"), this.button("Step 5", () => this.done("!time step 5"), "", "Five server ticks, then paused")).dataset.keys = "play";
       const speed = this.timeSpeed = this.select([ [ "0.25", "×0.25" ], [ "0.5", "×0.5" ], [ "1", "×1" ], [ "2", "×2" ] ], "1");
       speed.addEventListener("change", () => this.done("!time speed " + speed.value));
@@ -11035,9 +11210,9 @@ module.exports.PACKETCODE = PACKETCODE
     },
     buildSurvival(page) {
       const body = this.section(page, "survival", "Survival", "Harder waves until you die; a cleared wave heals you.");
-      this.survivalButton = this.liveToggle("Start", () => this.done(this.lastPanel && this.lastPanel.survival.on ? "!survival stop" : "!survival start"));
+      this.survivalButton = this.liveToggle("Survival", () => this.done(this.lastPanel && this.lastPanel.survival.on ? "!survival stop" : "!survival start"), "Start or stop the waves");
       this.survivalText = this.el("span", "ra-pl-hp", "");
-      this.row(body, "", this.survivalButton, this.survivalText).dataset.keys = "survival waves";
+      this.row(body, "", this.survivalButton, this.survivalText).dataset.keys = "survival waves start stop";
     },
     drawSurvival(sv) {
       if (!this.survivalButton || !sv) return;
@@ -11046,7 +11221,6 @@ module.exports.PACKETCODE = PACKETCODE
         best = sv.best;
         this.store("_ryn_survival_best", best);
       }
-      this.survivalButton.textContent = sv.on ? "Stop" : "Start";
       this.lit(this.survivalButton, sv.on);
       this.survivalText.textContent = sv.on ? "Wave " + sv.wave + " · " + sv.left + " left · best " + best : (sv.last ? "Last: " + sv.last.waves + " waves (" + sv.last.why + ") · " : "") + "best " + best;
     },
@@ -11323,7 +11497,7 @@ module.exports.PACKETCODE = PACKETCODE
       this.fillLater(c => {
         for (const it of c.items) if (!it.consume) this.option(what, it.id, it.name);
       });
-      this.editOwner = this.select([ [ "me", "Owner: me" ], [ "none", "Owner: nobody" ] ], "me");
+      this.editOwner = this.select([ [ "me", "Me" ], [ "none", "Nobody" ] ], "me");
       this.editOwner.title = "With a dummy as the owner, its spikes and traps work against you";
       this.editShape = this.select([ [ "point", "One" ], [ "line", "Line" ], [ "circle", "Circle" ], [ "square", "Square" ] ], "point");
       this.editShape.title = "Line: click the start, then the end";
@@ -11336,7 +11510,8 @@ module.exports.PACKETCODE = PACKETCODE
       });
       this.placeButton = this.liveToggle("Place", () => this.setEdit(this.editMode === "place" ? "" : "place"), "Click the map to place");
       this.deleteButton = this.liveToggle("Delete", () => this.setEdit(this.editMode === "delete" ? "" : "delete"), "Click something on the map to delete it");
-      this.row(body, "What", what, this.editOwner).dataset.keys = "editor";
+      this.row(body, "What", what).dataset.keys = "editor";
+      this.row(body, "Owner", this.editOwner).dataset.keys = "editor";
       this.row(body, "Shape", this.editShape, this.editSize, this.editCount).dataset.keys = "editor size count";
       this.row(body, "", this.placeButton, this.deleteButton, this.button("Undo", () => this.undo(), "", "Ctrl+Z")).dataset.keys = "editor";
     },
@@ -11530,9 +11705,9 @@ module.exports.PACKETCODE = PACKETCODE
       this._ownerSig = sig;
       const current = select.value;
       select.innerHTML = "";
-      this.option(select, "me", "Owner: me");
-      this.option(select, "none", "Owner: nobody");
-      for (const p of dummies) this.option(select, "d" + p.sid, "Owner: " + p.name);
+      this.option(select, "me", "Me");
+      this.option(select, "none", "Nobody");
+      for (const p of dummies) this.option(select, "d" + p.sid, p.name + " (dummy)");
       select.value = [ ...select.options ].some(o => o.value === current) ? current : "me";
     },
     worldAt(cx, cy) {
@@ -11878,17 +12053,6 @@ module.exports.PACKETCODE = PACKETCODE
       const body = this.section(page, "desync", "Desync", "Ryn's prediction of you against the server.");
       this.desyncText = this.el("div", "ra-note ra-item", "Needs you in the game.");
       body.appendChild(this.desyncText);
-    },
-    // ---- Tools ----
-    buildCustom(page) {
-      const body = this.section(page, "buttons", "My buttons", "Right-click to edit. Several commands: !god; !res 99999");
-      this.customGrid = this.grid(body, []);
-      this.customGrid.dataset.keys = "custom hotkey";
-      this.customEditor = this.el("div", "ra-edit ra-item");
-      this.customEditor.style.display = "none";
-      body.appendChild(this.customEditor);
-      this.row(body, "", this.button("+ Add", () => this.edit(null), "", "A new button, with a hotkey if you like")).dataset.keys = "button custom hotkey";
-      this.drawCustom();
     },
     buildPing(page) {
       const body = this.section(page, "ping", "Ping", "Changing: jumps between low and high every few seconds.");
@@ -12592,82 +12756,6 @@ module.exports.PACKETCODE = PACKETCODE
       jump();
       this.pingWaveTimer = setInterval(jump, Math.max(1, w.every) * 1e3);
     },
-    drawCustom() {
-      const grid = this.customGrid;
-      grid.innerHTML = "";
-      this.custom.forEach((b, i) => {
-        const btn = this.button(b.label, () => this.done(b.cmd, b.label));
-        btn.title = b.cmd + (b.key ? "  [" + this.keyName(b.key) + "]" : "");
-        if (b.key) btn.appendChild(this.el("span", "ra-key", this.keyName(b.key)));
-        btn.addEventListener("contextmenu", e => {
-          e.preventDefault();
-          this.edit(i);
-        });
-        grid.appendChild(btn);
-      });
-      grid.style.display = this.custom.length ? "" : "none";
-    },
-    keyName(code) {
-      if (/^Key[A-Z]$/.test(code)) return code.slice(3);
-      if (/^Digit\d$/.test(code)) return code.slice(5);
-      if (/^Numpad\d$/.test(code)) return "Num" + code.slice(6);
-      return code;
-    },
-    edit(index) {
-      const editor = this.customEditor;
-      const b = index === null ? {
-        label: "",
-        cmd: "",
-        key: ""
-      } : Object.assign({}, this.custom[index]);
-      editor.innerHTML = "";
-      editor.style.display = "";
-      const label = this.el("input");
-      label.type = "text";
-      label.placeholder = "Name";
-      label.value = b.label;
-      const cmd = this.el("input");
-      cmd.type = "text";
-      cmd.placeholder = "!god; !spawn wolf 3";
-      cmd.value = b.cmd;
-      const key = this.button(b.key ? "Key: " + this.keyName(b.key) : "Set key", () => {
-        key.textContent = "Press a key…";
-        const grab = e => {
-          e.preventDefault();
-          e.stopPropagation();
-          window.removeEventListener("keydown", grab, true);
-          b.key = e.code === "Escape" || e.code === "Backspace" ? "" : e.code;
-          key.textContent = b.key ? "Key: " + this.keyName(b.key) : "Set key";
-        };
-        window.addEventListener("keydown", grab, true);
-      });
-      this.row(editor, "Name", label);
-      this.row(editor, "Commands", cmd);
-      const actions = this.row(editor, "", key, this.button("Save", () => {
-        b.label = label.value.trim() || cmd.value.trim().split(/\s/)[0] || "Button";
-        b.cmd = cmd.value.trim();
-        if (!b.cmd) {
-          this.say("Write at least one command.", true);
-          return;
-        }
-        if (index === null) this.custom.push(b); else this.custom[index] = b;
-        this.store("_ryn_admin_buttons", this.custom);
-        editor.style.display = "none";
-        this.drawCustom();
-      }, "ra-go"));
-      if (index !== null) {
-        actions.appendChild(this.button("Delete", () => {
-          this.custom.splice(index, 1);
-          this.store("_ryn_admin_buttons", this.custom);
-          editor.style.display = "none";
-          this.drawCustom();
-        }, "ra-del"));
-      }
-      actions.appendChild(this.button("Cancel", () => {
-        editor.style.display = "none";
-      }));
-      label.focus();
-    },
     onHotkey(e) {
       if (e.code === "Escape" && this.editMode) {
         this.setEdit("");
@@ -12678,18 +12766,7 @@ module.exports.PACKETCODE = PACKETCODE
         e.preventDefault();
         e.stopPropagation();
         this.undo();
-        return;
       }
-      if (!this.custom.length || e.repeat) return;
-      const t = e.target;
-      if (t && (/^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName) || t.isContentEditable)) return;
-      const chat = document.getElementById("chatHolder");
-      if (chat && chat.style.display === "block") return;
-      const b = this.custom.find(x => x.key && x.key === e.code);
-      if (!b) return;
-      e.preventDefault();
-      e.stopPropagation();
-      this.done(b.cmd, b.label);
     }
   };
   // Private mode's worlds: the lobby lists them instead of servers. The one you pick
@@ -23870,6 +23947,8 @@ module.exports.PACKETCODE = PACKETCODE
     known: new Map(),
     taken(name) {
       if (this.known.has(name)) return Promise.resolve(this.known.get(name));
+      // the in-page server reserves no names
+      if (RynPrivate.on) return Promise.resolve(false);
       if (typeof fetch !== "function") return Promise.resolve(false);
       const signal = typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(4e3) : void 0;
       return fetch(RYN_API_BASE + "/name-check?name=" + encodeURIComponent(name), {
@@ -24262,6 +24341,14 @@ module.exports.PACKETCODE = PACKETCODE
               tries: 0
             };
             Logger.test("Bot connected — HOLDING (press ] to release)");
+          } else if (RynFleet.wants()) {
+            this.socket.dispatchEvent(new Event("connected"));
+            this.client._rynEntry = {
+              phase: "held",
+              at: Date.now(),
+              tries: 0
+            };
+            RynFleet.take(this.client);
           } else {
             this.socket.dispatchEvent(new Event("connected"));
             this.client.myPlayer.spawn();
@@ -36622,8 +36709,9 @@ module.exports.PACKETCODE = PACKETCODE
     }
     _pump() {
       if (this.timer !== null) return;
-      while (this.queue.length > 0 && this.active < RYN_ENTRY_CONCURRENCY) {
-        const wait = this.lastStart + RYN_ENTRY_SPACING_MS - Date.now();
+      // the pacing is for moomoo's servers; the in-page server takes every bot at once
+      while (this.queue.length > 0 && (RynPrivate.on || this.active < RYN_ENTRY_CONCURRENCY)) {
+        const wait = RynPrivate.on ? 0 : this.lastStart + RYN_ENTRY_SPACING_MS - Date.now();
         if (wait > 0) {
           this.timer = setTimeout(() => {
             this.timer = null;

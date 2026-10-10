@@ -50,7 +50,7 @@ const source = fs.readFileSync(SCRIPT, "utf8");
 if (!source.includes(HOOK)) throw new Error("hook line not found: " + JSON.stringify(HOOK));
 // Like a userscript manager: wrapped in a function, and only in the top page (Playwright's
 // init scripts also run in Ryn's own menu frame, which a manager would not inject into).
-const injected = "(function () {\nif (window !== window.top) return;\n" + source.replace(HOOK, HOOK + "    window.__ryn = { panel: RynAdminPanel, priv: RynPrivate, Sock: RynPrivateSocket, worlds: RynWorlds };\n") + "\n})();";
+const injected = "(function () {\nif (window !== window.top) return;\n" + source.replace(HOOK, HOOK + "    window.__ryn = { panel: RynAdminPanel, priv: RynPrivate, Sock: RynPrivateSocket, worlds: RynWorlds, client: client };\n") + "\n})();";
 
 const PAGE = `<!doctype html><html><head><meta charset="utf-8"><title>moomoo</title></head>
 <body style="margin:0;background:#3d6b35;overflow:hidden">
@@ -219,7 +219,17 @@ async function boot(context, opts = {}) {
   await page.goto("https://moomoo.io/?rynPrivate=1", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => window.__ryn && document.getElementById("ryn-admin"), null, { timeout: 30000 });
   await page.evaluate(PAGE_TOOLS);
-  await page.evaluate(() => window.__harness.spawn());
+  if (opts.viaClient) {
+    // the way the game joins: through Ryn's own client, so Ryn's bots can join behind it
+    await page.evaluate(async () => {
+      const ws = new WebSocket("wss://test.moomoo.io/?b=1");
+      for (let i = 0; i < 100 && ws.readyState !== 1; i++) await new Promise(r => setTimeout(r, 50));
+      await new Promise(r => setTimeout(r, 300));
+      window.__ryn.client.myPlayer.spawn();
+    });
+  } else {
+    await page.evaluate(() => window.__harness.spawn());
+  }
   await page.waitForFunction(() => {
     const me = window.__harness.me();
     return me && me.alive;
@@ -408,8 +418,8 @@ async function main() {
   });
   await settle();
 
-  // ---- your buttons: add one with a hotkey, press it, delete it ----
-  {
+  // ---- your buttons (panels that still have them): add one with a hotkey, press it, delete it ----
+  if (await page.evaluate(() => typeof window.__ryn.panel.edit === "function")) {
     const r = await page.evaluate(async () => {
       const P = window.__ryn.panel;
       const H = window.__harness;
@@ -516,26 +526,27 @@ async function main() {
     }
     return issues;
   };
-  await page.evaluate(() => {
-    const P = window.__ryn.panel;
-    P.root.classList.remove("ra-wide");
-    if (P.setBig) P.setBig(false);
-    P.place(900, 10);
-  });
-  report.layout.push(...await layout("312"));
-  await page.evaluate(() => {
-    const P = window.__ryn.panel;
-    if (P.setBig) P.setBig(true); else P.root.classList.add("ra-wide");
-    P.place(560, 10);
-  });
-  report.layout.push(...await layout("big"));
-  check("nothing wider than the panel (312px and Big)", report.layout.length === 0, report.layout.slice(0, 12));
-  const width312 = await page.evaluate(() => {
-    const P = window.__ryn.panel;
-    if (P.setBig) P.setBig(false); else P.root.classList.remove("ra-wide");
-    return P.root.getBoundingClientRect().width;
-  });
-  check("normal width is 312px", Math.round(width312) === 312, width312);
+  // normal, Big, and a narrow screen (the panel shrinks to fit it); widths animate, so wait
+  const mode = async (name, big, viewport, x) => {
+    await page.setViewportSize(viewport);
+    await page.evaluate(([big, x]) => {
+      const P = window.__ryn.panel;
+      if (P.setBig) P.setBig(big); else P.root.classList.toggle("ra-wide", big);
+      P.place(x, 10);
+    }, [ big, x ]);
+    await sleep(450);
+    const width = await page.evaluate(() => Math.round(window.__ryn.panel.root.getBoundingClientRect().width));
+    report.layout.push(...await layout(name));
+    return width;
+  };
+  const widths = {
+    normal: await mode("normal", false, { width: 1280, height: 860 }, 700),
+    big: await mode("big", true, { width: 1280, height: 860 }, 380),
+    narrow: await mode("narrow", false, { width: 360, height: 860 }, 0)
+  };
+  await mode("normal", false, { width: 1280, height: 860 }, 700);
+  check("nothing wider than the panel (normal, Big, a 360px screen)", report.layout.length === 0, report.layout.slice(0, 12));
+  check("widths: normal, Big, on a 360px screen", widths.normal >= 312 && widths.big > widths.normal && widths.narrow <= 344, widths);
 
   // ---- new panel only: search, folds, tab move, Big saved ----
   if (isNew) {
@@ -597,6 +608,47 @@ async function main() {
       report.errors.push(...e3);
       await p3.close();
     }
+  }
+
+  // ---- Ryn bots from the panel: however many, they spawn in the same server tick ----
+  if (isNew) {
+    for (const [n, ping] of [ [ 8, 0 ], [ 12, 150 ] ]) {
+      const { page: pb, errors: eb } = await boot(context, { viaClient: true });
+      const r = await pb.evaluate(async ([n, ping]) => {
+        const R = window.__ryn;
+        const sleep = ms => new Promise(res => setTimeout(res, ms));
+        if (ping) R.priv.command("!ping " + ping + " 40");
+        const steps = [];
+        const watch = setInterval(() => {
+          const s = R.priv.state();
+          const p = R.priv.call("panel");
+          if (!s || !p) return;
+          const bots = s.players.filter(q => !q.dummy && s.me && q.sid !== s.me.sid);
+          const alive = bots.filter(q => q.alive).length;
+          const last = steps[steps.length - 1];
+          if (!last || last.alive !== alive || last.joined !== bots.length) steps.push({ tick: p.time.tick, joined: bots.length, alive });
+        }, 2);
+        const row = [ ...document.querySelectorAll("#ryn-admin .ra-section") ].find(x => x.dataset.title === "Ryn bots");
+        row.querySelector('input[type="number"]').value = String(n);
+        [ ...row.querySelectorAll("button") ].find(x => x.textContent.trim() === "Spawn").click();
+        for (let i = 0; i < 200; i++) {
+          await sleep(50);
+          const s = R.priv.state();
+          if (s.players.filter(q => q.alive && !q.dummy).length >= n + 1) break;
+        }
+        await sleep(300);
+        clearInterval(watch);
+        R.priv.command("!ping 0");
+        return { steps, said: R.panel.logLine.textContent };
+      }, [ n, ping ]);
+      const rises = r.steps.filter((x, i) => i > 0 && x.alive > r.steps[i - 1].alive);
+      const ok = rises.length === 1 && rises[0].alive === n && r.steps.every(x => x.alive === 0 || x.alive === n);
+      check("bots: " + n + " spawn in one server tick" + (ping ? " (fake ping " + ping + "±40)" : ""), ok, r);
+      // the game client's own errors with fake ping (seen in fix21 too) are listed, not counted
+      report.botErrors = (report.botErrors || []).concat(eb);
+      await pb.close();
+    }
+    if (report.botErrors.length) console.log("Page errors while bots played (game client, not the panel):\n  " + [ ...new Set(report.botErrors) ].join("\n  "));
   }
 
   await browser.close();
