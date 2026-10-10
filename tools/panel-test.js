@@ -53,6 +53,10 @@ const SOAK = Number(flag("--soak", 0)) || 0;
 const SERVER_CHECKS = args.includes("--server-checks") ? (args.splice(args.indexOf("--server-checks"), 1), true) : false;
 // --king <seconds>: fight the Crab King in its arena and check what the page receives
 const KING = Number(flag("--king", 0)) || 0;
+// --king-record <seconds>: the same fight through Ryn's own client with the Crab King
+// recorder on; the recording is written to --out and tools/king-analyze.js must read the
+// in-page King's own numbers back out of it
+const KING_RECORD = Number(flag("--king-record", 0)) || 0;
 const SCRIPT = path.resolve(args[0] || path.join(__dirname, "..", "RynType2.user.js"));
 fs.mkdirSync(OUT, { recursive: true });
 
@@ -61,7 +65,7 @@ const source = fs.readFileSync(SCRIPT, "utf8");
 if (!source.includes(HOOK)) throw new Error("hook line not found: " + JSON.stringify(HOOK));
 // Like a userscript manager: wrapped in a function, and only in the top page (Playwright's
 // init scripts also run in Ryn's own menu frame, which a manager would not inject into).
-const injected = "(function () {\nif (window !== window.top) return;\n" + source.replace(HOOK, HOOK + "    window.__ryn = { panel: RynAdminPanel, priv: RynPrivate, Sock: RynPrivateSocket, worlds: RynWorlds, client: client };\n") + "\n})();";
+const injected = "(function () {\nif (window !== window.top) return;\n" + source.replace(HOOK, HOOK + "    window.__ryn = { panel: RynAdminPanel, priv: RynPrivate, Sock: RynPrivateSocket, worlds: RynWorlds, client: client, rec: RynKingRecorder };\n") + "\n})();";
 
 const PAGE = `<!doctype html><html><head><meta charset="utf-8"><title>moomoo</title></head>
 <body style="margin:0;background:#3d6b35;overflow:hidden">
@@ -263,6 +267,66 @@ async function main() {
     report.checks.push({ name, ok: !!ok, detail: detail === undefined ? "" : detail });
     console.log((ok ? "  ok   " : "  FAIL ") + name + (detail ? "  — " + (typeof detail === "string" ? detail : JSON.stringify(detail)) : ""));
   };
+
+  if (KING_RECORD) {
+    const { page: pr, errors: er } = await boot(context, { viaClient: true });
+    const rec = await pr.evaluate(async seconds => {
+      const R = window.__ryn, H = window.__harness;
+      const sleep = ms => new Promise(res => setTimeout(res, ms));
+      const send = (type, a) => R.priv.ownerSocket.send(H.enc([ type, a ]));
+      R.rec.start();
+      R.priv.command("!arena");
+      await sleep(300);
+      R.priv.command("!king respawn");
+      await sleep(300);
+      const t0 = Date.now();
+      // each of its attacks for sure, then a free fight; at the end it drops to 70% (crabs)
+      const plan = [ [ 0.1, "dive" ], [ 0.2, "charge" ], [ 0.3, "ring" ], [ 0.4, "slam" ], [ 0.5, "all" ] ];
+      let step = 0, hurt = false;
+      while (Date.now() - t0 < seconds * 1000) {
+        const f = (Date.now() - t0) / (seconds * 1000);
+        if (step < plan.length && f >= plan[step][0]) {
+          R.priv.command("!king only " + plan[step][1]);
+          R.priv.command("!king attack");
+          step++;
+        }
+        if (f > 0.7 && !hurt) {
+          hurt = true;
+          R.priv.command("!king hp 336000");
+        }
+        const me = H.me();
+        if (me && me.alive) send("9", [ Math.atan2(7200 - me.y, -2500 - me.x) + (Math.random() - 0.5) * 2.4 ]);
+        else {
+          R.client.myPlayer.spawn();
+          await sleep(600);
+          R.priv.command("!arena");
+        }
+        R.priv.command("!heal");
+        await sleep(400);
+      }
+      R.rec.stop();
+      return JSON.stringify(R.rec.data);
+    }, KING_RECORD);
+    const file = path.join(OUT, "crabking-test.json");
+    fs.writeFileSync(file, rec);
+    const analysis = path.join(OUT, "crabking-test.analysis.json");
+    execSync("node " + JSON.stringify(path.join(__dirname, "king-analyze.js")) + " " + JSON.stringify(file) + " --json " + JSON.stringify(analysis), { stdio: "inherit" });
+    const a = JSON.parse(fs.readFileSync(analysis, "utf8"));
+    const has = (list, v) => (list || []).some(x => String(x).split(" ")[0] === String(v));
+    const hit = a.attacks["hit circle"] || {}, ring = a.attacks.ring || {}, line = a.attacks["charge line"] || {}, splash = a.attacks.splash || {};
+    const fx = a.effects || {};
+    check("recorded: frames, the King, warnings", a.recording.kingTicks > 100 && a.recording.warnings > 5, a.recording);
+    check("its hit read back: 400, 700 ms, 45 damage, a 0.6 push", has(hit.radius, 400) && has(hit.ms, 700) && has((fx["hit circle"] || {}).damage, 45) && Math.abs((fx["hit circle"] || {}).push.median - 600) < 60, { hit, fx: fx["hit circle"] });
+    check("its ring read back: 250, 1100 ms", has(ring.radius, 250) && has(ring.ms, 1100), ring);
+    check("its charge read back: a line its width (280), 700 ms", has(line.radius, 280) && has(line.ms, 700), line);
+    check("its dive read back: under in ~700 ms, up in ~1650 ms, splash 400 / 1650", Math.abs(a.states.goingUnder.median - 700) <= 120 && Math.abs(a.states.comingUp.median - 1650) <= 120 && has(splash.radius, 400) && has(splash.ms, 1650), { states: a.states, splash });
+    check("its pace read back: chasing at most ~18 a tick, charging ~36", a.movement.perTick.walking.max <= 19 && a.movement.perTick.charging.max <= 37, a.movement.perTick);
+    check("its crabs read back: after it is hurt, Crablings and a Crab", a.crabs.waves.length > 0 && a.crabs.waves[0].kinds.length > 0, a.crabs.waves);
+    check("it stayed in its pools", a.arena.king && a.arena.king.ticksOutsideItsPools === 0, a.arena);
+    check("no page errors", er.length === 0, er);
+    await browser.close();
+    process.exit(report.checks.some(c => !c.ok) ? 1 : 0);
+  }
 
   if (KING) {
     const { page: pk, errors: ek } = await boot(context);
