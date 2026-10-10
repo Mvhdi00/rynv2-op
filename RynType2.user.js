@@ -1636,11 +1636,17 @@ window.grbtp = 35;
   // The player's own Cloudflare check. The game draws its widget inside #verifyDialog, which the lobby moves around the
   // page; a moved Turnstile frame reloads and never answers, so playing as a guest stalled on an empty dialog. Bots never
   // hit this because RynCF draws their checks in containers that stay put, so the player gets the same treatment.
+  // While the lobby is up a hidden check keeps the game holding a fresh token, so Play joins without waiting; the visible
+  // check in the dialog is only the fallback for when Cloudflare wants a click.
   (function rynPlayerCheck() {
+    const EARLY_TIMEOUT_MS = 3e4;
     let host = null;
     let widget = null;
     let api = null;
     let loading = false;
+    let heldAt = 0;
+    let early = null;
+    let earlyHoldUntil = 0;
     const give = token => {
       try {
         if (typeof window.onGotTurnstileToken === "function") window.onGotTurnstileToken(token);
@@ -1658,6 +1664,90 @@ window.grbtp = 35;
         host = null;
       }
     };
+    const dropEarly = () => {
+      const was = early;
+      if (was === null) return;
+      early = null;
+      clearTimeout(was.timer);
+      try {
+        if (was.widget != null && typeof was.api.remove === "function") was.api.remove(was.widget);
+      } catch (_) {}
+      try {
+        was.host.remove();
+      } catch (_) {}
+    };
+    const holdEarly = ms => {
+      dropEarly();
+      earlyHoldUntil = Date.now() + ms;
+    };
+    const signedIn = () => {
+      try {
+        const auth = window.FRVR && window.FRVR.auth;
+        return !!(auth && typeof auth.isLoggedIn === "function" && auth.isLoggedIn());
+      } catch (_) {
+        return false;
+      }
+    };
+    const inLobby = () => {
+      if (document.documentElement.classList.contains("ryn-in-lobby")) return true;
+      const menu = document.getElementById("mainMenu");
+      return menu !== null && menu.style.display !== "none" && !TokenPool._inGame();
+    };
+    const prefetch = () => {
+      if (early !== null || Date.now() < earlyHoldUntil) return;
+      const ts = RynCF.api();
+      if (!ts) {
+        RynCF.warm();
+        return;
+      }
+      const mine = {
+        host: document.createElement("div"),
+        widget: null,
+        api: ts,
+        timer: 0
+      };
+      mine.host.style.cssText = "position:fixed;left:-10000px;top:0;width:300px;height:65px;pointer-events:none;";
+      (document.body || document.documentElement).appendChild(mine.host);
+      early = mine;
+      mine.timer = setTimeout(() => {
+        if (early === mine) holdEarly(1e4);
+      }, EARLY_TIMEOUT_MS);
+      try {
+        mine.widget = ts.render(mine.host, {
+          sitekey: rynSitekey(),
+          appearance: "interaction-only",
+          callback: token => {
+            if (early !== mine) return;
+            dropEarly();
+            if (typeof token !== "string" || !token) return;
+            heldAt = Date.now();
+            give(token);
+          },
+          "before-interactive-callback": () => {
+            if (early === mine) holdEarly(6e4);
+          },
+          "error-callback": () => {
+            if (early === mine) holdEarly(1.5e4);
+            return true;
+          }
+        });
+      } catch (_) {}
+      if (early === mine && mine.widget == null) holdEarly(1.5e4);
+    };
+    const tick = () => {
+      try {
+        if (!inLobby()) {
+          heldAt = 0;
+          dropEarly();
+          return;
+        }
+        if (document.hidden || signedIn()) return;
+        if (heldAt !== 0 && Date.now() - heldAt < TURNSTILE_TTL_MS) return;
+        heldAt = 0;
+        prefetch();
+      } catch (_) {}
+    };
+    setInterval(tick, 1e3);
     const gameAsking = () => {
       const own = document.getElementById("turnstileWidget");
       const frame = own && own.querySelector("iframe");
@@ -1689,6 +1779,7 @@ window.grbtp = 35;
             callback: token => {
               if (typeof token !== "string" || !token) return;
               drop();
+              heldAt = Date.now();
               give(token);
             },
             "error-callback": code => {
