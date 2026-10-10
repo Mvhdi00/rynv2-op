@@ -21845,7 +21845,6 @@ module.exports.PACKETCODE = PACKETCODE
   }();
   let _RYN_Z = null;
   const RynBotChat = {
-    GAP_MS: 50,
     NOTICE_WINDOW_MS: 4e3,
     _lastLog: { text: "", at: 0 },
     _lastToast: "",
@@ -21875,11 +21874,10 @@ module.exports.PACKETCODE = PACKETCODE
         return false;
       }
     },
+    // every bot in the same moment: each has its own socket, so nothing is gained by spacing them out
     sayAll(owner, text) {
       const bots = this.bots(owner);
-      bots.forEach((bot, i) => {
-        if (i === 0) this.say(bot, text); else setTimeout(() => this.say(bot, text), i * this.GAP_MS);
-      });
+      for (const bot of bots) this.say(bot, text);
       return bots.length;
     },
     noteEcho(bot, text) {
