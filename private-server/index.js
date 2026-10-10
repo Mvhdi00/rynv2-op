@@ -613,49 +613,32 @@ server.addListener('connection', function (conn) {
 			}
 		}
 
+		// only what the game's upgrade bar offers: with a point left, of the age being
+		// picked, and after the weapon or item it upgrades (pre)
 		function sendUpgrade(index) {
-			if (index < 0 || index > items.weapons.length + items.list.length) return
+			index = Number(index)
+			if (!Number.isInteger(index) || index < 0 || index >= items.weapons.length + items.list.length) return
 
 			let tmpPlayer = findPlayerByID(conn.id)
-			if (tmpPlayer && tmpPlayer.alive) {
-				if (items.weapons[index]) {
-					if (tmpPlayer.weaponIndex < 9 && index < 9) {
-						tmpPlayer.weaponIndex = index
-					} else if (!(tmpPlayer.weaponIndex < 9) && !(index < 9)) {
-						tmpPlayer.weaponIndex = index
-					}
-					tmpPlayer.weapons[index < 9 ? 0 : 1] = index
-					server.send(conn.id, '17', [tmpPlayer.weapons, 1])
-				} else {
-					index -= 16
-					if (
-						tmpPlayer.buildIndex !== -1 &&
-						items.list[index].group.id ===
-							items.list[tmpPlayer.buildIndex].group.id
-					) {
-						tmpPlayer.buildIndex = index
-					}
-
-					let addedItem = false
-					for (let i = 0; i < tmpPlayer.items.length; i++) {
-						if (
-							items.list[tmpPlayer.items[i]].group.id ===
-							items.list[index].group.id
-						) {
-							tmpPlayer.items[i] = index
-							addedItem = true
-							break
-						}
-					}
-					if (!addedItem) {
-						tmpPlayer.items.push(index)
-					}
-					server.send(conn.id, '17', [tmpPlayer.items])
+			if (!tmpPlayer || !tmpPlayer.alive || !(tmpPlayer.upgradePoints > 0)) return
+			const isWeapon = index < items.weapons.length
+			const tmpObj = isWeapon ? items.weapons[index] : items.list[index - items.weapons.length]
+			if (!tmpObj || tmpObj.age != tmpPlayer.upgrAge) return
+			if (tmpObj.pre != null && (isWeapon ? tmpPlayer.weapons : tmpPlayer.items).indexOf(tmpObj.pre) < 0) return
+			if (isWeapon) {
+				// held a weapon of the same slot: now holding the new one
+				if (items.weapons[tmpPlayer.weaponIndex].type === tmpObj.type) {
+					tmpPlayer.weaponIndex = index
 				}
-				tmpPlayer.upgrAge++
-				tmpPlayer.upgradePoints--
-				server.send(conn.id, '16', [tmpPlayer.upgradePoints, tmpPlayer.upgrAge])
+				tmpPlayer.weapons[tmpObj.type] = index
+				server.send(conn.id, '17', [tmpPlayer.weapons, 1])
+			} else {
+				tmpPlayer.addItem(index - items.weapons.length)
+				server.send(conn.id, '17', [tmpPlayer.items])
 			}
+			tmpPlayer.upgrAge++
+			tmpPlayer.upgradePoints--
+			server.send(conn.id, '16', [tmpPlayer.upgradePoints, tmpPlayer.upgrAge])
 		}
 
 		function storeFunction(type, id, index) {
@@ -669,62 +652,45 @@ server.addListener('connection', function (conn) {
 				return
 			}
 
+			if (isNaN(type) || isNaN(id)) return
+			index = index ? 1 : 0
 			let tmpPlayer = findPlayerByID(conn.id)
-			if (tmpPlayer && tmpPlayer.alive) {
-				var tmpObj = null
-				if (id !== 0) {
-					if (index) {
-						for (let i = 0; i < accessories.length; ++i) {
-							if (accessories[i].id === id) {
-								tmpObj = accessories[i]
-								break
-							}
-						}
-					} else {
-						for (let i = 0; i < hats.length; i++) {
-							if (hats[i].id === id) {
-								tmpObj = hats[i]
-								break
-							}
-						}
-					}
-				} else {
-					if (index) {
-						tmpPlayer.tail = null
-						tmpPlayer.tailIndex = id
-						server.send(conn.id, 'us', [1, id, index])
-					} else {
-						tmpPlayer.skin = null
-						tmpPlayer.skinIndex = id
-						server.send(conn.id, 'us', [1, id, index])
-					}
-				}
-
+			if (!tmpPlayer || !tmpPlayer.alive) return
+			const owned = index ? tmpPlayer.tails : tmpPlayer.skins
+			const wear = function (obj) {
 				if (index) {
-					if (type) {
-						if (tmpObj.price <= tmpPlayer.points) {
-							tmpPlayer.addResource(3, -tmpObj.price)
-							tmpPlayer.tails[id] = 1
-							server.send(conn.id, 'us', [0, id, index])
-						}
-					} else if (tmpPlayer.tails[id]) {
-						tmpPlayer.tail = tmpObj
-						tmpPlayer.tailIndex = id
-						server.send(conn.id, 'us', [1, id, index])
-					}
+					tmpPlayer.tail = obj
+					tmpPlayer.tailIndex = id
 				} else {
-					if (type) {
-						if (tmpObj.price <= tmpPlayer.points) {
-							tmpPlayer.addResource(3, -tmpObj.price)
-							tmpPlayer.skins[id] = 1
-							server.send(conn.id, 'us', [0, id, index])
-						}
-					} else if (tmpPlayer.skins[id]) {
-						tmpPlayer.skin = tmpObj
-						tmpPlayer.skinIndex = id
-						server.send(conn.id, 'us', [1, id, index])
-					}
+					tmpPlayer.skin = obj
+					tmpPlayer.skinIndex = id
 				}
+				server.send(conn.id, 'us', [1, id, index])
+			}
+			// 0 takes it off
+			if (id === 0) {
+				if (!type) wear(null)
+				return
+			}
+			const list = index ? accessories : hats
+			let tmpObj = null
+			for (let i = 0; i < list.length; ++i) {
+				if (list[i].id === id) {
+					tmpObj = list[i]
+					break
+				}
+			}
+			if (!tmpObj) return
+			if (type) {
+				// buy: not twice, and not what is only given (Shame!, the Crab Shell)
+				if (owned[id] || tmpObj.dontSell || tmpObj.earned) return
+				if (tmpObj.price <= tmpPlayer.points) {
+					tmpPlayer.addResource(3, -tmpObj.price)
+					owned[id] = 1
+					server.send(conn.id, 'us', [0, id, index])
+				}
+			} else if (owned[id]) {
+				wear(tmpObj)
 			}
 		}
 
@@ -1090,6 +1056,7 @@ function gameTick(step) {
 	for (let i = 0; i < projectiles.length; i++) {
 		projectiles[i].update(delta)
 	}
+	payPointsPerSecond(delta)
 	try {
 		ryn.endTick()
 	} catch (e) {
@@ -1203,26 +1170,41 @@ function gameTick(step) {
 }
 let rynTickTimer = setInterval(tickLoop, 5)
 
+// As the game shows it: the top ten by points (whoever has played, alive or not), the dead
+// with a skull, and a crab by whoever has killed the Crab King (they have its shell).
 function updateLeaderboard() {
 	const tmpLeaderboardData = []
+	const dead = []
+	const crabKillers = []
 	for (const player of players
-		.filter(player => player.alive)
+		.filter(player => player.active)
 		.sort(UTILS.sortByPoints)
 		.slice(0, 10)) {
 		tmpLeaderboardData.push(player.sid, player.name, player.points)
+		if (!player.alive) dead.push(player.sid)
+		if (player.skins && player.skins[61]) crabKillers.push(player.sid)
 	}
-	server.sendAll('5', [tmpLeaderboardData])
+	server.sendAll('5', [tmpLeaderboardData, [], dead, crabKillers])
+}
+
+// Points per second (windmills and the Windmill Hat), in game time: they stop while the
+// world is paused and slow down with it. Called every tick with its delta.
+var ppsTime = 0
+function payPointsPerSecond(delta) {
+	ppsTime += delta
+	if (ppsTime < 1000) return
+	ppsTime -= 1000
+	for (let i = 0; i < players.length; i++) {
+		const tmpPlayer = players[i]
+		const pps = (tmpPlayer.pps || 0) + (tmpPlayer.alive && tmpPlayer.skin && tmpPlayer.skin.pps ? tmpPlayer.skin.pps : 0)
+		if (pps) {
+			scoreCallback(tmpPlayer, pps)
+		}
+	}
 }
 
 // Update Leaderboard
-setInterval(() => {
-	for (let i = 0; i < players.length; i++) {
-		if (players[i].pps) {
-			scoreCallback(players[i], players[i].pps)
-		}
-	}
-	updateLeaderboard()
-}, 1000)
+setInterval(updateLeaderboard, 1000)
 
 // SEND MAP DATA
 setInterval(() => {
@@ -1267,7 +1249,7 @@ function iconCallback() {
 			(highest == null || highestKill < player.kills)
 		) {
 			highest = i
-			highestKill = player.kill
+			highestKill = player.kills
 		}
 	}
 	if (highest !== null) {

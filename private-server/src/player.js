@@ -4,6 +4,7 @@ var mathSIN = Math.sin
 var mathPOW = Math.pow
 var mathSQRT = Math.sqrt
 var badWords = require('./badwords.js')
+var Capes = require('./capes.js')
 module.exports = function (
 	id,
 	sid,
@@ -21,6 +22,7 @@ module.exports = function (
 	iconCallback,
 	MODE
 ) {
+	var capes = Capes(config)
 	this.id = id
 	this.sid = sid
 	this.tmpScore = 0
@@ -34,15 +36,16 @@ module.exports = function (
 	this.secondary = null
 	this.secondaryVariant = 0
 	this.hitTime = 0
+	// the free ones, as the game: not Shame! or the Crab Shell (dontSell), which are given
 	this.tails = {}
 	for (let i = 0; i < accessories.length; ++i) {
-		if (accessories[i].price <= 0) {
+		if (accessories[i].price <= 0 && !accessories[i].dontSell) {
 			this.tails[accessories[i].id] = 1
 		}
 	}
 	this.skins = {}
 	for (let i = 0; i < hats.length; ++i) {
-		if (hats[i].price <= 0) {
+		if (hats[i].price <= 0 && !hats[i].dontSell) {
 			this.skins[hats[i].id] = 1
 		}
 	}
@@ -207,6 +210,8 @@ module.exports = function (
 	this.update = function (delta) {
 		if (!this.alive) return
 
+		capes.tick(this, delta)
+
 		// SHAME SHAME SHAME:
 		if (this.shameTimer > 0) {
 			this.shameTimer -= delta
@@ -261,8 +266,9 @@ module.exports = function (
 				(items.weapons[this.weaponIndex].spdMult || 1) *
 				(this.skin ? this.skin.spdMult || 1 : 1) *
 				(this.tail ? this.tail.spdMult || 1 : 1) *
-				(this.y <= config.snowBiomeTop ? (this.skin && this.skin.coldM ? 1 : config.snowSpeed) : 1) *
-				this.slowMult
+				(this.y <= config.snowBiomeTop ? (this.skin && this.skin.coldM ? 1 : capes.snow(this)) : 1) *
+				this.slowMult *
+				capes.speed(this)
 
 			// the river stops at the map edge: the Crab King's gorge and pools (x < 0) are dry land
 			if (!this.zIndex && (!config.secretPool || this.x >= 0) && this.y >= config.mapScale / 2 - config.riverWidth / 2 && this.y <= config.mapScale / 2 + config.riverWidth / 2) {
@@ -508,7 +514,7 @@ module.exports = function (
 			this.health = this.maxHealth
 		}
 		if (this.health <= 0) {
-			this.kill(doer)
+			this.kill(doer, src)
 		}
 		for (var i = 0; i < players.length; ++i) {
 			if (this.sentTo[players[i].id]) {
@@ -522,12 +528,15 @@ module.exports = function (
 	}
 
 	// KILL:
-	this.kill = function (doer) {
+	this.kill = function (doer, src) {
 		if (doer && doer.alive) {
 			doer.kills++
-			if (doer.skin && doer.skin.goldSteal) scoreCallback(doer, Math.round(this.points / 2))
-			else scoreCallback(doer, Math.round(this.age * 100 * (doer.skin && doer.skin.kScrM ? doer.skin.kScrM : 1)))
+			// Skull Cape (the kill leader) and Troll Cape (your spikes) multiply the gold
+			var capeGold = capes.killGold(doer, this, src)
+			if (doer.skin && doer.skin.goldSteal) scoreCallback(doer, Math.round(this.points / 2) * capeGold)
+			else scoreCallback(doer, Math.round(this.age * 100 * (doer.skin && doer.skin.kScrM ? doer.skin.kScrM : 1)) * capeGold)
 			server.send(doer.id, "9", ["kills", doer.kills, 1])
+			capes.killed(doer)
 		}
 		this.alive = false
 		// Ryn's private log: who killed you
@@ -688,10 +697,11 @@ module.exports = function (
 								} else {
 									this.earnXP(4 * items.weapons[this.weaponIndex].gather)
 									var count = Math.round((items.weapons[this.weaponIndex].gather + (tmpObj.type == 3 ? 4 : 0)) * ((config.rynRules && config.rynRules.gatherMult) || 1))
+									// Tree, Cookie and Stone Capes: one more per hit
+									this.addResource(tmpObj.type, count + capes.gather(this, tmpObj.type))
 									if (this.skin && this.skin.extraGold) {
 										this.addResource(3, 1)
 									}
-									this.addResource(tmpObj.type, count)
 								}
 								hitSomething = true
 								objectManager.hitObj(tmpObj, tmpDir)
@@ -732,7 +742,8 @@ module.exports = function (
 							this.customDmg ||
 							items.weapons[this.weaponIndex].dmg *
 								(this.skin && this.skin.dmgMultO ? this.skin.dmgMultO : 1) *
-								(this.tail && this.tail.dmgMultO ? this.tail.dmgMultO : 1)
+								(this.tail && this.tail.dmgMultO ? this.tail.dmgMultO : 1) *
+								capes.damage(this)
 						var tmpSpd = 0.3 * (tmpObj.weightM || 1) + (items.weapons[this.weaponIndex].knock || 0)
 						if (MODE !== "HOCKEY") {
 							tmpObj.xVel += tmpSpd * mathCOS(tmpDir)
@@ -767,14 +778,21 @@ module.exports = function (
 							tmpObj.dmgOverTime.time = 5
 							tmpObj.dmgOverTime.doer = this
 						}
+						if (MODE !== "HOCKEY" && tmpObj.isPlayer) {
+							// Devils Tail: bleeding; Thorns: a little health back; Dragon Cape: 5s of more damage
+							capes.bleed(this, tmpObj)
+							if (capes.thorns(this)) this.changeHealth(dmgVal * dmgMlt * capes.thorns(this), this)
+							capes.hitPlayer(this)
+						}
 						if (tmpObj.skin && tmpObj.skin.dmgK) {
 							this.xVel -= tmpObj.skin.dmgK * mathCOS(tmpDir)
 							this.yVel -= tmpObj.skin.dmgK * mathSIN(tmpDir)
 						}
 						if (MODE !== "HOCKEY") {
 							tmpObj.changeHealth(-dmgVal * dmgMlt, this, this)
-							// emerald weapons heal by part of the damage they deal
-							if (tmpVariant.lifesteal) {
+							// emerald weapons heal by part of the damage they deal (in the game's data,
+							// not in its code, so it goes with the store effects)
+							if (tmpVariant.lifesteal && capes.on() && dmgVal * dmgMlt > 0) {
 								this.changeHealth(dmgVal * dmgMlt * tmpVariant.lifesteal, this)
 							}
 						}

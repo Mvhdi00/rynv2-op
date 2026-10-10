@@ -78,6 +78,68 @@ They match. What was different and is now the game's:
   movement is not time-step independent, so a late tick used to move everyone
   further (up to three ticks' worth in one).
 
+## fix26: everything else the game's files say
+
+`node tools/server-parity.js` now also compares every packet sent each tick and what a
+new player owns, over generated situations: every weapon at every tier (on a player,
+animals, trees, bushes, rocks, gold and an enemy wall), every hat and accessory (walking,
+snow, river, a fight, shots, gathering), every building (walked into, stood on, own and
+enemy) and every animal (near a still player, hit with walls and a trap around, killed
+and back after its delay). 557 situations, all the same as the game. Found and fixed:
+
+- Everyone started owning **Shame!** and the **Crab Shell** (the game skips `dontSell`),
+  so killing the Crab King gave nothing. Worlds saved before this keep neither.
+- The store sold what you already had (charging again), sold Shame! and the Crab Shell,
+  and stopped on an unknown id. Now: only what you do not have, never what is only given,
+  and you wear only what you own.
+- Upgrades took anything at any time, even with no points. Now only what the game's
+  upgrade bar offers: a point left, the age being picked, and the weapon or item it
+  needs (`pre`).
+- The crown (kill leader) went to the first player with a kill, not the most kills
+  (`player.kill` instead of `player.kills`).
+- The leaderboard now has the game's other parts: the dead (a skull) and the Crab King's
+  killers (a crab), whoever has played and not only the living.
+- The **Windmill Hat** paid nothing. Points per second (it and the windmills) now run on
+  game time, so they stop with `!time pause`.
+- An unknown animal kind becomes a cow (as the game) instead of stopping the server, and
+  `minSpawnRange`/`maxSpawnRange` work as in the game. Projectile 1 is the game's again;
+  extra gold from the Miners Helmet comes after the resource, as in the game.
+
+### Capes
+
+Fourteen accessories have an effect only in the game's store text; the code for them is not
+in the game's files. They follow the text (`src/capes.js`):
+
+| | |
+|---|---|
+| Dash Cape | 5% faster |
+| Winter Cape / Snowball | no snow slowdown / half of it (x0.875 instead of x0.75) |
+| Super Cape | after a kill, 10 s of 5% more damage and 15% more speed |
+| Dragon Cape | 5 s of 5% more damage after hitting a player |
+| Tree, Cookie, Stone Cape | 1 more wood, food (bush, cactus), stone per hit |
+| Cow Cape | 1.5x the gold and food of a cow |
+| Skull Cape | 3x the gold for killing the kill leader |
+| Troll Cape | 2x the gold for a kill by your spikes |
+| Blockades | 25% less damage from shots |
+| Thorns | heals "a little" when you hit a player: **10% of the hit** (ours) |
+| Devils Tail | the hit player bleeds for 2 s: **5 a second** (ours); a longer poison stays |
+
+The damage bonuses count for melee and weapon shots, not turrets. `config.storeEffects =
+false` turns these off, with the Emerald lifesteal (also only in the game's data);
+`tools/server-parity.js` compares the rest with the game that way and then checks each
+of them against its text. Ryn's own movement prediction knows the Dash, Winter and
+Snowball capes.
+
+### Ryn's page
+
+The in-page socket delivered each message on its own timer. Timers round to whole
+milliseconds and a message with no delay could pass a late one, so with a fake ping about
+one message in seven came out of order: a tick's player list could arrive before the
+player it lists, and Ryn's client stopped on `getWeaponSpeed`. Each direction is now one
+queue delivered in order. `node tools/panel-test.js --soak 60` (12 bots on 150±80 ms for a
+minute, killed and back) went from 3 page errors to none. `--server-checks` drives the
+store, upgrades, Windmill Hat and leaderboard through real packets.
+
 ## Crab King
 
 The game only draws the King: its state (1 going under, 2 under water, 3 coming up)

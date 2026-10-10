@@ -256,6 +256,11 @@ module.exports = function (ais, AI, players, items, objectManager, config, UTILS
 
 	// SPAWN AI:
 	this.spawn = function (x, y, dir, index) {
+		// as the game: an unknown kind becomes a cow
+		if (!this.aiTypes[index]) {
+			console.error("missing ai type", index)
+			return this.spawn(x, y, dir, 0)
+		}
 		var tmpObj
 		for (var i = 0; i < ais.length; ++i) {
 			if (!ais[i].active) {

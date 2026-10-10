@@ -3,6 +3,9 @@
 // control did.
 //
 //   node tools/panel-test.js [RynType2.user.js] [--out dir] [--compare old-report.json] [--fast]
+//   node tools/panel-test.js --soak <seconds>     12 bots on a 150±80 ms fake ping, page errors counted
+//   node tools/panel-test.js --server-checks      the store, upgrades, Windmill Hat and leaderboard,
+//                                                 through real packets to the in-page server
 //
 // The page is a stub moomoo.io (nothing reaches the network) with the HUD the panel
 // needs (#adminButton, #chatHolder, the game canvas). The userscript is injected at
@@ -42,6 +45,10 @@ const flag = (name, fallback) => {
 const OUT = path.resolve(flag("--out", path.join(process.cwd(), "panel-test-out")));
 const COMPARE = flag("--compare", null);
 const FAST = args.includes("--fast") ? (args.splice(args.indexOf("--fast"), 1), true) : false;
+// --soak <seconds>: only the long run with bots on a jittery fake ping, counting page errors
+const SOAK = Number(flag("--soak", 0)) || 0;
+// --server-checks: only the in-page server's rules (store, upgrades, leaderboard) through real packets
+const SERVER_CHECKS = args.includes("--server-checks") ? (args.splice(args.indexOf("--server-checks"), 1), true) : false;
 const SCRIPT = path.resolve(args[0] || path.join(__dirname, "..", "RynType2.user.js"));
 fs.mkdirSync(OUT, { recursive: true });
 
@@ -101,7 +108,7 @@ const PAGE_TOOLS = () => {
     w(v);
     return new Uint8Array(out).buffer;
   };
-  const H = window.__harness = { rec: null, all: [], sock: null };
+  const H = window.__harness = { rec: null, all: [], sock: null, enc };
   H.spawn = () => {
     const R = window.__ryn;
     if (!H.sock || H.sock.readyState > 1) {
@@ -252,6 +259,144 @@ async function main() {
     report.checks.push({ name, ok: !!ok, detail: detail === undefined ? "" : detail });
     console.log((ok ? "  ok   " : "  FAIL ") + name + (detail ? "  — " + (typeof detail === "string" ? detail : JSON.stringify(detail)) : ""));
   };
+
+  if (SERVER_CHECKS) {
+    const { page: pc, errors: ec } = await boot(context);
+    const r = await pc.evaluate(async () => {
+      const R = window.__ryn, H = window.__harness;
+      const sleep = ms => new Promise(res => setTimeout(res, ms));
+      const got = [];
+      const dec = R.client.PacketManager.Decoder;
+      H.sock.addEventListener("message", ev => {
+        try {
+          got.push(dec.decode(new Uint8Array(ev.data)));
+        } catch (_) {}
+      });
+      // the harness's encoder is in its closure: send through the panel's own path instead
+      const send = async (type, ...a) => {
+        H.sock.send(H.enc([ type, a ]));
+        await sleep(150);
+      };
+      const st = () => R.priv.call("playerState");
+      const out = {};
+      const s0 = st();
+      out.start = { skins: s0.skins, points: s0.points };
+      R.priv.command("!res 100000");
+      await sleep(200);
+      const p0 = st().points;
+      await send("c", 1, 7, 0); // buy the Bull Helmet
+      const p1 = st().points;
+      await send("c", 1, 7, 0); // and again
+      const p2 = st().points;
+      await send("c", 1, 45, 0); // Shame! is not for sale
+      await send("c", 1, 61, 0); // nor the Crab Shell
+      await send("c", 0, 61, 0); // and cannot be worn without it
+      const s1 = st();
+      await send("c", 1, 999, 0); // a hat that does not exist
+      await send("c", 0, 7, 0); // wear the Bull Helmet
+      const worn = st().skinIndex;
+      await send("c", 1, 11, 1); // Monkey Tail
+      await send("c", 0, 11, 1);
+      const s2 = st();
+      await send("c", 0, 0, 0); // hat off
+      out.store = { price: p0 - p1, again: p1 - p2, owns: s1.skins, wearingAfterShell: s1.skinIndex, worn, tails: s2.tails, tail: s2.tailIndex, off: st().skinIndex };
+      // upgrades: nothing without a point, only the age being picked, only after "pre"
+      await send("H", 3);
+      const u0 = st();
+      R.priv.command("!age 2");
+      await sleep(200);
+      const u1 = st();
+      await send("H", 4); // katana: age 8, needs the short sword
+      const u2 = st();
+      await send("H", 3); // short sword: age 2
+      const u3 = st();
+      R.priv.command("!age 4");
+      await sleep(200);
+      await send("H", 16 + 1); // cookie: age 3
+      await send("H", 16 + 15); // pit trap: age 4
+      const u4 = st();
+      await send("H", 16 + 5); // castle wall: age 7, not yet
+      const u5 = st();
+      out.upgrades = { noPoint: u0.weapons, points: [ u1.upgradePoints, u1.upgrAge ], katanaRefused: u2.weapons, sword: [ u3.weapons, u3.upgradePoints, u3.upgrAge ], items: [ u4.items, u4.upgrAge ], castleRefused: u5.items };
+      // points per second: the Windmill Hat pays 1.5 a second, in game time
+      R.priv.command("!hat 14");
+      await sleep(300);
+      const w0 = st().points;
+      await sleep(2050);
+      const w1 = st().points;
+      R.priv.command("!time pause");
+      await sleep(300);
+      const w2 = st().points;
+      await sleep(2050);
+      const w3 = st().points;
+      R.priv.command("!time play");
+      out.windmillHat = { running: w1 - w0, paused: w3 - w2 };
+      // the leaderboard: list, roles, dead, Crab King killers (the Crab Shell's owners)
+      R.priv.command("!hat 61");
+      R.priv.command("!dummy idle 1");
+      await sleep(400);
+      const dummy = R.priv.state().players.find(p => p.dummy);
+      if (dummy) R.priv.command("!kill " + dummy.sid);
+      got.length = 0;
+      await sleep(1300);
+      const lb = got.filter(m => m[0] === "G").pop();
+      const me = R.priv.state().me;
+      out.leaderboard = lb ? { fields: lb[1].length, crab: lb[1][3], dead: lb[1][2], me: me.sid, dummy: dummy && dummy.sid, dummyAlive: dummy && R.priv.state().players.find(p => p.sid === dummy.sid) } : null;
+      return out;
+    });
+    console.log(JSON.stringify(r, null, 1));
+    const has = (a, x) => a.indexOf(x) >= 0;
+    check("a new player owns neither Shame! nor the Crab Shell", !has(r.start.skins, 45) && !has(r.start.skins, 61), r.start.skins);
+    check("store: a hat costs its price once", r.store.price === 6000 && r.store.again === 0, r.store);
+    check("store: Shame! and the Crab Shell cannot be bought or worn", !has(r.store.owns, 45) && !has(r.store.owns, 61) && r.store.wearingAfterShell !== 61, r.store.owns);
+    check("store: wear, accessory, take off", r.store.worn === 7 && has(r.store.tails, 11) && r.store.tail === 11 && r.store.off === 0, r.store);
+    const U = r.upgrades;
+    check("upgrades: none without a point", JSON.stringify(U.noPoint) === "[0]", U.noPoint);
+    check("upgrades: the age being picked, after what it needs", JSON.stringify(U.katanaRefused) === "[0]" && JSON.stringify(U.sword[0]) === "[3]" && U.sword[2] === 3 && has(U.items[0], 1) && has(U.items[0], 15) && JSON.stringify(U.castleRefused) === JSON.stringify(U.items[0]), U);
+    check("Windmill Hat: 1.5 points a second, none while the world is paused", r.windmillHat.running >= 3 && r.windmillHat.running <= 4.5 && r.windmillHat.paused === 0, r.windmillHat);
+    const L = r.leaderboard || {};
+    check("leaderboard: four parts, a crab by the Crab Shell's owner, the dead marked", L.fields === 4 && has(L.crab || [], L.me) && (!L.dummy || has(L.dead || [], L.dummy) || (L.dummyAlive && L.dummyAlive.alive)), L);
+    check("no page errors", ec.length === 0, ec);
+    await browser.close();
+    process.exit(report.checks.some(c => !c.ok) ? 1 : 0);
+  }
+
+  if (SOAK) {
+    // 12 bots on 150±80 ms, wolves and fighting dummies around, a bot killed every 3 s so
+    // they keep dying and joining again; every page error is counted
+    const { page: ps, errors: es } = await boot(context, { viaClient: true });
+    const r = await ps.evaluate(async seconds => {
+      const R = window.__ryn;
+      const sleep = ms => new Promise(res => setTimeout(res, ms));
+      R.priv.command("!ping 150 80");
+      const row = [ ...document.querySelectorAll("#ryn-admin .ra-section") ].find(x => x.dataset.title === "Ryn bots");
+      row.querySelector('input[type="number"]').value = "12";
+      [ ...row.querySelectorAll("button") ].find(x => x.textContent.trim() === "Spawn").click();
+      await sleep(4000);
+      R.priv.command("!spawn wolf 4");
+      R.priv.command("!dummy attack 3");
+      const end = Date.now() + seconds * 1000;
+      let kills = 0, most = 0;
+      while (Date.now() < end) {
+        await sleep(3000);
+        const s = R.priv.state();
+        const bots = s.players.filter(q => !q.dummy && q.alive && s.me && q.sid !== s.me.sid);
+        most = Math.max(most, bots.length);
+        if (bots.length) {
+          R.priv.command("!kill " + bots[Math.floor(Math.random() * bots.length)].sid);
+          kills++;
+        }
+      }
+      R.priv.command("!ping 0");
+      return { kills, most };
+    }, SOAK);
+    const uniq = [ ...new Set(es) ];
+    console.log("Soak " + SOAK + "s: " + r.most + " bots at most, " + r.kills + " killed and back, " + es.length + " page error(s)");
+    for (const e of uniq) console.log("  " + es.filter(x => x === e).length + "x " + e);
+    check("soak: no page errors with bots on a jittery ping", es.length === 0, uniq.slice(0, 5));
+    await browser.close();
+    process.exit(es.length ? 1 : 0);
+  }
 
   // ---- run 1: crawl everything ----
   const { page, errors } = await boot(context, {

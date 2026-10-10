@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.4-fix25
+// @version         2.9.4-fix26
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -2253,49 +2253,32 @@ server.addListener('connection', function (conn) {
 			}
 		}
 
+		// only what the game's upgrade bar offers: with a point left, of the age being
+		// picked, and after the weapon or item it upgrades (pre)
 		function sendUpgrade(index) {
-			if (index < 0 || index > items.weapons.length + items.list.length) return
+			index = Number(index)
+			if (!Number.isInteger(index) || index < 0 || index >= items.weapons.length + items.list.length) return
 
 			let tmpPlayer = findPlayerByID(conn.id)
-			if (tmpPlayer && tmpPlayer.alive) {
-				if (items.weapons[index]) {
-					if (tmpPlayer.weaponIndex < 9 && index < 9) {
-						tmpPlayer.weaponIndex = index
-					} else if (!(tmpPlayer.weaponIndex < 9) && !(index < 9)) {
-						tmpPlayer.weaponIndex = index
-					}
-					tmpPlayer.weapons[index < 9 ? 0 : 1] = index
-					server.send(conn.id, '17', [tmpPlayer.weapons, 1])
-				} else {
-					index -= 16
-					if (
-						tmpPlayer.buildIndex !== -1 &&
-						items.list[index].group.id ===
-							items.list[tmpPlayer.buildIndex].group.id
-					) {
-						tmpPlayer.buildIndex = index
-					}
-
-					let addedItem = false
-					for (let i = 0; i < tmpPlayer.items.length; i++) {
-						if (
-							items.list[tmpPlayer.items[i]].group.id ===
-							items.list[index].group.id
-						) {
-							tmpPlayer.items[i] = index
-							addedItem = true
-							break
-						}
-					}
-					if (!addedItem) {
-						tmpPlayer.items.push(index)
-					}
-					server.send(conn.id, '17', [tmpPlayer.items])
+			if (!tmpPlayer || !tmpPlayer.alive || !(tmpPlayer.upgradePoints > 0)) return
+			const isWeapon = index < items.weapons.length
+			const tmpObj = isWeapon ? items.weapons[index] : items.list[index - items.weapons.length]
+			if (!tmpObj || tmpObj.age != tmpPlayer.upgrAge) return
+			if (tmpObj.pre != null && (isWeapon ? tmpPlayer.weapons : tmpPlayer.items).indexOf(tmpObj.pre) < 0) return
+			if (isWeapon) {
+				// held a weapon of the same slot: now holding the new one
+				if (items.weapons[tmpPlayer.weaponIndex].type === tmpObj.type) {
+					tmpPlayer.weaponIndex = index
 				}
-				tmpPlayer.upgrAge++
-				tmpPlayer.upgradePoints--
-				server.send(conn.id, '16', [tmpPlayer.upgradePoints, tmpPlayer.upgrAge])
+				tmpPlayer.weapons[tmpObj.type] = index
+				server.send(conn.id, '17', [tmpPlayer.weapons, 1])
+			} else {
+				tmpPlayer.addItem(index - items.weapons.length)
+				server.send(conn.id, '17', [tmpPlayer.items])
 			}
+			tmpPlayer.upgrAge++
+			tmpPlayer.upgradePoints--
+			server.send(conn.id, '16', [tmpPlayer.upgradePoints, tmpPlayer.upgrAge])
 		}
 
 		function storeFunction(type, id, index) {
@@ -2309,62 +2292,45 @@ server.addListener('connection', function (conn) {
 				return
 			}
 
+			if (isNaN(type) || isNaN(id)) return
+			index = index ? 1 : 0
 			let tmpPlayer = findPlayerByID(conn.id)
-			if (tmpPlayer && tmpPlayer.alive) {
-				var tmpObj = null
-				if (id !== 0) {
-					if (index) {
-						for (let i = 0; i < accessories.length; ++i) {
-							if (accessories[i].id === id) {
-								tmpObj = accessories[i]
-								break
-							}
-						}
-					} else {
-						for (let i = 0; i < hats.length; i++) {
-							if (hats[i].id === id) {
-								tmpObj = hats[i]
-								break
-							}
-						}
-					}
-				} else {
-					if (index) {
-						tmpPlayer.tail = null
-						tmpPlayer.tailIndex = id
-						server.send(conn.id, 'us', [1, id, index])
-					} else {
-						tmpPlayer.skin = null
-						tmpPlayer.skinIndex = id
-						server.send(conn.id, 'us', [1, id, index])
-					}
-				}
-
+			if (!tmpPlayer || !tmpPlayer.alive) return
+			const owned = index ? tmpPlayer.tails : tmpPlayer.skins
+			const wear = function (obj) {
 				if (index) {
-					if (type) {
-						if (tmpObj.price <= tmpPlayer.points) {
-							tmpPlayer.addResource(3, -tmpObj.price)
-							tmpPlayer.tails[id] = 1
-							server.send(conn.id, 'us', [0, id, index])
-						}
-					} else if (tmpPlayer.tails[id]) {
-						tmpPlayer.tail = tmpObj
-						tmpPlayer.tailIndex = id
-						server.send(conn.id, 'us', [1, id, index])
-					}
+					tmpPlayer.tail = obj
+					tmpPlayer.tailIndex = id
 				} else {
-					if (type) {
-						if (tmpObj.price <= tmpPlayer.points) {
-							tmpPlayer.addResource(3, -tmpObj.price)
-							tmpPlayer.skins[id] = 1
-							server.send(conn.id, 'us', [0, id, index])
-						}
-					} else if (tmpPlayer.skins[id]) {
-						tmpPlayer.skin = tmpObj
-						tmpPlayer.skinIndex = id
-						server.send(conn.id, 'us', [1, id, index])
-					}
+					tmpPlayer.skin = obj
+					tmpPlayer.skinIndex = id
 				}
+				server.send(conn.id, 'us', [1, id, index])
+			}
+			// 0 takes it off
+			if (id === 0) {
+				if (!type) wear(null)
+				return
+			}
+			const list = index ? accessories : hats
+			let tmpObj = null
+			for (let i = 0; i < list.length; ++i) {
+				if (list[i].id === id) {
+					tmpObj = list[i]
+					break
+				}
+			}
+			if (!tmpObj) return
+			if (type) {
+				// buy: not twice, and not what is only given (Shame!, the Crab Shell)
+				if (owned[id] || tmpObj.dontSell || tmpObj.earned) return
+				if (tmpObj.price <= tmpPlayer.points) {
+					tmpPlayer.addResource(3, -tmpObj.price)
+					owned[id] = 1
+					server.send(conn.id, 'us', [0, id, index])
+				}
+			} else if (owned[id]) {
+				wear(tmpObj)
 			}
 		}
 
@@ -2730,6 +2696,7 @@ function gameTick(step) {
 	for (let i = 0; i < projectiles.length; i++) {
 		projectiles[i].update(delta)
 	}
+	payPointsPerSecond(delta)
 	try {
 		ryn.endTick()
 	} catch (e) {
@@ -2843,26 +2810,41 @@ function gameTick(step) {
 }
 let rynTickTimer = setInterval(tickLoop, 5)
 
+// As the game shows it: the top ten by points (whoever has played, alive or not), the dead
+// with a skull, and a crab by whoever has killed the Crab King (they have its shell).
 function updateLeaderboard() {
 	const tmpLeaderboardData = []
+	const dead = []
+	const crabKillers = []
 	for (const player of players
-		.filter(player => player.alive)
+		.filter(player => player.active)
 		.sort(UTILS.sortByPoints)
 		.slice(0, 10)) {
 		tmpLeaderboardData.push(player.sid, player.name, player.points)
+		if (!player.alive) dead.push(player.sid)
+		if (player.skins && player.skins[61]) crabKillers.push(player.sid)
 	}
-	server.sendAll('5', [tmpLeaderboardData])
+	server.sendAll('5', [tmpLeaderboardData, [], dead, crabKillers])
+}
+
+// Points per second (windmills and the Windmill Hat), in game time: they stop while the
+// world is paused and slow down with it. Called every tick with its delta.
+var ppsTime = 0
+function payPointsPerSecond(delta) {
+	ppsTime += delta
+	if (ppsTime < 1000) return
+	ppsTime -= 1000
+	for (let i = 0; i < players.length; i++) {
+		const tmpPlayer = players[i]
+		const pps = (tmpPlayer.pps || 0) + (tmpPlayer.alive && tmpPlayer.skin && tmpPlayer.skin.pps ? tmpPlayer.skin.pps : 0)
+		if (pps) {
+			scoreCallback(tmpPlayer, pps)
+		}
+	}
 }
 
 // Update Leaderboard
-setInterval(() => {
-	for (let i = 0; i < players.length; i++) {
-		if (players[i].pps) {
-			scoreCallback(players[i], players[i].pps)
-		}
-	}
-	updateLeaderboard()
-}, 1000)
+setInterval(updateLeaderboard, 1000)
 
 // SEND MAP DATA
 setInterval(() => {
@@ -2907,7 +2889,7 @@ function iconCallback() {
 			(highest == null || highestKill < player.kills)
 		) {
 			highest = i
-			highestKill = player.kill
+			highestKill = player.kills
 		}
 	}
 	if (highest !== null) {
@@ -3422,7 +3404,9 @@ async function commandStart() {
     },
     "src/ai.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
 var PI2 = Math.PI * 2
+var Capes = require('./capes.js')
 module.exports = function (sid, objectManager, players, items, UTILS, config, scoreCallback, server) {
+	var capes = Capes(config)
 	this.sid = sid
 	this.isAI = true
 	this.nameIndex = UTILS.randInt(0, config.cowNames.length - 1)
@@ -3463,6 +3447,8 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 		this.colDmg = data.colDmg
 		this.noTrap = data.noTrap
 		this.spawnDelay = data.spawnDelay
+		this.minSpawnRange = data.minSpawnRange
+		this.maxSpawnRange = data.maxSpawnRange
 		this.boss = data.boss
 		this.diver = data.diver
 		// the Crab King and its crabs live in the arena west of the map
@@ -3492,8 +3478,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 				this.spawnCounter -= delta
 				if (this.spawnCounter <= 0) {
 					this.spawnCounter = 0
-					this.x = this.startX || UTILS.randInt(0, config.mapScale)
-					this.y = this.startY || UTILS.randInt(0, config.mapScale)
+					this.respawnAt()
 				}
 				return
 			}
@@ -3734,6 +3719,21 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 		}
 	}
 
+	// WHERE IT COMES BACK:
+	// its own spot (fixedSpawn), a band of the map (min/maxSpawnRange), or anywhere, as the
+	// game; the Yeti comes back in the snow (ours)
+	this.respawnAt = function () {
+		if (this.minSpawnRange || this.maxSpawnRange) {
+			var lo = config.mapScale * this.minSpawnRange
+			var hi = config.mapScale * this.maxSpawnRange
+			this.x = UTILS.randInt(lo, hi)
+			this.y = UTILS.randInt(lo, hi)
+			return
+		}
+		this.x = this.startX || UTILS.randInt(0, config.mapScale)
+		this.y = this.startY || (this.index === 10 ? UTILS.randInt(0, config.snowBiomeTop) : UTILS.randInt(0, config.mapScale))
+	}
+
 	// CAN SEE:
 	this.canSee = function (other) {
 		if (!other) return false
@@ -3825,16 +3825,17 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 					this.x = -1000000
 					this.y = -1000000
 				} else {
-					this.x = this.startX || UTILS.randInt(0, config.mapScale)
-					this.y = this.startY || (this.index === 10 ? UTILS.randInt(0, config.snowBiomeTop) : UTILS.randInt(0, config.mapScale))
+					this.respawnAt()
 				}
 				this.health = this.maxHealth
 				this.runFrom = null
 				if (doer) {
-					scoreCallback(doer, this.killScore)
+					// Cow Cape: half as much again from cows
+					var cowMult = capes.cow(doer, this)
+					scoreCallback(doer, this.killScore * cowMult)
 					if (this.drop) {
 						for (var i = 0; i < this.drop.length; ) {
-							doer.addResource(config.resourceTypes.indexOf(this.drop[i]), this.drop[i + 1])
+							doer.addResource(config.resourceTypes.indexOf(this.drop[i]), this.drop[i + 1] * cowMult)
 							i += 2
 						}
 					}
@@ -4395,6 +4396,11 @@ module.exports = function (ais, AI, players, items, objectManager, config, UTILS
 
 	// SPAWN AI:
 	this.spawn = function (x, y, dir, index) {
+		// as the game: an unknown kind becomes a cow
+		if (!this.aiTypes[index]) {
+			console.error("missing ai type", index)
+			return this.spawn(x, y, dir, 0)
+		}
 		var tmpObj
 		for (var i = 0; i < ais.length; ++i) {
 			if (!ais[i].active) {
@@ -4418,6 +4424,101 @@ module.exports = function (ais, AI, players, items, objectManager, config, UTILS
 // game adds, in the game's order. A name that contains one, lowercased with spaces
 // removed and 1/0/5 read as i/o/s, becomes "unknown".
 module.exports = ["ahole","anus","ash0le","ash0les","asholes","ass","Ass Monkey","Assface","assh0le","assh0lez","asshole","assholes","assholz","asswipe","azzhole","bassterds","bastard","bastards","bastardz","basterds","basterdz","Biatch","bitch","bitches","Blow Job","boffing","butthole","buttwipe","c0ck","c0cks","c0k","Carpet Muncher","cawk","cawks","Clit","cnts","cntz","cock","cockhead","cock-head","cocks","CockSucker","cock-sucker","crap","cum","cunt","cunts","cuntz","dick","dild0","dild0s","dildo","dildos","dilld0","dilld0s","dominatricks","dominatrics","dominatrix","dyke","enema","f u c k","f u c k e r","fag","fag1t","faget","fagg1t","faggit","faggot","fagg0t","fagit","fags","fagz","faig","faigs","fart","flipping the bird","fuck","fucker","fuckin","fucking","fucks","Fudge Packer","fuk","Fukah","Fuken","fuker","Fukin","Fukk","Fukkah","Fukken","Fukker","Fukkin","g00k","God-damned","h00r","h0ar","h0re","hells","hoar","hoor","hoore","jackoff","jap","japs","jerk-off","jisim","jiss","jizm","jizz","knob","knobs","knobz","kunt","kunts","kuntz","Lezzian","Lipshits","Lipshitz","masochist","masokist","massterbait","masstrbait","masstrbate","masterbaiter","masterbate","masterbates","Motha Fucker","Motha Fuker","Motha Fukkah","Motha Fukker","Mother Fucker","Mother Fukah","Mother Fuker","Mother Fukkah","Mother Fukker","mother-fucker","Mutha Fucker","Mutha Fukah","Mutha Fuker","Mutha Fukkah","Mutha Fukker","n1gr","nastt","nigger;","nigur;","niiger;","niigr;","orafis","orgasim;","orgasm","orgasum","oriface","orifice","orifiss","packi","packie","packy","paki","pakie","paky","pecker","peeenus","peeenusss","peenus","peinus","pen1s","penas","penis","penis-breath","penus","penuus","Phuc","Phuck","Phuk","Phuker","Phukker","polac","polack","polak","Poonani","pr1c","pr1ck","pr1k","pusse","pussee","pussy","puuke","puuker","qweir","recktum","rectum","retard","sadist","scank","schlong","screwing","semen","sex","sexy","Sh!t","sh1t","sh1ter","sh1ts","sh1tter","sh1tz","shit","shits","shitter","Shitty","Shity","shitz","Shyt","Shyte","Shytty","Shyty","skanck","skank","skankee","skankey","skanks","Skanky","slag","slut","sluts","Slutty","slutz","son-of-a-bitch","tit","turd","va1jina","vag1na","vagiina","vagina","vaj1na","vajina","vullva","vulva","w0p","wh00r","wh0re","whore","xrated","xxx","b!+ch","bitch","blowjob","clit","arschloch","fuck","shit","ass","asshole","b!tch","b17ch","b1tch","bastard","bi+ch","boiolas","buceta","c0ck","cawk","chink","cipa","clits","cock","cum","cunt","dildo","dirsa","ejakulate","fatass","fcuk","fuk","fux0r","hoer","hore","jism","kawk","l3itch","l3i+ch","masturbate","masterbat*","masterbat3","motherfucker","s.o.b.","mofo","nazi","nigga","nigger","nutsack","phuck","pimpis","pusse","pussy","scrotum","sh!t","shemale","shi+","sh!+","slut","smut","teets","tits","boobs","b00bs","teez","testical","testicle","titt","w00se","jackoff","wank","whoar","whore","*damn","*dyke","*fuck*","*shit*","@$$","amcik","andskota","arse*","assrammer","ayir","bi7ch","bitch*","bollock*","breasts","butt-pirate","cabron","cazzo","chraa","chuj","Cock*","cunt*","d4mn","daygo","dego","dick*","dike*","dupa","dziwka","ejackulate","Ekrem*","Ekto","enculer","faen","fag*","fanculo","fanny","feces","feg","Felcher","ficken","fitt*","Flikker","foreskin","Fotze","Fu(*","fuk*","futkretzn","gook","guiena","h0r","h4x0r","hell","helvete","hoer*","honkey","Huevon","hui","injun","jizz","kanker*","kike","klootzak","kraut","knulle","kuk","kuksuger","Kurac","kurwa","kusi*","kyrpa*","lesbo","mamhoon","masturbat*","merd*","mibun","monkleigh","mouliewop","muie","mulkku","muschi","nazis","nepesaurio","nigger*","orospu","paska*","perse","picka","pierdol*","pillu*","pimmel","piss*","pizda","poontsee","poop","porn","p0rn","pr0n","preteen","pula","pule","puta","puto","qahbeh","queef*","rautenberg","schaffer","scheiss*","schlampe","schmuck","screw","sh!t*","sharmuta","sharmute","shipal","shiz","skribz","skurwysyn","sphencter","spic","spierdalaj","splooge","suka","b00b*","testicle*","titt*","twat","vittu","wank*","wetback*","wichser","wop*","yed","zabourah","4r5e","5h1t","5hit","a55","anal","anus","ar5e","arrse","arse","ass","ass-fucker","asses","assfucker","assfukka","asshole","assholes","asswhole","a_s_s","b!tch","b00bs","b17ch","b1tch","ballbag","balls","ballsack","bastard","beastial","beastiality","bellend","bestial","bestiality","bi+ch","biatch","bitch","bitcher","bitchers","bitches","bitchin","bitching","bloody","blow job","blowjob","blowjobs","boiolas","bollock","bollok","boner","boob","boobs","booobs","boooobs","booooobs","booooooobs","breasts","buceta","bugger","bum","bunny fucker","butt","butthole","buttmuch","buttplug","c0ck","c0cksucker","carpet muncher","cawk","chink","cipa","cl1t","clit","clitoris","clits","cnut","cock","cock-sucker","cockface","cockhead","cockmunch","cockmuncher","cocks","cocksuck","cocksucked","cocksucker","cocksucking","cocksucks","cocksuka","cocksukka","cok","cokmuncher","coksucka","coon","cox","crap","cum","cummer","cumming","cums","cumshot","cunilingus","cunillingus","cunnilingus","cunt","cuntlick","cuntlicker","cuntlicking","cunts","cyalis","cyberfuc","cyberfuck","cyberfucked","cyberfucker","cyberfuckers","cyberfucking","d1ck","damn","dick","dickhead","dildo","dildos","dink","dinks","dirsa","dlck","dog-fucker","doggin","dogging","donkeyribber","doosh","duche","dyke","ejaculate","ejaculated","ejaculates","ejaculating","ejaculatings","ejaculation","ejakulate","f u c k","f u c k e r","f4nny","fag","fagging","faggitt","faggot","faggs","fagot","fagots","fags","fanny","fannyflaps","fannyfucker","fanyy","fatass","fcuk","fcuker","fcuking","feck","fecker","felching","fellate","fellatio","fingerfuck","fingerfucked","fingerfucker","fingerfuckers","fingerfucking","fingerfucks","fistfuck","fistfucked","fistfucker","fistfuckers","fistfucking","fistfuckings","fistfucks","flange","fook","fooker","fuck","fucka","fucked","fucker","fuckers","fuckhead","fuckheads","fuckin","fucking","fuckings","fuckingshitmotherfucker","fuckme","fucks","fuckwhit","fuckwit","fudge packer","fudgepacker","fuk","fuker","fukker","fukkin","fuks","fukwhit","fukwit","fux","fux0r","f_u_c_k","gangbang","gangbanged","gangbangs","gaylord","gaysex","goatse","God","god-dam","god-damned","goddamn","goddamned","hardcoresex","hell","heshe","hoar","hoare","hoer","homo","hore","horniest","horny","hotsex","jack-off","jackoff","jap","jerk-off","jism","jiz","jizm","jizz","kawk","knob","knobead","knobed","knobend","knobhead","knobjocky","knobjokey","kock","kondum","kondums","kum","kummer","kumming","kums","kunilingus","l3i+ch","l3itch","labia","lust","lusting","m0f0","m0fo","m45terbate","ma5terb8","ma5terbate","masochist","master-bate","masterb8","masterbat*","masterbat3","masterbate","masterbation","masterbations","masturbate","mo-fo","mof0","mofo","mothafuck","mothafucka","mothafuckas","mothafuckaz","mothafucked","mothafucker","mothafuckers","mothafuckin","mothafucking","mothafuckings","mothafucks","mother fucker","motherfuck","motherfucked","motherfucker","motherfuckers","motherfuckin","motherfucking","motherfuckings","motherfuckka","motherfucks","muff","mutha","muthafecker","muthafuckker","muther","mutherfucker","n1gga","n1gger","nazi","nigg3r","nigg4h","nigga","niggah","niggas","niggaz","nigger","niggers","nob","nob jokey","nobhead","nobjocky","nobjokey","numbnuts","nutsack","orgasim","orgasims","orgasm","orgasms","p0rn","pawn","pecker","penis","penisfucker","phonesex","phuck","phuk","phuked","phuking","phukked","phukking","phuks","phuq","pigfucker","pimpis","piss","pissed","pisser","pissers","pisses","pissflaps","pissin","pissing","pissoff","poop","porn","porno","pornography","pornos","prick","pricks","pron","pube","pusse","pussi","pussies","pussy","pussys","rectum","retard","rimjaw","rimming","s hit","s.o.b.","sadist","schlong","screwing","scroat","scrote","scrotum","semen","sex","sh!+","sh!t","sh1t","shag","shagger","shaggin","shagging","shemale","shi+","shit","shitdick","shite","shited","shitey","shitfuck","shitfull","shithead","shiting","shitings","shits","shitted","shitter","shitters","shitting","shittings","shitty","skank","slut","sluts","smegma","smut","snatch","son-of-a-bitch","spac","spunk","s_h_i_t","t1tt1e5","t1tties","teets","teez","testical","testicle","tit","titfuck","tits","titt","tittie5","tittiefucker","titties","tittyfuck","tittywank","titwank","tosser","turd","tw4t","twat","twathead","twatty","twunt","twunter","v14gra","v1gra","vagina","viagra","vulva","w00se","wang","wank","wanker","wanky","whoar","whore","willies","willy","xrated","xxx","jew","black","baby","child","white","porn","pedo","trump","clinton","hitler","nazi","gay","pride","sex","pleasure","touch","poo","kids","rape","white power","nigga","nig nog","doggy","rapist","boner","nigger","nigg","finger","nogger","nagger","nig","fag","gai","pole","stripper","penis","vagina","pussy","nazi","hitler","stalin","burn","chamber","cock","peen","dick","spick","nieger","die","satan","n|ig","nlg","cunt","c0ck","fag","lick","condom","anal","shit","phile","little","kids","free KR","tiny","sidney","ass","kill",".io","(dot)","[dot]","mini","whiore","whore","faggot","github","1337","666","satan","senpa","discord","d1scord","mistik",".io","senpa.io","sidney","sid","senpaio","vries","asa"]
+    },
+    "src/capes.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
+// Accessories whose effect the game only gives in its store text ("5% faster", "no snow
+// slowdown", ...). The game's files carry the code for every other hat and accessory
+// property, but not for these, so they follow the text. Two amounts are not in the text
+// and are ours: Thorns heals 10% of the damage of the hit, Devils Tail bleeds 5 a second.
+//
+// config.storeEffects = false turns them off, with the Emerald tier's lifesteal (also only
+// in the game's data): tools/server-parity.js compares everything else with the game's code.
+var SUPER = 1
+var DRAGON = 2
+var COOKIE = 3
+var SKULL = 4
+var DASH = 5
+var WINTER = 6
+var TROLL = 7
+var COW = 8
+var TREE = 9
+var STONE = 10
+var SNOWBALL = 12
+var THORNS = 14
+var BLOCKADES = 15
+var DEVIL = 20
+
+var SUPER_MS = 10000
+var DRAGON_MS = 5000
+
+module.exports = function (config) {
+	var on = function () {
+		return config.storeEffects !== false
+	}
+	var wears = function (p, id) {
+		return !!(p && p.tail && p.tailIndex === id) && on()
+	}
+	var capes = {
+		on: on,
+		wears: wears,
+		// time-limited buffs run on game time, so they stop when the world is paused
+		tick: function (p, delta) {
+			if (p.capeSuper > 0) p.capeSuper -= delta
+			if (p.capeDragon > 0) p.capeDragon -= delta
+		},
+		speed: function (p) {
+			return (wears(p, DASH) ? 1.05 : 1) * (wears(p, SUPER) && p.capeSuper > 0 ? 1.15 : 1)
+		},
+		snow: function (p) {
+			if (wears(p, WINTER)) return 1
+			if (wears(p, SNOWBALL)) return 1 - (1 - config.snowSpeed) / 2
+			return config.snowSpeed
+		},
+		// damage a player deals, melee or shot
+		damage: function (p) {
+			return (wears(p, SUPER) && p.capeSuper > 0 ? 1.05 : 1) * (wears(p, DRAGON) && p.capeDragon > 0 ? 1.05 : 1)
+		},
+		hitPlayer: function (p) {
+			if (wears(p, DRAGON)) p.capeDragon = DRAGON_MS
+		},
+		killed: function (p) {
+			if (wears(p, SUPER)) p.capeSuper = SUPER_MS
+		},
+		// resource type: 0 wood (tree), 1 food (bush, cactus), 2 stone (rock)
+		gather: function (p, type) {
+			if (type === 0 && wears(p, TREE)) return 1
+			if (type === 1 && wears(p, COOKIE)) return 1
+			if (type === 2 && wears(p, STONE)) return 1
+			return 0
+		},
+		// gold for a kill: the kill leader (the crown) and kills by your spikes
+		killGold: function (doer, victim, src) {
+			var mult = 1
+			if (wears(doer, SKULL) && victim.iconIndex === 1) mult *= 3
+			if (wears(doer, TROLL) && src && src.isItem && src.dmg && src.owner === doer) mult *= 2
+			return mult
+		},
+		// gold and food for a cow
+		cow: function (doer, ai) {
+			return ai.index === 0 && wears(doer, COW) ? 1.5 : 1
+		},
+		shotTaken: function (p) {
+			return wears(p, BLOCKADES) ? 0.75 : 1
+		},
+		thorns: function (p) {
+			return wears(p, THORNS) ? 0.1 : 0
+		},
+		bleed: function (doer, target) {
+			if (!wears(doer, DEVIL) || !target.dmgOverTime) return
+			// a longer poison stays
+			if (target.dmgOverTime.dmg && target.dmgOverTime.time > 2) return
+			target.dmgOverTime.dmg = 5
+			target.dmgOverTime.time = 2
+			target.dmgOverTime.doer = doer
+		}
+	}
+	return capes
+}
     },
     "src/config.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
 //Default screen:
@@ -4876,9 +4977,7 @@ exports.projectiles = [
 		indx: 1,
 		layer: 1,
 		dmg: 25,
-		scale: 20,
-		speed: 1.5,
-		range: 700
+		scale: 20
 	},
 	{
 		indx: 0,
@@ -5820,6 +5919,7 @@ var mathSIN = Math.sin
 var mathPOW = Math.pow
 var mathSQRT = Math.sqrt
 var badWords = require('./badwords.js')
+var Capes = require('./capes.js')
 module.exports = function (
 	id,
 	sid,
@@ -5837,6 +5937,7 @@ module.exports = function (
 	iconCallback,
 	MODE
 ) {
+	var capes = Capes(config)
 	this.id = id
 	this.sid = sid
 	this.tmpScore = 0
@@ -5850,15 +5951,16 @@ module.exports = function (
 	this.secondary = null
 	this.secondaryVariant = 0
 	this.hitTime = 0
+	// the free ones, as the game: not Shame! or the Crab Shell (dontSell), which are given
 	this.tails = {}
 	for (let i = 0; i < accessories.length; ++i) {
-		if (accessories[i].price <= 0) {
+		if (accessories[i].price <= 0 && !accessories[i].dontSell) {
 			this.tails[accessories[i].id] = 1
 		}
 	}
 	this.skins = {}
 	for (let i = 0; i < hats.length; ++i) {
-		if (hats[i].price <= 0) {
+		if (hats[i].price <= 0 && !hats[i].dontSell) {
 			this.skins[hats[i].id] = 1
 		}
 	}
@@ -6023,6 +6125,8 @@ module.exports = function (
 	this.update = function (delta) {
 		if (!this.alive) return
 
+		capes.tick(this, delta)
+
 		// SHAME SHAME SHAME:
 		if (this.shameTimer > 0) {
 			this.shameTimer -= delta
@@ -6077,8 +6181,9 @@ module.exports = function (
 				(items.weapons[this.weaponIndex].spdMult || 1) *
 				(this.skin ? this.skin.spdMult || 1 : 1) *
 				(this.tail ? this.tail.spdMult || 1 : 1) *
-				(this.y <= config.snowBiomeTop ? (this.skin && this.skin.coldM ? 1 : config.snowSpeed) : 1) *
-				this.slowMult
+				(this.y <= config.snowBiomeTop ? (this.skin && this.skin.coldM ? 1 : capes.snow(this)) : 1) *
+				this.slowMult *
+				capes.speed(this)
 
 			// the river stops at the map edge: the Crab King's gorge and pools (x < 0) are dry land
 			if (!this.zIndex && (!config.secretPool || this.x >= 0) && this.y >= config.mapScale / 2 - config.riverWidth / 2 && this.y <= config.mapScale / 2 + config.riverWidth / 2) {
@@ -6324,7 +6429,7 @@ module.exports = function (
 			this.health = this.maxHealth
 		}
 		if (this.health <= 0) {
-			this.kill(doer)
+			this.kill(doer, src)
 		}
 		for (var i = 0; i < players.length; ++i) {
 			if (this.sentTo[players[i].id]) {
@@ -6338,12 +6443,15 @@ module.exports = function (
 	}
 
 	// KILL:
-	this.kill = function (doer) {
+	this.kill = function (doer, src) {
 		if (doer && doer.alive) {
 			doer.kills++
-			if (doer.skin && doer.skin.goldSteal) scoreCallback(doer, Math.round(this.points / 2))
-			else scoreCallback(doer, Math.round(this.age * 100 * (doer.skin && doer.skin.kScrM ? doer.skin.kScrM : 1)))
+			// Skull Cape (the kill leader) and Troll Cape (your spikes) multiply the gold
+			var capeGold = capes.killGold(doer, this, src)
+			if (doer.skin && doer.skin.goldSteal) scoreCallback(doer, Math.round(this.points / 2) * capeGold)
+			else scoreCallback(doer, Math.round(this.age * 100 * (doer.skin && doer.skin.kScrM ? doer.skin.kScrM : 1)) * capeGold)
 			server.send(doer.id, "9", ["kills", doer.kills, 1])
+			capes.killed(doer)
 		}
 		this.alive = false
 		// Ryn's private log: who killed you
@@ -6504,10 +6612,11 @@ module.exports = function (
 								} else {
 									this.earnXP(4 * items.weapons[this.weaponIndex].gather)
 									var count = Math.round((items.weapons[this.weaponIndex].gather + (tmpObj.type == 3 ? 4 : 0)) * ((config.rynRules && config.rynRules.gatherMult) || 1))
+									// Tree, Cookie and Stone Capes: one more per hit
+									this.addResource(tmpObj.type, count + capes.gather(this, tmpObj.type))
 									if (this.skin && this.skin.extraGold) {
 										this.addResource(3, 1)
 									}
-									this.addResource(tmpObj.type, count)
 								}
 								hitSomething = true
 								objectManager.hitObj(tmpObj, tmpDir)
@@ -6548,7 +6657,8 @@ module.exports = function (
 							this.customDmg ||
 							items.weapons[this.weaponIndex].dmg *
 								(this.skin && this.skin.dmgMultO ? this.skin.dmgMultO : 1) *
-								(this.tail && this.tail.dmgMultO ? this.tail.dmgMultO : 1)
+								(this.tail && this.tail.dmgMultO ? this.tail.dmgMultO : 1) *
+								capes.damage(this)
 						var tmpSpd = 0.3 * (tmpObj.weightM || 1) + (items.weapons[this.weaponIndex].knock || 0)
 						if (MODE !== "HOCKEY") {
 							tmpObj.xVel += tmpSpd * mathCOS(tmpDir)
@@ -6583,14 +6693,21 @@ module.exports = function (
 							tmpObj.dmgOverTime.time = 5
 							tmpObj.dmgOverTime.doer = this
 						}
+						if (MODE !== "HOCKEY" && tmpObj.isPlayer) {
+							// Devils Tail: bleeding; Thorns: a little health back; Dragon Cape: 5s of more damage
+							capes.bleed(this, tmpObj)
+							if (capes.thorns(this)) this.changeHealth(dmgVal * dmgMlt * capes.thorns(this), this)
+							capes.hitPlayer(this)
+						}
 						if (tmpObj.skin && tmpObj.skin.dmgK) {
 							this.xVel -= tmpObj.skin.dmgK * mathCOS(tmpDir)
 							this.yVel -= tmpObj.skin.dmgK * mathSIN(tmpDir)
 						}
 						if (MODE !== "HOCKEY") {
 							tmpObj.changeHealth(-dmgVal * dmgMlt, this, this)
-							// emerald weapons heal by part of the damage they deal
-							if (tmpVariant.lifesteal) {
+							// emerald weapons heal by part of the damage they deal (in the game's data,
+							// not in its code, so it goes with the store effects)
+							if (tmpVariant.lifesteal && capes.on() && dmgVal * dmgMlt > 0) {
 								this.changeHealth(dmgVal * dmgMlt * tmpVariant.lifesteal, this)
 							}
 						}
@@ -6658,7 +6775,9 @@ module.exports = function (
 }
     },
     "src/projectile.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
+var Capes = require('./capes.js')
 module.exports = function (players, ais, objectManager, items, config, UTILS, server) {
+	var capes = Capes(config)
 	// INIT:
 	this.init = function (indx, x, y, dir, spd, dmg, rng, scl, owner) {
 		this.active = true
@@ -6781,7 +6900,16 @@ module.exports = function (players, ais, objectManager, items, config, UTILS, se
 							hitObj.weaponIndex == undefined ||
 							!(items.weapons[hitObj.weaponIndex].shield && UTILS.getAngleDist(this.dir + Math.PI, hitObj.dir) <= config.shieldAngle)
 						) {
-							hitObj.changeHealth(-this.dmg, this.owner, this.owner)
+							// the shooter's Dragon or Super Cape (weapons only, not turrets: those
+							// shoot projectile 1), the target's Blockades
+							var shotDmg = this.dmg
+							var byWeapon = this.owner && this.owner.isPlayer && this.indx !== 1
+							if (byWeapon) shotDmg *= capes.damage(this.owner)
+							if (hitObj.isPlayer) {
+								shotDmg *= capes.shotTaken(hitObj)
+								if (byWeapon) capes.hitPlayer(this.owner)
+							}
+							hitObj.changeHealth(-shotDmg, this.owner, this.owner)
 						}
 					} else {
 						if (hitObj.projDmg && hitObj.health && hitObj.changeHealth(-this.dmg)) {
@@ -7391,7 +7519,9 @@ module.exports = function (ctx) {
 			skins: Object.keys(me.skins).map(Number).filter(k => me.skins[k]),
 			tails: Object.keys(me.tails).map(Number).filter(k => me.tails[k]),
 			skinIndex: me.skinIndex || 0,
-			tailIndex: me.tailIndex || 0
+			tailIndex: me.tailIndex || 0,
+			// saved since fix26: before it, every player owned Shame! and the Crab Shell
+			given: 1
 		}
 	}
 	api.applyPlayer = function (me, st) {
@@ -7423,7 +7553,11 @@ module.exports = function (ctx) {
 		me.kills = st.kills || 0
 		server.send(me.id, '9', ['kills', me.kills, 1])
 		for (const id of st.skins || []) {
-			if (!hatById(id)) continue
+			const hat = hatById(id)
+			if (!hat) continue
+			// hats that are only given (Shame!, the Crab Shell) come back only from saves that
+			// know who was given them; Shame! is never owned
+			if (hat.dontSell && (!st.given || id === 45)) continue
 			me.skins[id] = 1
 			server.send(me.id, 'us', [0, id, 0])
 		}
@@ -7433,6 +7567,7 @@ module.exports = function (ctx) {
 			server.send(me.id, 'us', [0, id, 1])
 		}
 		me.skin = hatById(st.skinIndex) || null
+		if (me.skin && me.skin.dontSell && !me.skins[st.skinIndex]) me.skin = null
 		me.skinIndex = me.skin ? st.skinIndex : 0
 		server.send(me.id, 'us', [1, me.skinIndex, 0])
 		me.tail = accById(st.tailIndex) || null
@@ -9715,6 +9850,10 @@ module.exports.PACKETCODE = PACKETCODE
       this._wired = {};
       this._upAt = 0;
       this._downAt = 0;
+      this._queues = {
+        _upAt: [],
+        _downAt: []
+      };
       this._who = owner ? "you" : "a bot";
       if (owner) RynPrivate.ownerSocket = this;
       if (owner) RynPrivate.dbg("you: connecting to the private server");
@@ -9797,16 +9936,37 @@ module.exports.PACKETCODE = PACKETCODE
         if (this.readyState === 1) this._conn._emit("message", bytes);
       });
     }
+    // Messages arrive in the order they were sent, as on a real socket: each direction is
+    // one queue that a single timer drains in order. A timer per message could fire out of
+    // order (delays are whole milliseconds, and a message with no delay could pass a late
+    // timer), so a tick's player list could arrive before the player it lists.
     _later(way, fn) {
       const now = performance.now();
-      const delay = RynPrivate.oneWay();
-      if (delay <= 0 && this[way] <= now) {
-        rynPrivateLater(fn);
-        return;
-      }
-      const at = Math.max(now + delay, this[way]);
+      const at = Math.max(now + RynPrivate.oneWay(), this[way]);
       this[way] = at;
-      setTimeout(fn, at - now);
+      const queue = this._queues[way];
+      queue.push(at, fn);
+      if (queue.length === 2) this._drainSoon(way, at - now);
+    }
+    _drainSoon(way, wait) {
+      if (wait <= 0) rynPrivateLater(() => this._drain(way)); else setTimeout(() => this._drain(way), Math.ceil(wait));
+    }
+    _drain(way) {
+      const queue = this._queues[way];
+      let i = 0;
+      while (i < queue.length && queue[i] <= performance.now()) {
+        const fn = queue[i + 1];
+        i += 2;
+        try {
+          fn();
+        } catch (e) {
+          setTimeout(() => {
+            throw e;
+          });
+        }
+      }
+      queue.splice(0, i);
+      if (queue.length) this._drainSoon(way, queue[0] - performance.now());
     }
     close(code = 1000, reason = "") {
       if (this.readyState < 2 && this._who === "you") RynPrivate.dbg("you: the game closed its connection (" + code + (reason ? " " + reason : "") + ") from " + RynPrivate.caller());
@@ -10231,7 +10391,9 @@ module.exports.PACKETCODE = PACKETCODE
       let tries = 0;
       const clear = () => {
         const now = performance.now();
-        const late = Math.max(0, ...bots.filter(open).map(c => (c.SocketManager.socket._upAt || 0) - now));
+        // still on its way, or due but not yet handed over (its socket's queue is not empty)
+        const wait = s => s._queues && s._queues._upAt.length ? Math.max(1, s._upAt - now) : (s._upAt || 0) - now;
+        const late = Math.max(0, ...bots.filter(open).map(c => wait(c.SocketManager.socket)));
         if (late > 0 && ++tries < 40) setTimeout(clear, late + 1); else go();
       };
       setTimeout(clear, Math.max(0, RynPrivate.oneWay()));
@@ -22000,13 +22162,16 @@ module.exports.PACKETCODE = PACKETCODE
       const {autoHat: autoHat} = ModuleHandler.staticModules;
       const pos = this.getPos();
       const skin = Hats[autoHat.getNextHat()];
-      const tail = Accessories[autoHat.getNextAcc()];
+      const accID = autoHat.getNextAcc();
+      const tail = Accessories[accID];
       const weapon = DataHandler_default.getWeapon(autoHat.getNextWeaponID());
       const weaponSpd = weapon.spdMult || 1;
       const skinSpd = "spdMult" in skin ? skin.spdMult : 1;
-      const tailSpd = "spdMult" in tail ? tail.spdMult : 1;
-      const inSnow = pos.y <= Config_default.snowBiomeTop && !("coldM" in skin);
-      const snowMult = inSnow ? Config_default.snowSpeed : 1;
+      // capes whose effect is only in the store text: Dash 5% faster, Winter no snow
+      // slowdown, Snowball half of it
+      const tailSpd = ("spdMult" in tail ? tail.spdMult : 1) * (accID === 5 ? 1.05 : 1);
+      const inSnow = pos.y <= Config_default.snowBiomeTop && !("coldM" in skin) && accID !== 6;
+      const snowMult = inSnow ? accID === 12 ? 1 - (1 - Config_default.snowSpeed) / 2 : Config_default.snowSpeed : 1;
       const buildMult = autoHat.getNextItemID() >= 0 ? .5 : 1;
       if (this.lockMove) {
         this.xVel = 0;
@@ -22310,6 +22475,8 @@ module.exports.PACKETCODE = PACKETCODE
     }
     playerInit(id) {
       this.id = id;
+      // listed from here on, so its weapons and reloads must be set even before its "D"
+      if (this.weapon.primary === void 0) this.init();
       const {PlayerManager: PlayerManager} = this.client;
       const held = PlayerManager.playerData.get(id);
       if (held !== this) {

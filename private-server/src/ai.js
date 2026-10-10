@@ -1,5 +1,7 @@
 var PI2 = Math.PI * 2
+var Capes = require('./capes.js')
 module.exports = function (sid, objectManager, players, items, UTILS, config, scoreCallback, server) {
+	var capes = Capes(config)
 	this.sid = sid
 	this.isAI = true
 	this.nameIndex = UTILS.randInt(0, config.cowNames.length - 1)
@@ -40,6 +42,8 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 		this.colDmg = data.colDmg
 		this.noTrap = data.noTrap
 		this.spawnDelay = data.spawnDelay
+		this.minSpawnRange = data.minSpawnRange
+		this.maxSpawnRange = data.maxSpawnRange
 		this.boss = data.boss
 		this.diver = data.diver
 		// the Crab King and its crabs live in the arena west of the map
@@ -69,8 +73,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 				this.spawnCounter -= delta
 				if (this.spawnCounter <= 0) {
 					this.spawnCounter = 0
-					this.x = this.startX || UTILS.randInt(0, config.mapScale)
-					this.y = this.startY || UTILS.randInt(0, config.mapScale)
+					this.respawnAt()
 				}
 				return
 			}
@@ -311,6 +314,21 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 		}
 	}
 
+	// WHERE IT COMES BACK:
+	// its own spot (fixedSpawn), a band of the map (min/maxSpawnRange), or anywhere, as the
+	// game; the Yeti comes back in the snow (ours)
+	this.respawnAt = function () {
+		if (this.minSpawnRange || this.maxSpawnRange) {
+			var lo = config.mapScale * this.minSpawnRange
+			var hi = config.mapScale * this.maxSpawnRange
+			this.x = UTILS.randInt(lo, hi)
+			this.y = UTILS.randInt(lo, hi)
+			return
+		}
+		this.x = this.startX || UTILS.randInt(0, config.mapScale)
+		this.y = this.startY || (this.index === 10 ? UTILS.randInt(0, config.snowBiomeTop) : UTILS.randInt(0, config.mapScale))
+	}
+
 	// CAN SEE:
 	this.canSee = function (other) {
 		if (!other) return false
@@ -402,16 +420,17 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 					this.x = -1000000
 					this.y = -1000000
 				} else {
-					this.x = this.startX || UTILS.randInt(0, config.mapScale)
-					this.y = this.startY || (this.index === 10 ? UTILS.randInt(0, config.snowBiomeTop) : UTILS.randInt(0, config.mapScale))
+					this.respawnAt()
 				}
 				this.health = this.maxHealth
 				this.runFrom = null
 				if (doer) {
-					scoreCallback(doer, this.killScore)
+					// Cow Cape: half as much again from cows
+					var cowMult = capes.cow(doer, this)
+					scoreCallback(doer, this.killScore * cowMult)
 					if (this.drop) {
 						for (var i = 0; i < this.drop.length; ) {
-							doer.addResource(config.resourceTypes.indexOf(this.drop[i]), this.drop[i + 1])
+							doer.addResource(config.resourceTypes.indexOf(this.drop[i]), this.drop[i + 1] * cowMult)
 							i += 2
 						}
 					}

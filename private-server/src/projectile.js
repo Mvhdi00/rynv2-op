@@ -1,4 +1,6 @@
+var Capes = require('./capes.js')
 module.exports = function (players, ais, objectManager, items, config, UTILS, server) {
+	var capes = Capes(config)
 	// INIT:
 	this.init = function (indx, x, y, dir, spd, dmg, rng, scl, owner) {
 		this.active = true
@@ -121,7 +123,16 @@ module.exports = function (players, ais, objectManager, items, config, UTILS, se
 							hitObj.weaponIndex == undefined ||
 							!(items.weapons[hitObj.weaponIndex].shield && UTILS.getAngleDist(this.dir + Math.PI, hitObj.dir) <= config.shieldAngle)
 						) {
-							hitObj.changeHealth(-this.dmg, this.owner, this.owner)
+							// the shooter's Dragon or Super Cape (weapons only, not turrets: those
+							// shoot projectile 1), the target's Blockades
+							var shotDmg = this.dmg
+							var byWeapon = this.owner && this.owner.isPlayer && this.indx !== 1
+							if (byWeapon) shotDmg *= capes.damage(this.owner)
+							if (hitObj.isPlayer) {
+								shotDmg *= capes.shotTaken(hitObj)
+								if (byWeapon) capes.hitPlayer(this.owner)
+							}
+							hitObj.changeHealth(-shotDmg, this.owner, this.owner)
 						}
 					} else {
 						if (hitObj.projDmg && hitObj.health && hitObj.changeHealth(-this.dmg)) {

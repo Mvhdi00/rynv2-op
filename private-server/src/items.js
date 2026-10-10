@@ -116,9 +116,7 @@ exports.projectiles = [
 		indx: 1,
 		layer: 1,
 		dmg: 25,
-		scale: 20,
-		speed: 1.5,
-		range: 700
+		scale: 20
 	},
 	{
 		indx: 0,

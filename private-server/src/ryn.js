@@ -548,7 +548,9 @@ module.exports = function (ctx) {
 			skins: Object.keys(me.skins).map(Number).filter(k => me.skins[k]),
 			tails: Object.keys(me.tails).map(Number).filter(k => me.tails[k]),
 			skinIndex: me.skinIndex || 0,
-			tailIndex: me.tailIndex || 0
+			tailIndex: me.tailIndex || 0,
+			// saved since fix26: before it, every player owned Shame! and the Crab Shell
+			given: 1
 		}
 	}
 	api.applyPlayer = function (me, st) {
@@ -580,7 +582,11 @@ module.exports = function (ctx) {
 		me.kills = st.kills || 0
 		server.send(me.id, '9', ['kills', me.kills, 1])
 		for (const id of st.skins || []) {
-			if (!hatById(id)) continue
+			const hat = hatById(id)
+			if (!hat) continue
+			// hats that are only given (Shame!, the Crab Shell) come back only from saves that
+			// know who was given them; Shame! is never owned
+			if (hat.dontSell && (!st.given || id === 45)) continue
 			me.skins[id] = 1
 			server.send(me.id, 'us', [0, id, 0])
 		}
@@ -590,6 +596,7 @@ module.exports = function (ctx) {
 			server.send(me.id, 'us', [0, id, 1])
 		}
 		me.skin = hatById(st.skinIndex) || null
+		if (me.skin && me.skin.dontSell && !me.skins[st.skinIndex]) me.skin = null
 		me.skinIndex = me.skin ? st.skinIndex : 0
 		server.send(me.id, 'us', [1, me.skinIndex, 0])
 		me.tail = accById(st.tailIndex) || null
