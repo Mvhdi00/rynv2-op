@@ -32877,6 +32877,10 @@ module.exports.PACKETCODE = PACKETCODE
   const NS_SIM_TICKS = 10;
   const NS_SIM_ANGLE_THRESHOLD = 0.35;
   const NS_SIM_RANGE_PAD = 25;
+  // The server takes two off the shame count for a heal it sees more than 120 ms after the hit, and adds one inside
+  // that window; the extra 20 ms covers jitter on top of the round trip.
+  const NS_SLOW_HEAL_MS = 140;
+  const NS_HEAL_PACKETS = 4;
   // `[20, 30, 35, 45]` and the same four through a soldier helmet, which is how
   // novastorm recognises a spike. Read off the item table rather than written
   // down, and the 0.75 off the helmet.
@@ -32953,6 +32957,8 @@ module.exports.PACKETCODE = PACKETCODE
     _simFrame;
     _simScratch;
     _simResult;
+    _slowHealFor=-1;
+    _slowHealTimer=0;
     constructor(client2) {
       this.client = client2;
       this._simHitIDs = new Set();
@@ -32999,6 +33005,9 @@ module.exports.PACKETCODE = PACKETCODE
       this.currentHat = 0;
       this.healedThisTick = 0;
       this.wasPrimaryReady.clear();
+      clearTimeout(this._slowHealTimer);
+      this._slowHealTimer = 0;
+      this._slowHealFor = -1;
     }
     // ── observation ───────────────────────────────────────────────────────
     //
@@ -33745,9 +33754,6 @@ module.exports.PACKETCODE = PACKETCODE
         return;
       }
       this.scan();
-      if (this.healCommit) {
-        return;
-      }
       //     let damageHealed = false;
       //     if (((healing && myPlayer.shameCount < 7) || (tick - damageTick) > 0)
       //         && myPlayer.health < 100) {
@@ -33771,6 +33777,7 @@ module.exports.PACKETCODE = PACKETCODE
       const healing = this.healing && myPlayer.shameCount < NS_SHAME_LIMIT;
       const clean = this.tick - this.damageTick > 0;
       if (!healing && !clean) {
+        this._slowHeal();
         return;
       }
       //     function heal(value) {
@@ -33787,6 +33794,26 @@ module.exports.PACKETCODE = PACKETCODE
       this.healedThisTick = count;
       //     if (predictObjects.length > 0 || damageHealed) io.send("D", angle);
       ModuleHandler.healedOnce = true;
+    }
+    // A hit that cannot kill is healed just past the server's 120 ms window, timed against the round trip, so it
+    // takes shame off instead of adding it; a hit that can kill is still healed at once by the branch above.
+    _slowHeal() {
+      if (this._slowHealFor === this.damageTick) return;
+      this._slowHealFor = this.damageTick;
+      const SM = this.client.SocketManager;
+      const ping = SM && typeof SM.pong === "number" && SM.pong > 0 ? SM.pong : 0;
+      clearTimeout(this._slowHealTimer);
+      this._slowHealTimer = setTimeout(() => {
+        this._slowHealTimer = 0;
+        const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+        if (!Settings_default._autoheal || !myPlayer.inGame || !myPlayer.canPlace(2)) return;
+        if (myPlayer.currentHealth >= myPlayer.maxHealth) return;
+        const count = this._healCount(myPlayer.maxHealth - myPlayer.currentHealth);
+        if (count <= 0 || ModuleHandler.packetCount + count * NS_HEAL_PACKETS > ModuleHandler.packetLimit) return;
+        for (let i = 0; i < count; i++) {
+          ModuleHandler.heal();
+        }
+      }, Math.max(0, NS_SLOW_HEAL_MS - ping));
     }
     _healCount(missing) {
       const myPlayer = this.client.myPlayer;
