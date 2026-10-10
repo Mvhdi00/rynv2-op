@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.4-fix18
+// @version         2.9.4-fix19
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -7430,7 +7430,7 @@ module.exports = function (ctx) {
 
 	// ---- the private log: tell the owner's page why a player died ----
 	config.rynDied = function (p, doer) {
-		const by = doer && doer !== p ? doer.name || 'someone' : p.rynLastHit || 'unknown'
+		const by = p.health > 0 ? 'a command (!die or !kill)' : doer && doer !== p ? doer.name || 'someone' : p.rynLastHit || 'unknown'
 		if (ctx.debug) ctx.debug(p, 'died, killed by ' + by + ' (health ' + Math.round(p.health) + ')')
 	}
 
@@ -9920,8 +9920,40 @@ module.exports.PACKETCODE = PACKETCODE
       } catch (_) {}
       return null;
     },
+    watchPage() {
+      // page errors and a heartbeat into the private log, so one report says what went wrong
+      const seen = new Map;
+      const note = (kind, msg) => {
+        const key = kind + msg;
+        const n = (seen.get(key) || 0) + 1;
+        seen.set(key, n);
+        if (n === 1 || n === 10 || n === 100) RynPrivate.dbg(kind + (n > 1 ? " (x" + n + ")" : "") + ": " + msg);
+      };
+      window.addEventListener("error", e => {
+        try {
+          note("page error", String(e.message || e.error || "?") + (e.filename ? " @ " + String(e.filename).split("/").pop() + ":" + e.lineno : ""));
+        } catch (_) {}
+      });
+      window.addEventListener("unhandledrejection", e => {
+        try {
+          note("page promise error", String(e.reason && e.reason.message || e.reason));
+        } catch (_) {}
+      });
+      setInterval(() => {
+        try {
+          const st = RynPrivate.state();
+          const sock = RynPrivate.ownerSocket;
+          if (!sock) return;
+          const p = RynPrivate.call("panel");
+          RynPrivate.dbg("status: socket " + [ "connecting", "open", "closing", "closed" ][sock.readyState] + (st && st.me ? ", you " + (st.me.alive ? "alive" : "dead") + ", " + st.players.length + " players" : ", not spawned") + (p ? ", server tick " + p.time.tick + (p.time.paused ? " (paused)" : "") : "") + ", ping " + RynPrivate.ping.ms + "ms");
+        } catch (e) {
+          RynPrivate.dbg("status check failed: " + (e && e.message));
+        }
+      }, 3e4);
+    },
     start() {
       if (!RynPrivate.on || this.root !== null) return;
+      this.watchPage();
       const custom = this.store("_ryn_admin_buttons");
       this.custom = Array.isArray(custom) ? custom.filter(b => b && typeof b.label === "string" && typeof b.cmd === "string") : [];
       window.addEventListener("keydown", e => this.onHotkey(e), true);

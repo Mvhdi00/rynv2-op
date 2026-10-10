@@ -624,7 +624,7 @@ module.exports = function (ctx) {
 
 	// ---- the private log: tell the owner's page why a player died ----
 	config.rynDied = function (p, doer) {
-		const by = doer && doer !== p ? doer.name || 'someone' : p.rynLastHit || 'unknown'
+		const by = p.health > 0 ? 'a command (!die or !kill)' : doer && doer !== p ? doer.name || 'someone' : p.rynLastHit || 'unknown'
 		if (ctx.debug) ctx.debug(p, 'died, killed by ' + by + ' (health ' + Math.round(p.health) + ')')
 	}
 
