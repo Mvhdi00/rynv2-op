@@ -143,8 +143,8 @@ ${modules}
           return {
             hats: pick(store.hats),
             accessories: pick(store.accessories),
-            weapons: pick(items.weapons),
-            items: pick(items.list)
+            weapons: items.weapons.map(x => ({ id: x.id, name: x.name, type: x.type })),
+            items: items.list.map(x => ({ id: x.id, name: x.name, consume: !!x.consume }))
           };
         }
       };

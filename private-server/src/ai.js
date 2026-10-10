@@ -234,7 +234,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 							if (!this.hitWait && tmpDst <= this.hitRange + tmpObj.scale) {
 								if (hitting) {
 									tmpDir = UTILS.getDirection(tmpObj.x, tmpObj.y, this.x, this.y)
-									tmpObj.changeHealth(-this.dmg)
+									tmpObj.changeHealth(-this.dmg, null, this)
 									tmpObj.xVel += 0.6 * Math.cos(tmpDir)
 									tmpObj.yVel += 0.6 * Math.sin(tmpDir)
 									this.runFrom = null
@@ -245,7 +245,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 							}
 						} else if (tmpDst <= this.scale + tmpObj.scale) {
 							tmpDir = UTILS.getDirection(tmpObj.x, tmpObj.y, this.x, this.y)
-							tmpObj.changeHealth(-this.dmg)
+							tmpObj.changeHealth(-this.dmg, null, this)
 							tmpObj.xVel += 0.55 * Math.cos(tmpDir)
 							tmpObj.yVel += 0.55 * Math.sin(tmpDir)
 						}
@@ -352,6 +352,8 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 	this.changeHealth = function (val, doer, runFrom) {
 		if (this.active) {
 			if (val < 0 && this.index === 11 && this.state === 2) return
+			// Ryn's damage rule and combat log
+			if (config.rynHealth) val = config.rynHealth(this, val, doer)
 			this.health += val
 			if (runFrom) {
 				if (this.hitScare && !UTILS.randInt(0, this.hitScare)) {
@@ -440,7 +442,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 			if (UTILS.getDistance(x, y, p.x, p.y) <= r + p.scale) {
 				if (hitList) hitList[p.sid] = 1
 				var dir = UTILS.getDirection(p.x, p.y, x, y)
-				p.changeHealth(-dmg, null)
+				p.changeHealth(-dmg, null, this)
 				p.xVel += knock * Math.cos(dir)
 				p.yVel += knock * Math.sin(dir)
 			}
@@ -481,9 +483,16 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 			room--
 		}
 	}
+	// how far the King's facing is from a direction, 0..PI
+	this.crabOff = function (dir) {
+		var d = Math.abs(((dir - this.dir) % PI2 + PI2 + Math.PI) % PI2 - Math.PI)
+		return d
+	}
 	this.crabKingUpdate = function (delta) {
 		var c = this.crab
-		if (!c) c = this.crab = { phase: "idle", t: 0, next: 2500, summon: 9000, x: 0, y: 0, r: 0, dir: 0, len: 0, hit: null }
+		if (!c) c = this.crab = { phase: "idle", t: 0, next: 2500, summon: 9000, x: 0, y: 0, r: 0, dir: 0, len: 0, hit: null, alone: 0, travel: 0 }
+		var tune = config.rynKing || { speed: 1, damage: 1 }
+		var dmgMult = tune.damage
 		var target = null
 		var best = Infinity
 		for (var i = 0; i < players.length; ++i) {
@@ -495,6 +504,14 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 					target = p
 				}
 			}
+		}
+		// it heals under water, and slowly when nobody is around
+		if (this.state === 2) {
+			this.health = Math.min(this.maxHealth, this.health + this.maxHealth * 0.015 * (delta / 1000))
+		}
+		c.alone = target ? 0 : c.alone + delta
+		if (c.alone > 5000) {
+			this.health = Math.min(this.maxHealth, this.health + this.maxHealth * 0.005 * (delta / 1000))
 		}
 		// nobody stands inside the King, except while it is under water
 		if (this.state !== 2) {
@@ -523,36 +540,45 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 					if (UTILS.getDistance(this.x, this.y, this.startX, this.startY) > 80) {
 						var home = UTILS.getDirection(this.startX, this.startY, this.x, this.y)
 						this.crabTurn(home, delta)
-						this.crabWalk(home, delta, 1)
+						// a crab walks where it faces; it turns first
+						if (this.crabOff(home) < 0.6) this.crabWalk(this.dir, delta, tune.speed)
 					}
 					return
 				}
 				var face = UTILS.getDirection(target.x, target.y, this.x, this.y)
 				this.crabTurn(face, delta)
-				if (best > this.hitRange * 0.7) this.crabWalk(face, delta, 1)
+				var off = this.crabOff(face)
+				if (best > this.hitRange * 0.7 && off < 0.6) this.crabWalk(this.dir, delta, tune.speed)
 				c.next -= delta
 				c.summon -= delta
 				if (c.summon <= 0) {
 					this.crabSummon()
 					c.summon = 15000
 				}
-				if (c.next > 0) return
+				// it only attacks what it is looking at
+				if (c.next > 0 || off > 0.35) return
+				var low = this.health < this.maxHealth * 0.4
 				if (best <= this.hitRange + target.scale) {
 					// slam in front of the King
 					c.phase = "slam"
 					c.t = this.hitDelay
 					c.r = 360
-					c.x = this.x + 160 * Math.cos(face)
-					c.y = this.y + 160 * Math.sin(face)
+					c.x = this.x + 160 * Math.cos(this.dir)
+					c.y = this.y + 160 * Math.sin(this.dir)
 					this.crabWarn(CRAB_SLAM, c.x, c.y, c.r, c.t)
-				} else if (best <= 1150 && UTILS.randInt(0, 2)) {
-					// charge along a line through the target
+				} else if (low && UTILS.randInt(0, 1)) {
+					// hurt: it goes under more, where it heals
+					c.phase = "dive1"
+					c.t = 700
+					this.state = 1
+				} else if (best <= 1150 && off < 0.25 && UTILS.randInt(0, 2)) {
+					// charge along the line it faces
 					c.phase = "chargeWind"
 					c.t = 900
-					c.dir = face
-					c.len = Math.min(1150, best + 300)
+					c.dir = this.dir
+					c.len = Math.min(1100, best + 250)
 					c.hit = {}
-					this.crabWarn(CRAB_LINE, this.x, this.y, this.scale, c.t, this.x + c.len * Math.cos(face), this.y + c.len * Math.sin(face))
+					this.crabWarn(CRAB_LINE, this.x, this.y, this.scale, c.t, this.x + c.len * Math.cos(c.dir), this.y + c.len * Math.sin(c.dir))
 				} else if (UTILS.randInt(0, 1)) {
 					// a ring of water under the target
 					c.phase = "ring"
@@ -570,34 +596,43 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 				return
 			}
 			case "slam":
+				this.xVel *= 0.5
+				this.yVel *= 0.5
 				if (c.t <= 0) {
 					for (var a = 0; a < players.length; ++a) {
 						if (players[a].canSee(this)) server.send(players[a].id, "aa", [this.sid])
 					}
-					this.crabHurt(c.x, c.y, c.r, this.dmg, 0.9)
+					this.crabHurt(c.x, c.y, c.r, this.dmg * dmgMult, 0.9)
 					this.crabEnd(1400)
 				}
 				return
 			case "chargeWind":
-				this.crabTurn(c.dir, delta)
+				// it holds the line it showed
+				this.xVel = 0
+				this.yVel = 0
 				if (c.t <= 0) {
 					c.phase = "charge"
-					c.t = c.len / 1.6
+					c.travel = 0
+					this.dir = c.dir
 				}
 				return
-			case "charge":
-				this.xVel = 1.6 * Math.cos(c.dir)
-				this.yVel = 1.6 * Math.sin(c.dir)
-				this.crabHurt(this.x, this.y, this.scale * 0.8, this.dmg, 1.1, c.hit)
-				if (c.t <= 0) {
-					this.xVel *= 0.2
-					this.yVel *= 0.2
+			case "charge": {
+				var v = 0.6 * tune.speed
+				this.dir = c.dir
+				this.xVel = v * Math.cos(c.dir)
+				this.yVel = v * Math.sin(c.dir)
+				c.travel += v * delta
+				this.crabHurt(this.x, this.y, this.scale * 0.8, this.dmg * dmgMult, 1.1, c.hit)
+				if (c.travel >= c.len) {
+					this.xVel = 0
+					this.yVel = 0
 					this.crabEnd(1800)
 				}
 				return
+			}
 			case "ring":
 				if (c.t <= 0) {
-					this.crabHurt(c.x, c.y, c.r, 30, 0.6)
+					this.crabHurt(c.x, c.y, c.r, 30 * dmgMult, 0.6)
 					this.crabEnd(1200)
 				}
 				return
@@ -608,6 +643,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 				if (c.t <= 0) {
 					c.phase = "dive2"
 					c.t = 1600
+					c.travel = 0
 					this.state = 2
 					c.x = target ? target.x : this.x
 					c.y = target ? target.y : this.y
@@ -621,9 +657,12 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 				}
 				var gap = UTILS.getDistance(this.x, this.y, c.x, c.y)
 				var go = UTILS.getDirection(c.x, c.y, this.x, this.y)
-				var v = Math.min(0.9, gap / Math.max(delta, 1))
-				this.xVel = v * Math.cos(go)
-				this.yVel = v * Math.sin(go)
+				var sv = Math.min(0.4 * tune.speed, gap / Math.max(delta, 1))
+				if (c.travel >= 900) sv = 0
+				this.xVel = sv * Math.cos(go)
+				this.yVel = sv * Math.sin(go)
+				c.travel += sv * delta
+				if (gap > 1) this.dir = go
 				if (c.t <= 0 || gap < 40) {
 					c.phase = "dive3"
 					c.t = 1650
@@ -639,7 +678,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 				this.xVel = 0
 				this.yVel = 0
 				if (c.t <= 0) {
-					this.crabHurt(this.x, this.y, 330, 60, 1.2)
+					this.crabHurt(this.x, this.y, 330, 60 * dmgMult, 1.2)
 					this.crabEnd(2200)
 				}
 				return

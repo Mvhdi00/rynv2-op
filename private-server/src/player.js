@@ -254,7 +254,8 @@ module.exports = function (
 				(this.y <= config.snowBiomeTop ? (this.skin && this.skin.coldM ? 1 : config.snowSpeed) : 1) *
 				this.slowMult
 
-			if (!this.zIndex && this.y >= config.mapScale / 2 - config.riverWidth / 2 && this.y <= config.mapScale / 2 + config.riverWidth / 2) {
+			// the river stops at the map edge: the Crab King's gorge and pools (x < 0) are dry land
+			if (!this.zIndex && (!config.secretPool || this.x >= 0) && this.y >= config.mapScale / 2 - config.riverWidth / 2 && this.y <= config.mapScale / 2 + config.riverWidth / 2) {
 				// calm water at the west edge of the river, so the gorge can be walked into
 				var current = !config.secretPool || this.x >= 700 ? config.waterCurrent : 0
 				if (this.skin && this.skin.watrImm) {
@@ -467,7 +468,7 @@ module.exports = function (
 	}
 
 	// CHANGE HEALTH:
-	this.changeHealth = function (amount, doer) {
+	this.changeHealth = function (amount, doer, src) {
 		// Ryn's !god
 		if (amount < 0 && this.rynGod) {
 			return false
@@ -480,6 +481,10 @@ module.exports = function (
 		}
 		if (amount < 0 && this.tail) {
 			amount *= this.tail.dmgMult || 1
+		}
+		// Ryn's damage rule and combat log
+		if (config.rynHealth) {
+			amount = config.rynHealth(this, amount, doer, src)
 		}
 		if (amount < 0) {
 			this.hitTime = Date.now()
@@ -669,7 +674,7 @@ module.exports = function (
 									}
 								} else {
 									this.earnXP(4 * items.weapons[this.weaponIndex].gather)
-									var count = items.weapons[this.weaponIndex].gather + (tmpObj.type == 3 ? 4 : 0)
+									var count = Math.round((items.weapons[this.weaponIndex].gather + (tmpObj.type == 3 ? 4 : 0)) * ((config.rynRules && config.rynRules.gatherMult) || 1))
 									if (this.skin && this.skin.extraGold) {
 										this.addResource(3, 1)
 									}

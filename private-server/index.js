@@ -97,6 +97,54 @@ let tribeManager = new TribeManager(Tribe, findPlayerBySID, server)
 let hats = store.hats,
 	accessories = store.accessories
 
+// Ryn's admin tools (src/ryn.js); the getters follow setupServer's new arrays
+const ryn = require('./src/ryn.js')({
+	UTILS,
+	config,
+	items,
+	hats,
+	accessories,
+	server,
+	get players() {
+		return players
+	},
+	get ais() {
+		return ais
+	},
+	get gameObjects() {
+		return gameObjects
+	},
+	get objectManager() {
+		return objectManager
+	},
+	get aiManager() {
+		return aiManager
+	},
+	findPlayerBySID,
+	newPlayer: (id, sid) =>
+		new Player(id, sid, config, UTILS, projectileManager, objectManager, players, ais, items, hats, accessories, server, scoreCallback, iconCallback, MODE),
+	allocSid() {
+		for (let sid = 1; sid < 1000; sid++) {
+			if (!playersSid.includes(sid)) {
+				playersSid.push(sid)
+				return sid
+			}
+		}
+		return 0
+	},
+	freeSid(sid) {
+		const i = playersSid.indexOf(sid)
+		if (i !== -1) playersSid.splice(i, 1)
+	},
+	updateLeaderboard: () => updateLeaderboard(),
+	iconCallback: () => iconCallback(),
+	setTickRate(rate) {
+		config.serverUpdateRate = rate
+		clearInterval(rynTickTimer)
+		rynTickTimer = setInterval(gameTick, 1000 / rate)
+	}
+})
+
 var connection = {}
 server.send = function (id, type, data = []) {
 	if (connection[id]) {
@@ -172,8 +220,8 @@ server.addListener('connection', function (conn) {
 	conn.rynState = function () {
 		const me = findPlayerByID(conn.id)
 		return {
-			me: me ? { sid: me.sid, name: me.name, alive: me.alive, admin: !!me.admin, god: !!me.rynGod, x: me.x, y: me.y } : null,
-			players: players.map(p => ({ sid: p.sid, name: p.name, alive: p.alive, god: !!p.rynGod, health: Math.round(p.health), maxHealth: p.maxHealth, age: p.age })),
+			me: me ? { sid: me.sid, name: me.name, alive: me.alive, admin: !!me.admin, god: !!me.rynGod, x: me.x, y: me.y, weapons: (me.weapons || []).slice(), xp: (me.weapons || []).map(w => (me.weaponXP && me.weaponXP[w]) || 0), hat: me.skinIndex || 0, acc: me.tailIndex || 0 } : null,
+			players: players.map(p => ({ sid: p.sid, name: p.name, alive: p.alive, god: !!p.rynGod, health: Math.round(p.health), maxHealth: p.maxHealth, age: p.age, dummy: !!p.rynDummy, x: Math.round(p.x), y: Math.round(p.y) })),
 			world: { mobs: !!config.spawnMobs, hostile: !!config.spawnHostile, bosses: !!config.spawnBosses },
 			mode: MODE
 		}
@@ -217,151 +265,6 @@ server.addListener('connection', function (conn) {
 			try {
 				events[type].apply(undefined, data)
 			} catch (error) {}
-		}
-
-		// Ryn's admin commands (batch 1). Returns true when it handled the message.
-		function rynAdminCommand(me, text) {
-			const args = text.trim().split(/\s+/)
-			const cmd = (args.shift() || '').toLowerCase()
-			const tell = msg => rynTell(conn, msg)
-			const num = v => (v === undefined || v === '' ? NaN : Number(v))
-			const who = v => {
-				if (v === undefined) return me
-				const p = findPlayerBySID(parseInt(v))
-				if (!p) tell('[Admin] No player with SID ' + v)
-				return p
-			}
-			const setHealth = (p, value) => {
-				p.health = Math.max(1, Math.min(p.maxHealth, value))
-				for (let i = 0; i < players.length; ++i) {
-					if (p.sentTo[players[i].id]) server.send(players[i].id, 'h', [p.sid, Math.round(p.health)])
-				}
-			}
-			switch (cmd) {
-				case 'help':
-					;[
-						'!ping <ms> [jitter] - fake ping for you and your bots (0 = off)',
-						'!spawn <animal> [count] - cow pig sheep bull bully wolf duck boar yeti moostafa moofie treasure crab crabling king',
-						'!hp <n> [sid]  !heal [sid]  !god [sid]',
-						'!age <n> [sid]  !res <amount> [sid]',
-						'!hat <id> [sid]  !acc <id> [sid]',
-						'!arena - into the Crab King arena  !tp <sid> | <x> <y>',
-						'!s  !speed <n>  !v <ruby|diamond|gold|normal>  !dmg [n]  !upgrade <n>',
-						'!kill <sid>  !die  !b  !players  !sid  !mobs|hostile|bosses on|off'
-					].forEach(tell)
-					return true
-				case 'ping': {
-					const ms = Math.max(0, Math.min(2000, num(args[0]) || 0))
-					const jitter = Math.max(0, Math.min(1000, num(args[1]) || 0))
-					if (typeof conn.rynSetPing !== 'function') {
-						tell('[Admin] Fake ping only works inside Ryn')
-						return true
-					}
-					conn.rynSetPing(ms, jitter)
-					tell(ms ? '[Admin] Ping ' + ms + 'ms' + (jitter ? ' +-' + jitter + 'ms' : '') : '[Admin] Ping off')
-					return true
-				}
-				case 'spawn': {
-					const kinds = { cow: 0, pig: 1, bull: 2, bully: 3, wolf: 4, duck: 5, quack: 5, moostafa: 6, treasure: 7, moofie: 8, boar: 9, yeti: 10, king: 11, crabking: 11, sheep: 12, crab: 13, crabling: 14 }
-					const kind = kinds[(args[0] || '').toLowerCase()]
-					if (kind === undefined) {
-						tell('[Admin] Animals: ' + Object.keys(kinds).join(' '))
-						return true
-					}
-					const count = Math.max(1, Math.min(20, num(args[1]) || 1))
-					const arena = kind === 11 || kind === 13 || kind === 14
-					const home = config.secretPool.pool[0]
-					const inArena = UTILS.inSecretPool(config, me.x, me.y, 100) && me.x < 0
-					for (let i = 0; i < count; i++) {
-						let x = me.x + 300 * Math.cos(me.dir) + UTILS.randInt(-60, 60)
-						let y = me.y + 300 * Math.sin(me.dir) + UTILS.randInt(-60, 60)
-						if (arena && !(x < 0 && UTILS.inSecretPool(config, x, y, 100))) {
-							x = (inArena ? me.x : home[0]) + UTILS.randInt(-150, 150)
-							y = (inArena ? me.y : home[1]) + UTILS.randInt(-150, 150)
-						}
-						const ai = aiManager.spawn(x, y, me.dir + Math.PI, kind)
-						if (kind === 13 || kind === 14) ai.minion = true
-					}
-					tell('[Admin] Spawned ' + count + ' ' + args[0] + (arena && !inArena ? ' in the Crab King arena (!arena to go there)' : ''))
-					return true
-				}
-				case 'hp': {
-					const p = who(args[1])
-					if (p && !isNaN(num(args[0]))) {
-						setHealth(p, num(args[0]))
-						tell('[Admin] ' + p.name + ' health ' + Math.round(p.health))
-					}
-					return true
-				}
-				case 'heal': {
-					const p = who(args[0])
-					if (p) {
-						setHealth(p, p.maxHealth)
-						tell('[Admin] Healed ' + p.name)
-					}
-					return true
-				}
-				case 'god': {
-					const p = who(args[0])
-					if (p) {
-						p.rynGod = !p.rynGod
-						tell('[Admin] God mode ' + (p.rynGod ? 'on' : 'off') + ' for ' + p.name)
-					}
-					return true
-				}
-				case 'age': {
-					const p = who(args[1])
-					const target = Math.min(config.maxAge, num(args[0]))
-					if (p && !isNaN(target)) {
-						while (p.age < target && p.age < config.maxAge) p.earnXP(p.maxXP - p.XP)
-						tell('[Admin] ' + p.name + ' age ' + p.age)
-					}
-					return true
-				}
-				case 'res': {
-					const p = who(args[1])
-					const amount = num(args[0])
-					if (p && !isNaN(amount)) {
-						for (let type = 0; type < 3; type++) p.addResource(type, amount - p[config.resourceTypes[type]], true)
-						p.points = amount
-						server.send(p.id, '9', ['points', Math.round(p.points), 1])
-						tell('[Admin] ' + p.name + ' resources ' + amount)
-					}
-					return true
-				}
-				case 'hat':
-				case 'acc': {
-					const p = who(args[1])
-					const id = num(args[0])
-					const tail = cmd === 'acc'
-					const list = tail ? accessories : hats
-					const item = list.find(h => h.id === id)
-					if (p && !item && id !== 0) tell('[Admin] No ' + (tail ? 'accessory' : 'hat') + ' ' + args[0])
-					if (p && (item || id === 0)) {
-						if (tail) {
-							if (item) p.tails[id] = 1
-							p.tail = item || null
-							p.tailIndex = id
-						} else {
-							if (item) p.skins[id] = 1
-							p.skin = item || null
-							p.skinIndex = id
-						}
-						if (item) server.send(p.id, 'us', [0, id, tail ? 1 : 0])
-						server.send(p.id, 'us', [1, id, tail ? 1 : 0])
-						tell('[Admin] ' + p.name + (tail ? ' accessory ' : ' hat ') + (item ? item.name : 'off'))
-					}
-					return true
-				}
-				case 'arena':
-					me.x = -900
-					me.y = config.mapScale / 2
-					me.xVel = 0
-					me.yVel = 0
-					tell('[Admin] Crab King arena')
-					return true
-			}
-			return false
 		}
 
 		function pingSocket() {
@@ -518,7 +421,7 @@ server.addListener('connection', function (conn) {
 			}
 
 			if (message.startsWith(PREFIX) && tmpPlayer.admin) {
-				if (rynAdminCommand(tmpPlayer, message.slice(PREFIX.length))) return
+				if (ryn.command(conn, tmpPlayer, message.slice(PREFIX.length), msg => rynTell(conn, msg))) return
 				if (message === `${PREFIX}s`) {
 					for (let i = 0; i < 9; i++) {
 						tmpPlayer.addResource(3, 999999, true)
@@ -904,6 +807,32 @@ server.addListener('connection', function (conn) {
 		}
 	}
 	conn.on('message', onMessage)
+	// the rest of what Ryn's panel reads and does without chat
+	conn.rynWorld = function () {
+		return ryn.world()
+	}
+	conn.rynCall = function (name, arg) {
+		const me = findPlayerByID(conn.id)
+		switch (name) {
+			case 'panel':
+				return ryn.panelState()
+			case 'stats':
+				return ryn.stats(me)
+			case 'log':
+				return ryn.log(arg)
+			case 'clearLog':
+				return ryn.clearLog()
+			case 'snapshot':
+				return ryn.snapshot(me)
+			case 'restore':
+				return ryn.restore(me, arg)
+			case 'scenarios':
+				return ryn.scenarios()
+			case 'physics':
+				return ryn.physics()
+		}
+		return null
+	}
 	// Ryn's admin panel sends its commands as chat from the owner, without the chat box
 	conn.rynCommand = function (text) {
 		const tmpPlayer = findPlayerByID(conn.id)
@@ -941,11 +870,16 @@ server.addListener('connection', function (conn) {
 })
 
 // GAME TICK
-setInterval(() => {
+function gameTick() {
 	now = Date.now()
 	delta = now - lastUpdate
 	lastUpdate = now
 
+	// Ryn's time control: paused, stepped or slowed ticks still send the world
+	const rynTick = ryn.beginTick(delta)
+	delta = rynTick.delta
+	if (rynTick.run) {
+	ryn.thinkDummies(delta)
 	for (let i = 0; i < players.length; ++i) {
 		let tmpObj = players[i]
 		if (tmpObj) {
@@ -1083,10 +1017,12 @@ setInterval(() => {
 	for (let i = 0; i < projectiles.length; i++) {
 		projectiles[i].update(delta)
 	}
+	}
 
 	for (let j = 0; j < players.length; j++) {
 		let tmpPlayer = players[j]
-		if (tmpPlayer) {
+		// Ryn's dummies have nobody to send to
+		if (tmpPlayer && !tmpPlayer.rynDummy) {
 			const tmpPlayersData = []
 			for (let i = 0; i < players.length; ++i) {
 				let tmpObj = players[i]
@@ -1192,14 +1128,15 @@ setInterval(() => {
 						tmpObj.scale,
 						tmpObj.type,
 						tmpObj.id,
-						tmpObj.owner?.sid
+						tmpObj.owner ? tmpObj.owner.sid : -1
 					)
 				}
 			}
 			server.send(tmpPlayer.id, '6', [tmpObjectsData])
 		}
 	}
-}, 1000 / config.serverUpdateRate)
+}
+let rynTickTimer = setInterval(gameTick, 1000 / config.serverUpdateRate)
 
 function updateLeaderboard() {
 	const tmpLeaderboardData = []
