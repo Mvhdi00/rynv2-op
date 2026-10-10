@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.4-fix20
+// @version         2.9.4-fix21
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -9491,7 +9491,8 @@ module.exports.PACKETCODE = PACKETCODE
   const RynPrivate = {
     on: (() => {
       try {
-        if (new URLSearchParams(location.search).get("rynPrivate") === "1") sessionStorage.setItem(RYN_PRIVATE_KEY, "1");
+        const asked = new URLSearchParams(location.search).get("rynPrivate");
+        if (asked === "1") sessionStorage.setItem(RYN_PRIVATE_KEY, "1"); else if (asked === "0") sessionStorage.removeItem(RYN_PRIVATE_KEY);
         return sessionStorage.getItem(RYN_PRIVATE_KEY) === "1";
       } catch (_) {
         return false;
@@ -12621,6 +12622,70 @@ module.exports.PACKETCODE = PACKETCODE
       if (RynPrivate.on) RynWorlds.save();
     } catch (_) {}
   });
+  // Private mode always runs on moomoo.io. A browser keeps each subdomain's storage
+  // apart, so worlds saved on sandbox.moomoo.io would not show on moomoo.io. Opening
+  // Private anywhere else goes to moomoo.io and carries that address's worlds along
+  // in the address hash, which is read and removed before the game loads.
+  const RYN_PRIVATE_HOME = "moomoo.io";
+  const rynPrivateHome = () => location.hostname === RYN_PRIVATE_HOME || location.hostname === "www." + RYN_PRIVATE_HOME;
+  const rynNoPrivate = href => {
+    try {
+      const u = new URL(href, location.href);
+      u.searchParams.set("rynPrivate", "0");
+      return u.href;
+    } catch (_) {
+      return href;
+    }
+  };
+  (() => {
+    try {
+      if (rynPrivateHome()) {
+        const hash = location.hash;
+        if (hash.indexOf("#rynWorlds=") !== 0) return;
+        history.replaceState(null, "", location.pathname + location.search);
+        const pack = JSON.parse(decodeURIComponent(hash.slice("#rynWorlds=".length)));
+        let mine = RynWorlds.list();
+        let brought = 0;
+        for (const w of pack.index || []) {
+          if (!w || typeof w.id !== "string" || !pack.data || typeof pack.data[w.id] !== "string") continue;
+          const have = mine.find(x => x.id === w.id);
+          if (have && (have.played || 0) >= (w.played || 0)) continue;
+          if (!have && mine.some(x => x.name === w.name)) w.name = (w.name + " (" + (pack.from || "sandbox") + ")").slice(0, 40);
+          localStorage.setItem("_ryn_world_" + w.id, pack.data[w.id]);
+          mine = mine.filter(x => x.id !== w.id).concat([ w ]);
+          brought++;
+        }
+        if (brought) {
+          localStorage.setItem(RynWorlds.INDEX, JSON.stringify(mine));
+          if (pack.selected && mine.some(x => x.id === pack.selected)) localStorage.setItem(RynWorlds.SELECTED, pack.selected);
+          RynPrivate.dbg("brought over " + brought + " world(s) from " + (pack.from || "another moomoo address"));
+        }
+        return;
+      }
+      if (!RynPrivate.on || !/(^|\.)moomoo\.io$/.test(location.hostname)) return;
+      RynPrivate.on = false;
+      sessionStorage.removeItem(RYN_PRIVATE_KEY);
+      const pack = {
+        from: location.hostname.split(".")[0],
+        index: [],
+        selected: localStorage.getItem(RynWorlds.SELECTED),
+        data: {}
+      };
+      let size = 0;
+      for (const w of RynWorlds.list().sort((a, b) => (b.played || 0) - (a.played || 0))) {
+        const d = localStorage.getItem("_ryn_world_" + w.id);
+        if (!d || size + d.length > 6e5) continue;
+        pack.data[w.id] = d;
+        pack.index.push(w);
+        size += d.length;
+      }
+      location.replace("https://" + RYN_PRIVATE_HOME + "/?rynPrivate=1" + (pack.index.length ? "#rynWorlds=" + encodeURIComponent(JSON.stringify(pack)) : ""));
+    } catch (e) {
+      try {
+        RynPrivate.dbg("moving worlds failed: " + (e && e.message));
+      } catch (_) {}
+    }
+  })();
   const rynBotNotice = msg => {
     try {
       console.warn("[RYN BOT] " + msg);
@@ -45012,8 +45077,9 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         seg.appendChild(button);
       };
       if (RynPrivate.on) {
-        addMode("Normal", false, isSandbox ? altHref || "//moomoo.io/" : "reload");
-        addMode("Sandbox", false, isSandbox ? "reload" : altHref || "//sandbox.moomoo.io/");
+        // Private runs on moomoo.io; leaving it for sandbox must not bring an old Private flag back there
+        addMode("Normal", false, isSandbox ? rynNoPrivate(altHref || "//moomoo.io/") : "reload");
+        addMode("Sandbox", false, isSandbox ? "reload" : rynNoPrivate(altHref || "//sandbox.moomoo.io/"));
       } else {
         addMode("Normal", !isSandbox, isSandbox ? altHref || "//moomoo.io/" : null);
         addMode("Sandbox", isSandbox, isSandbox ? null : altHref || "//sandbox.moomoo.io/");
