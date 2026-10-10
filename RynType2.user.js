@@ -32490,6 +32490,12 @@ module.exports.PACKETCODE = PACKETCODE
       }
     }
   }
+  const ANTI_ENEMY_RANGE = 400;
+  const antiEnemyNear = client => {
+    if (!Settings_default._antienemy) return false;
+    const enemy = client.EnemyManager.nearestEnemy;
+    return enemy !== null && client.myPlayer.pos.current.distance(enemy.pos.current) <= ANTI_ENEMY_RANGE;
+  };
   class UtilityHat {
     moduleName="utilityHat";
     client;
@@ -32653,6 +32659,9 @@ module.exports.PACKETCODE = PACKETCODE
         if (useActual && actual !== 11) return actual;
         return 0;
       }
+      if (useShadow && antiEnemyNear(this.client)) {
+        return 19;
+      }
       if (Settings_default._tailPriority && !Settings_default._cowboyWhenSafe && useTail && this.shouldUseTail()) {
         return 11;
       }
@@ -32660,7 +32669,7 @@ module.exports.PACKETCODE = PACKETCODE
       if (soldierActive && useShadow) {
         return 19;
       }
-      if (EnemyManager2.detectedEnemy || EnemyManager2.nearestEnemyInRangeOf(300, EnemyManager2.nearestEntity)) {
+      if (EnemyManager2.detectedEnemy || EnemyManager2.nearestEnemyInRangeOf(ANTI_ENEMY_RANGE, EnemyManager2.nearestEntity)) {
         const isEnemy = EnemyManager2.nearestEntity === EnemyManager2.nearestEnemy;
         if (useShadow) {
           return 19;
@@ -32728,6 +32737,10 @@ module.exports.PACKETCODE = PACKETCODE
             }
           }
         });
+      }
+      if (useSoldier && antiEnemyNear(this.client)) {
+        ModuleHandler.shouldEquipSoldier = true;
+        return 6;
       }
       if (!ModuleHandler.isMoving && myPlayer.speed <= 5 && !_empNearbyTurret) {
         const _nearestStill = EnemyManager2.nearestEnemy;
@@ -33557,7 +33570,7 @@ module.exports.PACKETCODE = PACKETCODE
       }
       //     if (myPlayer.shameCount > 0 && !soldierAnti && !collidingspike
       //         && poisonDmgPot == 0 && totalDmgPot == 0) shouldResetShame = true;
-      if (myPlayer.shameCount > 0 && !this.soldierAnti && !this.collidingspike && this.poisonDmgPot === 0 && this.totalDmgPot === 0) {
+      if (myPlayer.shameCount > 0 && !this.soldierAnti && !this.collidingspike && this.poisonDmgPot === 0 && this.totalDmgPot === 0 && !antiEnemyNear(this.client)) {
         this.shouldResetShame = true;
       }
       // ── hatFc ─────────────────────────────────────────────────────────
