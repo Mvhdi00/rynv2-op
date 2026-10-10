@@ -140,3 +140,11 @@ shame; a 60 second health/damage graph; fight export (Stats); a test bench that
 runs scenarios against your Ryn and scores them, with A/B of one setting and
 saved reports compared run to run; a 30 second replay you can scrub tick by tick;
 a packet inspector (Lab); and a ping that keeps changing between two values (Mine).
+
+Worlds: in Private mode Ryn's lobby lists saved worlds instead of servers. The one
+you pick loads into the in-page server when you first spawn in it (map, buildings,
+dummies, rules, your age, weapons, hats, resources and position: `restore`,
+`applyPlayer`, or `newWorld` for a fresh one), saves itself every 5 seconds, right
+before you leave (before the server removes your buildings) and when the page
+closes. Respawning after a death keeps playing the same world. Worlds live in
+localStorage (`_ryn_worlds`, `_ryn_world_<id>`).

@@ -524,6 +524,99 @@ module.exports = function (ctx) {
 		return true
 	}
 
+	// ---- worlds: what Ryn's lobby saves per world besides the map ----
+	api.playerState = function (me) {
+		if (!me || !me.alive) return null
+		return {
+			x: Math.round(me.x),
+			y: Math.round(me.y),
+			dir: me.dir,
+			health: Math.round(me.health),
+			age: me.age,
+			XP: me.XP,
+			maxXP: me.maxXP,
+			upgradePoints: me.upgradePoints,
+			upgrAge: me.upgrAge,
+			weapons: me.weapons.slice(),
+			weaponXP: me.weapons.map(w => me.weaponXP[w] || 0),
+			items: me.items.slice(),
+			wood: me.wood,
+			food: me.food,
+			stone: me.stone,
+			points: me.points,
+			kills: me.kills,
+			skins: Object.keys(me.skins).map(Number).filter(k => me.skins[k]),
+			tails: Object.keys(me.tails).map(Number).filter(k => me.tails[k]),
+			skinIndex: me.skinIndex || 0,
+			tailIndex: me.tailIndex || 0
+		}
+	}
+	api.applyPlayer = function (me, st) {
+		if (!me || !me.alive || !st) return false
+		me.age = st.age || 1
+		me.XP = st.XP || 0
+		me.maxXP = st.maxXP || 300
+		me.upgradePoints = st.upgradePoints || 0
+		me.upgrAge = st.upgrAge || 2
+		server.send(me.id, '15', [me.XP, UTILS.fixTo(me.maxXP, 1), me.age])
+		server.send(me.id, '16', [me.upgradePoints, me.upgrAge])
+		const weapons = (st.weapons || []).filter(w => items.weapons[w])
+		if (weapons.length) {
+			me.weapons = weapons
+			weapons.forEach((w, i) => (me.weaponXP[w] = (st.weaponXP || [])[i] || 0))
+			me.weaponIndex = weapons[0]
+		}
+		const list = (st.items || []).filter(i => items.list[i])
+		if (list.length) me.items = list
+		me.buildIndex = -1
+		server.send(me.id, '17', [me.items])
+		server.send(me.id, '17', [me.weapons, 1])
+		for (const type of ['wood', 'food', 'stone']) {
+			me[type] = st[type] || 0
+			server.send(me.id, '9', [type, me[type], 1])
+		}
+		me.points = st.points || 0
+		server.send(me.id, '9', ['points', Math.round(me.points), 1])
+		me.kills = st.kills || 0
+		server.send(me.id, '9', ['kills', me.kills, 1])
+		for (const id of st.skins || []) {
+			if (!hatById(id)) continue
+			me.skins[id] = 1
+			server.send(me.id, 'us', [0, id, 0])
+		}
+		for (const id of st.tails || []) {
+			if (!accById(id)) continue
+			me.tails[id] = 1
+			server.send(me.id, 'us', [0, id, 1])
+		}
+		me.skin = hatById(st.skinIndex) || null
+		me.skinIndex = me.skin ? st.skinIndex : 0
+		server.send(me.id, 'us', [1, me.skinIndex, 0])
+		me.tail = accById(st.tailIndex) || null
+		me.tailIndex = me.tail ? st.tailIndex : 0
+		server.send(me.id, 'us', [1, me.tailIndex, 1])
+		setHealth(me, st.health || 100)
+		if (Number.isFinite(st.x) && Number.isFinite(st.y)) moveTo(me, st.x, st.y)
+		if (Number.isFinite(st.dir)) me.dir = st.dir
+		return true
+	}
+	// a world nobody has played yet: the map as the server made it, nothing else
+	api.newWorld = function () {
+		keepOriginal()
+		api.clearDummies()
+		if (survival.on) survivalEnd('new world')
+		spawners.length = 0
+		for (const o of ctx.gameObjects) if (o.active) removeObject(o)
+		for (const p of players()) {
+			for (let g = 0; g < items.groups.length; g++) if (p.itemCounts && p.itemCounts[g]) p.changeItemAllCount(g, 0)
+			p.pps = 0
+		}
+		for (const [x, y, dir, scale, type] of original) ctx.objectManager.add(ctx.objectManager.objects.length, x, y, dir, scale, type, null, false, null)
+		Object.assign(rules, { dmgMult: 1, gatherMult: 1 })
+		Object.assign(king, { speed: 1, damage: 1, only: '' })
+		return true
+	}
+
 	// ---- scenarios ----
 	const SCENARIOS = {
 		trapped: 'Enemy in your trap with your spikes around it',

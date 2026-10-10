@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.4-fix19
+// @version         2.9.4-fix20
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -1966,6 +1966,14 @@ server.addListener('connection', function (conn) {
 				])
 				server.send(conn.id, '1', [tmpPlayer.sid])
 				if (typeof conn.rynDebug === 'function') conn.rynDebug('spawned at ' + Math.round(location[0]) + ', ' + Math.round(location[1]) + ' (' + players.length + ' players on the server)')
+				// Ryn's lobby worlds load into the server when you first spawn in them
+				if (typeof conn.rynSpawned === 'function') {
+					try {
+						conn.rynSpawned()
+					} catch (e) {
+						console.log('ryn world load', e)
+					}
+				}
 				updateLeaderboard()
 
 				var playerName = data.name
@@ -2488,6 +2496,12 @@ server.addListener('connection', function (conn) {
 				return alive ? ryn.copyBase(me, arg) : null
 			case 'pasteBase':
 				return alive ? ryn.pasteBase(me, arg.stamp, arg.rotate) : null
+			case 'playerState':
+				return ryn.playerState(me)
+			case 'applyPlayer':
+				return ryn.applyPlayer(me, arg)
+			case 'newWorld':
+				return ryn.newWorld()
 			case 'stats':
 				return ryn.stats(me)
 			case 'log':
@@ -7330,6 +7344,99 @@ module.exports = function (ctx) {
 		return true
 	}
 
+	// ---- worlds: what Ryn's lobby saves per world besides the map ----
+	api.playerState = function (me) {
+		if (!me || !me.alive) return null
+		return {
+			x: Math.round(me.x),
+			y: Math.round(me.y),
+			dir: me.dir,
+			health: Math.round(me.health),
+			age: me.age,
+			XP: me.XP,
+			maxXP: me.maxXP,
+			upgradePoints: me.upgradePoints,
+			upgrAge: me.upgrAge,
+			weapons: me.weapons.slice(),
+			weaponXP: me.weapons.map(w => me.weaponXP[w] || 0),
+			items: me.items.slice(),
+			wood: me.wood,
+			food: me.food,
+			stone: me.stone,
+			points: me.points,
+			kills: me.kills,
+			skins: Object.keys(me.skins).map(Number).filter(k => me.skins[k]),
+			tails: Object.keys(me.tails).map(Number).filter(k => me.tails[k]),
+			skinIndex: me.skinIndex || 0,
+			tailIndex: me.tailIndex || 0
+		}
+	}
+	api.applyPlayer = function (me, st) {
+		if (!me || !me.alive || !st) return false
+		me.age = st.age || 1
+		me.XP = st.XP || 0
+		me.maxXP = st.maxXP || 300
+		me.upgradePoints = st.upgradePoints || 0
+		me.upgrAge = st.upgrAge || 2
+		server.send(me.id, '15', [me.XP, UTILS.fixTo(me.maxXP, 1), me.age])
+		server.send(me.id, '16', [me.upgradePoints, me.upgrAge])
+		const weapons = (st.weapons || []).filter(w => items.weapons[w])
+		if (weapons.length) {
+			me.weapons = weapons
+			weapons.forEach((w, i) => (me.weaponXP[w] = (st.weaponXP || [])[i] || 0))
+			me.weaponIndex = weapons[0]
+		}
+		const list = (st.items || []).filter(i => items.list[i])
+		if (list.length) me.items = list
+		me.buildIndex = -1
+		server.send(me.id, '17', [me.items])
+		server.send(me.id, '17', [me.weapons, 1])
+		for (const type of ['wood', 'food', 'stone']) {
+			me[type] = st[type] || 0
+			server.send(me.id, '9', [type, me[type], 1])
+		}
+		me.points = st.points || 0
+		server.send(me.id, '9', ['points', Math.round(me.points), 1])
+		me.kills = st.kills || 0
+		server.send(me.id, '9', ['kills', me.kills, 1])
+		for (const id of st.skins || []) {
+			if (!hatById(id)) continue
+			me.skins[id] = 1
+			server.send(me.id, 'us', [0, id, 0])
+		}
+		for (const id of st.tails || []) {
+			if (!accById(id)) continue
+			me.tails[id] = 1
+			server.send(me.id, 'us', [0, id, 1])
+		}
+		me.skin = hatById(st.skinIndex) || null
+		me.skinIndex = me.skin ? st.skinIndex : 0
+		server.send(me.id, 'us', [1, me.skinIndex, 0])
+		me.tail = accById(st.tailIndex) || null
+		me.tailIndex = me.tail ? st.tailIndex : 0
+		server.send(me.id, 'us', [1, me.tailIndex, 1])
+		setHealth(me, st.health || 100)
+		if (Number.isFinite(st.x) && Number.isFinite(st.y)) moveTo(me, st.x, st.y)
+		if (Number.isFinite(st.dir)) me.dir = st.dir
+		return true
+	}
+	// a world nobody has played yet: the map as the server made it, nothing else
+	api.newWorld = function () {
+		keepOriginal()
+		api.clearDummies()
+		if (survival.on) survivalEnd('new world')
+		spawners.length = 0
+		for (const o of ctx.gameObjects) if (o.active) removeObject(o)
+		for (const p of players()) {
+			for (let g = 0; g < items.groups.length; g++) if (p.itemCounts && p.itemCounts[g]) p.changeItemAllCount(g, 0)
+			p.pps = 0
+		}
+		for (const [x, y, dir, scale, type] of original) ctx.objectManager.add(ctx.objectManager.objects.length, x, y, dir, scale, type, null, false, null)
+		Object.assign(rules, { dmgMult: 1, gatherMult: 1 })
+		Object.assign(king, { speed: 1, damage: 1, only: '' })
+		return true
+	}
+
 	// ---- scenarios ----
 	const SCENARIOS = {
 		trapped: 'Enemy in your trap with your spikes around it',
@@ -9602,6 +9709,9 @@ module.exports.PACKETCODE = PACKETCODE
         rynDebug(text) {
           if (owner) RynPrivate.dbg("you: " + text);
         },
+        rynSpawned() {
+          if (owner) RynWorlds.onSpawn();
+        },
         rynSetPing(ms, jitter) {
           RynPrivate.setPing(ms, jitter);
         },
@@ -9681,6 +9791,12 @@ module.exports.PACKETCODE = PACKETCODE
     _shut(code, reason) {
       if (this.readyState >= 2) return;
       const open = this.readyState === 1;
+      // save the world while your buildings are still in it (the server removes them when you go)
+      if (open && this._who === "you") {
+        try {
+          RynWorlds.beforeLeave();
+        } catch (_) {}
+      }
       this.readyState = 2;
       rynPrivateLater(() => {
         if (open) this._conn._emit("close", code, reason);
@@ -10899,11 +11015,7 @@ module.exports.PACKETCODE = PACKETCODE
       }, "ra-go"));
       this.saveList = this.el("div", "ra-plist");
       body.appendChild(this.saveList);
-      this.row(body, "", this.toggleButton("Keep after refresh", () => !!this.store("_ryn_admin_keep"), v => {
-        this.store("_ryn_admin_keep", v);
-        if (v) this.autoTick();
-      }));
-      body.appendChild(this.el("div", "ra-hint", "A save holds buildings, trees, dummies, rules and where you stand. Keep after refresh brings the last world back when you spawn again."));
+      body.appendChild(this.el("div", "ra-hint", "A save holds buildings, trees, dummies, rules and where you stand, and loads into the world you are in. The world itself saves on its own: pick it in the lobby's Worlds list."));
       this.drawSaves();
     },
     drawSaves() {
@@ -10930,19 +11042,7 @@ module.exports.PACKETCODE = PACKETCODE
       }
     },
     autoTick() {
-      if (!this.store("_ryn_admin_keep")) return;
-      const state = RynPrivate.state();
-      if (!state || !state.me || !state.me.alive) return;
-      if (!this.autoRestored) {
-        this.autoRestored = true;
-        const last = this.store("_ryn_admin_last");
-        if (last && RynPrivate.call("restore", last)) {
-          this.say("Brought back your last world");
-          return;
-        }
-      }
-      const snap = RynPrivate.call("snapshot");
-      if (snap) this.store("_ryn_admin_last", snap);
+      RynWorlds.save();
     },
     buildRules(body) {
       this.section(body, "Rules");
@@ -12304,6 +12404,223 @@ module.exports.PACKETCODE = PACKETCODE
       this.done(b.cmd, b.label);
     }
   };
+  // Private mode's worlds: the lobby lists them instead of servers. The one you pick
+  // loads into the in-page server when you spawn, saves itself every few seconds and
+  // right before you leave, and brings you back where you were.
+  const RynWorlds = {
+    INDEX: "_ryn_worlds",
+    SELECTED: "_ryn_world_selected",
+    applied: null,
+    loading: false,
+    listeners: new Set,
+    list() {
+      try {
+        const all = JSON.parse(localStorage.getItem(this.INDEX) || "[]");
+        return Array.isArray(all) ? all.filter(w => w && typeof w.id === "string") : [];
+      } catch (_) {
+        return [];
+      }
+    },
+    writeList(all) {
+      try {
+        localStorage.setItem(this.INDEX, JSON.stringify(all));
+      } catch (_) {}
+      this.changed();
+    },
+    data(id) {
+      try {
+        return JSON.parse(localStorage.getItem("_ryn_world_" + id) || "null");
+      } catch (_) {
+        return null;
+      }
+    },
+    selected() {
+      const all = this.list();
+      let id = null;
+      try {
+        id = localStorage.getItem(this.SELECTED);
+      } catch (_) {}
+      return all.find(w => w.id === id) || all[0] || null;
+    },
+    select(id) {
+      const now = this.selected();
+      if (now && now.id === id) return;
+      if (this.applied !== null) this.save();
+      try {
+        localStorage.setItem(this.SELECTED, id);
+      } catch (_) {}
+      this.changed();
+    },
+    create(name) {
+      const all = this.list();
+      const w = {
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+        name: String(name || "World " + (all.length + 1)).slice(0, 40),
+        created: Date.now(),
+        played: 0,
+        buildings: 0,
+        age: 1
+      };
+      all.push(w);
+      this.writeList(all);
+      this.select(w.id);
+      return w;
+    },
+    rename(id, name) {
+      const all = this.list();
+      const w = all.find(x => x.id === id);
+      if (!w) return;
+      w.name = String(name).slice(0, 40);
+      this.writeList(all);
+    },
+    remove(id) {
+      const all = this.list().filter(w => w.id !== id);
+      try {
+        localStorage.removeItem("_ryn_world_" + id);
+      } catch (_) {}
+      if (this.applied === id) this.applied = "";
+      this.writeList(all);
+      if (!all.length) this.create("World 1");
+    },
+    ensure() {
+      if (!this.list().length) this.create("World 1");
+    },
+    // the first spawn in a world loads it; respawning after a death does not
+    onSpawn() {
+      this.ensure();
+      const w = this.selected();
+      if (!w || this.applied === w.id || this.loading) return;
+      // wait until the game has your player (it arrives with the next server tick)
+      this.loading = true;
+      setTimeout(() => {
+        this.loading = false;
+        try {
+          this.load(w);
+        } catch (e) {
+          RynPrivate.dbg("could not load world " + w.name + ": " + (e && e.message));
+        }
+      }, 350);
+    },
+    load(w) {
+      const st = RynPrivate.state();
+      if (!st || !st.me || !st.me.alive) return;
+      const d = this.data(w.id);
+      if (d && d.snap) {
+        RynPrivate.call("restore", d.snap);
+        if (d.player) RynPrivate.call("applyPlayer", d.player);
+        RynPrivate.dbg("you: loaded world " + w.name + (d.player ? " (age " + d.player.age + ", back where you were)" : ""));
+      } else if (this.applied !== null) {
+        RynPrivate.call("newWorld");
+        RynPrivate.dbg("you: started new world " + w.name);
+      } else {
+        RynPrivate.dbg("you: started new world " + w.name);
+      }
+      this.applied = w.id;
+      setTimeout(() => this.save(), 1500);
+    },
+    save() {
+      const id = this.applied;
+      if (!id) return false;
+      const all = this.list();
+      const w = all.find(x => x.id === id);
+      if (!w) return false;
+      const snap = RynPrivate.call("snapshot");
+      if (!snap) return false;
+      const player = RynPrivate.call("playerState");
+      try {
+        localStorage.setItem("_ryn_world_" + id, JSON.stringify({
+          v: 1,
+          snap: snap,
+          player: player
+        }));
+      } catch (e) {
+        RynPrivate.dbg("could not save world " + w.name + ": " + (e && e.message));
+        return false;
+      }
+      w.played = Date.now();
+      w.buildings = snap.objects.filter(o => o[6] === "me").length;
+      w.age = player ? player.age : 1;
+      this.writeList(all);
+      return true;
+    },
+    beforeLeave() {
+      if (this.applied) this.save();
+      this.applied = null;
+    },
+    changed() {
+      for (const fn of this.listeners) {
+        try {
+          fn();
+        } catch (_) {}
+      }
+    },
+    buildLobby(right, el, statusText) {
+      this.ensure();
+      right.textContent = "";
+      const head = el("div", "rs-head");
+      const titleRow = el("div", "rs-title-row");
+      titleRow.appendChild(el("span", "rs-title", "Worlds"));
+      const count = el("span", "rs-online");
+      titleRow.appendChild(count);
+      head.appendChild(titleRow);
+      head.appendChild(el("div", "rs-note", "Saved in this browser. Your buildings, dummies, progress and where you stand come back when you return."));
+      const actions = el("div", "rs-filters");
+      const add = el("div", "rs-chip", "+ New world");
+      add.addEventListener("click", () => {
+        const name = prompt("Name the new world", "World " + (this.list().length + 1));
+        if (name !== null) this.create(name.trim() || undefined);
+      });
+      actions.appendChild(add);
+      head.appendChild(actions);
+      right.appendChild(head);
+      const list = el("div", "rs-list");
+      right.appendChild(list);
+      const ago = t => {
+        const s = Math.max(0, Math.round((Date.now() - t) / 1e3));
+        if (s < 60) return "just now";
+        if (s < 3600) return Math.round(s / 60) + " min ago";
+        if (s < 86400) return Math.round(s / 3600) + " h ago";
+        return Math.round(s / 86400) + " d ago";
+      };
+      const draw = () => {
+        const all = this.list();
+        const sel = this.selected();
+        count.textContent = all.length + " saved";
+        list.textContent = "";
+        for (const w of all) {
+          const row = el("div", "rs-row" + (sel && sel.id === w.id ? " rs-on" : ""));
+          const id = el("div", "rs-id");
+          id.appendChild(el("span", "rs-name", w.name));
+          id.appendChild(el("span", "rs-region", w.played ? "Played " + ago(w.played) + " · age " + (w.age || 1) + " · " + (w.buildings || 0) + " buildings" : "New world"));
+          row.appendChild(id);
+          const rename = el("span", "rs-tag rw-act", "Rename");
+          rename.addEventListener("click", e => {
+            e.stopPropagation();
+            const name = prompt("Rename the world", w.name);
+            if (name && name.trim()) this.rename(w.id, name.trim());
+          });
+          const del = el("span", "rs-tag rw-act rw-del", "Delete");
+          del.addEventListener("click", e => {
+            e.stopPropagation();
+            if (confirm("Delete " + w.name + "? It cannot be brought back.")) this.remove(w.id);
+          });
+          row.appendChild(rename);
+          row.appendChild(del);
+          row.addEventListener("click", () => this.select(w.id));
+          list.appendChild(row);
+        }
+        statusText.textContent = sel ? "Private · " + sel.name : "Private";
+      };
+      this.listeners.add(draw);
+      draw();
+      setInterval(draw, 3e4);
+    }
+  };
+  window.addEventListener("pagehide", () => {
+    try {
+      if (RynPrivate.on) RynWorlds.save();
+    } catch (_) {}
+  });
   const rynBotNotice = msg => {
     try {
       console.warn("[RYN BOT] " + msg);
@@ -39629,6 +39946,17 @@ html.ryn-in-lobby .ryn-v2-wrapper {
     white-space: nowrap;
 }
 .rs-tag[hidden] { display: none; }
+.rs-tag.rw-act {
+    cursor: pointer;
+    opacity: 0;
+    border-color: var(--rl-line-2);
+    background: rgba(255,255,255,0.04);
+    color: var(--rl-tx-3);
+    transition: opacity 140ms var(--rl-ease), color 140ms var(--rl-ease);
+}
+.rs-row:hover .rs-tag.rw-act, .rs-row.rs-on .rs-tag.rw-act { opacity: 1; }
+.rs-tag.rw-act:hover { color: var(--rl-tx-1); }
+.rs-tag.rw-del:hover { color: #E7BCC3; border-color: rgba(217,163,171,0.45); }
 .rs-pref {
     display: flex;
     align-items: center;
@@ -44628,7 +44956,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       title.appendChild(el("span", "rl-t1", "RYN"));
       title.appendChild(el("span", "rl-t2", "Type 2"));
       body.appendChild(title);
-      body.appendChild(el("div", "rl-tagline", "Pick a server · Press Enter to drop in"));
+      body.appendChild(el("div", "rl-tagline", RynPrivate.on ? "Pick a world · Press Enter to drop in" : "Pick a server · Press Enter to drop in"));
 
       const group = label => {
         const wrap = el("div", "rl-group");
@@ -44759,6 +45087,15 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         if (node !== null) stash.appendChild(node);
       });
 
+      // Private mode: the panel lists your saved worlds instead of servers
+      const privateWorlds = RynPrivate.on;
+      if (privateWorlds) {
+        try {
+          RynWorlds.buildLobby(right, el, statusText);
+        } catch (e) {
+          RynPrivate.dbg("lobby worlds: " + (e && e.message));
+        }
+      }
       lobby.appendChild(left);
       lobby.appendChild(right);
       lobby.appendChild(stash);
@@ -44836,7 +45173,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
       };
 
       const startLive = () => {
-        if (liveTimer !== 0) {
+        if (liveTimer !== 0 || privateWorlds) {
           return;
         }
         readLive();
@@ -45195,6 +45532,7 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 
       const sync = () => {
         queued = false;
+        if (privateWorlds) return;
         if (!visible) {
           dirty = true;
           return;

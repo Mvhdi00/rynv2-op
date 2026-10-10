@@ -328,6 +328,14 @@ server.addListener('connection', function (conn) {
 				])
 				server.send(conn.id, '1', [tmpPlayer.sid])
 				if (typeof conn.rynDebug === 'function') conn.rynDebug('spawned at ' + Math.round(location[0]) + ', ' + Math.round(location[1]) + ' (' + players.length + ' players on the server)')
+				// Ryn's lobby worlds load into the server when you first spawn in them
+				if (typeof conn.rynSpawned === 'function') {
+					try {
+						conn.rynSpawned()
+					} catch (e) {
+						console.log('ryn world load', e)
+					}
+				}
 				updateLeaderboard()
 
 				var playerName = data.name
@@ -850,6 +858,12 @@ server.addListener('connection', function (conn) {
 				return alive ? ryn.copyBase(me, arg) : null
 			case 'pasteBase':
 				return alive ? ryn.pasteBase(me, arg.stamp, arg.rotate) : null
+			case 'playerState':
+				return ryn.playerState(me)
+			case 'applyPlayer':
+				return ryn.applyPlayer(me, arg)
+			case 'newWorld':
+				return ryn.newWorld()
 			case 'stats':
 				return ryn.stats(me)
 			case 'log':
