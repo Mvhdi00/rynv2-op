@@ -14,6 +14,7 @@
     try {
         if (typeof localStorage === "undefined") return;
         localStorage.removeItem("moo_did");
+        localStorage.removeItem("_ryn_bot_dids");
     } catch (e) {}
 })();
 
