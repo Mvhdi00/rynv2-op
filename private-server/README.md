@@ -49,6 +49,35 @@ Checked table by table against the game bundle (parsed statically, nothing run):
   the arena is dry land, so you move at normal speed there. Nothing can be built in
   it, and the King's whole body stays west of the map edge.
 
+## Checked against the game's own logic
+
+The game's client bundle carries the server's shared modules: the player, the
+animals, game objects, the object manager, projectiles, the config, the data tables
+and the helpers. `tools/parity/extract.js` cuts them out of
+`src/game_index-12d386a8.js` into `tools/parity/game-shared.js`, and
+`node tools/server-parity.js` runs the same situations through the game's code and
+this server's (seeded, steady ticks) and compares every tick: walking, snow, the
+river, hats, collisions, spikes, boost pads, traps, walls, melee with tiers, poison,
+shields and reflected damage, shots, gathering, shame, animals, sandbox caps, names.
+They match. What was different and is now the game's:
+
+- Speeds stop at 0.01, as in the game: before, players never fully stopped, so they
+  never "settled" for the client and "still" timers (invisibility) never ran.
+- An object touched in one sub-step of a tick is not checked again in the next ones:
+  a fast player took a spike's damage and push up to four times in one tick.
+- Gear that hurts the attacker returns the weapon's own damage on every hit; it was
+  skipped for gold and better weapons and against shields, and scaled by the
+  attacker's hats.
+- Sandbox keeps the game's building caps (the group's sandbox limit, else 3x the
+  limit and at least 99) instead of none.
+- Health goes out exact, not rounded; a new player's data is rounded the way the
+  game rounds it; a broken object is announced once.
+- Names go through the game's filter (`src/badwords.js`, generated from the game's
+  files); an attack aimed at exactly 0 rad turns the player too.
+- One tick is always exactly 1000/9 ms of game time. The page's timers jitter, and
+  movement is not time-step independent, so a late tick used to move everyone
+  further (up to three ticks' worth in one).
+
 ## Crab King
 
 The game only draws the King: its state (1 going under, 2 under water, 3 coming up)

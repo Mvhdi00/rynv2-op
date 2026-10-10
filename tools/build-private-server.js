@@ -89,7 +89,9 @@ ${modules}
         if (!factory) throw new Error("private server: no module " + rel);
         const module = { exports: {} };
         cache[rel] = module;
-        factory(module, module.exports, require, processShim, quiet, timers.setInterval, timers.clearInterval, timers.setTimeout, timers.clearTimeout);
+        // a module's "./x.js" is next to it, as in Node
+        const dir = rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/") + 1) : "";
+        factory(module, module.exports, name => require(name, dir), processShim, quiet, timers.setInterval, timers.clearInterval, timers.setTimeout, timers.clearTimeout);
         return module.exports;
       };
       const codec = (() => {
@@ -118,9 +120,16 @@ ${modules}
         "node-fetch": async () => ({ json: async () => ({ version: "1.2.2" }) }),
         "./package.json": { version: "1.2.2" }
       };
-      function require(name) {
+      function require(name, dir = "") {
         if (Object.prototype.hasOwnProperty.call(externals, name)) return externals[name];
-        let rel = name.replace(/^\\.\\//, "");
+        const parts = (dir + name).split("/");
+        const out = [];
+        for (const part of parts) {
+          if (part === "" || part === ".") continue;
+          if (part === "..") out.pop();
+          else out.push(part);
+        }
+        let rel = out.join("/");
         if (!rel.endsWith(".js")) rel += ".js";
         return run(rel);
       }

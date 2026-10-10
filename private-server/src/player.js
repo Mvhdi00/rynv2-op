@@ -3,6 +3,7 @@ var mathCOS = Math.cos
 var mathSIN = Math.sin
 var mathPOW = Math.pow
 var mathSQRT = Math.sqrt
+var badWords = require('./badwords.js')
 module.exports = function (
 	id,
 	sid,
@@ -150,7 +151,16 @@ module.exports = function (
 			name = name.replace(/[^\w:\(\)\/? -]+/gim, " ") // USE SPACE SO WE CAN CHECK PROFANITY
 			name = name.replace(/[^\x00-\x7F]/g, " ")
 			name = name.trim()
-			if (name.length > 0) {
+			// the game's filter: a name with a listed word in it stays "unknown"
+			var check = name.toLowerCase().replace(/\s/g, '').replace(/1/g, 'i').replace(/0/g, 'o').replace(/5/g, 's')
+			var banned = false
+			for (var w = 0; w < badWords.length; ++w) {
+				if (check.indexOf(badWords[w]) != -1) {
+					banned = true
+					break
+				}
+			}
+			if (name.length > 0 && !banned) {
 				this.name = name
 			}
 
@@ -287,6 +297,9 @@ module.exports = function (
 		const tmpSpeed = UTILS.getDistance(0, 0, this.xVel * delta, this.yVel * delta)
 		const depth = Math.min(4, Math.max(1, Math.round(tmpSpeed / 40)))
 		const tMlt = 1 / depth
+		// as the game: an object touched in one step of the tick is not checked again in
+		// the next steps (so a spike hurts and pushes once, a boost pad pushes once)
+		const touched = {}
 		for (let i = 0; i < depth; ++i) {
 			if (this.xVel) {
 				this.x += this.xVel * delta * tMlt
@@ -295,15 +308,15 @@ module.exports = function (
 				this.y += this.yVel * delta * tMlt
 			}
 			tmpList = objectManager.getGridArrays(this.x, this.y, this.scale)
-			const visitedObj = []
-			for (var x = 0; x < tmpList.length; ++x) {
+			for (var x = 0; x < tmpList.length && this.alive; ++x) {
 				for (var y = 0; y < tmpList[x].length; ++y) {
-					if (tmpList[x][y].active && !visitedObj.includes(tmpList[x][y].sid)) {
-						visitedObj.push(tmpList[x][y].sid)
-						objectManager.checkCollision(this, tmpList[x][y], tMlt)
+					if (tmpList[x][y].active && !touched[tmpList[x][y].sid] && objectManager.checkCollision(this, tmpList[x][y], tMlt)) {
+						touched[tmpList[x][y].sid] = true
+						if (!this.alive) break
 					}
 				}
 			}
+			if (!this.alive) break
 		}
 
 		// PLAYER COLLISIONS:
@@ -317,11 +330,11 @@ module.exports = function (
 		// DECEL:
 		if (this.xVel) {
 			this.xVel *= mathPOW(config.playerDecel, delta)
-			// if (this.xVel <= 0.01 && this.xVel >= -0.01) this.xVel = 0
+			if (this.xVel <= 0.01 && this.xVel >= -0.01) this.xVel = 0
 		}
 		if (this.yVel) {
 			this.yVel *= mathPOW(config.playerDecel, delta)
-			// if (this.yVel <= 0.01 && this.yVel >= -0.01) this.yVel = 0
+			if (this.yVel <= 0.01 && this.yVel >= -0.01) this.yVel = 0
 		}
 
 		// MAP BOUNDARIES:
@@ -499,7 +512,7 @@ module.exports = function (
 		}
 		for (var i = 0; i < players.length; ++i) {
 			if (this.sentTo[players[i].id]) {
-				server.send(players[i].id, "h", [this.sid, Math.round(this.health)])
+				server.send(players[i].id, "h", [this.sid, this.health])
 			}
 		}
 		if (doer && doer.canSee(this) && !(doer == this && amount < 0)) {
@@ -621,13 +634,12 @@ module.exports = function (
 
 	// CAN BUILD:
 	this.canBuild = function (item) {
-		if (config.inSandbox) {
-			return true
-		}
-		if (item.group.limit && this.itemCounts[item.group.id] >= item.group.limit) {
+		// in sandbox the game still has a cap: the group's sandbox limit, else 3x its limit (at least 99)
+		var limit = config.inSandbox ? item.group.sandboxLimit || Math.max(item.group.limit * 3, 99) : item.group.limit
+		if (limit && this.itemCounts[item.group.id] >= limit) {
 			return false
 		}
-		return this.hasRes(item)
+		return config.inSandbox ? true : this.hasRes(item)
 	}
 
 	// GATHER:
@@ -672,7 +684,6 @@ module.exports = function (
 											x += 2
 										}
 										objectManager.disableObj(tmpObj)
-										server.sendAll("12", [tmpObj.sid])
 									}
 								} else {
 									this.earnXP(4 * items.weapons[this.weaponIndex].gather)
@@ -738,11 +749,13 @@ module.exports = function (
 						if (this.tail && this.tail.healD) {
 							this.changeHealth(dmgVal * dmgMlt * this.tail.healD, this)
 						}
-						if (tmpObj.skin && tmpObj.skin.dmg && dmgMlt == 1) {
-							this.changeHealth(-dmgVal * tmpObj.skin.dmg, tmpObj)
+						// gear that hurts the attacker returns part of the weapon's own damage, every hit
+						var weaponDmg = items.weapons[this.weaponIndex].dmg
+						if (tmpObj.skin && tmpObj.skin.dmg) {
+							this.changeHealth(-weaponDmg * tmpObj.skin.dmg, tmpObj)
 						}
-						if (tmpObj.tail && tmpObj.tail.dmg && dmgMlt == 1) {
-							this.changeHealth(-dmgVal * tmpObj.tail.dmg, tmpObj)
+						if (tmpObj.tail && tmpObj.tail.dmg) {
+							this.changeHealth(-weaponDmg * tmpObj.tail.dmg, tmpObj)
 						}
 						if (MODE !== "HOCKEY" && tmpObj.dmgOverTime && this.skin && this.skin.poisonDmg && !(tmpObj.skin && tmpObj.skin.poisonRes)) {
 							tmpObj.dmgOverTime.dmg = this.skin.poisonDmg

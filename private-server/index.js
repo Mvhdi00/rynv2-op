@@ -147,8 +147,7 @@ const ryn = require('./src/ryn.js')({
 	iconCallback: () => iconCallback(),
 	setTickRate(rate) {
 		config.serverUpdateRate = rate
-		clearInterval(rynTickTimer)
-		rynTickTimer = setInterval(gameTick, 1000 / rate)
+		tickDue = Date.now() + 1000 / rate
 	}
 })
 
@@ -362,7 +361,8 @@ server.addListener('connection', function (conn) {
 		function sendAtckState(mouseState, dir) {
 			let tmpPlayer = findPlayerByID(conn.id)
 			if (tmpPlayer && tmpPlayer.alive) {
-				if (dir) {
+				// an angle of 0 (aiming east) is an angle too
+				if (typeof dir === 'number' && isFinite(dir)) {
 					tmpPlayer.dir = dir
 				}
 				tmpPlayer.mouseState = mouseState
@@ -918,9 +918,24 @@ server.addListener('connection', function (conn) {
 })
 
 // GAME TICK
-function gameTick() {
+// The game's server runs one tick every 1000/9 ms. A page's timers drift and jitter (a
+// busy frame holds them back), and movement is not time-step independent: a long tick
+// moves everyone further than two short ones. So every tick is exactly one step long;
+// a late timer catches up, and a long stall (a hidden tab) is skipped, not replayed.
+var tickDue = Date.now()
+function tickLoop() {
+	const step = 1000 / config.serverUpdateRate
+	const at = Date.now()
+	if (at - tickDue > 1000) tickDue = at
+	for (let runs = 0; at >= tickDue && runs < 3; runs++) {
+		tickDue += step
+		gameTick(step)
+	}
+}
+
+function gameTick(step) {
 	now = Date.now()
-	delta = now - lastUpdate
+	delta = step
 	lastUpdate = now
 
 	// Ryn's time control: paused, stepped or slowed ticks still send the world.
@@ -1092,21 +1107,8 @@ function gameTick() {
 				if (tmpObj && tmpPlayer.canSee(tmpObj)) {
 					if (!tmpObj.sentTo[tmpPlayer.id]) {
 						tmpObj.sentTo[tmpPlayer.id] = 1
-						server.send(tmpPlayer.id, '2', [
-							[
-								tmpObj.id,
-								tmpObj.sid,
-								tmpObj.name,
-								tmpObj.x,
-								tmpObj.y,
-								tmpObj.dir,
-								tmpObj.health,
-								tmpObj.maxHealth,
-								config.playerScale,
-								tmpObj.skinColor
-							],
-							tmpObj.id === tmpPlayer.id
-						])
+						// the player's own data, rounded the way the game rounds it
+						server.send(tmpPlayer.id, '2', [tmpObj.getData(), tmpObj.id === tmpPlayer.id])
 					}
 					if (tmpObj.alive) {
 						tmpPlayersData.push(
@@ -1199,7 +1201,7 @@ function gameTick() {
 		}
 	}
 }
-let rynTickTimer = setInterval(gameTick, 1000 / config.serverUpdateRate)
+let rynTickTimer = setInterval(tickLoop, 5)
 
 function updateLeaderboard() {
 	const tmpLeaderboardData = []

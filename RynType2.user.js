@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.4-fix24
+// @version         2.9.4-fix25
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -1787,8 +1787,7 @@ const ryn = require('./src/ryn.js')({
 	iconCallback: () => iconCallback(),
 	setTickRate(rate) {
 		config.serverUpdateRate = rate
-		clearInterval(rynTickTimer)
-		rynTickTimer = setInterval(gameTick, 1000 / rate)
+		tickDue = Date.now() + 1000 / rate
 	}
 })
 
@@ -2002,7 +2001,8 @@ server.addListener('connection', function (conn) {
 		function sendAtckState(mouseState, dir) {
 			let tmpPlayer = findPlayerByID(conn.id)
 			if (tmpPlayer && tmpPlayer.alive) {
-				if (dir) {
+				// an angle of 0 (aiming east) is an angle too
+				if (typeof dir === 'number' && isFinite(dir)) {
 					tmpPlayer.dir = dir
 				}
 				tmpPlayer.mouseState = mouseState
@@ -2558,9 +2558,24 @@ server.addListener('connection', function (conn) {
 })
 
 // GAME TICK
-function gameTick() {
+// The game's server runs one tick every 1000/9 ms. A page's timers drift and jitter (a
+// busy frame holds them back), and movement is not time-step independent: a long tick
+// moves everyone further than two short ones. So every tick is exactly one step long;
+// a late timer catches up, and a long stall (a hidden tab) is skipped, not replayed.
+var tickDue = Date.now()
+function tickLoop() {
+	const step = 1000 / config.serverUpdateRate
+	const at = Date.now()
+	if (at - tickDue > 1000) tickDue = at
+	for (let runs = 0; at >= tickDue && runs < 3; runs++) {
+		tickDue += step
+		gameTick(step)
+	}
+}
+
+function gameTick(step) {
 	now = Date.now()
-	delta = now - lastUpdate
+	delta = step
 	lastUpdate = now
 
 	// Ryn's time control: paused, stepped or slowed ticks still send the world.
@@ -2732,21 +2747,8 @@ function gameTick() {
 				if (tmpObj && tmpPlayer.canSee(tmpObj)) {
 					if (!tmpObj.sentTo[tmpPlayer.id]) {
 						tmpObj.sentTo[tmpPlayer.id] = 1
-						server.send(tmpPlayer.id, '2', [
-							[
-								tmpObj.id,
-								tmpObj.sid,
-								tmpObj.name,
-								tmpObj.x,
-								tmpObj.y,
-								tmpObj.dir,
-								tmpObj.health,
-								tmpObj.maxHealth,
-								config.playerScale,
-								tmpObj.skinColor
-							],
-							tmpObj.id === tmpPlayer.id
-						])
+						// the player's own data, rounded the way the game rounds it
+						server.send(tmpPlayer.id, '2', [tmpObj.getData(), tmpObj.id === tmpPlayer.id])
 					}
 					if (tmpObj.alive) {
 						tmpPlayersData.push(
@@ -2839,7 +2841,7 @@ function gameTick() {
 		}
 	}
 }
-let rynTickTimer = setInterval(gameTick, 1000 / config.serverUpdateRate)
+let rynTickTimer = setInterval(tickLoop, 5)
 
 function updateLeaderboard() {
 	const tmpLeaderboardData = []
@@ -4411,6 +4413,12 @@ module.exports = function (ais, AI, players, items, objectManager, config, UTILS
 	}
 }
     },
+    "src/badwords.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
+// The game's name filter (12d386a8): the bad-words package's two lists and the words the
+// game adds, in the game's order. A name that contains one, lowercased with spaces
+// removed and 1/0/5 read as i/o/s, becomes "unknown".
+module.exports = ["ahole","anus","ash0le","ash0les","asholes","ass","Ass Monkey","Assface","assh0le","assh0lez","asshole","assholes","assholz","asswipe","azzhole","bassterds","bastard","bastards","bastardz","basterds","basterdz","Biatch","bitch","bitches","Blow Job","boffing","butthole","buttwipe","c0ck","c0cks","c0k","Carpet Muncher","cawk","cawks","Clit","cnts","cntz","cock","cockhead","cock-head","cocks","CockSucker","cock-sucker","crap","cum","cunt","cunts","cuntz","dick","dild0","dild0s","dildo","dildos","dilld0","dilld0s","dominatricks","dominatrics","dominatrix","dyke","enema","f u c k","f u c k e r","fag","fag1t","faget","fagg1t","faggit","faggot","fagg0t","fagit","fags","fagz","faig","faigs","fart","flipping the bird","fuck","fucker","fuckin","fucking","fucks","Fudge Packer","fuk","Fukah","Fuken","fuker","Fukin","Fukk","Fukkah","Fukken","Fukker","Fukkin","g00k","God-damned","h00r","h0ar","h0re","hells","hoar","hoor","hoore","jackoff","jap","japs","jerk-off","jisim","jiss","jizm","jizz","knob","knobs","knobz","kunt","kunts","kuntz","Lezzian","Lipshits","Lipshitz","masochist","masokist","massterbait","masstrbait","masstrbate","masterbaiter","masterbate","masterbates","Motha Fucker","Motha Fuker","Motha Fukkah","Motha Fukker","Mother Fucker","Mother Fukah","Mother Fuker","Mother Fukkah","Mother Fukker","mother-fucker","Mutha Fucker","Mutha Fukah","Mutha Fuker","Mutha Fukkah","Mutha Fukker","n1gr","nastt","nigger;","nigur;","niiger;","niigr;","orafis","orgasim;","orgasm","orgasum","oriface","orifice","orifiss","packi","packie","packy","paki","pakie","paky","pecker","peeenus","peeenusss","peenus","peinus","pen1s","penas","penis","penis-breath","penus","penuus","Phuc","Phuck","Phuk","Phuker","Phukker","polac","polack","polak","Poonani","pr1c","pr1ck","pr1k","pusse","pussee","pussy","puuke","puuker","qweir","recktum","rectum","retard","sadist","scank","schlong","screwing","semen","sex","sexy","Sh!t","sh1t","sh1ter","sh1ts","sh1tter","sh1tz","shit","shits","shitter","Shitty","Shity","shitz","Shyt","Shyte","Shytty","Shyty","skanck","skank","skankee","skankey","skanks","Skanky","slag","slut","sluts","Slutty","slutz","son-of-a-bitch","tit","turd","va1jina","vag1na","vagiina","vagina","vaj1na","vajina","vullva","vulva","w0p","wh00r","wh0re","whore","xrated","xxx","b!+ch","bitch","blowjob","clit","arschloch","fuck","shit","ass","asshole","b!tch","b17ch","b1tch","bastard","bi+ch","boiolas","buceta","c0ck","cawk","chink","cipa","clits","cock","cum","cunt","dildo","dirsa","ejakulate","fatass","fcuk","fuk","fux0r","hoer","hore","jism","kawk","l3itch","l3i+ch","masturbate","masterbat*","masterbat3","motherfucker","s.o.b.","mofo","nazi","nigga","nigger","nutsack","phuck","pimpis","pusse","pussy","scrotum","sh!t","shemale","shi+","sh!+","slut","smut","teets","tits","boobs","b00bs","teez","testical","testicle","titt","w00se","jackoff","wank","whoar","whore","*damn","*dyke","*fuck*","*shit*","@$$","amcik","andskota","arse*","assrammer","ayir","bi7ch","bitch*","bollock*","breasts","butt-pirate","cabron","cazzo","chraa","chuj","Cock*","cunt*","d4mn","daygo","dego","dick*","dike*","dupa","dziwka","ejackulate","Ekrem*","Ekto","enculer","faen","fag*","fanculo","fanny","feces","feg","Felcher","ficken","fitt*","Flikker","foreskin","Fotze","Fu(*","fuk*","futkretzn","gook","guiena","h0r","h4x0r","hell","helvete","hoer*","honkey","Huevon","hui","injun","jizz","kanker*","kike","klootzak","kraut","knulle","kuk","kuksuger","Kurac","kurwa","kusi*","kyrpa*","lesbo","mamhoon","masturbat*","merd*","mibun","monkleigh","mouliewop","muie","mulkku","muschi","nazis","nepesaurio","nigger*","orospu","paska*","perse","picka","pierdol*","pillu*","pimmel","piss*","pizda","poontsee","poop","porn","p0rn","pr0n","preteen","pula","pule","puta","puto","qahbeh","queef*","rautenberg","schaffer","scheiss*","schlampe","schmuck","screw","sh!t*","sharmuta","sharmute","shipal","shiz","skribz","skurwysyn","sphencter","spic","spierdalaj","splooge","suka","b00b*","testicle*","titt*","twat","vittu","wank*","wetback*","wichser","wop*","yed","zabourah","4r5e","5h1t","5hit","a55","anal","anus","ar5e","arrse","arse","ass","ass-fucker","asses","assfucker","assfukka","asshole","assholes","asswhole","a_s_s","b!tch","b00bs","b17ch","b1tch","ballbag","balls","ballsack","bastard","beastial","beastiality","bellend","bestial","bestiality","bi+ch","biatch","bitch","bitcher","bitchers","bitches","bitchin","bitching","bloody","blow job","blowjob","blowjobs","boiolas","bollock","bollok","boner","boob","boobs","booobs","boooobs","booooobs","booooooobs","breasts","buceta","bugger","bum","bunny fucker","butt","butthole","buttmuch","buttplug","c0ck","c0cksucker","carpet muncher","cawk","chink","cipa","cl1t","clit","clitoris","clits","cnut","cock","cock-sucker","cockface","cockhead","cockmunch","cockmuncher","cocks","cocksuck","cocksucked","cocksucker","cocksucking","cocksucks","cocksuka","cocksukka","cok","cokmuncher","coksucka","coon","cox","crap","cum","cummer","cumming","cums","cumshot","cunilingus","cunillingus","cunnilingus","cunt","cuntlick","cuntlicker","cuntlicking","cunts","cyalis","cyberfuc","cyberfuck","cyberfucked","cyberfucker","cyberfuckers","cyberfucking","d1ck","damn","dick","dickhead","dildo","dildos","dink","dinks","dirsa","dlck","dog-fucker","doggin","dogging","donkeyribber","doosh","duche","dyke","ejaculate","ejaculated","ejaculates","ejaculating","ejaculatings","ejaculation","ejakulate","f u c k","f u c k e r","f4nny","fag","fagging","faggitt","faggot","faggs","fagot","fagots","fags","fanny","fannyflaps","fannyfucker","fanyy","fatass","fcuk","fcuker","fcuking","feck","fecker","felching","fellate","fellatio","fingerfuck","fingerfucked","fingerfucker","fingerfuckers","fingerfucking","fingerfucks","fistfuck","fistfucked","fistfucker","fistfuckers","fistfucking","fistfuckings","fistfucks","flange","fook","fooker","fuck","fucka","fucked","fucker","fuckers","fuckhead","fuckheads","fuckin","fucking","fuckings","fuckingshitmotherfucker","fuckme","fucks","fuckwhit","fuckwit","fudge packer","fudgepacker","fuk","fuker","fukker","fukkin","fuks","fukwhit","fukwit","fux","fux0r","f_u_c_k","gangbang","gangbanged","gangbangs","gaylord","gaysex","goatse","God","god-dam","god-damned","goddamn","goddamned","hardcoresex","hell","heshe","hoar","hoare","hoer","homo","hore","horniest","horny","hotsex","jack-off","jackoff","jap","jerk-off","jism","jiz","jizm","jizz","kawk","knob","knobead","knobed","knobend","knobhead","knobjocky","knobjokey","kock","kondum","kondums","kum","kummer","kumming","kums","kunilingus","l3i+ch","l3itch","labia","lust","lusting","m0f0","m0fo","m45terbate","ma5terb8","ma5terbate","masochist","master-bate","masterb8","masterbat*","masterbat3","masterbate","masterbation","masterbations","masturbate","mo-fo","mof0","mofo","mothafuck","mothafucka","mothafuckas","mothafuckaz","mothafucked","mothafucker","mothafuckers","mothafuckin","mothafucking","mothafuckings","mothafucks","mother fucker","motherfuck","motherfucked","motherfucker","motherfuckers","motherfuckin","motherfucking","motherfuckings","motherfuckka","motherfucks","muff","mutha","muthafecker","muthafuckker","muther","mutherfucker","n1gga","n1gger","nazi","nigg3r","nigg4h","nigga","niggah","niggas","niggaz","nigger","niggers","nob","nob jokey","nobhead","nobjocky","nobjokey","numbnuts","nutsack","orgasim","orgasims","orgasm","orgasms","p0rn","pawn","pecker","penis","penisfucker","phonesex","phuck","phuk","phuked","phuking","phukked","phukking","phuks","phuq","pigfucker","pimpis","piss","pissed","pisser","pissers","pisses","pissflaps","pissin","pissing","pissoff","poop","porn","porno","pornography","pornos","prick","pricks","pron","pube","pusse","pussi","pussies","pussy","pussys","rectum","retard","rimjaw","rimming","s hit","s.o.b.","sadist","schlong","screwing","scroat","scrote","scrotum","semen","sex","sh!+","sh!t","sh1t","shag","shagger","shaggin","shagging","shemale","shi+","shit","shitdick","shite","shited","shitey","shitfuck","shitfull","shithead","shiting","shitings","shits","shitted","shitter","shitters","shitting","shittings","shitty","skank","slut","sluts","smegma","smut","snatch","son-of-a-bitch","spac","spunk","s_h_i_t","t1tt1e5","t1tties","teets","teez","testical","testicle","tit","titfuck","tits","titt","tittie5","tittiefucker","titties","tittyfuck","tittywank","titwank","tosser","turd","tw4t","twat","twathead","twatty","twunt","twunter","v14gra","v1gra","vagina","viagra","vulva","w00se","wang","wank","wanker","wanky","whoar","whore","willies","willy","xrated","xxx","jew","black","baby","child","white","porn","pedo","trump","clinton","hitler","nazi","gay","pride","sex","pleasure","touch","poo","kids","rape","white power","nigga","nig nog","doggy","rapist","boner","nigger","nigg","finger","nogger","nagger","nig","fag","gai","pole","stripper","penis","vagina","pussy","nazi","hitler","stalin","burn","chamber","cock","peen","dick","spick","nieger","die","satan","n|ig","nlg","cunt","c0ck","fag","lick","condom","anal","shit","phile","little","kids","free KR","tiny","sidney","ass","kill",".io","(dot)","[dot]","mini","whiore","whore","faggot","github","1337","666","satan","senpa","discord","d1scord","mistik",".io","senpa.io","sidney","sid","senpaio","vries","asa"]
+    },
     "src/config.js": function (module, exports, require, process, console, setInterval, clearInterval, setTimeout, clearTimeout) {
 //Default screen:
 /*module.exports.maxScreenWidth = 1920;
@@ -5811,6 +5819,7 @@ var mathCOS = Math.cos
 var mathSIN = Math.sin
 var mathPOW = Math.pow
 var mathSQRT = Math.sqrt
+var badWords = require('./badwords.js')
 module.exports = function (
 	id,
 	sid,
@@ -5958,7 +5967,16 @@ module.exports = function (
 			name = name.replace(/[^\w:\(\)\/? -]+/gim, " ") // USE SPACE SO WE CAN CHECK PROFANITY
 			name = name.replace(/[^\x00-\x7F]/g, " ")
 			name = name.trim()
-			if (name.length > 0) {
+			// the game's filter: a name with a listed word in it stays "unknown"
+			var check = name.toLowerCase().replace(/\s/g, '').replace(/1/g, 'i').replace(/0/g, 'o').replace(/5/g, 's')
+			var banned = false
+			for (var w = 0; w < badWords.length; ++w) {
+				if (check.indexOf(badWords[w]) != -1) {
+					banned = true
+					break
+				}
+			}
+			if (name.length > 0 && !banned) {
 				this.name = name
 			}
 
@@ -6095,6 +6113,9 @@ module.exports = function (
 		const tmpSpeed = UTILS.getDistance(0, 0, this.xVel * delta, this.yVel * delta)
 		const depth = Math.min(4, Math.max(1, Math.round(tmpSpeed / 40)))
 		const tMlt = 1 / depth
+		// as the game: an object touched in one step of the tick is not checked again in
+		// the next steps (so a spike hurts and pushes once, a boost pad pushes once)
+		const touched = {}
 		for (let i = 0; i < depth; ++i) {
 			if (this.xVel) {
 				this.x += this.xVel * delta * tMlt
@@ -6103,15 +6124,15 @@ module.exports = function (
 				this.y += this.yVel * delta * tMlt
 			}
 			tmpList = objectManager.getGridArrays(this.x, this.y, this.scale)
-			const visitedObj = []
-			for (var x = 0; x < tmpList.length; ++x) {
+			for (var x = 0; x < tmpList.length && this.alive; ++x) {
 				for (var y = 0; y < tmpList[x].length; ++y) {
-					if (tmpList[x][y].active && !visitedObj.includes(tmpList[x][y].sid)) {
-						visitedObj.push(tmpList[x][y].sid)
-						objectManager.checkCollision(this, tmpList[x][y], tMlt)
+					if (tmpList[x][y].active && !touched[tmpList[x][y].sid] && objectManager.checkCollision(this, tmpList[x][y], tMlt)) {
+						touched[tmpList[x][y].sid] = true
+						if (!this.alive) break
 					}
 				}
 			}
+			if (!this.alive) break
 		}
 
 		// PLAYER COLLISIONS:
@@ -6125,11 +6146,11 @@ module.exports = function (
 		// DECEL:
 		if (this.xVel) {
 			this.xVel *= mathPOW(config.playerDecel, delta)
-			// if (this.xVel <= 0.01 && this.xVel >= -0.01) this.xVel = 0
+			if (this.xVel <= 0.01 && this.xVel >= -0.01) this.xVel = 0
 		}
 		if (this.yVel) {
 			this.yVel *= mathPOW(config.playerDecel, delta)
-			// if (this.yVel <= 0.01 && this.yVel >= -0.01) this.yVel = 0
+			if (this.yVel <= 0.01 && this.yVel >= -0.01) this.yVel = 0
 		}
 
 		// MAP BOUNDARIES:
@@ -6307,7 +6328,7 @@ module.exports = function (
 		}
 		for (var i = 0; i < players.length; ++i) {
 			if (this.sentTo[players[i].id]) {
-				server.send(players[i].id, "h", [this.sid, Math.round(this.health)])
+				server.send(players[i].id, "h", [this.sid, this.health])
 			}
 		}
 		if (doer && doer.canSee(this) && !(doer == this && amount < 0)) {
@@ -6429,13 +6450,12 @@ module.exports = function (
 
 	// CAN BUILD:
 	this.canBuild = function (item) {
-		if (config.inSandbox) {
-			return true
-		}
-		if (item.group.limit && this.itemCounts[item.group.id] >= item.group.limit) {
+		// in sandbox the game still has a cap: the group's sandbox limit, else 3x its limit (at least 99)
+		var limit = config.inSandbox ? item.group.sandboxLimit || Math.max(item.group.limit * 3, 99) : item.group.limit
+		if (limit && this.itemCounts[item.group.id] >= limit) {
 			return false
 		}
-		return this.hasRes(item)
+		return config.inSandbox ? true : this.hasRes(item)
 	}
 
 	// GATHER:
@@ -6480,7 +6500,6 @@ module.exports = function (
 											x += 2
 										}
 										objectManager.disableObj(tmpObj)
-										server.sendAll("12", [tmpObj.sid])
 									}
 								} else {
 									this.earnXP(4 * items.weapons[this.weaponIndex].gather)
@@ -6546,11 +6565,13 @@ module.exports = function (
 						if (this.tail && this.tail.healD) {
 							this.changeHealth(dmgVal * dmgMlt * this.tail.healD, this)
 						}
-						if (tmpObj.skin && tmpObj.skin.dmg && dmgMlt == 1) {
-							this.changeHealth(-dmgVal * tmpObj.skin.dmg, tmpObj)
+						// gear that hurts the attacker returns part of the weapon's own damage, every hit
+						var weaponDmg = items.weapons[this.weaponIndex].dmg
+						if (tmpObj.skin && tmpObj.skin.dmg) {
+							this.changeHealth(-weaponDmg * tmpObj.skin.dmg, tmpObj)
 						}
-						if (tmpObj.tail && tmpObj.tail.dmg && dmgMlt == 1) {
-							this.changeHealth(-dmgVal * tmpObj.tail.dmg, tmpObj)
+						if (tmpObj.tail && tmpObj.tail.dmg) {
+							this.changeHealth(-weaponDmg * tmpObj.tail.dmg, tmpObj)
 						}
 						if (MODE !== "HOCKEY" && tmpObj.dmgOverTime && this.skin && this.skin.poisonDmg && !(tmpObj.skin && tmpObj.skin.poisonRes)) {
 							tmpObj.dmgOverTime.dmg = this.skin.poisonDmg
@@ -9097,7 +9118,7 @@ module.exports.capitalizeFirst = function (string) {
 	return string.charAt(0).toUpperCase() + string.slice(1)
 }
 module.exports.fixTo = function (n, v) {
-	return parseFloat(n.toFixed(v))
+	return n ? parseFloat(n.toFixed(v)) : 0
 }
 module.exports.sortByPoints = function (a, b) {
 	return parseFloat(b.points) - parseFloat(a.points)
@@ -9389,7 +9410,9 @@ module.exports.PACKETCODE = PACKETCODE
         if (!factory) throw new Error("private server: no module " + rel);
         const module = { exports: {} };
         cache[rel] = module;
-        factory(module, module.exports, require, processShim, quiet, timers.setInterval, timers.clearInterval, timers.setTimeout, timers.clearTimeout);
+        // a module's "./x.js" is next to it, as in Node
+        const dir = rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/") + 1) : "";
+        factory(module, module.exports, name => require(name, dir), processShim, quiet, timers.setInterval, timers.clearInterval, timers.setTimeout, timers.clearTimeout);
         return module.exports;
       };
       const codec = (() => {
@@ -9418,9 +9441,16 @@ module.exports.PACKETCODE = PACKETCODE
         "node-fetch": async () => ({ json: async () => ({ version: "1.2.2" }) }),
         "./package.json": { version: "1.2.2" }
       };
-      function require(name) {
+      function require(name, dir = "") {
         if (Object.prototype.hasOwnProperty.call(externals, name)) return externals[name];
-        let rel = name.replace(/^\.\//, "");
+        const parts = (dir + name).split("/");
+        const out = [];
+        for (const part of parts) {
+          if (part === "" || part === ".") continue;
+          if (part === "..") out.pop();
+          else out.push(part);
+        }
+        let rel = out.join("/");
         if (!rel.endsWith(".js")) rel += ".js";
         return run(rel);
       }
@@ -11600,7 +11630,7 @@ module.exports.PACKETCODE = PACKETCODE
       this.row(body, "Gather ×", gather, this.button("Set", () => this.done("!rules gather " + (Number(gather.value) || 1)), "ra-go"));
       const tick = this.number(9, 1, 1);
       this.row(body, "Ticks/s", tick, this.button("Set", () => this.done("!rules tick " + Math.max(1, Math.min(30, Number(tick.value) || 9))), "ra-go")).dataset.keys = "tick rate";
-      this.sandboxButton = this.liveToggle("Free build", () => this.done("!rules sandbox " + (this.lastPanel && this.lastPanel.rules.sandbox ? "off" : "on")), "No cost and no limits");
+      this.sandboxButton = this.liveToggle("Free build", () => this.done("!rules sandbox " + (this.lastPanel && this.lastPanel.rules.sandbox ? "off" : "on")), "Sandbox: nothing costs anything; building caps as in the game's sandbox (99 of most things)");
       this.row(body, "", this.sandboxButton, this.button("Reset rules", () => this.done("!rules dmg 1; !rules gather 1; !rules tick 9; !rules sandbox on", "Rules reset"))).dataset.keys = "sandbox";
       this.rulesNow = this.el("div", "ra-note ra-item", "");
       body.appendChild(this.rulesNow);

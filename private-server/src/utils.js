@@ -78,7 +78,7 @@ module.exports.capitalizeFirst = function (string) {
 	return string.charAt(0).toUpperCase() + string.slice(1)
 }
 module.exports.fixTo = function (n, v) {
-	return parseFloat(n.toFixed(v))
+	return n ? parseFloat(n.toFixed(v)) : 0
 }
 module.exports.sortByPoints = function (a, b) {
 	return parseFloat(b.points) - parseFloat(a.points)
