@@ -32878,8 +32878,8 @@ module.exports.PACKETCODE = PACKETCODE
   const NS_SIM_ANGLE_THRESHOLD = 0.35;
   const NS_SIM_RANGE_PAD = 25;
   // The server takes two off the shame count for a heal it sees more than 120 ms after the hit, and adds one inside
-  // that window; the extra 20 ms covers jitter on top of the round trip.
-  const NS_SLOW_HEAL_MS = 140;
+  // that window.
+  const NS_SLOW_HEAL_MS = 120;
   const NS_HEAL_PACKETS = 4;
   // `[20, 30, 35, 45]` and the same four through a soldier helmet, which is how
   // novastorm recognises a spike. Read off the item table rather than written
@@ -33795,13 +33795,11 @@ module.exports.PACKETCODE = PACKETCODE
       //     if (predictObjects.length > 0 || damageHealed) io.send("D", angle);
       ModuleHandler.healedOnce = true;
     }
-    // A hit that cannot kill is healed just past the server's 120 ms window, timed against the round trip, so it
-    // takes shame off instead of adding it; a hit that can kill is still healed at once by the branch above.
+    // A hit that cannot kill is healed 120 ms after it arrives, so it takes shame off instead of adding it; a hit
+    // that can kill is still healed at once by the branch above.
     _slowHeal() {
       if (this._slowHealFor === this.damageTick) return;
       this._slowHealFor = this.damageTick;
-      const SM = this.client.SocketManager;
-      const ping = SM && typeof SM.pong === "number" && SM.pong > 0 ? SM.pong : 0;
       clearTimeout(this._slowHealTimer);
       this._slowHealTimer = setTimeout(() => {
         this._slowHealTimer = 0;
@@ -33813,7 +33811,7 @@ module.exports.PACKETCODE = PACKETCODE
         for (let i = 0; i < count; i++) {
           ModuleHandler.heal();
         }
-      }, Math.max(0, NS_SLOW_HEAL_MS - ping));
+      }, NS_SLOW_HEAL_MS);
     }
     _healCount(missing) {
       const myPlayer = this.client.myPlayer;
