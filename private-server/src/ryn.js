@@ -11,7 +11,16 @@ module.exports = function (ctx) {
 	const server = ctx.server
 
 	const time = { paused: false, scale: 1, steps: 0, tick: 0, clock: 0 }
-	const sparring = require('./sparring.js')({ UTILS, config, items, server, time, hatById: id => hats.find(h => h.id === id) || null })
+	const sparring = require('./sparring.js')({
+		UTILS,
+		config,
+		items,
+		server,
+		time,
+		hatById: id => hats.find(h => h.id === id) || null,
+		accById: id => accessories.find(a => a.id === id) || null,
+		removeObject: o => removeObject(o)
+	})
 	const rules = { dmgMult: 1, gatherMult: 1 }
 	const king = { speed: 1, damage: 1 }
 	config.rynRules = rules
@@ -728,7 +737,7 @@ module.exports = function (ctx) {
 			kingStats: me ? kingStatsOf(me) : null,
 			dummies: dummies.length,
 			survival: { on: survival.on, wave: survival.wave, left: survival.on ? survivalLeft() : 0, best: survival.best, last: survival.last },
-			spar: (d => (d ? { sid: d.p.sid, name: d.name, level: d.spar.level, style: d.spar.style, ping: d.spar.ping, score: d.spar.score, alive: d.p.alive, health: Math.round(d.p.health), mode: d.p.alive ? d.spar.mode || '' : 'dead', modes: dummies.filter(x => x.spar).map(x => [x.p.sid, x.p.alive ? x.spar.mode : 'dead', Math.round(x.p.health), x.p.weaponIndex, x.p.lockMove ? 1 : 0]) } : null))(dummies.find(x => x.spar)),
+			spar: (d => (d ? { sid: d.p.sid, name: d.name, score: d.spar.score, alive: d.p.alive, health: Math.round(d.p.health), mode: d.p.alive ? d.spar.mode || '' : 'dead', modes: dummies.filter(x => x.spar).map(x => [x.p.sid, x.p.alive ? x.spar.mode : 'dead', Math.round(x.p.health), x.p.weaponIndex, x.p.lockMove ? 1 : 0]) } : null))(dummies.find(x => x.spar)),
 			spawners: spawners.map(sp => ({ id: sp.id, kind: sp.name, every: sp.every / 1000, max: sp.max, alive: sp.mobs.length }))
 		}
 	}
@@ -1099,7 +1108,7 @@ module.exports = function (ctx) {
 					'!time pause|play|step [n]|speed <x>  !scenario <name>  !rules dmg|gather|sandbox|tick <v>',
 					'!king respawn|attack|hp <n>|speed <x>|damage <x>|only <slam|charge|ring|dive|all>|stats  !bring <sid>  !arena  !tp <sid>|<x> <y>',
 						'!survival start|stop  !spawner <animal> [every s] [max] | clear  !map empty|forest|rocks|duel|reset  !killmobs [r]',
-						'!spar [easy|normal|hard|pro] [classic|hammer|bow|daggers|random] [ping=ms]  !spar stop|score',
+						'!spar  !spar stop|score  (a 1v1 opponent at full strength)',
 					'!s  !speed <n>  !v <tier>  !dmg [n]  !upgrade <n>  !kill <sid>  !die  !b  !mobs|hostile|bosses on|off'
 				].forEach(tell)
 				return true
@@ -1385,19 +1394,15 @@ module.exports = function (ctx) {
 					tell(current ? '[Admin] You ' + current.spar.score.you + ' - ' + current.spar.score.bot + ' ' + current.name : '[Admin] No sparring partner')
 					return true
 				}
-				// !spar [level] [style] [ping=ms] [target=sid] [tier=name]
-				const opts = { level: 'normal', style: 'classic' }
+				// !spar [target=sid] [keep]: one opponent at full strength, no levels
+				const opts = {}
 				for (const a of args) {
 					const [k, val] = a.toLowerCase().split('=')
-					if (val === undefined && sparring.LEVELS[k]) opts.level = k
-					else if (val === undefined && (sparring.STYLES[k] || k === 'random')) opts.style = k
-					else if (k === 'ping' && !isNaN(num(val))) opts.ping = num(val)
-					else if (k === 'target' && !isNaN(num(val))) opts.target = num(val)
-					else if (k === 'tier' && TIERS[val] !== undefined) opts.tier = val
+					if (k === 'target' && !isNaN(num(val))) opts.target = num(val)
 				}
 				const keep = args.some(a => a.toLowerCase() === 'keep')
-				// the score carries over to a rematch, not to a different opponent
-				const keepScore = current && !keep && current.spar.level === opts.level && current.spar.style === opts.style ? current.spar.score : null
+				// the score carries over to a rematch
+				const keepScore = current && !keep ? current.spar.score : null
 				if (current && !keep) removeDummy(current)
 				const foe = opts.target !== undefined ? ctx.findPlayerBySID(opts.target) || me : me
 				const a = foe.dir
@@ -1411,7 +1416,7 @@ module.exports = function (ctx) {
 				if (opts.target === undefined) d.spar.targetSid = me.sid
 				respawnDummy(d)
 				ctx.updateLeaderboard()
-				tell('[Admin] ' + d.name + ' (' + d.spar.level + ', ' + sparring.STYLES[d.spar.style].label + ', ping ' + d.spar.ping + 'ms) wants a 1v1')
+				tell('[Admin] ' + d.name + ' wants a 1v1')
 				return true
 			}
 			case 'survival': {
