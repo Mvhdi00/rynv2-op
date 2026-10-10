@@ -31,3 +31,44 @@ Changes from the copy it came from:
   mode).
 - `msgpack.js` is the codec from the game's own vendor bundle, replacing
   `msgpack-lite`.
+
+## Synced with the current game (12d386a8)
+
+Checked table by table against the game bundle (parsed statically, nothing run):
+
+- Hats: Scout Hat (59), Frost Helm (60), Crab Shell (61). The Crab Shell cannot be
+  bought; killing the Crab King gives it.
+- Animals: Boar (9), Yeti (10, in the snow), Crab King (11), Sheep (12), Crab (13),
+  Crabling (14), with the game's stats.
+- Emerald weapon tier (30000 XP): poison and 15% lifesteal on melee hits.
+- Weapon and item upgrade prerequisites (`pre`), group sandbox limits, the game's
+  view range (1920x1080) and skin colours.
+- The arena west of the map (`config.secretPool`): through the gorge at the river
+  (the current is too strong to swim against without the Flipper hat), five pools
+  and the passage behind the waterfall. Nothing can be built in it.
+
+## Crab King
+
+The game only draws the King: its state (1 going under, 2 under water, 3 coming up)
+and warnings sent as `W [kind, x, y, r, ms, x2, y2]` - 3 a slam, 4 a charge line,
+1 a ring, anything else a splash where it surfaces. Its behaviour here is built on
+those and is ours, not moomoo's: slam when you are close, charge along a line, a
+ring under you, dive and come up under you, and crabs every 15 seconds (eight at
+most). It cannot be hurt under water and comes back 3 minutes after it dies.
+
+## Admin commands
+
+The page owner is admin. `!help` lists everything. Added by Ryn:
+
+| Command | |
+|---|---|
+| `!ping <ms> [jitter]` | fake round-trip ping for you and your bots, `0` turns it off; kept across reloads |
+| `!spawn <animal> [count]` | in front of you; crabs and the King go to the arena |
+| `!hp <n> [sid]`, `!heal [sid]`, `!god [sid]` | health and god mode, yours by default |
+| `!age <n> [sid]`, `!res <amount> [sid]` | age with its upgrade points, all resources |
+| `!hat <id> [sid]`, `!acc <id> [sid]` | equip anything, `0` takes it off |
+| `!arena` | into the Crab King's arena |
+
+Also fixed: `!mobs off`, `!hostile off` and `!bosses off` sent packet `'11'` per
+animal, which is the game's "you died" packet; removed animals now just drop out
+of view.

@@ -202,6 +202,150 @@ server.addListener('connection', function (conn) {
 			} catch (error) {}
 		}
 
+		// Ryn's admin commands (batch 1). Returns true when it handled the message.
+		function rynAdminCommand(me, text) {
+			const args = text.trim().split(/\s+/)
+			const cmd = (args.shift() || '').toLowerCase()
+			const tell = msg => server.send(conn.id, 'ch', [-1, msg])
+			const num = v => (v === undefined || v === '' ? NaN : Number(v))
+			const who = v => {
+				if (v === undefined) return me
+				const p = findPlayerBySID(parseInt(v))
+				if (!p) tell('[Admin] No player with SID ' + v)
+				return p
+			}
+			const setHealth = (p, value) => {
+				p.health = Math.max(1, Math.min(p.maxHealth, value))
+				for (let i = 0; i < players.length; ++i) {
+					if (p.sentTo[players[i].id]) server.send(players[i].id, 'h', [p.sid, Math.round(p.health)])
+				}
+			}
+			switch (cmd) {
+				case 'help':
+					;[
+						'!ping <ms> [jitter] - fake ping for you and your bots (0 = off)',
+						'!spawn <animal> [count] - cow pig sheep bull bully wolf duck boar yeti moostafa moofie treasure crab crabling king',
+						'!hp <n> [sid]  !heal [sid]  !god [sid]',
+						'!age <n> [sid]  !res <amount> [sid]',
+						'!hat <id> [sid]  !acc <id> [sid]',
+						'!arena - into the Crab King arena  !tp <sid> | <x> <y>',
+						'!s  !speed <n>  !v <ruby|diamond|gold|normal>  !dmg [n]  !upgrade <n>',
+						'!kill <sid>  !die  !b  !players  !sid  !mobs|hostile|bosses on|off'
+					].forEach(tell)
+					return true
+				case 'ping': {
+					const ms = Math.max(0, Math.min(2000, num(args[0]) || 0))
+					const jitter = Math.max(0, Math.min(1000, num(args[1]) || 0))
+					if (typeof conn.rynSetPing !== 'function') {
+						tell('[Admin] Fake ping only works inside Ryn')
+						return true
+					}
+					conn.rynSetPing(ms, jitter)
+					tell(ms ? '[Admin] Ping ' + ms + 'ms' + (jitter ? ' +-' + jitter + 'ms' : '') : '[Admin] Ping off')
+					return true
+				}
+				case 'spawn': {
+					const kinds = { cow: 0, pig: 1, bull: 2, bully: 3, wolf: 4, duck: 5, quack: 5, moostafa: 6, treasure: 7, moofie: 8, boar: 9, yeti: 10, king: 11, crabking: 11, sheep: 12, crab: 13, crabling: 14 }
+					const kind = kinds[(args[0] || '').toLowerCase()]
+					if (kind === undefined) {
+						tell('[Admin] Animals: ' + Object.keys(kinds).join(' '))
+						return true
+					}
+					const count = Math.max(1, Math.min(20, num(args[1]) || 1))
+					const arena = kind === 11 || kind === 13 || kind === 14
+					const home = config.secretPool.pool[0]
+					const inArena = UTILS.inSecretPool(config, me.x, me.y, 100) && me.x < 0
+					for (let i = 0; i < count; i++) {
+						let x = me.x + 300 * Math.cos(me.dir) + UTILS.randInt(-60, 60)
+						let y = me.y + 300 * Math.sin(me.dir) + UTILS.randInt(-60, 60)
+						if (arena && !(x < 0 && UTILS.inSecretPool(config, x, y, 100))) {
+							x = (inArena ? me.x : home[0]) + UTILS.randInt(-150, 150)
+							y = (inArena ? me.y : home[1]) + UTILS.randInt(-150, 150)
+						}
+						const ai = aiManager.spawn(x, y, me.dir + Math.PI, kind)
+						if (kind === 13 || kind === 14) ai.minion = true
+					}
+					tell('[Admin] Spawned ' + count + ' ' + args[0] + (arena && !inArena ? ' in the Crab King arena (!arena to go there)' : ''))
+					return true
+				}
+				case 'hp': {
+					const p = who(args[1])
+					if (p && !isNaN(num(args[0]))) {
+						setHealth(p, num(args[0]))
+						tell('[Admin] ' + p.name + ' health ' + Math.round(p.health))
+					}
+					return true
+				}
+				case 'heal': {
+					const p = who(args[0])
+					if (p) {
+						setHealth(p, p.maxHealth)
+						tell('[Admin] Healed ' + p.name)
+					}
+					return true
+				}
+				case 'god': {
+					const p = who(args[0])
+					if (p) {
+						p.rynGod = !p.rynGod
+						tell('[Admin] God mode ' + (p.rynGod ? 'on' : 'off') + ' for ' + p.name)
+					}
+					return true
+				}
+				case 'age': {
+					const p = who(args[1])
+					const target = Math.min(config.maxAge, num(args[0]))
+					if (p && !isNaN(target)) {
+						while (p.age < target && p.age < config.maxAge) p.earnXP(p.maxXP - p.XP)
+						tell('[Admin] ' + p.name + ' age ' + p.age)
+					}
+					return true
+				}
+				case 'res': {
+					const p = who(args[1])
+					const amount = num(args[0])
+					if (p && !isNaN(amount)) {
+						for (let type = 0; type < 3; type++) p.addResource(type, amount - p[config.resourceTypes[type]], true)
+						p.addResource(3, amount - p.points, true)
+						tell('[Admin] ' + p.name + ' resources ' + amount)
+					}
+					return true
+				}
+				case 'hat':
+				case 'acc': {
+					const p = who(args[1])
+					const id = num(args[0])
+					const tail = cmd === 'acc'
+					const list = tail ? accessories : hats
+					const item = list.find(h => h.id === id)
+					if (p && !item && id !== 0) tell('[Admin] No ' + (tail ? 'accessory' : 'hat') + ' ' + args[0])
+					if (p && (item || id === 0)) {
+						if (tail) {
+							if (item) p.tails[id] = 1
+							p.tail = item || null
+							p.tailIndex = id
+						} else {
+							if (item) p.skins[id] = 1
+							p.skin = item || null
+							p.skinIndex = id
+						}
+						if (item) server.send(p.id, 'us', [0, id, tail ? 1 : 0])
+						server.send(p.id, 'us', [1, id, tail ? 1 : 0])
+						tell('[Admin] ' + p.name + (tail ? ' accessory ' : ' hat ') + (item ? item.name : 'off'))
+					}
+					return true
+				}
+				case 'arena':
+					me.x = -900
+					me.y = config.mapScale / 2
+					me.xVel = 0
+					me.yVel = 0
+					tell('[Admin] Crab King arena')
+					return true
+			}
+			return false
+		}
+
 		function pingSocket() {
 			server.send(conn.id, 'pp')
 		}
@@ -365,6 +509,7 @@ server.addListener('connection', function (conn) {
 			}
 
 			if (message.startsWith(PREFIX) && tmpPlayer.admin) {
+				if (rynAdminCommand(tmpPlayer, message.slice(PREFIX.length))) return
 				if (message === `${PREFIX}s`) {
 					for (let i = 0; i < 9; i++) {
 						tmpPlayer.addResource(3, 999999, true)
@@ -441,7 +586,6 @@ server.addListener('connection', function (conn) {
 					for (let i = 0; i < ais.length; i++) {
 						ais[i].active = false
 						ais[i].alive = false
-						server.sendAll('11', [ais[i].sid])
 					}
 					server.send(conn.id, 'ch', [-1, '[Admin] Mobs off.'])
 				} else if (message === PREFIX + 'mobs on') {
@@ -452,12 +596,11 @@ server.addListener('connection', function (conn) {
 					])
 				} else if (message === PREFIX + 'hostile off') {
 					config.spawnHostile = false
-					const hostileTypes = [2, 3, 4]
+					const hostileTypes = [2, 3, 4, 9, 10, 13, 14]
 					for (let i = 0; i < ais.length; i++) {
 						if (hostileTypes.includes(ais[i].index)) {
 							ais[i].active = false
 							ais[i].alive = false
-							server.sendAll('11', [ais[i].sid])
 						}
 					}
 					server.send(conn.id, 'ch', [-1, '[Admin] Hostile mobs off.'])
@@ -466,12 +609,11 @@ server.addListener('connection', function (conn) {
 					server.send(conn.id, 'ch', [-1, '[Admin] Hostile mobs on.'])
 				} else if (message === PREFIX + 'bosses off') {
 					config.spawnBosses = false
-					const bossTypes = [6, 7, 8]
+					const bossTypes = [6, 7, 8, 11, 13, 14]
 					for (let i = 0; i < ais.length; i++) {
 						if (bossTypes.includes(ais[i].index)) {
 							ais[i].active = false
 							ais[i].alive = false
-							server.sendAll('11', [ais[i].sid])
 						}
 					}
 					server.send(conn.id, 'ch', [-1, '[Admin] Bosses off.'])
@@ -1001,7 +1143,7 @@ setInterval(() => {
 						Math.round(tmpObj.dir * 100),
 						tmpObj.health,
 						tmpObj.nameIndex,
-						0
+						tmpObj.state || 0
 					)
 				}
 			}
@@ -1310,14 +1452,25 @@ function addRiverStone(riverStoneCount) {
 
 function addAnimal() {
 	if (!config.spawnMobs) return
-	const animalCount = [10, 10, 10, 2, 15, 2, 1, 1, 1]
-	const hostileTypes = [2, 3, 4]
-	const bossTypes = [6, 7, 8]
+	// cow, pig, bull, bully, wolf, quack, moostafa, treasure, moofie,
+	// boar, yeti, crab king, sheep (crabs and crablings come with the King)
+	const animalCount = [10, 10, 10, 2, 15, 2, 1, 1, 1, 6, 2, 1, 10]
+	const hostileTypes = [2, 3, 4, 9, 10]
+	const bossTypes = [6, 7, 8, 11]
 	for (let i = 0; i < animalCount.length; i++) {
 		if (!config.spawnHostile && hostileTypes.includes(i)) continue
 		if (!config.spawnBosses && bossTypes.includes(i)) continue
 		if (config.disabledMobTypes && config.disabledMobTypes.includes(i)) continue
 		for (let j = 0; j < animalCount[i]; j++) {
+			if (i === 11) {
+				const home = config.secretPool.pool[0]
+				aiManager.spawn(home[0], home[1], Math.PI, i)
+				continue
+			}
+			if (i === 10) {
+				aiManager.spawn(UTILS.randFloat(0, config.mapScale), UTILS.randFloat(0, config.snowBiomeTop), Math.PI / 2, i)
+				continue
+			}
 			aiManager.spawn(
 				animalCount[i] === 1
 					? config.mapScale / 2

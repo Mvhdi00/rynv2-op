@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.4-fix12
+// @version         2.9.4-fix13
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -1823,6 +1823,150 @@ server.addListener('connection', function (conn) {
 			} catch (error) {}
 		}
 
+		// Ryn's admin commands (batch 1). Returns true when it handled the message.
+		function rynAdminCommand(me, text) {
+			const args = text.trim().split(/\s+/)
+			const cmd = (args.shift() || '').toLowerCase()
+			const tell = msg => server.send(conn.id, 'ch', [-1, msg])
+			const num = v => (v === undefined || v === '' ? NaN : Number(v))
+			const who = v => {
+				if (v === undefined) return me
+				const p = findPlayerBySID(parseInt(v))
+				if (!p) tell('[Admin] No player with SID ' + v)
+				return p
+			}
+			const setHealth = (p, value) => {
+				p.health = Math.max(1, Math.min(p.maxHealth, value))
+				for (let i = 0; i < players.length; ++i) {
+					if (p.sentTo[players[i].id]) server.send(players[i].id, 'h', [p.sid, Math.round(p.health)])
+				}
+			}
+			switch (cmd) {
+				case 'help':
+					;[
+						'!ping <ms> [jitter] - fake ping for you and your bots (0 = off)',
+						'!spawn <animal> [count] - cow pig sheep bull bully wolf duck boar yeti moostafa moofie treasure crab crabling king',
+						'!hp <n> [sid]  !heal [sid]  !god [sid]',
+						'!age <n> [sid]  !res <amount> [sid]',
+						'!hat <id> [sid]  !acc <id> [sid]',
+						'!arena - into the Crab King arena  !tp <sid> | <x> <y>',
+						'!s  !speed <n>  !v <ruby|diamond|gold|normal>  !dmg [n]  !upgrade <n>',
+						'!kill <sid>  !die  !b  !players  !sid  !mobs|hostile|bosses on|off'
+					].forEach(tell)
+					return true
+				case 'ping': {
+					const ms = Math.max(0, Math.min(2000, num(args[0]) || 0))
+					const jitter = Math.max(0, Math.min(1000, num(args[1]) || 0))
+					if (typeof conn.rynSetPing !== 'function') {
+						tell('[Admin] Fake ping only works inside Ryn')
+						return true
+					}
+					conn.rynSetPing(ms, jitter)
+					tell(ms ? '[Admin] Ping ' + ms + 'ms' + (jitter ? ' +-' + jitter + 'ms' : '') : '[Admin] Ping off')
+					return true
+				}
+				case 'spawn': {
+					const kinds = { cow: 0, pig: 1, bull: 2, bully: 3, wolf: 4, duck: 5, quack: 5, moostafa: 6, treasure: 7, moofie: 8, boar: 9, yeti: 10, king: 11, crabking: 11, sheep: 12, crab: 13, crabling: 14 }
+					const kind = kinds[(args[0] || '').toLowerCase()]
+					if (kind === undefined) {
+						tell('[Admin] Animals: ' + Object.keys(kinds).join(' '))
+						return true
+					}
+					const count = Math.max(1, Math.min(20, num(args[1]) || 1))
+					const arena = kind === 11 || kind === 13 || kind === 14
+					const home = config.secretPool.pool[0]
+					const inArena = UTILS.inSecretPool(config, me.x, me.y, 100) && me.x < 0
+					for (let i = 0; i < count; i++) {
+						let x = me.x + 300 * Math.cos(me.dir) + UTILS.randInt(-60, 60)
+						let y = me.y + 300 * Math.sin(me.dir) + UTILS.randInt(-60, 60)
+						if (arena && !(x < 0 && UTILS.inSecretPool(config, x, y, 100))) {
+							x = (inArena ? me.x : home[0]) + UTILS.randInt(-150, 150)
+							y = (inArena ? me.y : home[1]) + UTILS.randInt(-150, 150)
+						}
+						const ai = aiManager.spawn(x, y, me.dir + Math.PI, kind)
+						if (kind === 13 || kind === 14) ai.minion = true
+					}
+					tell('[Admin] Spawned ' + count + ' ' + args[0] + (arena && !inArena ? ' in the Crab King arena (!arena to go there)' : ''))
+					return true
+				}
+				case 'hp': {
+					const p = who(args[1])
+					if (p && !isNaN(num(args[0]))) {
+						setHealth(p, num(args[0]))
+						tell('[Admin] ' + p.name + ' health ' + Math.round(p.health))
+					}
+					return true
+				}
+				case 'heal': {
+					const p = who(args[0])
+					if (p) {
+						setHealth(p, p.maxHealth)
+						tell('[Admin] Healed ' + p.name)
+					}
+					return true
+				}
+				case 'god': {
+					const p = who(args[0])
+					if (p) {
+						p.rynGod = !p.rynGod
+						tell('[Admin] God mode ' + (p.rynGod ? 'on' : 'off') + ' for ' + p.name)
+					}
+					return true
+				}
+				case 'age': {
+					const p = who(args[1])
+					const target = Math.min(config.maxAge, num(args[0]))
+					if (p && !isNaN(target)) {
+						while (p.age < target && p.age < config.maxAge) p.earnXP(p.maxXP - p.XP)
+						tell('[Admin] ' + p.name + ' age ' + p.age)
+					}
+					return true
+				}
+				case 'res': {
+					const p = who(args[1])
+					const amount = num(args[0])
+					if (p && !isNaN(amount)) {
+						for (let type = 0; type < 3; type++) p.addResource(type, amount - p[config.resourceTypes[type]], true)
+						p.addResource(3, amount - p.points, true)
+						tell('[Admin] ' + p.name + ' resources ' + amount)
+					}
+					return true
+				}
+				case 'hat':
+				case 'acc': {
+					const p = who(args[1])
+					const id = num(args[0])
+					const tail = cmd === 'acc'
+					const list = tail ? accessories : hats
+					const item = list.find(h => h.id === id)
+					if (p && !item && id !== 0) tell('[Admin] No ' + (tail ? 'accessory' : 'hat') + ' ' + args[0])
+					if (p && (item || id === 0)) {
+						if (tail) {
+							if (item) p.tails[id] = 1
+							p.tail = item || null
+							p.tailIndex = id
+						} else {
+							if (item) p.skins[id] = 1
+							p.skin = item || null
+							p.skinIndex = id
+						}
+						if (item) server.send(p.id, 'us', [0, id, tail ? 1 : 0])
+						server.send(p.id, 'us', [1, id, tail ? 1 : 0])
+						tell('[Admin] ' + p.name + (tail ? ' accessory ' : ' hat ') + (item ? item.name : 'off'))
+					}
+					return true
+				}
+				case 'arena':
+					me.x = -900
+					me.y = config.mapScale / 2
+					me.xVel = 0
+					me.yVel = 0
+					tell('[Admin] Crab King arena')
+					return true
+			}
+			return false
+		}
+
 		function pingSocket() {
 			server.send(conn.id, 'pp')
 		}
@@ -1986,6 +2130,7 @@ server.addListener('connection', function (conn) {
 			}
 
 			if (message.startsWith(PREFIX) && tmpPlayer.admin) {
+				if (rynAdminCommand(tmpPlayer, message.slice(PREFIX.length))) return
 				if (message === `${PREFIX}s`) {
 					for (let i = 0; i < 9; i++) {
 						tmpPlayer.addResource(3, 999999, true)
@@ -2062,7 +2207,6 @@ server.addListener('connection', function (conn) {
 					for (let i = 0; i < ais.length; i++) {
 						ais[i].active = false
 						ais[i].alive = false
-						server.sendAll('11', [ais[i].sid])
 					}
 					server.send(conn.id, 'ch', [-1, '[Admin] Mobs off.'])
 				} else if (message === PREFIX + 'mobs on') {
@@ -2073,12 +2217,11 @@ server.addListener('connection', function (conn) {
 					])
 				} else if (message === PREFIX + 'hostile off') {
 					config.spawnHostile = false
-					const hostileTypes = [2, 3, 4]
+					const hostileTypes = [2, 3, 4, 9, 10, 13, 14]
 					for (let i = 0; i < ais.length; i++) {
 						if (hostileTypes.includes(ais[i].index)) {
 							ais[i].active = false
 							ais[i].alive = false
-							server.sendAll('11', [ais[i].sid])
 						}
 					}
 					server.send(conn.id, 'ch', [-1, '[Admin] Hostile mobs off.'])
@@ -2087,12 +2230,11 @@ server.addListener('connection', function (conn) {
 					server.send(conn.id, 'ch', [-1, '[Admin] Hostile mobs on.'])
 				} else if (message === PREFIX + 'bosses off') {
 					config.spawnBosses = false
-					const bossTypes = [6, 7, 8]
+					const bossTypes = [6, 7, 8, 11, 13, 14]
 					for (let i = 0; i < ais.length; i++) {
 						if (bossTypes.includes(ais[i].index)) {
 							ais[i].active = false
 							ais[i].alive = false
-							server.sendAll('11', [ais[i].sid])
 						}
 					}
 					server.send(conn.id, 'ch', [-1, '[Admin] Bosses off.'])
@@ -2622,7 +2764,7 @@ setInterval(() => {
 						Math.round(tmpObj.dir * 100),
 						tmpObj.health,
 						tmpObj.nameIndex,
-						0
+						tmpObj.state || 0
 					)
 				}
 			}
@@ -2931,14 +3073,25 @@ function addRiverStone(riverStoneCount) {
 
 function addAnimal() {
 	if (!config.spawnMobs) return
-	const animalCount = [10, 10, 10, 2, 15, 2, 1, 1, 1]
-	const hostileTypes = [2, 3, 4]
-	const bossTypes = [6, 7, 8]
+	// cow, pig, bull, bully, wolf, quack, moostafa, treasure, moofie,
+	// boar, yeti, crab king, sheep (crabs and crablings come with the King)
+	const animalCount = [10, 10, 10, 2, 15, 2, 1, 1, 1, 6, 2, 1, 10]
+	const hostileTypes = [2, 3, 4, 9, 10]
+	const bossTypes = [6, 7, 8, 11]
 	for (let i = 0; i < animalCount.length; i++) {
 		if (!config.spawnHostile && hostileTypes.includes(i)) continue
 		if (!config.spawnBosses && bossTypes.includes(i)) continue
 		if (config.disabledMobTypes && config.disabledMobTypes.includes(i)) continue
 		for (let j = 0; j < animalCount[i]; j++) {
+			if (i === 11) {
+				const home = config.secretPool.pool[0]
+				aiManager.spawn(home[0], home[1], Math.PI, i)
+				continue
+			}
+			if (i === 10) {
+				aiManager.spawn(UTILS.randFloat(0, config.mapScale), UTILS.randFloat(0, config.snowBiomeTop), Math.PI / 2, i)
+				continue
+			}
 			aiManager.spawn(
 				animalCount[i] === 1
 					? config.mapScale / 2
@@ -3272,6 +3425,15 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 		this.colDmg = data.colDmg
 		this.noTrap = data.noTrap
 		this.spawnDelay = data.spawnDelay
+		this.boss = data.boss
+		this.diver = data.diver
+		// the Crab King and its crabs live in the arena west of the map
+		this.arena = index === 11 || index === 13 || index === 14
+		this.state = 0
+		this.crab = null
+		this.minion = false
+		this.owner = null
+		this.minions = []
 		this.hitWait = 0
 		this.waitCount = 1000
 		this.moveCount = 0
@@ -3312,9 +3474,12 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 			}
 
 			// BEHAVIOUR:
+			var isKing = this.index === 11
+			if (isKing) this.crabKingUpdate(delta)
 			var charging = false
 			var slowMlt = 1
 			if (
+				!this.arena &&
 				!this.zIndex &&
 				!this.lockMove &&
 				this.y >= config.mapScale / 2 - config.riverWidth / 2 &&
@@ -3323,7 +3488,8 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 				slowMlt = 0.33
 				this.xVel += config.waterCurrent * delta
 			}
-			if (this.lockMove) {
+			if (isKing) {
+			} else if (this.lockMove) {
 				this.xVel = 0
 				this.yVel = 0
 			} else if (this.waitCount > 0) {
@@ -3384,6 +3550,8 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 			}
 
 			// OBJECT COLL:
+			var startX = this.x
+			var startY = this.y
 			this.zIndex = 0
 			this.lockMove = false
 			var tmpList
@@ -3409,7 +3577,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 
 			// HITTING:
 			var hitting = false
-			if (this.hitWait > 0) {
+			if (!isKing && this.hitWait > 0) {
 				this.hitWait -= delta
 				if (this.hitWait <= 0) {
 					hitting = true
@@ -3480,7 +3648,32 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 
 			// MAP BOUNDARIES:
 			var tmpScale = this.scale
-			if (this.x - tmpScale < 0) {
+			if (this.arena) {
+				// arena animals stay in the arena; slide along its walls
+				var fits = function (x, y) {
+					return x <= 0 && UTILS.inSecretPool(config, x, y, tmpScale)
+				}
+				if (!fits(this.x, this.y)) {
+					if (fits(this.x, startY)) {
+						this.y = startY
+						this.yVel = 0
+					} else if (fits(startX, this.y)) {
+						this.x = startX
+						this.xVel = 0
+					} else if (fits(startX, startY)) {
+						this.x = startX
+						this.y = startY
+						this.xVel = 0
+						this.yVel = 0
+					} else {
+						var home = config.secretPool.pool[0]
+						this.x = home[0]
+						this.y = home[1]
+						this.xVel = 0
+						this.yVel = 0
+					}
+				}
+			} else if (this.x - tmpScale < 0) {
 				this.x = tmpScale
 				this.xVel = 0
 			} else if (this.x + tmpScale > config.mapScale) {
@@ -3543,6 +3736,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 	// CHANGE HEALTH:
 	this.changeHealth = function (val, doer, runFrom) {
 		if (this.active) {
+			if (val < 0 && this.index === 11 && this.state === 2) return
 			this.health += val
 			if (runFrom) {
 				if (this.hitScare && !UTILS.randInt(0, this.hitScare)) {
@@ -3563,6 +3757,22 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 			if (doer && doer.canSee(this) && val < 0) {
 				server.send(doer.id, "t", [Math.round(this.x), Math.round(this.y), Math.round(-val), 1])
 			}
+			if (this.health <= 0 && this.minion) {
+				this.active = false
+				this.alive = false
+				this.minion = false
+				this.owner = null
+				if (doer) scoreCallback(doer, this.killScore)
+				return
+			}
+			if (this.health <= 0 && this.index === 11) {
+				this.state = 0
+				this.crab = null
+				if (doer && doer.isPlayer && doer.skins && !doer.skins[61]) {
+					doer.skins[61] = 1
+					server.send(doer.id, "us", [0, 61, 0])
+				}
+			}
 			if (this.health <= 0) {
 				if (this.spawnDelay) {
 					this.spawnCounter = this.spawnDelay
@@ -3570,7 +3780,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 					this.y = -1000000
 				} else {
 					this.x = this.startX || UTILS.randInt(0, config.mapScale)
-					this.y = this.startY || UTILS.randInt(0, config.mapScale)
+					this.y = this.startY || (this.index === 10 ? UTILS.randInt(0, config.snowBiomeTop) : UTILS.randInt(0, config.mapScale))
 				}
 				this.health = this.maxHealth
 				this.runFrom = null
@@ -3584,6 +3794,233 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 					}
 				}
 			}
+		}
+	}
+
+	// CRAB KING:
+	// The game draws the King and its warnings but leaves what it does to the server.
+	// It shows the King's state (1 going under, 2 under water, 3 coming up) and
+	// warnings sent as W [kind, x, y, r, ms, x2, y2]: 3 a slam, 4 a charge line,
+	// 1 a ring, 0 a splash where it surfaces. The attacks below are built on those.
+	var CRAB_SLAM = 3
+	var CRAB_LINE = 4
+	var CRAB_RING = 1
+	var CRAB_SPLASH = 0
+	this.crabWarn = function (kind, x, y, r, ms, x2, y2) {
+		if (x2 === undefined) {
+			x2 = x
+			y2 = y
+		}
+		var probe = { x: (x + x2) / 2, y: (y + y2) / 2, scale: r + Math.abs(x2 - x) / 2 + Math.abs(y2 - y) / 2 }
+		for (var i = 0; i < players.length; ++i) {
+			if (players[i].canSee(probe)) {
+				server.send(players[i].id, "cw", [kind, Math.round(x), Math.round(y), r, ms, Math.round(x2), Math.round(y2)])
+			}
+		}
+	}
+	this.crabHurt = function (x, y, r, dmg, knock, hitList) {
+		for (var i = 0; i < players.length; ++i) {
+			var p = players[i]
+			if (!p.alive || (hitList && hitList[p.sid])) continue
+			if (UTILS.getDistance(x, y, p.x, p.y) <= r + p.scale) {
+				if (hitList) hitList[p.sid] = 1
+				var dir = UTILS.getDirection(p.x, p.y, x, y)
+				p.changeHealth(-dmg, null)
+				p.xVel += knock * Math.cos(dir)
+				p.yVel += knock * Math.sin(dir)
+			}
+		}
+	}
+	this.crabTurn = function (dir, delta) {
+		this.dir %= PI2
+		var netAngle = (this.dir - dir + PI2) % PI2
+		var amnt = Math.min(Math.abs(netAngle - PI2), netAngle, this.turnSpeed * delta)
+		var sign = netAngle - Math.PI >= 0 ? 1 : -1
+		this.dir = (this.dir + sign * amnt + PI2) % PI2
+	}
+	this.crabWalk = function (dir, delta, mult) {
+		this.xVel += this.speed * mult * delta * Math.cos(dir)
+		this.yVel += this.speed * mult * delta * Math.sin(dir)
+	}
+	this.crabEnd = function (rest) {
+		this.crab.phase = "idle"
+		this.crab.next = rest
+		this.state = 0
+	}
+	this.crabSummon = function () {
+		this.minions = this.minions.filter(function (m) {
+			return m.active && m.alive && m.minion
+		})
+		var room = 8 - this.minions.length
+		var kinds = [14, 14, 14, 13]
+		for (var i = 0; i < kinds.length && room > 0; i++) {
+			var a = UTILS.randFloat(-Math.PI, Math.PI)
+			var d = this.scale + UTILS.randInt(80, 260)
+			var x = this.x + d * Math.cos(a)
+			var y = this.y + d * Math.sin(a)
+			if (!this.spawnAi || !UTILS.inSecretPool(config, x, y, 40)) continue
+			var m = this.spawnAi(x, y, a, kinds[i])
+			m.minion = true
+			m.owner = this
+			this.minions.push(m)
+			room--
+		}
+	}
+	this.crabKingUpdate = function (delta) {
+		var c = this.crab
+		if (!c) c = this.crab = { phase: "idle", t: 0, next: 2500, summon: 9000, x: 0, y: 0, r: 0, dir: 0, len: 0, hit: null }
+		var target = null
+		var best = Infinity
+		for (var i = 0; i < players.length; ++i) {
+			var p = players[i]
+			if (p.alive && p.x < 0) {
+				var d = UTILS.getDistance(this.x, this.y, p.x, p.y)
+				if (d <= this.viewRange && d < best) {
+					best = d
+					target = p
+				}
+			}
+		}
+		// nobody stands inside the King, except while it is under water
+		if (this.state !== 2) {
+			for (var k = 0; k < players.length; ++k) {
+				var q = players[k]
+				if (!q.alive) continue
+				var qd = UTILS.getDistance(this.x, this.y, q.x, q.y)
+				var room = this.scale * 0.8 + q.scale
+				if (qd < room) {
+					var qa = qd > 0 ? UTILS.getDirection(q.x, q.y, this.x, this.y) : UTILS.randFloat(-Math.PI, Math.PI)
+					q.x = this.x + room * Math.cos(qa)
+					q.y = this.y + room * Math.sin(qa)
+				}
+			}
+		}
+		c.t -= delta
+		switch (c.phase) {
+			case "idle": {
+				this.state = 0
+				if (!target) {
+					c.next = Math.max(c.next, 1500)
+					if (UTILS.getDistance(this.x, this.y, this.startX, this.startY) > 80) {
+						var home = UTILS.getDirection(this.startX, this.startY, this.x, this.y)
+						this.crabTurn(home, delta)
+						this.crabWalk(home, delta, 1)
+					}
+					return
+				}
+				var face = UTILS.getDirection(target.x, target.y, this.x, this.y)
+				this.crabTurn(face, delta)
+				if (best > this.hitRange * 0.7) this.crabWalk(face, delta, 1)
+				c.next -= delta
+				c.summon -= delta
+				if (c.summon <= 0) {
+					this.crabSummon()
+					c.summon = 15000
+				}
+				if (c.next > 0) return
+				if (best <= this.hitRange + target.scale) {
+					// slam in front of the King
+					c.phase = "slam"
+					c.t = this.hitDelay
+					c.r = 360
+					c.x = this.x + 160 * Math.cos(face)
+					c.y = this.y + 160 * Math.sin(face)
+					this.crabWarn(CRAB_SLAM, c.x, c.y, c.r, c.t)
+				} else if (best <= 1150 && UTILS.randInt(0, 2)) {
+					// charge along a line through the target
+					c.phase = "chargeWind"
+					c.t = 900
+					c.dir = face
+					c.len = Math.min(1150, best + 300)
+					c.hit = {}
+					this.crabWarn(CRAB_LINE, this.x, this.y, this.scale, c.t, this.x + c.len * Math.cos(face), this.y + c.len * Math.sin(face))
+				} else if (UTILS.randInt(0, 1)) {
+					// a ring of water under the target
+					c.phase = "ring"
+					c.t = 1100
+					c.r = 240
+					c.x = target.x
+					c.y = target.y
+					this.crabWarn(CRAB_RING, c.x, c.y, c.r, c.t)
+				} else {
+					// go under and come up beneath the target
+					c.phase = "dive1"
+					c.t = 700
+					this.state = 1
+				}
+				return
+			}
+			case "slam":
+				if (c.t <= 0) {
+					this.crabHurt(c.x, c.y, c.r, this.dmg, 0.9)
+					this.crabEnd(1400)
+				}
+				return
+			case "chargeWind":
+				this.crabTurn(c.dir, delta)
+				if (c.t <= 0) {
+					c.phase = "charge"
+					c.t = c.len / 1.6
+				}
+				return
+			case "charge":
+				this.xVel = 1.6 * Math.cos(c.dir)
+				this.yVel = 1.6 * Math.sin(c.dir)
+				this.crabHurt(this.x, this.y, this.scale * 0.8, this.dmg, 1.1, c.hit)
+				if (c.t <= 0) {
+					this.xVel *= 0.2
+					this.yVel *= 0.2
+					this.crabEnd(1800)
+				}
+				return
+			case "ring":
+				if (c.t <= 0) {
+					this.crabHurt(c.x, c.y, c.r, 30, 0.6)
+					this.crabEnd(1200)
+				}
+				return
+			case "dive1":
+				this.state = 1
+				this.xVel = 0
+				this.yVel = 0
+				if (c.t <= 0) {
+					c.phase = "dive2"
+					c.t = 1600
+					this.state = 2
+					c.x = target ? target.x : this.x
+					c.y = target ? target.y : this.y
+				}
+				return
+			case "dive2": {
+				this.state = 2
+				if (target) {
+					c.x = target.x
+					c.y = target.y
+				}
+				var gap = UTILS.getDistance(this.x, this.y, c.x, c.y)
+				var go = UTILS.getDirection(c.x, c.y, this.x, this.y)
+				var v = Math.min(0.9, gap / Math.max(delta, 1))
+				this.xVel = v * Math.cos(go)
+				this.yVel = v * Math.sin(go)
+				if (c.t <= 0 || gap < 40) {
+					c.phase = "dive3"
+					c.t = 1650
+					this.state = 3
+					this.xVel = 0
+					this.yVel = 0
+					this.crabWarn(CRAB_SPLASH, this.x, this.y, 330, c.t)
+				}
+				return
+			}
+			case "dive3":
+				this.state = 3
+				this.xVel = 0
+				this.yVel = 0
+				if (c.t <= 0) {
+					this.crabHurt(this.x, this.y, 330, 60, 1.2)
+					this.crabEnd(2200)
+				}
+				return
 		}
 	}
 }
@@ -3741,6 +4178,107 @@ module.exports = function (ais, AI, players, items, objectManager, config, UTILS
 			viewRange: 800,
 			chargePlayer: true,
 			drop: ["food", 1000]
+		},
+		// added from the current game (12d386a8)
+		{
+			id: 9,
+			name: "Boar",
+			src: "boar_1",
+			hostile: true,
+			dmg: 14,
+			killScore: 800,
+			health: 900,
+			weightM: 0.55,
+			speed: 0.00105,
+			turnSpeed: 0.0012,
+			scale: 76,
+			viewRange: 700,
+			chargePlayer: true,
+			drop: ["food", 150]
+		},
+		{
+			id: 10,
+			name: "Yeti",
+			src: "yeti_1",
+			hostile: true,
+			dmg: 25,
+			killScore: 4500,
+			health: 3200,
+			weightM: 0.35,
+			speed: 0.0008,
+			turnSpeed: 0.0008,
+			scale: 95,
+			viewRange: 750,
+			leapForce: 0.6,
+			chargePlayer: true,
+			drop: ["food", 800]
+		},
+		{
+			id: 11,
+			name: "Crab King",
+			src: "crab_1",
+			boss: true,
+			hostile: true,
+			dontRun: true,
+			fixedSpawn: true,
+			noTrap: true,
+			dmg: 45,
+			killScore: 4000,
+			health: 480000,
+			weightM: 0,
+			speed: 0.00045,
+			turnSpeed: 0.0007,
+			scale: 280,
+			viewRange: 1800,
+			hitRange: 400,
+			hitDelay: 700,
+			// not in the game's table (server side): how long the King stays dead
+			spawnDelay: 180000
+		},
+		{
+			id: 12,
+			src: "sheep_1",
+			killScore: 200,
+			health: 650,
+			weightM: 0.7,
+			speed: 0.0009,
+			turnSpeed: 0.001,
+			scale: 72,
+			drop: ["food", 150]
+		},
+		{
+			id: 13,
+			name: "Crab",
+			src: "crab_1",
+			diver: true,
+			hostile: true,
+			noTrap: true,
+			dmg: 14.4,
+			killScore: 400,
+			health: 500,
+			weightM: 0.5,
+			speed: 0.0014,
+			turnSpeed: 0.003,
+			scale: 78,
+			viewRange: 4000,
+			chargePlayer: true
+		},
+		{
+			id: 14,
+			name: "Crabling",
+			src: "crab_1",
+			diver: true,
+			hostile: true,
+			noTrap: true,
+			dmg: 6,
+			killScore: 200,
+			health: 250,
+			weightM: 0.5,
+			speed: 0.0017,
+			turnSpeed: 0.004,
+			scale: 39,
+			viewRange: 4000,
+			chargePlayer: true
 		}
 	]
 
@@ -3758,6 +4296,8 @@ module.exports = function (ais, AI, players, items, objectManager, config, UTILS
 			ais.push(tmpObj)
 		}
 		tmpObj.init(x, y, dir, index, this.aiTypes[index])
+		// the Crab King calls its crabs through this
+		tmpObj.spawnAi = this.spawn.bind(this)
 		return tmpObj
 	}
 }
@@ -3768,8 +4308,9 @@ module.exports = function (ais, AI, players, items, objectManager, config, UTILS
 module.exports.maxScreenHeight = 1080;*/
 
 //Max screen:
-module.exports.maxScreenWidth = 2820 //2820;//optimal what im finded
-module.exports.maxScreenHeight = 1754 //1754;//optimal what im finded
+// view range of the current game (12d386a8)
+module.exports.maxScreenWidth = 1920
+module.exports.maxScreenHeight = 1080
 
 // SERVER:
 module.exports.serverUpdateRate = 9
@@ -3823,9 +4364,8 @@ module.exports.skinColors = [
 	'#c37373',
 	'#4c4c4c',
 	'#ecaff7',
-	'#5f73a7',
-	'#8bc373',
-	'#738cc3'
+	'#738cc3',
+	'#8bc373'
 ]
 module.exports.skinColors1 = [
 	'#bf8f54',
@@ -3926,6 +4466,15 @@ module.exports.weaponVariants = [
 		poison: true,
 		xp: 12000,
 		val: 1.18
+	},
+	{
+		id: 4,
+		src: '_e',
+		poison: true,
+		lifesteal: 0.15,
+		membersOnly: true,
+		xp: 30000,
+		val: 1.18
 	}
 ]
 module.exports.fetchVariant = function (player) {
@@ -3962,6 +4511,22 @@ module.exports.maxNameLength = 15
 
 // MAP:
 module.exports.mapScale = 14400
+
+// The Crab King's arena west of the map (x < 0), reached through a gorge at the river:
+// a corridor, five pools and a passage behind the waterfall. Same numbers as the game.
+module.exports.secretPool = {
+	gorgeX0: -1500,
+	gorgeHalf: 520,
+	pool: [
+		[-2500, 7200, 1150],
+		[-3300, 6750, 750],
+		[-3200, 7750, 700],
+		[-1700, 6900, 600],
+		[-1800, 7550, 600]
+	],
+	waterfall: { x: -3860, y: 7250, half: 210 },
+	shallows: { start: -1500, length: 320 }
+}
 module.exports.mapPingScale = 40
 module.exports.mapPingTime = 2200
     },
@@ -4102,7 +4667,8 @@ module.exports.groups = [
 		name: "mill",
 		place: true,
 		limit: 7,
-		layer: 1
+		layer: 1,
+		sandboxLimit: 299
 	},
 	{
 		id: 4,
@@ -4123,7 +4689,8 @@ module.exports.groups = [
 		name: "booster",
 		place: true,
 		limit: 12,
-		layer: -1
+		layer: -1,
+		sandboxLimit: 299
 	},
 	{
 		id: 7,
@@ -4172,7 +4739,8 @@ module.exports.groups = [
 		name: "teleporter",
 		place: true,
 		limit: 2,
-		layer: -1
+		layer: -1,
+		sandboxLimit: 299
 	}
 ]
 
@@ -4269,6 +4837,7 @@ exports.weapons = [
 		type: 0,
 		age: 8,
 		name: "great axe",
+		pre: 1,
 		desc: "deal more damage and gather more resources",
 		src: "great_axe_1",
 		length: 140,
@@ -4304,6 +4873,7 @@ exports.weapons = [
 		type: 0,
 		age: 8,
 		name: "katana",
+		pre: 3,
 		desc: "greater range and damage",
 		src: "samurai_1",
 		iPad: 1.3,
@@ -4444,6 +5014,7 @@ exports.weapons = [
 		type: 1,
 		age: 8,
 		name: "crossbow",
+		pre: 9,
 		desc: "deals more damage and has greater range",
 		src: "crossbow_1",
 		req: ["wood", 5],
@@ -4462,6 +5033,7 @@ exports.weapons = [
 		type: 1,
 		age: 9,
 		name: "repeater crossbow",
+		pre: 12,
 		desc: "high firerate crossbow with reduced damage",
 		src: "crossbow_2",
 		req: ["wood", 10],
@@ -4499,6 +5071,7 @@ exports.weapons = [
 		type: 1,
 		age: 9,
 		name: "musket",
+		pre: 12,
 		desc: "slow firerate but high damage and range",
 		src: "musket_1",
 		req: ["stone", 10],
@@ -4587,6 +5160,7 @@ module.exports.list = [
 		age: 7,
 		group: module.exports.groups[1],
 		name: "castle wall",
+		pre: 1,
 		desc: "provides powerful protection for your village",
 		req: ["stone", 35],
 		health: 1500,
@@ -4623,6 +5197,7 @@ module.exports.list = [
 		age: 9,
 		group: module.exports.groups[2],
 		name: "poison spikes",
+		pre: 1,
 		desc: "poisons enemies when they touch them",
 		req: ["wood", 35, "stone", 15],
 		health: 600,
@@ -4637,6 +5212,7 @@ module.exports.list = [
 		age: 9,
 		group: module.exports.groups[2],
 		name: "spinning spikes",
+		pre: 2,
 		desc: "damages enemies when they touch them",
 		req: ["wood", 30, "stone", 20],
 		health: 500,
@@ -4665,6 +5241,7 @@ module.exports.list = [
 		age: 5,
 		group: module.exports.groups[3],
 		name: "faster windmill",
+		pre: 1,
 		desc: "generates more gold over time",
 		req: ["wood", 60, "stone", 20],
 		health: 500,
@@ -4680,6 +5257,7 @@ module.exports.list = [
 		age: 8,
 		group: module.exports.groups[3],
 		name: "power mill",
+		pre: 1,
 		desc: "generates more gold over time",
 		req: ["wood", 100, "stone", 50],
 		health: 800,
@@ -5050,6 +5628,11 @@ module.exports = function (GameObject, gameObjects, UTILS, config, players, serv
 		if (!ignoreWater && indx != 18 && y >= config.mapScale / 2 - config.riverWidth / 2 && y <= config.mapScale / 2 + config.riverWidth / 2) {
 			return false
 		}
+		// nothing gets built in the Crab King's arena or at the mouth of its gorge
+		var pool = config.secretPool
+		if (pool && (x < 0 || (x < 140 && Math.abs(y - config.mapScale / 2) < pool.gorgeHalf + 140))) {
+			return false
+		}
 		return true
 	}
 
@@ -5371,12 +5954,13 @@ module.exports = function (
 				this.slowMult
 
 			if (!this.zIndex && this.y >= config.mapScale / 2 - config.riverWidth / 2 && this.y <= config.mapScale / 2 + config.riverWidth / 2) {
+				var current = this.x >= 0 ? config.waterCurrent : 0
 				if (this.skin && this.skin.watrImm) {
 					spdMult *= 0.75
-					this.xVel += config.waterCurrent * 0.4 * delta
+					this.xVel += current * 0.4 * delta
 				} else {
 					spdMult *= 0.33
-					this.xVel += config.waterCurrent * delta
+					this.xVel += current * delta
 				}
 			}
 			var xVel = this.moveDir != undefined ? mathCOS(this.moveDir) : 0
@@ -5391,6 +5975,8 @@ module.exports = function (
 		}
 
 		// OBJECT COLL:
+		var startX = this.x
+		var startY = this.y
 		this.zIndex = 0
 		this.lockMove = false
 		this.healCol = 0
@@ -5436,8 +6022,26 @@ module.exports = function (
 		}
 
 		// MAP BOUNDARIES:
-		if (this.x - this.scale < 0) {
-			this.x = this.scale
+		// west of the map only the Crab King's arena is open; slide along its walls
+		if (this.x - this.scale < 0 && !UTILS.inSecretPool(config, this.x, this.y, this.scale)) {
+			var scale = this.scale
+			var fits = function (x, y) {
+				return x - scale >= 0 || UTILS.inSecretPool(config, x, y, scale)
+			}
+			if (fits(this.x, startY)) {
+				this.y = startY
+				this.yVel = 0
+			} else if (fits(startX, this.y)) {
+				this.x = startX
+				this.xVel = 0
+			} else if (fits(startX, startY)) {
+				this.x = startX
+				this.y = startY
+				this.xVel = 0
+				this.yVel = 0
+			} else {
+				this.x = this.scale
+			}
 		} else if (this.x + this.scale > config.mapScale) {
 			this.x = config.mapScale - this.scale
 		}
@@ -5562,6 +6166,10 @@ module.exports = function (
 
 	// CHANGE HEALTH:
 	this.changeHealth = function (amount, doer) {
+		// Ryn's !god
+		if (amount < 0 && this.rynGod) {
+			return false
+		}
 		if (amount > 0 && this.health >= this.maxHealth) {
 			return false
 		}
@@ -5843,6 +6451,10 @@ module.exports = function (
 						}
 						if (MODE !== "HOCKEY") {
 							tmpObj.changeHealth(-dmgVal * dmgMlt, this, this)
+							// emerald weapons heal by part of the damage they deal
+							if (tmpVariant.lifesteal) {
+								this.changeHealth(dmgVal * dmgMlt * tmpVariant.lifesteal, this)
+							}
 						}
 					}
 				}
@@ -6138,7 +6750,10 @@ module.exports.sHats = {
 	55: 1,
 	56: 1.1,
 	57: 1,
-	58: 1
+	58: 1,
+	59: 1.08,
+	60: 0.94,
+	61: 0.93
 }
 module.exports.hats = [
 	{
@@ -6504,6 +7119,37 @@ module.exports.hats = [
 		noEat: true,
 		spdMult: 1.1,
 		invisTimer: 1000
+	},
+	{
+		id: 59,
+		name: "Scout Hat",
+		price: 3500,
+		scale: 120,
+		desc: "move faster but take more damage",
+		spdMult: 1.08,
+		dmgMult: 1.12
+	},
+	{
+		id: 60,
+		name: "Frost Helm",
+		price: 7000,
+		scale: 120,
+		desc: "normal speed in snow and reduces damage taken",
+		coldM: 1,
+		spdMult: 0.94,
+		dmgMult: 0.88
+	},
+	{
+		id: 61,
+		name: "Crab Shell",
+		dontSell: true,
+		earned: true,
+		price: 0,
+		scale: 120,
+		desc: "dropped by the Crab King. reflects damage and reduces damage taken",
+		dmg: 0.375,
+		dmgMult: 0.8,
+		spdMult: 0.93
 	}
 ]
 
@@ -6993,7 +7639,8 @@ const PACKETCODE = {
 		updateMinimap: "7",
 		showText: "8",
 		pingMap: "9",
-		pingSocketResponse: "0"
+		pingSocketResponse: "0",
+		crabWarning: "W"
 	}
 }
 const OLDPACKETCODE = {
@@ -7053,7 +7700,8 @@ const OLDPACKETCODE = {
 		mm: PACKETCODE.RECEIVE.updateMinimap,
 		t: PACKETCODE.RECEIVE.showText,
 		p: PACKETCODE.RECEIVE.pingMap,
-		pp: PACKETCODE.RECEIVE.pingSocketResponse
+		pp: PACKETCODE.RECEIVE.pingSocketResponse,
+		cw: PACKETCODE.RECEIVE.crabWarning
 	}
 }
 const NEWPACKETCODE = {
@@ -7071,6 +7719,23 @@ module.exports.OldToNew = function (packetCode, type) {
 }
 module.exports.NewToOld = function (packetCode, type) {
 	return NEWPACKETCODE[type][packetCode]
+}
+
+// The Crab King's arena west of the map (config.secretPool): the gorge from the river,
+// the pools and the passage behind the waterfall. True when a circle of radius r at
+// (x, y) fits inside it.
+module.exports.inSecretPool = function (config, x, y, r) {
+	var p = config.secretPool
+	if (!p) return false
+	var midY = config.mapScale / 2
+	if (x >= p.gorgeX0 && mathABS(y - midY) <= p.gorgeHalf - r) return true
+	for (var i = 0; i < p.pool.length; i++) {
+		var c = p.pool[i]
+		if (mathSQRT((x - c[0]) * (x - c[0]) + (y - c[1]) * (y - c[1])) <= c[2] - r) return true
+	}
+	var w = p.waterfall
+	if (w && x <= w.x + r && x >= w.x - 900 && mathABS(y - w.y) <= w.half - r) return true
+	return false
 }
     }
     };
@@ -7225,6 +7890,30 @@ module.exports.NewToOld = function (packetCode, type) {
       }
     })(),
     engine: null,
+    ping: (() => {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem("_ryn_private_ping") || "null");
+        if (saved && Number.isFinite(saved.ms) && Number.isFinite(saved.jitter)) return saved;
+      } catch (_) {}
+      return {
+        ms: 0,
+        jitter: 0
+      };
+    })(),
+    setPing(ms, jitter) {
+      this.ping = {
+        ms: ms,
+        jitter: jitter
+      };
+      try {
+        sessionStorage.setItem("_ryn_private_ping", JSON.stringify(this.ping));
+      } catch (_) {}
+    },
+    oneWay() {
+      const {ms: ms, jitter: jitter} = this.ping;
+      if (!ms && !jitter) return 0;
+      return Math.max(0, ms / 2 + (Math.random() * 2 - 1) * jitter / 2);
+    },
     setMode(on) {
       try {
         if (on) sessionStorage.setItem(RYN_PRIVATE_KEY, "1"); else sessionStorage.removeItem(RYN_PRIVATE_KEY);
@@ -7295,6 +7984,8 @@ module.exports.NewToOld = function (packetCode, type) {
         error: null
       };
       this._wired = {};
+      this._upAt = 0;
+      this._downAt = 0;
       const socket = this;
       const listeners = {};
       this._conn = {
@@ -7314,6 +8005,9 @@ module.exports.NewToOld = function (packetCode, type) {
         },
         close() {
           socket._shut(1000, "");
+        },
+        rynSetPing(ms, jitter) {
+          RynPrivate.setPing(ms, jitter);
         },
         _emit(ev, ...args) {
           for (const fn of listeners[ev] || []) {
@@ -7356,9 +8050,20 @@ module.exports.NewToOld = function (packetCode, type) {
         bytes = new Uint8Array(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
       }
       if (bytes === null) return;
-      rynPrivateLater(() => {
+      this._later("_upAt", () => {
         if (this.readyState === 1) this._conn._emit("message", bytes);
       });
+    }
+    _later(way, fn) {
+      const now = performance.now();
+      const delay = RynPrivate.oneWay();
+      if (delay <= 0 && this[way] <= now) {
+        rynPrivateLater(fn);
+        return;
+      }
+      const at = Math.max(now + delay, this[way]);
+      this[way] = at;
+      setTimeout(fn, at - now);
     }
     close(code = 1000, reason = "") {
       this._shut(code, reason);
@@ -7366,7 +8071,7 @@ module.exports.NewToOld = function (packetCode, type) {
     _fromServer(bytes) {
       if (this.readyState !== 1) return;
       const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-      rynPrivateLater(() => {
+      this._later("_downAt", () => {
         if (this.readyState === 1) this.dispatchEvent(new MessageEvent("message", {
           data: data
         }));

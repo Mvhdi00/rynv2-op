@@ -255,12 +255,13 @@ module.exports = function (
 				this.slowMult
 
 			if (!this.zIndex && this.y >= config.mapScale / 2 - config.riverWidth / 2 && this.y <= config.mapScale / 2 + config.riverWidth / 2) {
+				var current = this.x >= 0 ? config.waterCurrent : 0
 				if (this.skin && this.skin.watrImm) {
 					spdMult *= 0.75
-					this.xVel += config.waterCurrent * 0.4 * delta
+					this.xVel += current * 0.4 * delta
 				} else {
 					spdMult *= 0.33
-					this.xVel += config.waterCurrent * delta
+					this.xVel += current * delta
 				}
 			}
 			var xVel = this.moveDir != undefined ? mathCOS(this.moveDir) : 0
@@ -275,6 +276,8 @@ module.exports = function (
 		}
 
 		// OBJECT COLL:
+		var startX = this.x
+		var startY = this.y
 		this.zIndex = 0
 		this.lockMove = false
 		this.healCol = 0
@@ -320,8 +323,26 @@ module.exports = function (
 		}
 
 		// MAP BOUNDARIES:
-		if (this.x - this.scale < 0) {
-			this.x = this.scale
+		// west of the map only the Crab King's arena is open; slide along its walls
+		if (this.x - this.scale < 0 && !UTILS.inSecretPool(config, this.x, this.y, this.scale)) {
+			var scale = this.scale
+			var fits = function (x, y) {
+				return x - scale >= 0 || UTILS.inSecretPool(config, x, y, scale)
+			}
+			if (fits(this.x, startY)) {
+				this.y = startY
+				this.yVel = 0
+			} else if (fits(startX, this.y)) {
+				this.x = startX
+				this.xVel = 0
+			} else if (fits(startX, startY)) {
+				this.x = startX
+				this.y = startY
+				this.xVel = 0
+				this.yVel = 0
+			} else {
+				this.x = this.scale
+			}
 		} else if (this.x + this.scale > config.mapScale) {
 			this.x = config.mapScale - this.scale
 		}
@@ -446,6 +467,10 @@ module.exports = function (
 
 	// CHANGE HEALTH:
 	this.changeHealth = function (amount, doer) {
+		// Ryn's !god
+		if (amount < 0 && this.rynGod) {
+			return false
+		}
 		if (amount > 0 && this.health >= this.maxHealth) {
 			return false
 		}
@@ -727,6 +752,10 @@ module.exports = function (
 						}
 						if (MODE !== "HOCKEY") {
 							tmpObj.changeHealth(-dmgVal * dmgMlt, this, this)
+							// emerald weapons heal by part of the damage they deal
+							if (tmpVariant.lifesteal) {
+								this.changeHealth(dmgVal * dmgMlt * tmpVariant.lifesteal, this)
+							}
 						}
 					}
 				}

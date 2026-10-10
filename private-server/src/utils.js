@@ -212,7 +212,8 @@ const PACKETCODE = {
 		updateMinimap: "7",
 		showText: "8",
 		pingMap: "9",
-		pingSocketResponse: "0"
+		pingSocketResponse: "0",
+		crabWarning: "W"
 	}
 }
 const OLDPACKETCODE = {
@@ -272,7 +273,8 @@ const OLDPACKETCODE = {
 		mm: PACKETCODE.RECEIVE.updateMinimap,
 		t: PACKETCODE.RECEIVE.showText,
 		p: PACKETCODE.RECEIVE.pingMap,
-		pp: PACKETCODE.RECEIVE.pingSocketResponse
+		pp: PACKETCODE.RECEIVE.pingSocketResponse,
+		cw: PACKETCODE.RECEIVE.crabWarning
 	}
 }
 const NEWPACKETCODE = {
@@ -290,4 +292,21 @@ module.exports.OldToNew = function (packetCode, type) {
 }
 module.exports.NewToOld = function (packetCode, type) {
 	return NEWPACKETCODE[type][packetCode]
+}
+
+// The Crab King's arena west of the map (config.secretPool): the gorge from the river,
+// the pools and the passage behind the waterfall. True when a circle of radius r at
+// (x, y) fits inside it.
+module.exports.inSecretPool = function (config, x, y, r) {
+	var p = config.secretPool
+	if (!p) return false
+	var midY = config.mapScale / 2
+	if (x >= p.gorgeX0 && mathABS(y - midY) <= p.gorgeHalf - r) return true
+	for (var i = 0; i < p.pool.length; i++) {
+		var c = p.pool[i]
+		if (mathSQRT((x - c[0]) * (x - c[0]) + (y - c[1]) * (y - c[1])) <= c[2] - r) return true
+	}
+	var w = p.waterfall
+	if (w && x <= w.x + r && x >= w.x - 900 && mathABS(y - w.y) <= w.half - r) return true
+	return false
 }

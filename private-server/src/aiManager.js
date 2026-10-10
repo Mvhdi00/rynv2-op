@@ -150,6 +150,107 @@ module.exports = function (ais, AI, players, items, objectManager, config, UTILS
 			viewRange: 800,
 			chargePlayer: true,
 			drop: ["food", 1000]
+		},
+		// added from the current game (12d386a8)
+		{
+			id: 9,
+			name: "Boar",
+			src: "boar_1",
+			hostile: true,
+			dmg: 14,
+			killScore: 800,
+			health: 900,
+			weightM: 0.55,
+			speed: 0.00105,
+			turnSpeed: 0.0012,
+			scale: 76,
+			viewRange: 700,
+			chargePlayer: true,
+			drop: ["food", 150]
+		},
+		{
+			id: 10,
+			name: "Yeti",
+			src: "yeti_1",
+			hostile: true,
+			dmg: 25,
+			killScore: 4500,
+			health: 3200,
+			weightM: 0.35,
+			speed: 0.0008,
+			turnSpeed: 0.0008,
+			scale: 95,
+			viewRange: 750,
+			leapForce: 0.6,
+			chargePlayer: true,
+			drop: ["food", 800]
+		},
+		{
+			id: 11,
+			name: "Crab King",
+			src: "crab_1",
+			boss: true,
+			hostile: true,
+			dontRun: true,
+			fixedSpawn: true,
+			noTrap: true,
+			dmg: 45,
+			killScore: 4000,
+			health: 480000,
+			weightM: 0,
+			speed: 0.00045,
+			turnSpeed: 0.0007,
+			scale: 280,
+			viewRange: 1800,
+			hitRange: 400,
+			hitDelay: 700,
+			// not in the game's table (server side): how long the King stays dead
+			spawnDelay: 180000
+		},
+		{
+			id: 12,
+			src: "sheep_1",
+			killScore: 200,
+			health: 650,
+			weightM: 0.7,
+			speed: 0.0009,
+			turnSpeed: 0.001,
+			scale: 72,
+			drop: ["food", 150]
+		},
+		{
+			id: 13,
+			name: "Crab",
+			src: "crab_1",
+			diver: true,
+			hostile: true,
+			noTrap: true,
+			dmg: 14.4,
+			killScore: 400,
+			health: 500,
+			weightM: 0.5,
+			speed: 0.0014,
+			turnSpeed: 0.003,
+			scale: 78,
+			viewRange: 4000,
+			chargePlayer: true
+		},
+		{
+			id: 14,
+			name: "Crabling",
+			src: "crab_1",
+			diver: true,
+			hostile: true,
+			noTrap: true,
+			dmg: 6,
+			killScore: 200,
+			health: 250,
+			weightM: 0.5,
+			speed: 0.0017,
+			turnSpeed: 0.004,
+			scale: 39,
+			viewRange: 4000,
+			chargePlayer: true
 		}
 	]
 
@@ -167,6 +268,8 @@ module.exports = function (ais, AI, players, items, objectManager, config, UTILS
 			ais.push(tmpObj)
 		}
 		tmpObj.init(x, y, dir, index, this.aiTypes[index])
+		// the Crab King calls its crabs through this
+		tmpObj.spawnAi = this.spawn.bind(this)
 		return tmpObj
 	}
 }

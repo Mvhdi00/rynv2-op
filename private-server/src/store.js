@@ -45,7 +45,10 @@ module.exports.sHats = {
 	55: 1,
 	56: 1.1,
 	57: 1,
-	58: 1
+	58: 1,
+	59: 1.08,
+	60: 0.94,
+	61: 0.93
 }
 module.exports.hats = [
 	{
@@ -411,6 +414,37 @@ module.exports.hats = [
 		noEat: true,
 		spdMult: 1.1,
 		invisTimer: 1000
+	},
+	{
+		id: 59,
+		name: "Scout Hat",
+		price: 3500,
+		scale: 120,
+		desc: "move faster but take more damage",
+		spdMult: 1.08,
+		dmgMult: 1.12
+	},
+	{
+		id: 60,
+		name: "Frost Helm",
+		price: 7000,
+		scale: 120,
+		desc: "normal speed in snow and reduces damage taken",
+		coldM: 1,
+		spdMult: 0.94,
+		dmgMult: 0.88
+	},
+	{
+		id: 61,
+		name: "Crab Shell",
+		dontSell: true,
+		earned: true,
+		price: 0,
+		scale: 120,
+		desc: "dropped by the Crab King. reflects damage and reduces damage taken",
+		dmg: 0.375,
+		dmgMult: 0.8,
+		spdMult: 0.93
 	}
 ]
 

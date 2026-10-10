@@ -24,7 +24,8 @@ module.exports.groups = [
 		name: "mill",
 		place: true,
 		limit: 7,
-		layer: 1
+		layer: 1,
+		sandboxLimit: 299
 	},
 	{
 		id: 4,
@@ -45,7 +46,8 @@ module.exports.groups = [
 		name: "booster",
 		place: true,
 		limit: 12,
-		layer: -1
+		layer: -1,
+		sandboxLimit: 299
 	},
 	{
 		id: 7,
@@ -94,7 +96,8 @@ module.exports.groups = [
 		name: "teleporter",
 		place: true,
 		limit: 2,
-		layer: -1
+		layer: -1,
+		sandboxLimit: 299
 	}
 ]
 
@@ -191,6 +194,7 @@ exports.weapons = [
 		type: 0,
 		age: 8,
 		name: "great axe",
+		pre: 1,
 		desc: "deal more damage and gather more resources",
 		src: "great_axe_1",
 		length: 140,
@@ -226,6 +230,7 @@ exports.weapons = [
 		type: 0,
 		age: 8,
 		name: "katana",
+		pre: 3,
 		desc: "greater range and damage",
 		src: "samurai_1",
 		iPad: 1.3,
@@ -366,6 +371,7 @@ exports.weapons = [
 		type: 1,
 		age: 8,
 		name: "crossbow",
+		pre: 9,
 		desc: "deals more damage and has greater range",
 		src: "crossbow_1",
 		req: ["wood", 5],
@@ -384,6 +390,7 @@ exports.weapons = [
 		type: 1,
 		age: 9,
 		name: "repeater crossbow",
+		pre: 12,
 		desc: "high firerate crossbow with reduced damage",
 		src: "crossbow_2",
 		req: ["wood", 10],
@@ -421,6 +428,7 @@ exports.weapons = [
 		type: 1,
 		age: 9,
 		name: "musket",
+		pre: 12,
 		desc: "slow firerate but high damage and range",
 		src: "musket_1",
 		req: ["stone", 10],
@@ -509,6 +517,7 @@ module.exports.list = [
 		age: 7,
 		group: module.exports.groups[1],
 		name: "castle wall",
+		pre: 1,
 		desc: "provides powerful protection for your village",
 		req: ["stone", 35],
 		health: 1500,
@@ -545,6 +554,7 @@ module.exports.list = [
 		age: 9,
 		group: module.exports.groups[2],
 		name: "poison spikes",
+		pre: 1,
 		desc: "poisons enemies when they touch them",
 		req: ["wood", 35, "stone", 15],
 		health: 600,
@@ -559,6 +569,7 @@ module.exports.list = [
 		age: 9,
 		group: module.exports.groups[2],
 		name: "spinning spikes",
+		pre: 2,
 		desc: "damages enemies when they touch them",
 		req: ["wood", 30, "stone", 20],
 		health: 500,
@@ -587,6 +598,7 @@ module.exports.list = [
 		age: 5,
 		group: module.exports.groups[3],
 		name: "faster windmill",
+		pre: 1,
 		desc: "generates more gold over time",
 		req: ["wood", 60, "stone", 20],
 		health: 500,
@@ -602,6 +614,7 @@ module.exports.list = [
 		age: 8,
 		group: module.exports.groups[3],
 		name: "power mill",
+		pre: 1,
 		desc: "generates more gold over time",
 		req: ["wood", 100, "stone", 50],
 		health: 800,

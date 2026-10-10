@@ -211,6 +211,11 @@ module.exports = function (GameObject, gameObjects, UTILS, config, players, serv
 		if (!ignoreWater && indx != 18 && y >= config.mapScale / 2 - config.riverWidth / 2 && y <= config.mapScale / 2 + config.riverWidth / 2) {
 			return false
 		}
+		// nothing gets built in the Crab King's arena or at the mouth of its gorge
+		var pool = config.secretPool
+		if (pool && (x < 0 || (x < 140 && Math.abs(y - config.mapScale / 2) < pool.gorgeHalf + 140))) {
+			return false
+		}
 		return true
 	}
 

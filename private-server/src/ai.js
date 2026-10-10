@@ -40,6 +40,15 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 		this.colDmg = data.colDmg
 		this.noTrap = data.noTrap
 		this.spawnDelay = data.spawnDelay
+		this.boss = data.boss
+		this.diver = data.diver
+		// the Crab King and its crabs live in the arena west of the map
+		this.arena = index === 11 || index === 13 || index === 14
+		this.state = 0
+		this.crab = null
+		this.minion = false
+		this.owner = null
+		this.minions = []
 		this.hitWait = 0
 		this.waitCount = 1000
 		this.moveCount = 0
@@ -80,9 +89,12 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 			}
 
 			// BEHAVIOUR:
+			var isKing = this.index === 11
+			if (isKing) this.crabKingUpdate(delta)
 			var charging = false
 			var slowMlt = 1
 			if (
+				!this.arena &&
 				!this.zIndex &&
 				!this.lockMove &&
 				this.y >= config.mapScale / 2 - config.riverWidth / 2 &&
@@ -91,7 +103,8 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 				slowMlt = 0.33
 				this.xVel += config.waterCurrent * delta
 			}
-			if (this.lockMove) {
+			if (isKing) {
+			} else if (this.lockMove) {
 				this.xVel = 0
 				this.yVel = 0
 			} else if (this.waitCount > 0) {
@@ -152,6 +165,8 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 			}
 
 			// OBJECT COLL:
+			var startX = this.x
+			var startY = this.y
 			this.zIndex = 0
 			this.lockMove = false
 			var tmpList
@@ -177,7 +192,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 
 			// HITTING:
 			var hitting = false
-			if (this.hitWait > 0) {
+			if (!isKing && this.hitWait > 0) {
 				this.hitWait -= delta
 				if (this.hitWait <= 0) {
 					hitting = true
@@ -248,7 +263,32 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 
 			// MAP BOUNDARIES:
 			var tmpScale = this.scale
-			if (this.x - tmpScale < 0) {
+			if (this.arena) {
+				// arena animals stay in the arena; slide along its walls
+				var fits = function (x, y) {
+					return x <= 0 && UTILS.inSecretPool(config, x, y, tmpScale)
+				}
+				if (!fits(this.x, this.y)) {
+					if (fits(this.x, startY)) {
+						this.y = startY
+						this.yVel = 0
+					} else if (fits(startX, this.y)) {
+						this.x = startX
+						this.xVel = 0
+					} else if (fits(startX, startY)) {
+						this.x = startX
+						this.y = startY
+						this.xVel = 0
+						this.yVel = 0
+					} else {
+						var home = config.secretPool.pool[0]
+						this.x = home[0]
+						this.y = home[1]
+						this.xVel = 0
+						this.yVel = 0
+					}
+				}
+			} else if (this.x - tmpScale < 0) {
 				this.x = tmpScale
 				this.xVel = 0
 			} else if (this.x + tmpScale > config.mapScale) {
@@ -311,6 +351,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 	// CHANGE HEALTH:
 	this.changeHealth = function (val, doer, runFrom) {
 		if (this.active) {
+			if (val < 0 && this.index === 11 && this.state === 2) return
 			this.health += val
 			if (runFrom) {
 				if (this.hitScare && !UTILS.randInt(0, this.hitScare)) {
@@ -331,6 +372,22 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 			if (doer && doer.canSee(this) && val < 0) {
 				server.send(doer.id, "t", [Math.round(this.x), Math.round(this.y), Math.round(-val), 1])
 			}
+			if (this.health <= 0 && this.minion) {
+				this.active = false
+				this.alive = false
+				this.minion = false
+				this.owner = null
+				if (doer) scoreCallback(doer, this.killScore)
+				return
+			}
+			if (this.health <= 0 && this.index === 11) {
+				this.state = 0
+				this.crab = null
+				if (doer && doer.isPlayer && doer.skins && !doer.skins[61]) {
+					doer.skins[61] = 1
+					server.send(doer.id, "us", [0, 61, 0])
+				}
+			}
 			if (this.health <= 0) {
 				if (this.spawnDelay) {
 					this.spawnCounter = this.spawnDelay
@@ -338,7 +395,7 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 					this.y = -1000000
 				} else {
 					this.x = this.startX || UTILS.randInt(0, config.mapScale)
-					this.y = this.startY || UTILS.randInt(0, config.mapScale)
+					this.y = this.startY || (this.index === 10 ? UTILS.randInt(0, config.snowBiomeTop) : UTILS.randInt(0, config.mapScale))
 				}
 				this.health = this.maxHealth
 				this.runFrom = null
@@ -352,6 +409,233 @@ module.exports = function (sid, objectManager, players, items, UTILS, config, sc
 					}
 				}
 			}
+		}
+	}
+
+	// CRAB KING:
+	// The game draws the King and its warnings but leaves what it does to the server.
+	// It shows the King's state (1 going under, 2 under water, 3 coming up) and
+	// warnings sent as W [kind, x, y, r, ms, x2, y2]: 3 a slam, 4 a charge line,
+	// 1 a ring, 0 a splash where it surfaces. The attacks below are built on those.
+	var CRAB_SLAM = 3
+	var CRAB_LINE = 4
+	var CRAB_RING = 1
+	var CRAB_SPLASH = 0
+	this.crabWarn = function (kind, x, y, r, ms, x2, y2) {
+		if (x2 === undefined) {
+			x2 = x
+			y2 = y
+		}
+		var probe = { x: (x + x2) / 2, y: (y + y2) / 2, scale: r + Math.abs(x2 - x) / 2 + Math.abs(y2 - y) / 2 }
+		for (var i = 0; i < players.length; ++i) {
+			if (players[i].canSee(probe)) {
+				server.send(players[i].id, "cw", [kind, Math.round(x), Math.round(y), r, ms, Math.round(x2), Math.round(y2)])
+			}
+		}
+	}
+	this.crabHurt = function (x, y, r, dmg, knock, hitList) {
+		for (var i = 0; i < players.length; ++i) {
+			var p = players[i]
+			if (!p.alive || (hitList && hitList[p.sid])) continue
+			if (UTILS.getDistance(x, y, p.x, p.y) <= r + p.scale) {
+				if (hitList) hitList[p.sid] = 1
+				var dir = UTILS.getDirection(p.x, p.y, x, y)
+				p.changeHealth(-dmg, null)
+				p.xVel += knock * Math.cos(dir)
+				p.yVel += knock * Math.sin(dir)
+			}
+		}
+	}
+	this.crabTurn = function (dir, delta) {
+		this.dir %= PI2
+		var netAngle = (this.dir - dir + PI2) % PI2
+		var amnt = Math.min(Math.abs(netAngle - PI2), netAngle, this.turnSpeed * delta)
+		var sign = netAngle - Math.PI >= 0 ? 1 : -1
+		this.dir = (this.dir + sign * amnt + PI2) % PI2
+	}
+	this.crabWalk = function (dir, delta, mult) {
+		this.xVel += this.speed * mult * delta * Math.cos(dir)
+		this.yVel += this.speed * mult * delta * Math.sin(dir)
+	}
+	this.crabEnd = function (rest) {
+		this.crab.phase = "idle"
+		this.crab.next = rest
+		this.state = 0
+	}
+	this.crabSummon = function () {
+		this.minions = this.minions.filter(function (m) {
+			return m.active && m.alive && m.minion
+		})
+		var room = 8 - this.minions.length
+		var kinds = [14, 14, 14, 13]
+		for (var i = 0; i < kinds.length && room > 0; i++) {
+			var a = UTILS.randFloat(-Math.PI, Math.PI)
+			var d = this.scale + UTILS.randInt(80, 260)
+			var x = this.x + d * Math.cos(a)
+			var y = this.y + d * Math.sin(a)
+			if (!this.spawnAi || !UTILS.inSecretPool(config, x, y, 40)) continue
+			var m = this.spawnAi(x, y, a, kinds[i])
+			m.minion = true
+			m.owner = this
+			this.minions.push(m)
+			room--
+		}
+	}
+	this.crabKingUpdate = function (delta) {
+		var c = this.crab
+		if (!c) c = this.crab = { phase: "idle", t: 0, next: 2500, summon: 9000, x: 0, y: 0, r: 0, dir: 0, len: 0, hit: null }
+		var target = null
+		var best = Infinity
+		for (var i = 0; i < players.length; ++i) {
+			var p = players[i]
+			if (p.alive && p.x < 0) {
+				var d = UTILS.getDistance(this.x, this.y, p.x, p.y)
+				if (d <= this.viewRange && d < best) {
+					best = d
+					target = p
+				}
+			}
+		}
+		// nobody stands inside the King, except while it is under water
+		if (this.state !== 2) {
+			for (var k = 0; k < players.length; ++k) {
+				var q = players[k]
+				if (!q.alive) continue
+				var qd = UTILS.getDistance(this.x, this.y, q.x, q.y)
+				var room = this.scale * 0.8 + q.scale
+				if (qd < room) {
+					var qa = qd > 0 ? UTILS.getDirection(q.x, q.y, this.x, this.y) : UTILS.randFloat(-Math.PI, Math.PI)
+					q.x = this.x + room * Math.cos(qa)
+					q.y = this.y + room * Math.sin(qa)
+				}
+			}
+		}
+		c.t -= delta
+		switch (c.phase) {
+			case "idle": {
+				this.state = 0
+				if (!target) {
+					c.next = Math.max(c.next, 1500)
+					if (UTILS.getDistance(this.x, this.y, this.startX, this.startY) > 80) {
+						var home = UTILS.getDirection(this.startX, this.startY, this.x, this.y)
+						this.crabTurn(home, delta)
+						this.crabWalk(home, delta, 1)
+					}
+					return
+				}
+				var face = UTILS.getDirection(target.x, target.y, this.x, this.y)
+				this.crabTurn(face, delta)
+				if (best > this.hitRange * 0.7) this.crabWalk(face, delta, 1)
+				c.next -= delta
+				c.summon -= delta
+				if (c.summon <= 0) {
+					this.crabSummon()
+					c.summon = 15000
+				}
+				if (c.next > 0) return
+				if (best <= this.hitRange + target.scale) {
+					// slam in front of the King
+					c.phase = "slam"
+					c.t = this.hitDelay
+					c.r = 360
+					c.x = this.x + 160 * Math.cos(face)
+					c.y = this.y + 160 * Math.sin(face)
+					this.crabWarn(CRAB_SLAM, c.x, c.y, c.r, c.t)
+				} else if (best <= 1150 && UTILS.randInt(0, 2)) {
+					// charge along a line through the target
+					c.phase = "chargeWind"
+					c.t = 900
+					c.dir = face
+					c.len = Math.min(1150, best + 300)
+					c.hit = {}
+					this.crabWarn(CRAB_LINE, this.x, this.y, this.scale, c.t, this.x + c.len * Math.cos(face), this.y + c.len * Math.sin(face))
+				} else if (UTILS.randInt(0, 1)) {
+					// a ring of water under the target
+					c.phase = "ring"
+					c.t = 1100
+					c.r = 240
+					c.x = target.x
+					c.y = target.y
+					this.crabWarn(CRAB_RING, c.x, c.y, c.r, c.t)
+				} else {
+					// go under and come up beneath the target
+					c.phase = "dive1"
+					c.t = 700
+					this.state = 1
+				}
+				return
+			}
+			case "slam":
+				if (c.t <= 0) {
+					this.crabHurt(c.x, c.y, c.r, this.dmg, 0.9)
+					this.crabEnd(1400)
+				}
+				return
+			case "chargeWind":
+				this.crabTurn(c.dir, delta)
+				if (c.t <= 0) {
+					c.phase = "charge"
+					c.t = c.len / 1.6
+				}
+				return
+			case "charge":
+				this.xVel = 1.6 * Math.cos(c.dir)
+				this.yVel = 1.6 * Math.sin(c.dir)
+				this.crabHurt(this.x, this.y, this.scale * 0.8, this.dmg, 1.1, c.hit)
+				if (c.t <= 0) {
+					this.xVel *= 0.2
+					this.yVel *= 0.2
+					this.crabEnd(1800)
+				}
+				return
+			case "ring":
+				if (c.t <= 0) {
+					this.crabHurt(c.x, c.y, c.r, 30, 0.6)
+					this.crabEnd(1200)
+				}
+				return
+			case "dive1":
+				this.state = 1
+				this.xVel = 0
+				this.yVel = 0
+				if (c.t <= 0) {
+					c.phase = "dive2"
+					c.t = 1600
+					this.state = 2
+					c.x = target ? target.x : this.x
+					c.y = target ? target.y : this.y
+				}
+				return
+			case "dive2": {
+				this.state = 2
+				if (target) {
+					c.x = target.x
+					c.y = target.y
+				}
+				var gap = UTILS.getDistance(this.x, this.y, c.x, c.y)
+				var go = UTILS.getDirection(c.x, c.y, this.x, this.y)
+				var v = Math.min(0.9, gap / Math.max(delta, 1))
+				this.xVel = v * Math.cos(go)
+				this.yVel = v * Math.sin(go)
+				if (c.t <= 0 || gap < 40) {
+					c.phase = "dive3"
+					c.t = 1650
+					this.state = 3
+					this.xVel = 0
+					this.yVel = 0
+					this.crabWarn(CRAB_SPLASH, this.x, this.y, 330, c.t)
+				}
+				return
+			}
+			case "dive3":
+				this.state = 3
+				this.xVel = 0
+				this.yVel = 0
+				if (c.t <= 0) {
+					this.crabHurt(this.x, this.y, 330, 60, 1.2)
+					this.crabEnd(2200)
+				}
+				return
 		}
 	}
 }

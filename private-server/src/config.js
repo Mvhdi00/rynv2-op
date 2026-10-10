@@ -3,8 +3,9 @@
 module.exports.maxScreenHeight = 1080;*/
 
 //Max screen:
-module.exports.maxScreenWidth = 2820 //2820;//optimal what im finded
-module.exports.maxScreenHeight = 1754 //1754;//optimal what im finded
+// view range of the current game (12d386a8)
+module.exports.maxScreenWidth = 1920
+module.exports.maxScreenHeight = 1080
 
 // SERVER:
 module.exports.serverUpdateRate = 9
@@ -58,9 +59,8 @@ module.exports.skinColors = [
 	'#c37373',
 	'#4c4c4c',
 	'#ecaff7',
-	'#5f73a7',
-	'#8bc373',
-	'#738cc3'
+	'#738cc3',
+	'#8bc373'
 ]
 module.exports.skinColors1 = [
 	'#bf8f54',
@@ -161,6 +161,15 @@ module.exports.weaponVariants = [
 		poison: true,
 		xp: 12000,
 		val: 1.18
+	},
+	{
+		id: 4,
+		src: '_e',
+		poison: true,
+		lifesteal: 0.15,
+		membersOnly: true,
+		xp: 30000,
+		val: 1.18
 	}
 ]
 module.exports.fetchVariant = function (player) {
@@ -197,5 +206,21 @@ module.exports.maxNameLength = 15
 
 // MAP:
 module.exports.mapScale = 14400
+
+// The Crab King's arena west of the map (x < 0), reached through a gorge at the river:
+// a corridor, five pools and a passage behind the waterfall. Same numbers as the game.
+module.exports.secretPool = {
+	gorgeX0: -1500,
+	gorgeHalf: 520,
+	pool: [
+		[-2500, 7200, 1150],
+		[-3300, 6750, 750],
+		[-3200, 7750, 700],
+		[-1700, 6900, 600],
+		[-1800, 7550, 600]
+	],
+	waterfall: { x: -3860, y: 7250, half: 210 },
+	shallows: { start: -1500, length: 320 }
+}
 module.exports.mapPingScale = 40
 module.exports.mapPingTime = 2200
