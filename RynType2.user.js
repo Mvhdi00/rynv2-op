@@ -1696,11 +1696,9 @@ window.grbtp = 35;
     };
     const prefetch = () => {
       if (early !== null || Date.now() < earlyHoldUntil) return;
+      // Only once the game has loaded Cloudflare itself: loading it from here could race the game's own copy onto the page
       const ts = RynCF.api();
-      if (!ts) {
-        RynCF.warm();
-        return;
-      }
+      if (!ts) return;
       const mine = {
         host: document.createElement("div"),
         widget: null,
@@ -13568,11 +13566,16 @@ module.exports.PACKETCODE = PACKETCODE
       signal: signal
     }).then(response => {
       if (response.status === 403 || response.status === 429) {
-        return response.json().catch(() => ({})).then(body => ({
-          ticket: null,
-          error: response.status === 429 ? "busy" : body && body.error === "auth" ? "members" : body && body.error === "vpn" ? "vpn" : "refused",
-          retryAfterMs: response.status === 429 ? rynRetryAfterMs(response, body) : 0
-        }));
+        return response.json().catch(() => ({})).then(body => {
+          const code = body && typeof body.error === "string" ? body.error : "";
+          return {
+            ticket: null,
+            error: response.status === 429 ? "busy" : code === "auth" ? "members" : code === "vpn" ? "vpn" : code === "locked" ? "locked" : "refused",
+            detail: code,
+            seconds: body && Number(body.seconds) > 0 ? Number(body.seconds) : 0,
+            retryAfterMs: response.status === 429 ? rynRetryAfterMs(response, body) : 0
+          };
+        });
       }
       if (!response.ok) return {
         ticket: null,
@@ -15099,6 +15102,12 @@ module.exports.PACKETCODE = PACKETCODE
         } else if (joined.error !== "network" || member) {
           RynBotDevices.release(did);
           let reason = RYN_JOIN_REFUSED[joined.error] || "The join API refused this bot (" + joined.error + ").";
+          if (joined.error === "locked") {
+            const secs = joined.seconds || 60;
+            reason = "The game removed this bot and refuses it for " + (secs >= 120 ? Math.ceil(secs / 60) + " minutes" : secs + " seconds") + " — add it again after that.";
+          } else if (joined.error === "refused" && joined.detail) {
+            reason += " (the join API said: " + joined.detail + ")";
+          }
           if (auth) {
             if (joined.error === "members") reason = "This server is members-only, and Bot " + account.slot + "'s account is not verified (confirm its email) — switch server.";
             else if (joined.error === "refused") reason = "The join API refused Bot " + account.slot + "'s account" + (member ? "." : " or its Cloudflare token.");
