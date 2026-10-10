@@ -4,7 +4,7 @@
 // @description     ! i am done w this shit
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/G294sRHY/ryn-type-2.webp
-// @version         2.9.4-fix21
+// @version         2.9.4-fix23
 // @run-at          document-start
 // @grant           none
 // @license         MIT
@@ -9869,6 +9869,7 @@ module.exports.PACKETCODE = PACKETCODE
   user-select: none;
 }
 #ryn-admin.ra-hidden { display: none; }
+#ryn-admin.ra-wide { width: 660px; }
 #ryn-admin, #ryn-admin * { box-sizing: border-box; }
 #ryn-admin .ra-head {
   display: flex;
@@ -9882,14 +9883,15 @@ module.exports.PACKETCODE = PACKETCODE
 }
 #ryn-admin.ra-drag .ra-head { cursor: grabbing; }
 #ryn-admin .ra-title { font-family: 'Space Grotesk', 'Manrope', sans-serif; font-weight: 700; font-size: 11px; letter-spacing: 0.16em; color: var(--ra-iris-hi); }
-#ryn-admin .ra-tag { font-size: 9.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ra-tx-3); }
+#ryn-admin .ra-tag { font-size: 9.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ra-tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #ryn-admin .ra-spacer { flex: 1; }
 #ryn-admin .ra-ic {
-  width: 24px; height: 24px; display: grid; place-items: center;
+  width: 24px; height: 24px; display: grid; place-items: center; flex-shrink: 0;
   border: none; border-radius: 6px; background: none; padding: 0; cursor: pointer;
   color: var(--ra-tx-3); font: inherit; font-size: 15px; line-height: 1;
 }
 #ryn-admin .ra-ic:hover { color: var(--ra-tx-1); background: rgba(255, 255, 255, 0.07); }
+#ryn-admin .ra-ic.ra-on { color: var(--ra-iris-hi); }
 #ryn-admin .ra-log {
   padding: 6px 12px;
   border-bottom: 1px solid var(--ra-line);
@@ -9903,11 +9905,58 @@ module.exports.PACKETCODE = PACKETCODE
 #ryn-admin .ra-log.ra-bad { color: var(--ra-rose); }
 #ryn-admin .ra-loglist { max-height: 140px; overflow-y: auto; padding: 4px 12px 8px; border-bottom: 1px solid var(--ra-line); font-size: 10.5px; color: var(--ra-tx-3); flex-shrink: 0; }
 #ryn-admin .ra-loglist div { padding: 1px 0; overflow-wrap: anywhere; }
-#ryn-admin .ra-body { overflow-y: auto; max-height: min(66vh, 620px); padding: 4px 12px 12px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.16) transparent; }
-#ryn-admin.ra-min .ra-body, #ryn-admin.ra-min .ra-loglist { display: none; }
-#ryn-admin .ra-sec { font-size: 9.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ra-tx-3); margin: 11px 0 5px; }
-#ryn-admin .ra-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 4px 0; }
-#ryn-admin .ra-lbl { width: 54px; flex-shrink: 0; color: var(--ra-tx-2); font-size: 11px; }
+
+#ryn-admin .ra-target { padding: 8px 12px 9px; border-bottom: 1px solid var(--ra-line); flex-shrink: 0; background: rgba(142, 118, 206, 0.06); }
+#ryn-admin .ra-tg-top { display: flex; align-items: center; gap: 6px; }
+#ryn-admin .ra-tg-top select { font-weight: 700; }
+#ryn-admin .ra-tg-chips { display: flex; gap: 4px; flex-shrink: 0; }
+#ryn-admin .ra-tg-hp { display: flex; align-items: center; gap: 8px; margin: 6px 0 7px; }
+#ryn-admin .ra-tg-hp .ra-bar { flex: 1; height: 5px; margin: 0; }
+#ryn-admin .ra-tg-hp span { font-family: 'Space Grotesk', 'Manrope', sans-serif; font-size: 11px; color: var(--ra-tx-2); min-width: 52px; text-align: right; }
+#ryn-admin .ra-tg-acts { display: flex; gap: 4px; flex-wrap: wrap; }
+#ryn-admin .ra-tg-acts .ra-btn { flex: 1 1 auto; height: 24px; padding: 0 7px; font-size: 10.5px; }
+
+#ryn-admin .ra-search { padding: 7px 12px; border-bottom: 1px solid var(--ra-line); flex-shrink: 0; }
+#ryn-admin .ra-search input { width: 100%; height: 26px; padding-left: 26px; background: rgba(255, 255, 255, 0.05) no-repeat 8px 50% / 12px 12px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='7' cy='7' r='5' fill='none' stroke='%23726f80' stroke-width='2'/%3E%3Cpath d='M11 11l4 4' stroke='%23726f80' stroke-width='2'/%3E%3C/svg%3E"); }
+
+#ryn-admin .ra-tabs { display: flex; gap: 2px; padding: 0 8px; border-bottom: 1px solid var(--ra-line); flex-shrink: 0; }
+#ryn-admin .ra-tab { flex: 1; height: 28px; border: none; border-bottom: 2px solid transparent; background: none; color: var(--ra-tx-3); font: inherit; font-size: 10px; font-weight: 700; cursor: pointer; padding: 0 1px; white-space: nowrap; }
+#ryn-admin .ra-tab:hover { color: var(--ra-tx-1); }
+#ryn-admin .ra-tab.ra-cur { color: var(--ra-iris-hi); border-bottom-color: var(--ra-iris); }
+#ryn-admin .ra-tab[data-count]::after { content: attr(data-count); margin-left: 3px; font-size: 9px; color: var(--ra-iris-hi); }
+#ryn-admin .ra-tab.ra-none { opacity: 0.4; }
+#ryn-admin.ra-min .ra-body, #ryn-admin.ra-min .ra-loglist, #ryn-admin.ra-min .ra-tabs, #ryn-admin.ra-min .ra-target, #ryn-admin.ra-min .ra-search { display: none; }
+
+#ryn-admin .ra-body { overflow-y: auto; max-height: min(60vh, 620px); padding: 2px 10px 10px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.16) transparent; }
+#ryn-admin .ra-page-label { display: none; font-size: 9.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ra-iris-hi); margin: 10px 2px 0; }
+#ryn-admin .ra-searching .ra-page-label { display: block; }
+#ryn-admin .ra-empty { display: none; padding: 14px 4px; color: var(--ra-tx-3); font-size: 11px; text-align: center; }
+#ryn-admin .ra-searching .ra-empty.ra-shown { display: block; }
+
+#ryn-admin .ra-section { margin-top: 8px; border: 1px solid var(--ra-line); border-radius: 9px; background: rgba(255, 255, 255, 0.018); }
+#ryn-admin .ra-sec-head { display: flex; align-items: center; gap: 6px; width: 100%; height: 30px; padding: 0 9px; border: none; background: none; cursor: pointer; font: inherit; color: var(--ra-tx-2); text-align: left; }
+#ryn-admin .ra-sec-head:hover { color: var(--ra-tx-1); }
+#ryn-admin .ra-sec-title { flex: 1; font-size: 9.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+#ryn-admin .ra-chev { width: 7px; height: 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform 120ms ease; opacity: 0.7; }
+#ryn-admin .ra-folded .ra-chev { transform: rotate(-45deg); }
+#ryn-admin .ra-sec-body { padding: 0 9px 9px; }
+#ryn-admin .ra-folded .ra-sec-body { display: none; }
+#ryn-admin .ra-section.ra-danger { border-color: rgba(217, 163, 171, 0.32); background: rgba(217, 163, 171, 0.045); }
+#ryn-admin .ra-danger .ra-sec-head { color: var(--ra-rose); }
+
+#ryn-admin .ra-searching .ra-section.ra-folded .ra-sec-body { display: block; }
+#ryn-admin .ra-searching .ra-section.ra-folded .ra-chev { transform: translateY(-2px) rotate(45deg); }
+#ryn-admin .ra-searching .ra-section.ra-miss, #ryn-admin .ra-searching .ra-item.ra-miss { display: none; }
+#ryn-admin .ra-searching .ra-section:not(.ra-hit-all) .ra-sec-body > :not(.ra-item) { display: none; }
+
+#ryn-admin .ra-hint { font-size: 10px; color: var(--ra-tx-3); margin: 0 0 4px; line-height: 1.4; }
+#ryn-admin .ra-note { font-size: 10px; color: var(--ra-tx-2); margin: 4px 0 0; line-height: 1.4; }
+#ryn-admin .ra-sub { display: flex; align-items: baseline; gap: 6px; margin: 9px 0 3px; font-size: 10.5px; font-weight: 700; color: var(--ra-tx-2); }
+#ryn-admin .ra-sub small { font-weight: 500; font-size: 9.5px; color: var(--ra-tx-3); }
+#ryn-admin .ra-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 5px 0; }
+#ryn-admin .ra-lbl { width: 62px; flex-shrink: 0; color: var(--ra-tx-2); font-size: 11px; white-space: nowrap; }
+#ryn-admin .ra-you { margin-left: 3px; font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ra-iris-hi); vertical-align: 1px; }
+
 #ryn-admin input, #ryn-admin select {
   height: 26px;
   min-width: 0;
@@ -9924,8 +9973,13 @@ module.exports.PACKETCODE = PACKETCODE
 }
 #ryn-admin input:focus, #ryn-admin select:focus { border-color: var(--ra-iris); }
 #ryn-admin input[type=number] { width: 70px; }
+#ryn-admin input.ra-narrow { width: 58px; }
+#ryn-admin input.ra-tiny { width: 46px; }
+#ryn-admin input[type=text] { flex: 1; }
 #ryn-admin select { flex: 1; cursor: pointer; }
 #ryn-admin select option { background: #101016; color: #f3f2f7; }
+#ryn-admin input[type=range] { width: 100%; height: 20px; padding: 0; border: none; background: none; accent-color: var(--ra-iris); }
+
 #ryn-admin .ra-btn {
   height: 26px;
   padding: 0 10px;
@@ -9944,45 +9998,54 @@ module.exports.PACKETCODE = PACKETCODE
 #ryn-admin .ra-btn:active { transform: translateY(1px); }
 #ryn-admin .ra-btn.ra-go { background: rgba(142, 118, 206, 0.22); border-color: rgba(142, 118, 206, 0.55); }
 #ryn-admin .ra-btn.ra-go:hover { background: rgba(142, 118, 206, 0.34); }
-#ryn-admin .ra-btn.ra-on { background: rgba(166, 215, 178, 0.2); border-color: rgba(166, 215, 178, 0.55); color: var(--ra-sage); }
-#ryn-admin .ra-btn.ra-off { color: var(--ra-tx-3); }
 #ryn-admin .ra-btn.ra-del { color: var(--ra-rose); border-color: rgba(217, 163, 171, 0.35); }
-#ryn-admin .ra-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+#ryn-admin .ra-btn.ra-del:hover { background: rgba(217, 163, 171, 0.12); }
+#ryn-admin .ra-btn.ra-tog::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--ra-tx-3); vertical-align: 1px; }
+#ryn-admin .ra-btn.ra-on { background: rgba(166, 215, 178, 0.16); border-color: rgba(166, 215, 178, 0.55); color: var(--ra-sage); }
+#ryn-admin .ra-btn.ra-tog.ra-on::before { background: var(--ra-sage); box-shadow: 0 0 6px rgba(166, 215, 178, 0.8); }
+#ryn-admin .ra-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin: 5px 0; }
 #ryn-admin .ra-grid .ra-btn { padding: 0 6px; overflow: hidden; text-overflow: ellipsis; }
+#ryn-admin.ra-wide .ra-grid { grid-template-columns: repeat(5, 1fr); }
+#ryn-admin .ra-grid.ra-grid-2 { grid-template-columns: repeat(2, 1fr); }
+#ryn-admin.ra-wide .ra-grid.ra-grid-2 { grid-template-columns: repeat(3, 1fr); }
+#ryn-admin .ra-unit { margin-left: -2px; font-size: 10px; color: var(--ra-tx-3); }
+#ryn-admin .ra-seg { display: flex; gap: 3px; flex: 1; min-width: 0; }
+#ryn-admin .ra-seg .ra-btn { flex: 1; min-width: 0; padding: 0 3px; font-size: 10px; overflow: hidden; text-overflow: ellipsis; }
+#ryn-admin .ra-seg .ra-btn.ra-pick { background: rgba(142, 118, 206, 0.3); border-color: var(--ra-iris); color: var(--ra-tx-1); }
 #ryn-admin .ra-key { font-size: 9px; color: var(--ra-tx-3); margin-left: 4px; }
 #ryn-admin .ra-edit { border: 1px solid var(--ra-line); border-radius: 9px; padding: 8px; margin-top: 6px; background: rgba(255, 255, 255, 0.025); }
-#ryn-admin .ra-edit input[type=text] { flex: 1; }
-#ryn-admin .ra-hint { font-size: 10px; color: var(--ra-tx-3); margin-top: 3px; }
-#adminButton.ryn-admin-open { box-shadow: inset 0 0 0 2px rgba(168, 148, 224, 0.75); }
-#ryn-admin .ra-tabs { display: flex; gap: 2px; padding: 4px 8px 0; border-bottom: 1px solid var(--ra-line); flex-shrink: 0; }
-#ryn-admin .ra-tab { flex: 1; height: 27px; border: none; border-bottom: 2px solid transparent; background: none; color: var(--ra-tx-3); font: inherit; font-size: 10px; font-weight: 700; letter-spacing: 0; cursor: pointer; padding: 0 1px; }
-#ryn-admin .ra-tab:hover { color: var(--ra-tx-1); }
-#ryn-admin .ra-tab.ra-cur { color: var(--ra-iris-hi); border-bottom-color: var(--ra-iris); }
-#ryn-admin.ra-min .ra-tabs { display: none; }
-#ryn-admin .ra-plist { display: flex; flex-direction: column; gap: 5px; }
+
+#ryn-admin .ra-plist { display: flex; flex-direction: column; gap: 5px; margin: 5px 0; }
+#ryn-admin .ra-plist:empty { display: none; }
 #ryn-admin .ra-pl { border: 1px solid var(--ra-line); border-radius: 8px; padding: 6px 7px; background: rgba(255, 255, 255, 0.02); }
+#ryn-admin .ra-pl.ra-click { cursor: pointer; }
+#ryn-admin .ra-pl.ra-click:hover { border-color: rgba(255, 255, 255, 0.2); }
+#ryn-admin .ra-pl.ra-pick { border-color: var(--ra-iris); background: rgba(142, 118, 206, 0.12); }
 #ryn-admin .ra-pl-top { display: flex; align-items: center; gap: 6px; font-size: 11px; }
 #ryn-admin .ra-pl-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#ryn-admin .ra-chip { font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ra-tx-3); border: 1px solid var(--ra-line-2); border-radius: 5px; padding: 1px 4px; }
-#ryn-admin .ra-bar { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); margin: 5px 0; overflow: hidden; }
-#ryn-admin .ra-bar > i { display: block; height: 100%; width: 0; background: var(--ra-sage); }
-#ryn-admin .ra-bar.ra-low > i { background: var(--ra-rose); }
-#ryn-admin .ra-pl .ra-row { margin: 0; gap: 4px; }
+#ryn-admin .ra-pl-hp { font-size: 10px; color: var(--ra-tx-3); white-space: nowrap; }
+#ryn-admin .ra-pl .ra-row { margin: 5px 0 0; gap: 4px; }
 #ryn-admin .ra-pl .ra-btn { height: 22px; padding: 0 7px; font-size: 10.5px; }
-#ryn-admin .ra-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+#ryn-admin .ra-chip { font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ra-tx-3); border: 1px solid var(--ra-line-2); border-radius: 5px; padding: 1px 4px; white-space: nowrap; }
+#ryn-admin .ra-chip.ra-chip-god { color: var(--ra-sage); border-color: rgba(166, 215, 178, 0.45); }
+#ryn-admin .ra-chip.ra-chip-dead { color: var(--ra-rose); border-color: rgba(217, 163, 171, 0.45); }
+#ryn-admin .ra-bar { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); margin: 5px 0 0; overflow: hidden; }
+#ryn-admin .ra-bar > i { display: block; height: 100%; width: 0; background: var(--ra-sage); transition: width 160ms ease; }
+#ryn-admin .ra-bar.ra-low > i { background: var(--ra-rose); }
+
+#ryn-admin .ra-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin: 5px 0; }
+#ryn-admin.ra-wide .ra-stats { grid-template-columns: repeat(6, 1fr); }
 #ryn-admin .ra-stat { border: 1px solid var(--ra-line); border-radius: 8px; padding: 5px 7px; min-width: 0; }
 #ryn-admin .ra-stat b { display: block; font-family: 'Space Grotesk', 'Manrope', sans-serif; font-size: 15px; color: var(--ra-tx-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #ryn-admin .ra-stat span { font-size: 9.5px; color: var(--ra-tx-3); }
-#ryn-admin .ra-lines { font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; font-size: 10px; color: var(--ra-tx-2); line-height: 1.55; max-height: 170px; overflow-y: auto; border: 1px solid var(--ra-line); border-radius: 8px; padding: 5px 7px; -webkit-user-select: text; user-select: text; }
+#ryn-admin .ra-lines { font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; font-size: 10px; color: var(--ra-tx-2); line-height: 1.55; max-height: 170px; overflow-y: auto; border: 1px solid var(--ra-line); border-radius: 8px; padding: 5px 7px; margin-top: 5px; -webkit-user-select: text; user-select: text; }
 #ryn-admin .ra-lines:empty::before { content: "Nothing yet"; color: var(--ra-tx-3); }
 #ryn-admin .ra-lines .ra-hurt { color: var(--ra-rose); }
 #ryn-admin .ra-lines .ra-heal { color: var(--ra-sage); }
-#ryn-admin .ra-edit-on { outline: 2px solid var(--ra-sage); outline-offset: -2px; }
-#ryn-admin .ra-lines div { white-space: pre-line; }
-#ryn-admin.ra-wide { width: 660px; }
-#ryn-admin canvas.ra-canvas { display: block; width: 100%; height: auto; border: 1px solid var(--ra-line); border-radius: 8px; background: #0e1410; margin-top: 4px; }
-#ryn-admin input[type=range] { width: 100%; height: 20px; padding: 0; border: none; background: none; accent-color: var(--ra-iris); }
-#ryn-admin .ra-pl-top .ra-btn { height: 22px; padding: 0 7px; font-size: 10.5px; }
+#ryn-admin .ra-lines div { white-space: pre-line; overflow-wrap: anywhere; }
+#ryn-admin.ra-wide .ra-lines { max-height: 260px; }
+#ryn-admin canvas.ra-canvas { display: block; width: 100%; height: auto; border: 1px solid var(--ra-line); border-radius: 8px; background: #0e1410; margin-top: 5px; }
+#adminButton.ryn-admin-open { box-shadow: inset 0 0 0 2px rgba(168, 148, 224, 0.75); }
 `;
   const RYN_ADMIN_ANIMALS = [ [ "cow", "Cow" ], [ "pig", "Pig" ], [ "sheep", "Sheep" ], [ "bull", "Bull" ], [ "bully", "Bully" ], [ "wolf", "Wolf" ], [ "duck", "Quack" ], [ "boar", "Boar" ], [ "yeti", "Yeti" ], [ "moostafa", "MOOSTAFA" ], [ "moofie", "MOOFIE" ], [ "treasure", "Treasure" ], [ "king", "Crab King" ], [ "crab", "Crab" ], [ "crabling", "Crabling" ] ];
   const RYN_ADMIN_TIERS = [ [ "normal", "Normal" ], [ "gold", "Gold" ], [ "diamond", "Diamond" ], [ "ruby", "Ruby" ], [ "emerald", "Emerald" ] ];
@@ -10013,6 +10076,18 @@ module.exports.PACKETCODE = PACKETCODE
     dive2: "Under water, healing",
     dive3: "Coming up"
   };
+  // tabs, most used first, and the sections each one is built from
+  const RYN_ADMIN_TABS = [ [ "player", "Player", [ "buildVitals", "buildGear", "buildLoadouts", "buildYou" ] ], [ "people", "People", [ "buildPlayers", "buildDummies", "buildBots" ] ], [ "train", "Train", [ "buildScenarios", "buildTime", "buildSurvival", "buildBench" ] ], [ "world", "World", [ "buildMap", "buildAnimals", "buildKing", "buildRules", "buildSaves", "buildTravel", "buildClear" ] ], [ "analyze", "Analyze", [ "buildFight", "buildGraph", "buildCombatLog", "buildKnockback", "buildReplay", "buildLayers", "buildDesync" ] ], [ "tools", "Tools", [ "buildCustom", "buildPing", "buildPackets", "buildPrivateLog" ] ] ];
+  // what _ryn_admin_tab held before the tabs were regrouped
+  const RYN_ADMIN_OLD_TABS = {
+    me: "player",
+    players: "people",
+    test: "train",
+    world: "world",
+    stats: "analyze",
+    lab: "analyze",
+    mine: "tools"
+  };
   const RynAdminPanel = {
     root: null,
     icon: null,
@@ -10023,9 +10098,12 @@ module.exports.PACKETCODE = PACKETCODE
     stateTimer: null,
     lastState: null,
     lastPanel: null,
-    tab: "me",
+    tab: "player",
     pages: {},
     tabButtons: {},
+    sections: [],
+    folds: {},
+    query: "",
     layers: {},
     editMode: "",
     mouse: null,
@@ -10137,21 +10215,28 @@ module.exports.PACKETCODE = PACKETCODE
       if (text !== undefined) node.textContent = text;
       return node;
     },
-    button(label, onClick, cls = "") {
+    button(label, onClick, cls = "", title = "") {
       const b = this.el("button", "ra-btn" + (cls ? " " + cls : ""), label);
       b.type = "button";
+      if (title) b.title = title;
       b.addEventListener("click", e => {
         e.stopPropagation();
         onClick(b);
       });
       return b;
     },
-    number(value, step = 1, min = null) {
-      const input = this.el("input");
+    number(value, step = 1, min = null, narrow = false) {
+      const input = this.el("input", narrow ? "ra-narrow" : "");
       input.type = "number";
       input.value = String(value);
       input.step = String(step);
       if (min !== null) input.min = String(min);
+      return input;
+    },
+    text(placeholder) {
+      const input = this.el("input");
+      input.type = "text";
+      input.placeholder = placeholder;
       return input;
     },
     select(options, value) {
@@ -10164,15 +10249,102 @@ module.exports.PACKETCODE = PACKETCODE
       if (value !== undefined) s.value = String(value);
       return s;
     },
+    // a labelled row of controls; rows are what the search shows or hides
     row(parent, label, ...children) {
-      const r = this.el("div", "ra-row");
+      const r = this.el("div", "ra-row ra-item");
       if (label) r.appendChild(this.el("span", "ra-lbl", label));
       for (const c of children) r.appendChild(c);
       parent.appendChild(r);
       return r;
     },
-    section(parent, title) {
-      parent.appendChild(this.el("div", "ra-sec", title));
+    // marks a row as always acting on you, whoever the target is
+    you(r) {
+      const lbl = r.querySelector(".ra-lbl");
+      if (lbl) lbl.appendChild(this.el("span", "ra-you", "you"));
+      r.title = "Always you, whoever the target is";
+      return r;
+    },
+    grid(parent, buttons) {
+      const g = this.el("div", "ra-grid ra-item");
+      for (const b of buttons) g.appendChild(b);
+      parent.appendChild(g);
+      return g;
+    },
+    sub(parent, title, note) {
+      const s = this.el("div", "ra-sub ra-item", title);
+      if (note) s.appendChild(this.el("small", "", note));
+      parent.appendChild(s);
+      return s;
+    },
+    // one section: a title that folds it (remembered), one short hint, then its rows
+    section(page, id, title, hint, danger = false) {
+      const sec = this.el("section", "ra-section" + (danger ? " ra-danger" : ""));
+      sec.dataset.id = page.dataset.tab + "." + id;
+      sec.dataset.title = title;
+      const head = this.el("button", "ra-sec-head");
+      head.type = "button";
+      head.appendChild(this.el("span", "ra-sec-title", title));
+      head.appendChild(this.el("span", "ra-chev"));
+      const body = this.el("div", "ra-sec-body");
+      if (hint) body.appendChild(this.el("div", "ra-hint", hint));
+      sec.appendChild(head);
+      sec.appendChild(body);
+      page.appendChild(sec);
+      const fold = on => {
+        sec.classList.toggle("ra-folded", on);
+        head.setAttribute("aria-expanded", on ? "false" : "true");
+      };
+      fold(!!this.folds[sec.dataset.id]);
+      head.addEventListener("click", e => {
+        e.stopPropagation();
+        if (this.query) return;
+        const on = !sec.classList.contains("ra-folded");
+        fold(on);
+        if (on) this.folds[sec.dataset.id] = true; else delete this.folds[sec.dataset.id];
+        this.store("_ryn_admin_folds", this.folds);
+        if (!on) this.refresh();
+      });
+      this.sections.push(sec);
+      return body;
+    },
+    toggleButton(label, get, set, title = "") {
+      const b = this.button(label, () => {
+        set(!get());
+        draw();
+      }, "ra-tog", title);
+      const draw = () => this.lit(b, !!get());
+      draw();
+      return b;
+    },
+    // an on/off button whose state comes from the server
+    liveToggle(label, onClick, title = "") {
+      return this.button(label, onClick, "ra-tog", title);
+    },
+    lit(b, on) {
+      if (!b) return;
+      b.classList.toggle("ra-on", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    },
+    // a row of buttons where one is picked (the weapon tier)
+    chips(options, value) {
+      const box = this.el("div", "ra-seg");
+      const pick = {
+        value: String(value),
+        el: box
+      };
+      const draw = () => {
+        for (const b of box.children) b.classList.toggle("ra-pick", b.dataset.value === pick.value);
+      };
+      for (const [v, label] of options) {
+        const b = this.button(label, () => {
+          pick.value = String(v);
+          draw();
+        });
+        b.dataset.value = String(v);
+        box.appendChild(b);
+      }
+      draw();
+      return pick;
     },
     build() {
       const style = document.createElement("style");
@@ -10188,11 +10360,20 @@ module.exports.PACKETCODE = PACKETCODE
           if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) e.stopPropagation();
         });
       }
+      const folds = this.store("_ryn_admin_folds");
+      this.folds = folds && typeof folds === "object" && !Array.isArray(folds) ? folds : {};
       const head = this.el("div", "ra-head");
       head.appendChild(this.el("span", "ra-title", "ADMIN"));
       this.tagLine = this.el("span", "ra-tag", "Private");
       head.appendChild(this.tagLine);
       head.appendChild(this.el("span", "ra-spacer"));
+      const big = this.bigButton = this.el("button", "ra-ic", "⤢");
+      big.type = "button";
+      big.title = "Big";
+      big.addEventListener("click", e => {
+        e.stopPropagation();
+        this.setBig(!root.classList.contains("ra-wide"));
+      });
       const min = this.el("button", "ra-ic", "–");
       min.type = "button";
       min.title = "Minimise";
@@ -10208,10 +10389,12 @@ module.exports.PACKETCODE = PACKETCODE
         e.stopPropagation();
         this.toggle(false);
       });
+      head.appendChild(big);
       head.appendChild(min);
       head.appendChild(close);
       root.appendChild(head);
       this.makeDraggable(head);
+      this.buildTargetBar(root);
       this.logLine = this.el("div", "ra-log", "Press Play, then use the buttons below.");
       this.logList = this.el("div", "ra-loglist");
       this.logList.style.display = "none";
@@ -10221,15 +10404,18 @@ module.exports.PACKETCODE = PACKETCODE
       });
       root.appendChild(this.logLine);
       root.appendChild(this.logList);
+      this.buildSearch(root);
       const tabs = this.el("div", "ra-tabs");
       root.appendChild(tabs);
       const body = this.body = this.el("div", "ra-body");
       root.appendChild(body);
       if (this.store("_ryn_admin_min")) root.classList.add("ra-min");
-      const pages = [ [ "me", "Me", [ "buildTarget", "buildPlayer", "buildShame", "buildGear", "buildGive", "buildLoadouts" ] ], [ "players", "Players", [ "buildPlayers", "buildBots" ] ], [ "test", "Test", [ "buildDummies", "buildScenarios", "buildSurvival", "buildTime", "buildSpawn" ] ], [ "world", "World", [ "buildEditor", "buildStamps", "buildMaps", "buildSpawners", "buildSaves", "buildRules", "buildKing", "buildWorld", "buildTravel" ] ], [ "stats", "Stats", [ "buildStats" ] ], [ "lab", "Lab", [ "buildBench", "buildReplay", "buildPackets" ] ], [ "mine", "Mine", [ "buildCustom", "buildPing", "buildPrivateLog" ] ] ];
-      for (const [id, label, parts] of pages) {
+      if (this.store("_ryn_admin_big")) root.classList.add("ra-wide");
+      this.lit(big, root.classList.contains("ra-wide"));
+      for (const [id, label, parts] of RYN_ADMIN_TABS) {
         const page = this.el("div", "ra-page");
         page.dataset.tab = id;
+        page.appendChild(this.el("div", "ra-page-label", label));
         for (const part of parts) this[part](page);
         body.appendChild(page);
         this.pages[id] = page;
@@ -10237,17 +10423,28 @@ module.exports.PACKETCODE = PACKETCODE
         b.type = "button";
         b.addEventListener("click", e => {
           e.stopPropagation();
+          if (this.query) this.search("");
           this.showTab(id);
         });
         tabs.appendChild(b);
         this.tabButtons[id] = b;
       }
-      const tab = this.store("_ryn_admin_tab");
-      this.showTab(this.pages[tab] ? tab : "me");
+      this.noMatch = this.el("div", "ra-empty", "Nothing matches");
+      body.appendChild(this.noMatch);
+      let tab = this.store("_ryn_admin_tab");
+      if (!this.pages[tab] && RYN_ADMIN_OLD_TABS[tab]) tab = RYN_ADMIN_OLD_TABS[tab];
+      this.showTab(this.pages[tab] ? tab : "player");
       document.body.appendChild(root);
       const pos = this.store("_ryn_admin_pos");
       this.place(pos && Number.isFinite(pos.x) ? pos.x : window.innerWidth - 340, pos && Number.isFinite(pos.y) ? pos.y : 90);
       window.addEventListener("resize", () => this.place(this.x, this.y));
+    },
+    setBig(on) {
+      this.root.classList.toggle("ra-wide", on);
+      this.lit(this.bigButton, on);
+      this.store("_ryn_admin_big", on);
+      this.place(this.x, this.y);
+      if (this.open) this.refresh();
     },
     place(x, y) {
       const root = this.root;
@@ -10331,57 +10528,107 @@ module.exports.PACKETCODE = PACKETCODE
     sid() {
       return this.target === "" ? "" : " " + this.target;
     },
+    // a tab's contents are drawn while it is open, or while a search shows every tab
+    shown(id) {
+      return this.query !== "" || this.tab === id;
+    },
     refresh() {
       const state = RynPrivate.state();
       this.lastState = state;
       if (state === null) return;
-      const select = this.targetSelect;
-      const current = select.value;
-      const options = [ [ "", "Me" ] ].concat(state.players.filter(p => !state.me || p.sid !== state.me.sid).map(p => [ String(p.sid), p.sid + " · " + (p.name || "unknown") + (p.alive ? "" : " (dead)") ]));
-      const signature = options.map(o => o.join(":")).join("|");
-      if (signature !== this._targetSig) {
-        this._targetSig = signature;
-        select.innerHTML = "";
-        for (const [v, label] of options) {
-          const o = this.el("option", "", label);
-          o.value = v;
-          select.appendChild(o);
-        }
-        select.value = options.some(o => o[0] === current) ? current : "";
-        this.target = select.value;
-      }
-      const who = this.target === "" ? state.me : state.players.find(p => String(p.sid) === this.target);
-      if (this.godButton) {
-        const on = !!(who && who.god);
-        this.godButton.classList.toggle("ra-on", on);
-        this.godButton.textContent = on ? "God: on" : "God: off";
-      }
-      for (const [key, b] of Object.entries(this.worldButtons || {})) {
-        const on = !!(state.world && state.world[key]);
-        b.classList.toggle("ra-on", on);
-        b.classList.toggle("ra-off", !on);
-      }
+      this.drawTarget(state);
+      for (const [key, b] of Object.entries(this.worldButtons || {})) this.lit(b, !!(state.world && state.world[key]));
       const ping = RynPrivate.ping;
-      if (this.pingNow) this.pingNow.textContent = ping.ms || ping.jitter ? "now " + ping.ms + "ms" + (ping.jitter ? " ±" + ping.jitter : "") : "now off";
+      if (this.pingNow) this.pingNow.textContent = ping.ms || ping.jitter ? "Now " + ping.ms + "ms" + (ping.jitter ? " ±" + ping.jitter : "") : "Now off";
       const panel = this.lastPanel = RynPrivate.call("panel");
       if (panel) this.drawPanelState(panel);
       this.drawEditorOwners(state);
-      if (this.freezeButton) {
-        const frozen = !!Settings_default._botsFrozen;
-        this.freezeButton.classList.toggle("ra-on", frozen);
-        this.freezeButton.textContent = frozen ? "Frozen: on" : "Frozen: off";
-      }
+      this.lit(this.freezeButton, !!Settings_default._botsFrozen);
       this.drawShame(state.me);
       if (this.tapOn && this.tapConn !== (RynPrivate.ownerSocket && RynPrivate.ownerSocket._conn)) this.installTap();
-      if (this.tab === "players") this.drawPlayers(state);
-      if (this.tab === "stats") this.drawStats(state);
-      if (this.tab === "lab") this.drawPackets();
+      if (this.shown("people")) this.drawPlayers(state);
+      if (this.shown("analyze")) this.drawStats(state);
+      if (this.shown("tools")) this.drawPackets();
+      if (this.shown("world")) this.drawWorldSave();
     },
     showTab(id) {
       this.tab = id;
       for (const [key, page] of Object.entries(this.pages)) page.style.display = key === id ? "" : "none";
       for (const [key, b] of Object.entries(this.tabButtons)) b.classList.toggle("ra-cur", key === id);
       this.store("_ryn_admin_tab", id);
+      if (this.open) this.refresh();
+    },
+    buildSearch(root) {
+      const box = this.el("div", "ra-search");
+      const input = this.searchInput = this.text("Search…");
+      input.title = "Find a button by its name, in every tab. Esc clears.";
+      input.addEventListener("input", () => this.search(input.value));
+      input.addEventListener("keydown", e => {
+        if (e.key !== "Escape") return;
+        e.preventDefault();
+        this.search("");
+        input.blur();
+      });
+      box.appendChild(input);
+      root.appendChild(box);
+    },
+    // what a row is found by: its label, buttons and placeholders, not the choices in its lists
+    searchText(node) {
+      const parts = [];
+      const walk = n => {
+        if (n.nodeType === 3) {
+          parts.push(n.nodeValue);
+          return;
+        }
+        if (n.nodeType !== 1 || n.tagName === "SELECT" || n.tagName === "CANVAS") return;
+        if (n.tagName === "INPUT" && n.placeholder) parts.push(n.placeholder);
+        if (n.dataset && n.dataset.keys) parts.push(n.dataset.keys);
+        for (const c of n.childNodes) walk(c);
+      };
+      walk(node);
+      return parts.join(" ").toLowerCase();
+    },
+    search(text) {
+      const q = String(text || "").trim().toLowerCase();
+      if (q === "") this.searchInput.value = "";
+      this.query = q;
+      this.body.classList.toggle("ra-searching", q !== "");
+      if (q === "") {
+        for (const b of Object.values(this.tabButtons)) {
+          delete b.dataset.count;
+          b.classList.remove("ra-none");
+        }
+        this.showTab(this.tab);
+        return;
+      }
+      const words = q.split(/\s+/);
+      const counts = {};
+      for (const sec of this.sections) {
+        const title = sec.dataset.title.toLowerCase();
+        const body = sec.querySelector(".ra-sec-body");
+        const all = words.every(w => title.includes(w));
+        sec.classList.toggle("ra-hit-all", all);
+        let hits = 0;
+        for (const item of body.querySelectorAll(".ra-item")) {
+          if (item.parentElement.closest(".ra-item")) continue;
+          const hit = all || words.every(w => (title + " " + this.searchText(item)).includes(w));
+          item.classList.toggle("ra-miss", !hit);
+          if (hit) hits++;
+        }
+        sec.classList.toggle("ra-miss", hits === 0 && !all);
+        if (hits || all) {
+          const tab = sec.dataset.id.split(".")[0];
+          counts[tab] = (counts[tab] || 0) + 1;
+        }
+      }
+      for (const [id, page] of Object.entries(this.pages)) page.style.display = counts[id] ? "" : "none";
+      for (const [id, b] of Object.entries(this.tabButtons)) {
+        if (counts[id]) b.dataset.count = counts[id]; else delete b.dataset.count;
+        b.classList.toggle("ra-none", !counts[id]);
+        b.classList.remove("ra-cur");
+      }
+      this.noMatch.classList.toggle("ra-shown", !Object.keys(counts).length);
+      this.body.scrollTop = 0;
       if (this.open) this.refresh();
     },
     fillLater(fn) {
@@ -10403,18 +10650,6 @@ module.exports.PACKETCODE = PACKETCODE
       select.appendChild(o);
       return o;
     },
-    toggleButton(label, get, set) {
-      const b = this.button("", () => {
-        set(!get());
-        draw();
-      });
-      const draw = () => {
-        b.textContent = label + ": " + (get() ? "on" : "off");
-        b.classList.toggle("ra-on", !!get());
-      };
-      draw();
-      return b;
-    },
     tierOf(xp) {
       const t = RYN_ADMIN_TIER_XP.find(([, min]) => (xp || 0) >= min);
       return t ? t[0] : "normal";
@@ -10427,16 +10662,13 @@ module.exports.PACKETCODE = PACKETCODE
     drawPanelState(panel) {
       if (this.tagLine) this.tagLine.textContent = "Private · tick " + panel.time.tick;
       if (this.pauseButton) {
-        this.pauseButton.textContent = panel.time.paused ? "Play" : "Pause";
-        this.pauseButton.classList.toggle("ra-on", panel.time.paused);
+        this.pauseButton.textContent = panel.time.paused ? "Play world" : "Pause world";
+        this.lit(this.pauseButton, panel.time.paused);
       }
       if (this.timeNow) this.timeNow.textContent = (panel.time.paused ? "Paused" : "Running") + " at ×" + panel.time.scale + " · tick " + panel.time.tick;
       if (this.timeSpeed && document.activeElement !== this.timeSpeed) this.timeSpeed.value = String(panel.time.scale);
-      if (this.sandboxButton) {
-        this.sandboxButton.textContent = "Free build: " + (panel.rules.sandbox ? "on" : "off");
-        this.sandboxButton.classList.toggle("ra-on", panel.rules.sandbox);
-      }
-      if (this.rulesNow) this.rulesNow.textContent = "Now: damage ×" + panel.rules.dmgMult + ", gather ×" + panel.rules.gatherMult + ", " + panel.rules.tickRate + " ticks/s";
+      this.lit(this.sandboxButton, !!panel.rules.sandbox);
+      if (this.rulesNow) this.rulesNow.textContent = "Now: all hits ×" + panel.rules.dmgMult + ", gather ×" + panel.rules.gatherMult + ", " + panel.rules.tickRate + " ticks/s";
       if (this.kingName) {
         const k = panel.kings[0];
         if (!k) {
@@ -10458,29 +10690,129 @@ module.exports.PACKETCODE = PACKETCODE
       this.drawSurvival(panel.survival);
       this.drawSpawners(panel.spawners || []);
     },
-    buildGive(body) {
-      this.section(body, "Give");
+    // ---- the target: who Heal, God, Kill and the Player tab act on ----
+    buildTargetBar(root) {
+      const bar = this.el("div", "ra-target");
+      const top = this.el("div", "ra-tg-top");
+      this.targetSelect = this.select([ [ "", "You" ] ], "");
+      this.targetSelect.title = "Who the target buttons and the Player tab act on. Click a player in People to pick them.";
+      this.targetSelect.addEventListener("change", () => this.setTarget(this.targetSelect.value));
+      top.appendChild(this.targetSelect);
+      this.targetChips = this.el("span", "ra-tg-chips");
+      top.appendChild(this.targetChips);
+      bar.appendChild(top);
+      const hp = this.el("div", "ra-tg-hp");
+      this.targetBar = this.el("div", "ra-bar");
+      this.targetFill = this.el("i");
+      this.targetBar.appendChild(this.targetFill);
+      this.targetHp = this.el("span", "", "–");
+      hp.appendChild(this.targetBar);
+      hp.appendChild(this.targetHp);
+      bar.appendChild(hp);
+      const acts = this.el("div", "ra-tg-acts");
+      this.targetActs = {
+        heal: this.button("Heal", () => this.done("!heal" + this.sid()), "", "Full health"),
+        god: this.liveToggle("God", () => this.done("!god" + this.sid()), "Cannot be hurt"),
+        kill: this.button("Kill", () => this.done(this.target === "" ? "!die" : "!kill" + this.sid(), this.target === "" ? "You died" : "Killed " + this.target), "ra-del"),
+        go: this.button("Go", () => this.done("!tp" + this.sid(), "Went to " + this.target), "", "Teleport to them"),
+        bring: this.button("Bring", () => this.done("!bring" + this.sid()), "", "Bring them in front of you"),
+        remove: this.button("Remove", () => this.done("!dummy remove" + this.sid()), "ra-del", "Remove this dummy")
+      };
+      for (const b of Object.values(this.targetActs)) acts.appendChild(b);
+      bar.appendChild(acts);
+      root.appendChild(bar);
+      this.drawTarget(null);
+    },
+    setTarget(value) {
+      this.target = String(value);
+      if (this.targetSelect.value !== this.target) this.targetSelect.value = this.target;
+      this._plSig = null;
+      this.refresh();
+      if (this.lastState === null) this.drawTarget(null);
+    },
+    drawTarget(state) {
+      const select = this.targetSelect;
+      if (!select) return;
+      if (state) {
+        const me = state.me;
+        const options = [ [ "", "You" + (me && me.name ? " · " + me.name : "") ] ].concat(state.players.filter(p => !me || p.sid !== me.sid).map(p => [ String(p.sid), p.sid + " · " + (p.name || "unknown") + (p.dummy ? " (dummy)" : "") + (p.alive ? "" : " (dead)") ]));
+        const signature = options.map(o => o.join(":")).join("|");
+        if (signature !== this._targetSig) {
+          this._targetSig = signature;
+          const current = this.target;
+          select.innerHTML = "";
+          for (const [v, label] of options) this.option(select, v, label);
+          select.value = options.some(o => o[0] === current) ? current : "";
+          if (this.target !== select.value) {
+            this.target = select.value;
+            this._plSig = null;
+          }
+        }
+      }
+      const mine = this.target === "";
+      const who = !state ? null : mine ? state.players.find(p => state.me && p.sid === state.me.sid) || null : state.players.find(p => String(p.sid) === this.target) || null;
+      const a = this.targetActs;
+      a.go.style.display = a.bring.style.display = mine ? "none" : "";
+      a.remove.style.display = who && who.dummy ? "" : "none";
+      this.lit(a.god, !!(who && who.god));
+      const chips = [];
+      if (who && who.dummy) chips.push([ "dummy", "" ]);
+      if (who && who.god) chips.push([ "god", "ra-chip-god" ]);
+      if (who && !who.alive) chips.push([ "dead", "ra-chip-dead" ]);
+      const sig = chips.map(c => c[0]).join();
+      if (sig !== this._chipSig) {
+        this._chipSig = sig;
+        this.targetChips.innerHTML = "";
+        for (const [text, cls] of chips) this.targetChips.appendChild(this.el("span", "ra-chip " + cls, text));
+      }
+      const f = who && who.alive && who.maxHealth ? Math.max(0, Math.min(1, who.health / who.maxHealth)) : 0;
+      this.targetFill.style.width = Math.round(f * 100) + "%";
+      this.targetBar.classList.toggle("ra-low", f < .4);
+      this.targetHp.textContent = !who ? "not in game" : who.alive ? who.health + " / " + who.maxHealth : "dead";
+    },
+    // ---- Player ----
+    buildVitals(page) {
+      const body = this.section(page, "vitals", "Vitals", "For the target.");
+      const hp = this.number(100, 1, 1);
+      this.row(body, "Health", hp, this.button("Set", () => this.done("!hp " + (Number(hp.value) || 1) + this.sid()), "ra-go")).dataset.keys = "hp";
+      const age = this.number(10, 1, 1);
+      this.row(body, "Age", age, this.button("Set", () => this.done("!age " + (Number(age.value) || 1) + this.sid()), "ra-go")).dataset.keys = "level xp";
+      const res = this.number(1e4, 1e3, 0);
+      this.row(body, "Resources", res, this.button("Set", () => this.done("!res " + (Number(res.value) || 0) + this.sid()), "ra-go"), this.button("Max", () => {
+        if (this.target === "") this.done("!s", "Resources maxed"); else this.done("!res 999999" + this.sid());
+      }, "", "As much of everything as there is")).dataset.keys = "res gold wood stone food points";
+    },
+    buildGear(page) {
+      const body = this.section(page, "gear", "Gear", "For the target. Set held is always you.");
+      const hats = this.select([ [ 0, "No hat" ] ]);
+      const accs = this.select([ [ 0, "No accessory" ] ]);
       const weapon = this.select([]);
-      const tier = this.select(RYN_ADMIN_TIERS, "ruby");
       const item = this.select([]);
       this.fillLater(c => {
+        for (const h of c.hats) this.option(hats, h.id, h.id + " · " + h.name);
+        for (const a of c.accessories) this.option(accs, a.id, a.id + " · " + a.name);
         for (const w of c.weapons) this.option(weapon, w.id, w.id + " · " + w.name + (w.type ? " (2nd)" : ""));
         for (const it of c.items) this.option(item, it.id, it.id + " · " + it.name);
       });
-      this.row(body, "Weapon", weapon, tier);
-      this.row(body, "", this.button("Give weapon", () => this.done("!give weapon " + weapon.value + " " + tier.value + this.sid()), "ra-go"));
+      this.row(body, "Hat", hats, this.button("Wear", () => this.done("!hat " + hats.value + this.sid()), "ra-go"));
+      this.row(body, "Accessory", accs, this.button("Wear", () => this.done("!acc " + accs.value + this.sid()), "ra-go"));
+      this.row(body, "Weapon", weapon);
+      const tier = this.chips(RYN_ADMIN_TIERS, "ruby");
+      this.row(body, "", tier.el).dataset.keys = "tier weapon";
+      const give = this.row(body, "", this.button("Give", () => this.done("!give weapon " + weapon.value + " " + tier.value + this.sid()), "ra-go", "Give the target this weapon at this tier"), this.button("Set held", () => this.done("!v " + tier.value, RYN_ADMIN_TIERS.find(t => t[0] === tier.value)[1] + " weapon"), "", "Put this tier on the weapon you hold (only you)"));
+      give.dataset.keys = "weapon tier";
       this.row(body, "Item", item, this.button("Give", () => this.done("!give item " + item.value + this.sid()), "ra-go"));
     },
     loadouts() {
       const mine = this.store("_ryn_admin_loadouts");
       return Array.isArray(mine) ? mine.filter(l => l && Array.isArray(l.weapons)) : [];
     },
-    buildLoadouts(body) {
-      this.section(body, "Loadouts");
-      this.loadoutGrid = this.el("div", "ra-grid");
-      body.appendChild(this.loadoutGrid);
-      this.row(body, "", this.button("+ Save what I wear", () => this.saveLoadout()));
-      body.appendChild(this.el("div", "ra-hint", "Weapons with their tier, hat and accessory, for the target. Right-click your own to delete it."));
+    buildLoadouts(page) {
+      const body = this.section(page, "loadouts", "Loadouts", "For the target. Right-click one of yours to delete it.");
+      this.loadoutGrid = this.grid(body, []);
+      this.loadoutGrid.classList.add("ra-grid-2");
+      this.loadoutGrid.dataset.keys = "loadout";
+      this.row(body, "", this.button("Save mine", () => this.saveLoadout(), "", "Save what you wear now")).dataset.keys = "loadout";
       this.drawLoadouts();
     },
     drawLoadouts() {
@@ -10528,44 +10860,68 @@ module.exports.PACKETCODE = PACKETCODE
       this.drawLoadouts();
       this.say("Saved loadout " + name);
     },
-    buildPlayers(body) {
-      this.section(body, "Players");
-      this.playerList = this.el("div", "ra-plist");
+    buildYou(page) {
+      const body = this.section(page, "you", "You", "Always you, whoever the target is.");
+      const card = this.el("div", "ra-pl ra-item");
+      card.dataset.keys = "shame clown";
+      const top = this.el("div", "ra-pl-top");
+      top.appendChild(this.el("span", "ra-pl-name", "Shame"));
+      this.shameText = this.el("span", "ra-pl-hp", "0 / 8");
+      top.appendChild(this.shameText);
+      card.appendChild(top);
+      this.shameBar = this.el("div", "ra-bar");
+      this.shameFill = this.el("i");
+      this.shameBar.appendChild(this.shameFill);
+      card.appendChild(this.shameBar);
+      card.title = "Eating within 120ms of a hit adds 1; a later heal takes 2 off. At 8 you wear the clown hat for 30s and cannot heal.";
+      body.appendChild(card);
+      const speed = this.number(1, .1, .1);
+      this.you(this.row(body, "Walk ×", speed, this.button("Set", () => this.done("!speed " + .0016 * (Number(speed.value) || 1), "Walk speed ×" + (Number(speed.value) || 1)), "ra-go"))).dataset.keys = "speed move";
+    },
+    drawShame(me) {
+      if (!this.shameText || !me) return;
+      const n = me.shame || 0;
+      const clown = me.shameTimer > 0;
+      this.shameText.textContent = clown ? "Clown · " + Math.ceil(me.shameTimer / 1e3) + "s left" : n + " / 8" + (n >= 6 ? " · careful" : "");
+      this.shameFill.style.width = (clown ? 100 : n / 8 * 100) + "%";
+      this.shameBar.classList.toggle("ra-low", clown || n >= 5);
+    },
+    // ---- People ----
+    buildPlayers(page) {
+      const body = this.section(page, "players", "Players", "Click a player to make them the target.");
+      this.playerList = this.el("div", "ra-plist ra-item");
       body.appendChild(this.playerList);
-      body.appendChild(this.el("div", "ra-hint", "Health straight from the server. Dummies are test players the server moves."));
     },
     drawPlayers(state) {
       const list = this.playerList;
       if (!list) return;
-      const sig = state.players.map(p => [ p.sid, p.alive, p.dummy, p.god, p.name ].join(":")).join("|");
+      const sig = this.target + "/" + state.players.map(p => [ p.sid, p.alive, p.dummy, p.god, p.name ].join(":")).join("|");
       if (sig !== this._plSig) {
         this._plSig = sig;
         list.innerHTML = "";
         this._plRows = {};
         for (const p of state.players) {
           const mine = !!state.me && p.sid === state.me.sid;
-          const card = this.el("div", "ra-pl");
+          const picked = mine ? this.target === "" : this.target === String(p.sid);
+          const card = this.el("div", "ra-pl ra-click" + (picked ? " ra-pick" : ""));
+          card.title = picked ? "The target" : "Make " + (mine ? "yourself" : p.name || p.sid) + " the target";
+          card.addEventListener("click", e => {
+            e.stopPropagation();
+            this.setTarget(mine ? "" : String(p.sid));
+          });
           const top = this.el("div", "ra-pl-top");
           top.appendChild(this.el("span", "ra-pl-name", p.sid + " · " + (p.name || "unknown")));
           if (mine) top.appendChild(this.el("span", "ra-chip", "you"));
           if (p.dummy) top.appendChild(this.el("span", "ra-chip", "dummy"));
-          if (p.god) top.appendChild(this.el("span", "ra-chip", "god"));
-          if (!p.alive) top.appendChild(this.el("span", "ra-chip", "dead"));
-          const hp = this.el("span", "ra-hint", "");
-          hp.style.margin = "0";
+          if (p.god) top.appendChild(this.el("span", "ra-chip ra-chip-god", "god"));
+          if (!p.alive) top.appendChild(this.el("span", "ra-chip ra-chip-dead", "dead"));
+          const hp = this.el("span", "ra-pl-hp", "");
           top.appendChild(hp);
           card.appendChild(top);
           const bar = this.el("div", "ra-bar");
           const fill = this.el("i");
           bar.appendChild(fill);
           card.appendChild(bar);
-          const s = " " + p.sid;
-          const acts = this.row(card, "", this.button("Heal", () => this.done("!heal" + s)), this.button(p.god ? "Ungod" : "God", () => this.done("!god" + s)), this.button("Kill", () => this.done(mine ? "!die" : "!kill" + s)));
-          if (!mine) {
-            acts.appendChild(this.button("Bring", () => this.done("!bring" + s)));
-            acts.appendChild(this.button("Go", () => this.done("!tp" + s, "Went to " + p.sid)));
-          }
-          if (p.dummy) acts.appendChild(this.button("Remove", () => this.done("!dummy remove" + s), "ra-del"));
           list.appendChild(card);
           this._plRows[p.sid] = {
             hp: hp,
@@ -10583,12 +10939,49 @@ module.exports.PACKETCODE = PACKETCODE
         r.hp.textContent = p.alive ? p.health + "/" + p.maxHealth : "";
       }
     },
-    buildBots(body) {
-      this.section(body, "Ryn bots");
+    buildDummies(page) {
+      const body = this.section(page, "dummies", "Dummies", "Test players the server moves; back 3s after dying.");
+      const kind = this.select([ [ "idle", "Stand still" ], [ "walk", "Walk around" ], [ "circle", "Circle" ], [ "chase", "Chase me" ], [ "attack", "Attack me" ], [ "insta", "Insta me" ] ], "idle");
+      const count = this.number(1, 1, 1, true);
+      count.max = "10";
+      count.title = "How many";
+      const primary = this.select([]);
+      const secondary = this.select([ [ "none", "No 2nd" ] ]);
+      const tier = this.select(RYN_ADMIN_TIERS, "normal");
+      const hat = this.select([ [ 0, "No hat" ] ]);
+      this.fillLater(c => {
+        for (const w of c.weapons) this.option(w.type ? secondary : primary, w.id, w.name);
+        for (const h of c.hats) this.option(hat, h.id, h.name);
+        primary.value = "5";
+      });
+      const delay = this.number(120, 10, 0, true);
+      delay.title = "How long a dummy waits after a hit before it eats (ms)";
+      let heal = true;
+      let god = false;
+      const healButton = this.toggleButton("Auto heal", () => heal, v => heal = v);
+      const godButton = this.toggleButton("God", () => god, v => god = v);
+      kind.addEventListener("change", () => {
+        if (kind.value === "insta") {
+          secondary.value = "15";
+          hat.value = "6";
+        }
+      });
+      this.row(body, "Kind", kind, count);
+      this.row(body, "Weapons", primary, secondary);
+      this.row(body, "Tier / hat", tier, hat);
+      this.row(body, "Heal ms", delay);
+      this.row(body, "", healButton, godButton);
+      this.row(body, "", this.button("Add", () => {
+        const opts = [ "p=" + primary.value, "s=" + secondary.value, "tier=" + tier.value, "hat=" + hat.value, "heal=" + (heal ? 1 : 0), "delay=" + Math.max(0, Number(delay.value) || 0), "god=" + (god ? 1 : 0) ];
+        this.done("!dummy " + kind.value + " " + Math.max(1, Math.min(10, Number(count.value) || 1)) + " " + opts.join(" "));
+      }, "ra-go"), this.button("Remove all", () => this.done("!dummy clear"), "ra-del")).dataset.keys = "dummies";
+    },
+    buildBots(page) {
+      const body = this.section(page, "bots", "Ryn bots", "Your own bots. Freeze stops only them.");
       const count = this.number(3, 1, 1);
       count.max = "40";
-      this.row(body, "Add", count, this.button("Add bots", () => this.addBots(Math.max(1, Math.min(40, Number(count.value) || 1))), "ra-go"));
-      this.freezeButton = this.button("Frozen: off", () => {
+      this.row(body, "Bots", count, this.button("Add", () => this.addBots(Math.max(1, Math.min(40, Number(count.value) || 1))), "ra-go"));
+      this.freezeButton = this.liveToggle("Freeze my bots", () => {
         const on = !Settings_default._botsFrozen;
         if (!_rynSetBotsFrozen(client, on)) {
           this.say("Your bots are not here yet.", true);
@@ -10603,8 +10996,7 @@ module.exports.PACKETCODE = PACKETCODE
           n = _rynRemoveBots(client, true) + _rynRemoveBots(client, false);
         } catch (_) {}
         this.say("Removed " + n + " bot(s)");
-      }, "ra-del"));
-      body.appendChild(this.el("div", "ra-hint", "Your own bots, the same as the bot keys. For players that fight you, add dummies in Test."));
+      }, "ra-del")).dataset.keys = "bots";
     },
     addBots(n) {
       let made = 0;
@@ -10623,524 +11015,29 @@ module.exports.PACKETCODE = PACKETCODE
       };
       one();
     },
-    buildDummies(body) {
-      this.section(body, "Dummies");
-      const kind = this.select([ [ "idle", "Stand still" ], [ "walk", "Walk around" ], [ "circle", "Circle" ], [ "chase", "Chase me" ], [ "attack", "Attack me" ], [ "insta", "Insta me" ] ], "idle");
-      const count = this.number(1, 1, 1);
-      count.max = "10";
-      const primary = this.select([]);
-      const secondary = this.select([ [ "none", "No 2nd" ] ]);
-      const tier = this.select(RYN_ADMIN_TIERS, "normal");
-      const hat = this.select([ [ 0, "No hat" ] ]);
-      this.fillLater(c => {
-        for (const w of c.weapons) this.option(w.type ? secondary : primary, w.id, w.name);
-        for (const h of c.hats) this.option(hat, h.id, h.name);
-        primary.value = "5";
-      });
-      const delay = this.number(120, 10, 0);
-      let heal = true;
-      let god = false;
-      const healButton = this.toggleButton("Auto heal", () => heal, v => heal = v);
-      const godButton = this.toggleButton("God", () => god, v => god = v);
-      kind.addEventListener("change", () => {
-        if (kind.value === "insta") {
-          secondary.value = "15";
-          hat.value = "6";
-        }
-      });
-      this.row(body, "Kind", kind, count);
-      this.row(body, "Weapons", primary, secondary);
-      this.row(body, "Tier / hat", tier, hat);
-      this.row(body, "Heal ms", delay, healButton, godButton);
-      this.row(body, "", this.button("Add dummies", () => {
-        const opts = [ "p=" + primary.value, "s=" + secondary.value, "tier=" + tier.value, "hat=" + hat.value, "heal=" + (heal ? 1 : 0), "delay=" + Math.max(0, Number(delay.value) || 0), "god=" + (god ? 1 : 0) ];
-        this.done("!dummy " + kind.value + " " + Math.max(1, Math.min(10, Number(count.value) || 1)) + " " + opts.join(" "));
-      }, "ra-go"), this.button("Remove all", () => this.done("!dummy clear"), "ra-del"));
-      body.appendChild(this.el("div", "ra-hint", "Heal ms: how long a dummy waits after a hit before it eats. They respawn 3s after dying."));
+    // ---- Train ----
+    buildScenarios(page) {
+      const body = this.section(page, "scenarios", "Scenarios", "Built around you, where you look.");
+      const list = [ [ "trapped", "Enemy trapped" ], [ "push", "Spike push" ], [ "metrapped", "I'm trapped" ], [ "surrounded", "Surrounded" ], [ "duel", "Duel" ] ];
+      const grid = this.grid(body, list.map(([id, label]) => this.button(label, () => this.done("!scenario " + id, label))));
+      grid.classList.add("ra-grid-2");
+      grid.dataset.keys = "scenario";
     },
-    buildScenarios(body) {
-      this.section(body, "Scenarios");
-      const grid = this.el("div", "ra-grid");
-      for (const [id, label] of [ [ "trapped", "Enemy trapped" ], [ "push", "Spike push" ], [ "metrapped", "I'm trapped" ], [ "surrounded", "Surrounded" ], [ "duel", "Duel" ], [ "crab", "Crab King" ] ]) {
-        grid.appendChild(this.button(label, () => this.done("!scenario " + id, label)));
-      }
-      body.appendChild(grid);
-      body.appendChild(this.el("div", "ra-hint", "Built around you, in the direction you look. Save your own setups in World, Saves."));
-    },
-    buildTime(body) {
-      this.section(body, "Time");
-      this.pauseButton = this.button("Pause", () => this.done(this.lastPanel && this.lastPanel.time.paused ? "!time play" : "!time pause"));
+    buildTime(page) {
+      const body = this.section(page, "time", "Time", "Pauses or slows the whole server.");
+      this.pauseButton = this.liveToggle("Pause world", () => this.done(this.lastPanel && this.lastPanel.time.paused ? "!time play" : "!time pause"));
+      this.row(body, "", this.pauseButton, this.button("Step 1", () => this.done("!time step 1"), "", "One server tick, then paused"), this.button("Step 5", () => this.done("!time step 5"), "", "Five server ticks, then paused")).dataset.keys = "play";
       const speed = this.timeSpeed = this.select([ [ "0.25", "×0.25" ], [ "0.5", "×0.5" ], [ "1", "×1" ], [ "2", "×2" ] ], "1");
       speed.addEventListener("change", () => this.done("!time speed " + speed.value));
-      this.row(body, "", this.pauseButton, this.button("Step 1", () => this.done("!time step 1")), this.button("Step 5", () => this.done("!time step 5")), speed);
-      this.timeNow = this.el("div", "ra-hint", "");
+      this.row(body, "Game speed", speed).dataset.keys = "slow motion";
+      this.timeNow = this.el("div", "ra-note ra-item", "");
       body.appendChild(this.timeNow);
     },
-    buildEditor(body) {
-      this.section(body, "Map editor");
-      const what = this.editWhat = this.select([ [ "tree", "Tree" ], [ "bush", "Bush" ], [ "stone", "Stone" ], [ "gold", "Gold" ] ], "tree");
-      this.fillLater(c => {
-        for (const it of c.items) if (!it.consume) this.option(what, it.id, it.name);
-      });
-      this.editOwner = this.select([ [ "me", "Owner: me" ], [ "none", "Owner: nobody" ] ], "me");
-      this.editShape = this.select([ [ "point", "One" ], [ "line", "Line" ], [ "circle", "Circle" ], [ "square", "Square" ] ], "point");
-      this.editSize = this.number(220, 20, 40);
-      this.editCount = this.number(8, 1, 2);
-      this.editSize.style.width = this.editCount.style.width = "58px";
-      this.editSize.title = "Circle radius or square side";
-      this.editCount.title = "How many go on a circle";
-      this.editShape.addEventListener("change", () => {
-        this.editStart = null;
-      });
-      this.placeButton = this.button("Place", () => this.setEdit(this.editMode === "place" ? "" : "place"));
-      this.deleteButton = this.button("Delete", () => this.setEdit(this.editMode === "delete" ? "" : "delete"));
-      this.row(body, "", what, this.editOwner);
-      this.row(body, "Shape", this.editShape, this.editSize, this.editCount);
-      this.row(body, "", this.placeButton, this.deleteButton, this.button("Undo", () => this.undo()), this.button("Clear near me", () => this.done("!clearnear 600"), "ra-del"));
-      body.appendChild(this.el("div", "ra-hint", "Turn on Place or Delete and click the map; Esc stops, Ctrl+Z undoes. Line: click the start, then the end. Size is the circle's radius or the square's side, count is how many go on a circle. With a dummy as owner, its spikes and traps work against you."));
-    },
-    drawEditorOwners(state) {
-      const select = this.editOwner;
-      if (!select) return;
-      const dummies = state.players.filter(p => p.dummy);
-      const sig = dummies.map(p => p.sid + p.name).join("|");
-      if (sig === this._ownerSig) return;
-      this._ownerSig = sig;
-      const current = select.value;
-      select.innerHTML = "";
-      this.option(select, "me", "Owner: me");
-      this.option(select, "none", "Owner: nobody");
-      for (const p of dummies) this.option(select, "d" + p.sid, "Owner: " + p.name);
-      select.value = [ ...select.options ].some(o => o.value === current) ? current : "me";
-    },
-    setEdit(mode) {
-      this.editMode = mode;
-      this.editStart = null;
-      if (this.placeButton) this.placeButton.classList.toggle("ra-on", mode === "place");
-      if (this.deleteButton) this.deleteButton.classList.toggle("ra-on", mode === "delete");
-      if (mode) this.say(mode === "place" ? "Click the map to place. Esc stops." : "Click something to delete it. Esc stops.");
-    },
-    worldAt(cx, cy) {
-      try {
-        const {_w: w, _h: h} = ZoomHandler_default._scale.current;
-        const scale = Math.max(window.innerWidth / w, window.innerHeight / h);
-        const off = RYN._offset;
-        return {
-          x: off.x + w / 2 + (cx - window.innerWidth / 2) / scale,
-          y: off.y + h / 2 + (cy - window.innerHeight / 2) / scale
-        };
-      } catch (_) {
-        return null;
-      }
-    },
-    editTarget(e) {
-      if (!this.editMode || e.button !== 0) return false;
-      const t = e.target;
-      return !!t && t.tagName === "CANVAS" && t.id !== "mapDisplay";
-    },
-    spacingOf(what) {
-      const nature = {
-        tree: 300,
-        bush: 170,
-        stone: 210,
-        gold: 160
-      };
-      if (nature[what]) return nature[what];
-      const c = RynPrivate.catalog();
-      const it = c && c.items.find(i => String(i.id) === String(what));
-      return it && it.scale ? it.scale * 2 + 2 : 100;
-    },
-    shapePoints(shape, at) {
-      const gap = this.spacingOf(this.editWhat.value);
-      const size = Math.max(40, Number(this.editSize.value) || 220);
-      const pts = [];
-      if (shape === "line" && this.editStart) {
-        const s = this.editStart;
-        const len = Math.hypot(at.x - s.x, at.y - s.y);
-        const a = Math.atan2(at.y - s.y, at.x - s.x);
-        const n = Math.min(60, Math.floor(len / gap) + 1);
-        for (let i = 0; i < n; i++) pts.push([ s.x + gap * i * Math.cos(a), s.y + gap * i * Math.sin(a) ]);
-      } else if (shape === "circle") {
-        const n = Math.max(2, Math.min(40, Number(this.editCount.value) || 8));
-        for (let i = 0; i < n; i++) {
-          const a = i / n * Math.PI * 2;
-          pts.push([ at.x + size * Math.cos(a), at.y + size * Math.sin(a) ]);
-        }
-      } else if (shape === "square") {
-        const h = size / 2;
-        const per = Math.max(1, Math.min(15, Math.round(size / gap)));
-        const c = [ [ -h, -h ], [ h, -h ], [ h, h ], [ -h, h ] ];
-        for (let i = 0; i < 4; i++) {
-          const [x1, y1] = c[i];
-          const [x2, y2] = c[(i + 1) % 4];
-          for (let k = 0; k < per; k++) pts.push([ at.x + x1 + (x2 - x1) * k / per, at.y + y1 + (y2 - y1) * k / per ]);
-        }
-      } else {
-        pts.push([ at.x, at.y ]);
-      }
-      return pts.map(([x, y]) => [ Math.round(x), Math.round(y) ]);
-    },
-    onEditPointer(e) {
-      if (!this.editTarget(e)) return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      const at = this.worldAt(e.clientX, e.clientY);
-      if (at === null) return;
-      if (this.editMode === "delete") {
-        const rec = RynPrivate.call("removeAt", {
-          x: at.x,
-          y: at.y,
-          r: 90
-        });
-        if (rec) {
-          this.pushUndo({
-            recs: [ rec ]
-          });
-          this.say("Removed " + this.objName(rec));
-        } else {
-          this.say("Nothing there", true);
-        }
-        return;
-      }
-      const shape = this.editShape.value;
-      if (shape === "line" && !this.editStart) {
-        this.editStart = at;
-        this.say("Now click where the line ends.");
-        return;
-      }
-      const points = this.shapePoints(shape, at);
-      this.editStart = null;
-      const o = this.editOwner.value;
-      const r = RynPrivate.call("placeMany", {
-        what: this.editWhat.value,
-        owner: o === "none" || o === "me" ? o : o.slice(1),
-        points: points
-      });
-      if (!r || !r.sids.length) {
-        this.say(r ? "That can't be placed" : "Spawn into the game first (press Play).", true);
-        return;
-      }
-      this.pushUndo({
-        sids: r.sids
-      });
-      this.say("Placed " + r.sids.length + " " + r.name);
-    },
-    pushUndo(entry) {
-      const stack = this.undoStack || (this.undoStack = []);
-      stack.push(entry);
-      if (stack.length > 40) stack.shift();
-    },
-    undo() {
-      const e = (this.undoStack || []).pop();
-      if (!e) {
-        this.say("Nothing to undo", true);
-        return;
-      }
-      if (e.sids) this.say("Undone: took away " + (RynPrivate.call("removeSids", e.sids) || 0)); else if (e.recs) {
-        RynPrivate.call("restoreObjs", e.recs);
-        this.say("Undone: put back " + e.recs.map(r => this.objName(r)).join(", "));
-      }
-    },
-    objName(rec) {
-      if (rec[5] >= 0) {
-        const c = RynPrivate.catalog();
-        const it = c && c.items.find(i => i.id === rec[5]);
-        return it ? it.name : "item";
-      }
-      return [ "tree", "bush", "stone", "gold" ][rec[4]] || "object";
-    },
-    drawEditPreview(ctx) {
-      const at = this.worldAt(this.mouse.x, this.mouse.y);
-      if (at === null) return;
-      ctx.lineWidth = 3;
-      if (this.editMode === "delete") {
-        ctx.strokeStyle = "rgba(217, 163, 171, 0.95)";
-        ctx.beginPath();
-        ctx.arc(at.x, at.y, 90, 0, Math.PI * 2);
-        ctx.stroke();
-        return;
-      }
-      ctx.strokeStyle = "rgba(166, 215, 178, 0.95)";
-      const shape = this.editShape.value;
-      if (shape === "line" && this.editStart) {
-        ctx.beginPath();
-        ctx.moveTo(this.editStart.x, this.editStart.y);
-        ctx.lineTo(at.x, at.y);
-        ctx.stroke();
-      }
-      const pts = shape === "line" && !this.editStart ? [ [ at.x, at.y ] ] : this.shapePoints(shape, at);
-      const r = Math.max(20, this.spacingOf(this.editWhat.value) / 2 - 4);
-      for (const [x, y] of pts) {
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-    },
-    stamps() {
-      const all = this.store("_ryn_stamps");
-      return Array.isArray(all) ? all.filter(s => s && s.stamp && Array.isArray(s.stamp.items)) : [];
-    },
-    buildStamps(body) {
-      this.section(body, "Base stamps");
-      const name = this.el("input");
-      name.type = "text";
-      name.placeholder = "Name";
-      name.style.flex = "1";
-      const radius = this.select([ [ "400", "400 around" ], [ "600", "600 around" ], [ "900", "900 around" ] ], "600");
-      this.row(body, "", name, radius);
-      this.row(body, "", this.button("Copy my base", () => {
-        const stamp = RynPrivate.call("copyBase", Number(radius.value));
-        if (!stamp) {
-          this.say("Spawn into the game first (press Play).", true);
-          return;
-        }
-        if (!stamp.items.length) {
-          this.say("No buildings of yours around you", true);
-          return;
-        }
-        const all = this.stamps();
-        const label = name.value.trim() || "Base " + (all.length + 1);
-        all.push({
-          name: label,
-          stamp: stamp
-        });
-        this.store("_ryn_stamps", all);
-        name.value = "";
-        this.drawStamps();
-        this.say("Copied " + label + ": " + stamp.items.length + " buildings");
-      }, "ra-go"), this.toggleButton("Turn with me", () => !!this.store("_ryn_stamp_turn"), v => this.store("_ryn_stamp_turn", v)));
-      this.stampList = this.el("div", "ra-plist");
-      body.appendChild(this.stampList);
-      body.appendChild(this.el("div", "ra-hint", "Copies your own buildings around you. Stamp puts them around where you stand; Turn with me turns them to where you look."));
-      this.drawStamps();
-    },
-    drawStamps() {
-      const list = this.stampList;
-      if (!list) return;
-      list.innerHTML = "";
-      this.stamps().forEach((s, i) => {
-        const card = this.el("div", "ra-pl");
-        const top = this.el("div", "ra-pl-top");
-        top.appendChild(this.el("span", "ra-pl-name", s.name));
-        top.appendChild(this.el("span", "ra-chip", s.stamp.items.length + " items"));
-        card.appendChild(top);
-        const r = this.row(card, "", this.button("Stamp", () => {
-          const sids = RynPrivate.call("pasteBase", {
-            stamp: s.stamp,
-            rotate: !!this.store("_ryn_stamp_turn")
-          });
-          if (!sids) {
-            this.say("Spawn into the game first (press Play).", true);
-            return;
-          }
-          this.pushUndo({
-            sids: sids
-          });
-          this.say("Stamped " + s.name + " (" + sids.length + ")");
-        }, "ra-go"), this.button("Delete", () => {
-          const all = this.stamps();
-          all.splice(i, 1);
-          this.store("_ryn_stamps", all);
-          this.drawStamps();
-        }, "ra-del"));
-        r.style.marginTop = "5px";
-        list.appendChild(card);
-      });
-    },
-    buildMaps(body) {
-      this.section(body, "Map");
-      const grid = this.el("div", "ra-grid");
-      for (const [id, label] of [ [ "empty", "Empty" ], [ "forest", "Forest" ], [ "rocks", "Rocks" ], [ "duel", "Duel ring" ], [ "reset", "Original" ] ]) {
-        grid.appendChild(this.button(label, () => this.done("!map " + id)));
-      }
-      body.appendChild(grid);
-      body.appendChild(this.el("div", "ra-hint", "Changes the 1600 around you; Duel ring clears 1000 around you, buildings too, inside a ring of stones. Original puts the whole map back the way the server made it."));
-    },
-    buildSpawners(body) {
-      this.section(body, "Spawners");
-      const animal = this.select(RYN_ADMIN_ANIMALS, "wolf");
-      const every = this.number(10, 1, 1);
-      const max = this.number(3, 1, 1);
-      every.style.width = max.style.width = "58px";
-      every.title = "Seconds between animals";
-      max.title = "Most alive at once";
-      this.row(body, "Animal", animal);
-      this.row(body, "Every / max", every, max, this.button("Add here", () => this.done("!spawner " + animal.value + " " + (Number(every.value) || 10) + " " + (Number(max.value) || 3)), "ra-go"));
-      this.spawnerList = this.el("div", "ra-plist");
-      body.appendChild(this.spawnerList);
-      this.row(body, "", this.button("Remove all", () => this.done("!spawner clear"), "ra-del"), this.button("Send animals away", () => this.done("!killmobs 2000")));
-    },
-    drawSpawners(list) {
-      const box = this.spawnerList;
-      if (!box) return;
-      const sig = list.map(s => [ s.id, s.alive, s.max ].join(":")).join("|");
-      if (sig === this._spawnSig) return;
-      this._spawnSig = sig;
-      box.innerHTML = "";
-      for (const s of list) {
-        const card = this.el("div", "ra-pl");
-        const top = this.el("div", "ra-pl-top");
-        top.appendChild(this.el("span", "ra-pl-name", "#" + s.id + " " + s.kind + " · every " + s.every + "s"));
-        top.appendChild(this.el("span", "ra-chip", s.alive + "/" + s.max));
-        top.appendChild(this.button("Remove", () => this.done("!spawner remove " + s.id), "ra-del"));
-        card.appendChild(top);
-        box.appendChild(card);
-      }
-    },
-    saves() {
-      const all = this.store("_ryn_admin_saves");
-      return all && typeof all === "object" && !Array.isArray(all) ? all : {};
-    },
-    buildSaves(body) {
-      this.section(body, "Saves");
-      const name = this.el("input");
-      name.type = "text";
-      name.placeholder = "Name this world";
-      name.style.flex = "1";
-      this.row(body, "", name, this.button("Save", () => {
-        const label = name.value.trim() || "World " + (Object.keys(this.saves()).length + 1);
-        const snap = RynPrivate.call("snapshot");
-        if (!snap) {
-          this.say("Spawn into the game first (press Play).", true);
-          return;
-        }
-        const all = this.saves();
-        all[label] = {
-          at: Date.now(),
-          snap: snap
-        };
-        this.store("_ryn_admin_saves", all);
-        name.value = "";
-        this.drawSaves();
-        this.say("Saved " + label + " (" + snap.objects.length + " objects, " + snap.dummies.length + " dummies)");
-      }, "ra-go"));
-      this.saveList = this.el("div", "ra-plist");
-      body.appendChild(this.saveList);
-      body.appendChild(this.el("div", "ra-hint", "A save holds buildings, trees, dummies, rules and where you stand, and loads into the world you are in. The world itself saves on its own: pick it in the lobby's Worlds list."));
-      this.drawSaves();
-    },
-    drawSaves() {
-      const list = this.saveList;
-      if (!list) return;
-      list.innerHTML = "";
-      for (const [label, save] of Object.entries(this.saves())) {
-        const card = this.el("div", "ra-pl");
-        const top = this.el("div", "ra-pl-top");
-        top.appendChild(this.el("span", "ra-pl-name", label));
-        top.appendChild(this.el("span", "ra-hint", new Date(save.at).toLocaleString()));
-        card.appendChild(top);
-        const r = this.row(card, "", this.button("Load", () => {
-          const ok = RynPrivate.call("restore", save.snap);
-          this.say(ok ? "Loaded " + label : "Spawn into the game first (press Play).", !ok);
-        }, "ra-go"), this.button("Delete", () => {
-          const all = this.saves();
-          delete all[label];
-          this.store("_ryn_admin_saves", all);
-          this.drawSaves();
-        }, "ra-del"));
-        r.style.marginTop = "5px";
-        list.appendChild(card);
-      }
-    },
-    autoTick() {
-      RynWorlds.save();
-    },
-    buildRules(body) {
-      this.section(body, "Rules");
-      const dmg = this.number(1, .25, .1);
-      const gather = this.number(1, 1, 1);
-      const tick = this.number(9, 1, 1);
-      this.row(body, "Damage ×", dmg, this.button("Set", () => this.done("!rules dmg " + (Number(dmg.value) || 1)), "ra-go"));
-      this.row(body, "Gather ×", gather, this.button("Set", () => this.done("!rules gather " + (Number(gather.value) || 1)), "ra-go"));
-      this.row(body, "Ticks/s", tick, this.button("Set", () => this.done("!rules tick " + Math.max(1, Math.min(30, Number(tick.value) || 9))), "ra-go"));
-      this.sandboxButton = this.button("Free build: off", () => this.done("!rules sandbox " + (this.lastPanel && this.lastPanel.rules.sandbox ? "off" : "on")));
-      this.row(body, "", this.sandboxButton, this.button("Reset", () => this.done("!rules dmg 1; !rules gather 1; !rules tick 9; !rules sandbox on", "Rules reset")));
-      this.rulesNow = this.el("div", "ra-hint", "");
-      body.appendChild(this.rulesNow);
-      body.appendChild(this.el("div", "ra-hint", "Damage counts player hits only. The game and Ryn expect 9 ticks/s; other rates are for experiments. Free build: no cost and no limits."));
-    },
-    buildKing(body) {
-      this.section(body, "Crab King");
-      const card = this.el("div", "ra-pl");
-      const top = this.el("div", "ra-pl-top");
-      this.kingName = this.el("span", "ra-pl-name", "");
-      this.kingHp = this.el("span", "ra-hint", "");
-      this.kingHp.style.margin = "0";
-      top.appendChild(this.kingName);
-      top.appendChild(this.kingHp);
-      card.appendChild(top);
-      this.kingBar = this.el("div", "ra-bar");
-      this.kingFill = this.el("i");
-      this.kingBar.appendChild(this.kingFill);
-      card.appendChild(this.kingBar);
-      body.appendChild(card);
-      this.row(body, "", this.button("Full / respawn", () => this.done("!king respawn")), this.button("Attack now", () => this.done("!king attack")), this.button("Arena", () => this.done("!arena")));
-      const hp = this.number(24e4, 1e4, 1);
-      this.row(body, "Health", hp, this.button("Set", () => this.done("!king hp " + (Number(hp.value) || 1)), "ra-go"));
-      const speeds = [ [ "0.5", "×0.5" ], [ "0.75", "×0.75" ], [ "1", "×1" ], [ "1.5", "×1.5" ], [ "2", "×2" ] ];
-      this.kingSpeed = this.select(speeds, "1");
-      this.kingSpeed.addEventListener("change", () => this.done("!king speed " + this.kingSpeed.value));
-      this.kingDamage = this.select([ [ "0", "×0" ] ].concat(speeds), "1");
-      this.kingDamage.addEventListener("change", () => this.done("!king damage " + this.kingDamage.value));
-      this.row(body, "Speed", this.kingSpeed);
-      this.row(body, "Damage", this.kingDamage);
-      this.kingOnly = this.select([ [ "all", "All attacks" ], [ "slam", "Slam only" ], [ "charge", "Charge only" ], [ "ring", "Ring only" ], [ "dive", "Dive only" ] ], "all");
-      this.kingOnly.addEventListener("change", () => this.done("!king only " + this.kingOnly.value));
-      this.row(body, "Practice", this.kingOnly);
-      this.kingDodge = this.el("div", "ra-hint", "");
-      body.appendChild(this.kingDodge);
-      this.row(body, "", this.button("Reset counts", () => this.done("!king resetstats")));
-    },
-    drawKingStats(st) {
-      if (!this.kingDodge || !st) return;
-      const names = {
-        slam: "slam",
-        charge: "charge",
-        ring: "ring",
-        dive: "dive"
-      };
-      const kinds = Object.entries(st.kinds).map(([k, [d, h]]) => names[k] + " " + d + "/" + (d + h)).join(", ");
-      let best = Number(this.store("_ryn_king_best")) || null;
-      if (st.bestKill && (!best || st.bestKill < best)) {
-        best = st.bestKill;
-        this.store("_ryn_king_best", best);
-      }
-      const s = ms => (ms / 1e3).toFixed(1) + "s";
-      this.kingDodge.textContent = "Dodged " + st.dodged + " of " + (st.dodged + st.hit) + (kinds ? " (" + kinds + ")" : "") + ". Kill time: " + (st.fighting !== null ? "now " + s(st.fighting) + ", " : "") + "last " + (st.lastKill ? s(st.lastKill) : "–") + ", best " + (best ? s(best) : "–") + ".";
-    },
-    buildShame(body) {
-      this.section(body, "Shame");
-      const card = this.el("div", "ra-pl");
-      const top = this.el("div", "ra-pl-top");
-      this.shameText = this.el("span", "ra-pl-name", "0 / 8");
-      this.shameNote = this.el("span", "ra-hint", "");
-      this.shameNote.style.margin = "0";
-      top.appendChild(this.shameText);
-      top.appendChild(this.shameNote);
-      card.appendChild(top);
-      this.shameBar = this.el("div", "ra-bar");
-      this.shameFill = this.el("i");
-      this.shameBar.appendChild(this.shameFill);
-      card.appendChild(this.shameBar);
-      body.appendChild(card);
-      body.appendChild(this.el("div", "ra-hint", "Eating within 120ms of a hit adds 1; a later heal takes 2 off. At 8 you wear the clown hat for 30s and cannot heal. From 3 it also shows under you on screen (Stats, On screen, Shame)."));
-    },
-    drawShame(me) {
-      if (!this.shameText || !me) return;
-      const n = me.shame || 0;
-      const clown = me.shameTimer > 0;
-      this.shameText.textContent = clown ? "Clown" : n + " / 8";
-      this.shameNote.textContent = clown ? Math.ceil(me.shameTimer / 1e3) + "s left" : n >= 6 ? "careful" : "";
-      this.shameFill.style.width = (clown ? 100 : n / 8 * 100) + "%";
-      this.shameBar.classList.toggle("ra-low", clown || n >= 5);
-    },
-    buildSurvival(body) {
-      this.section(body, "Survival");
-      this.survivalButton = this.button("Start", () => this.done(this.lastPanel && this.lastPanel.survival.on ? "!survival stop" : "!survival start"), "ra-go");
-      this.survivalText = this.el("span", "ra-hint", "");
-      this.survivalText.style.margin = "0";
-      this.row(body, "", this.survivalButton, this.survivalText);
-      body.appendChild(this.el("div", "ra-hint", "Waves of dummies and animals around you, harder each wave. Clear a wave and you get healed and 3s to rest. It ends when you die."));
+    buildSurvival(page) {
+      const body = this.section(page, "survival", "Survival", "Harder waves until you die; a cleared wave heals you.");
+      this.survivalButton = this.liveToggle("Start", () => this.done(this.lastPanel && this.lastPanel.survival.on ? "!survival stop" : "!survival start"));
+      this.survivalText = this.el("span", "ra-pl-hp", "");
+      this.row(body, "", this.survivalButton, this.survivalText).dataset.keys = "survival waves";
     },
     drawSurvival(sv) {
       if (!this.survivalButton || !sv) return;
@@ -11150,440 +11047,8 @@ module.exports.PACKETCODE = PACKETCODE
         this.store("_ryn_survival_best", best);
       }
       this.survivalButton.textContent = sv.on ? "Stop" : "Start";
-      this.survivalButton.classList.toggle("ra-on", sv.on);
+      this.lit(this.survivalButton, sv.on);
       this.survivalText.textContent = sv.on ? "Wave " + sv.wave + " · " + sv.left + " left · best " + best : (sv.last ? "Last: " + sv.last.waves + " waves (" + sv.last.why + ") · " : "") + "best " + best;
-    },
-    buildStats(body) {
-      this.section(body, "Your fight");
-      const grid = this.el("div", "ra-stats");
-      this.statCells = {};
-      for (const [key, label] of [ [ "dps", "DPS, last 5s" ], [ "burst", "Best tick" ], [ "taken", "Taken, 5s" ], [ "insta", "Insta kills" ], [ "heal", "Heal after hit" ], [ "ttk", "Last kill" ] ]) {
-        const cell = this.el("div", "ra-stat");
-        const value = this.el("b", "", "–");
-        cell.appendChild(value);
-        cell.appendChild(this.el("span", "", label));
-        grid.appendChild(cell);
-        this.statCells[key] = value;
-      }
-      body.appendChild(grid);
-      this.row(body, "", this.button("Reset", () => {
-        RynPrivate.call("clearLog");
-        this.refresh();
-      }), this.button("Export", () => this.exportFight(false)), this.button("Copy", () => this.exportFight(true)));
-      this.section(body, "On screen");
-      const layers = this.el("div", "ra-grid");
-      for (const [key, label] of [ [ "truth", "Truth" ], [ "ranges", "Ranges" ], [ "shots", "Shots" ], [ "desync", "Desync" ], [ "shame", "Shame" ] ]) {
-        layers.appendChild(this.toggleButton(label, () => !!this.layers[key], v => {
-          this.layers[key] = v;
-          this.store("_ryn_admin_layers", this.layers);
-        }));
-      }
-      body.appendChild(layers);
-      body.appendChild(this.el("div", "ra-hint", "Truth: where the server has everyone (dashed), the server tick under you and spawners. Ranges: weapon reach, spikes and turrets. Shots: projectile paths. Desync: a line from where Ryn predicts you to where the server has you. Shame: your shame count under you."));
-      this.section(body, "Last 60 seconds");
-      this.graph = this.el("canvas", "ra-canvas");
-      this.graph.width = 576;
-      this.graph.height = 220;
-      body.appendChild(this.graph);
-      body.appendChild(this.el("div", "ra-hint", "Green your health, purple your damage per second, red damage you took per second."));
-      this.section(body, "Desync");
-      this.desyncText = this.el("div", "ra-hint", "Needs you in the game.");
-      body.appendChild(this.desyncText);
-      this.section(body, "Combat log");
-      this.combatLines = this.el("div", "ra-lines");
-      body.appendChild(this.combatLines);
-      this.section(body, "Knockback, server vs Ryn");
-      this.physLines = this.el("div", "ra-lines");
-      body.appendChild(this.physLines);
-      body.appendChild(this.el("div", "ra-hint", "How far a hit pushed a player in the first server tick and in all, next to what Ryn's knockback model expects for that first tick."));
-    },
-    kindName(kind) {
-      if (!kind) return "";
-      if (kind[0] === "w" && /^w\d+$/.test(kind)) return this.weaponName(Number(kind.slice(1)));
-      return kind;
-    },
-    fmtLog(e) {
-      const from = e.fromName || (e.kind ? this.kindName(e.kind) : "world");
-      const how = e.kind && e.fromName ? " · " + this.kindName(e.kind) : "";
-      return "t" + e.tick + "  " + (e.amount < 0 ? from + " → " + e.toName : e.toName + " healed") + "  " + (e.amount > 0 ? "+" : "") + e.amount + how + "  hp " + e.hp;
-    },
-    mineFilter(state) {
-      const me = state && state.me ? state.me.sid : -1;
-      const dummies = new Set((state ? state.players : []).filter(p => p.dummy).map(p => p.sid));
-      return e => !e.ai && (e.to === me || dummies.has(e.to)) || !e.fromAi && (e.from === me || dummies.has(e.from));
-    },
-    drawStats(state) {
-      const s = RynPrivate.call("stats");
-      if (!s || !this.statCells) return;
-      const c = this.statCells;
-      c.dps.textContent = String(s.dps);
-      c.burst.textContent = String(s.burst);
-      c.taken.textContent = String(s.taken);
-      c.insta.textContent = s.instaKills + " / " + s.instaTries;
-      c.heal.textContent = s.healAvg === null ? "–" : s.healAvg + "ms";
-      const kill = s.kills[s.kills.length - 1];
-      c.ttk.textContent = kill ? kill.ms + "ms" : "–";
-      if (kill) c.ttk.title = kill.name;
-      const log = (RynPrivate.call("log", 120) || []).filter(this.mineFilter(state)).slice(-16).reverse();
-      const lines = this.combatLines;
-      lines.innerHTML = "";
-      for (const e of log) lines.appendChild(this.el("div", e.amount < 0 ? "ra-hurt" : "ra-heal", this.fmtLog(e)));
-      const phys = RynPrivate.call("physics") || [];
-      const pl = this.physLines;
-      pl.innerHTML = "";
-      for (const p of phys.slice().reverse()) {
-        const same = p.ryn !== null && Math.abs(p.first - p.ryn) <= 3;
-        pl.appendChild(this.el("div", same ? "ra-heal" : p.ryn === null ? "" : "ra-hurt", "t" + p.tick + "  " + p.name + " · " + this.kindName(p.kind) + ": " + p.first + "px" + (p.ryn === null ? "" : ", Ryn " + p.ryn + "px" + (same ? " ✓" : "")) + ", total " + p.total + "px"));
-      }
-      this.drawGraph();
-      this.drawDesyncText();
-    },
-    drawGraph() {
-      const cv = this.graph;
-      if (!cv) return;
-      const ctx = cv.getContext("2d");
-      const W = cv.width;
-      const H = cv.height;
-      ctx.clearRect(0, 0, W, H);
-      ctx.font = "18px sans-serif";
-      const data = RynPrivate.call("series") || [];
-      if (data.length < 2) {
-        ctx.fillStyle = "#726f80";
-        ctx.fillText("No data yet", 14, 30);
-        return;
-      }
-      const t1 = data[data.length - 1][1];
-      const t0 = t1 - 6e4;
-      const perSecond = col => {
-        const out = [];
-        let sum = 0;
-        let j = 0;
-        for (let i = 0; i < data.length; i++) {
-          sum += data[i][col];
-          while (data[i][1] - data[j][1] > 1e3) sum -= data[j++][col];
-          out.push(sum);
-        }
-        return out;
-      };
-      const dealt = perSecond(3);
-      const taken = perSecond(4);
-      const top = Math.max(100, ...dealt, ...taken);
-      const X = at => (at - t0) / 6e4 * W;
-      const Y = (v, max) => H - 8 - v / max * (H - 16);
-      ctx.strokeStyle = "rgba(255,255,255,0.07)";
-      ctx.lineWidth = 1;
-      for (const f of [ .25, .5, .75 ]) {
-        ctx.beginPath();
-        ctx.moveTo(0, Y(f * 100, 100));
-        ctx.lineTo(W, Y(f * 100, 100));
-        ctx.stroke();
-      }
-      const line = (values, max, color) => {
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        data.forEach((row, i) => {
-          const x = X(row[1]);
-          const y = Y(values[i], max);
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        });
-        ctx.stroke();
-      };
-      line(data.map(r => r[2]), 100, "#a6d7b2");
-      line(taken, top, "#d9a3ab");
-      line(dealt, top, "#a894e0");
-      ctx.fillStyle = "#aca9ba";
-      ctx.fillText("max " + Math.round(top) + "/s", W - 130, 24);
-    },
-    trackDesync(me) {
-      let pl = null;
-      try {
-        pl = client.myPlayer;
-      } catch (_) {}
-      if (!me || !me.alive || !pl || !pl.pos || !pl.pos.current || !pl.pos.future) {
-        this.desyncNow = null;
-        return;
-      }
-      const cur = pl.pos.current;
-      const fut = pl.pos.future;
-      const shown = Math.hypot(cur.x - me.x, cur.y - me.y);
-      const pred = Math.hypot(fut.x - me.x, fut.y - me.y);
-      const now = performance.now();
-      this.desyncNow = {
-        shown: shown,
-        pred: pred,
-        fx: fut.x,
-        fy: fut.y
-      };
-      const hist = this.desyncHist || (this.desyncHist = []);
-      hist.push([ now, pred ]);
-      while (hist.length && now - hist[0][0] > 5e3) hist.shift();
-      if (pred > 60) {
-        this.desyncBad = (this.desyncBad || 0) + 1;
-        if (this.desyncBad === 3) this.desyncWarn = (this.desyncWarn || 0) + 1;
-      } else {
-        this.desyncBad = 0;
-      }
-    },
-    drawDesyncText() {
-      if (!this.desyncText) return;
-      const d = this.desyncNow;
-      if (!d) {
-        this.desyncText.textContent = "Needs you in the game.";
-        return;
-      }
-      const peak = Math.max(0, ...(this.desyncHist || []).map(h => h[1]));
-      this.desyncText.textContent = "Ryn shows you " + Math.round(d.shown) + "px from where the server has you; its prediction is " + Math.round(d.pred) + "px off (worst in 5s: " + Math.round(peak) + "px). Over 60px for 3 frames: " + (this.desyncWarn || 0) + " times.";
-    },
-    exportFight(copy) {
-      const state = RynPrivate.state();
-      const s = RynPrivate.call("stats");
-      if (!state || !s) {
-        this.say("Spawn into the game first (press Play).", true);
-        return;
-      }
-      const log = (RynPrivate.call("log", 400) || []).filter(this.mineFilter(state));
-      const phys = RynPrivate.call("physics") || [];
-      let version = "?";
-      try {
-        version = GM_info.script.version;
-      } catch (_) {}
-      const lines = [ "Ryn fight export", new Date().toString(), "Ryn " + version + " · ping " + RynPrivate.ping.ms + "ms ±" + RynPrivate.ping.jitter + " · tick " + s.tick, "", "DPS " + s.dps + " · best tick " + s.burst + " · taken (5s) " + s.taken + " · insta kills " + s.instaKills + "/" + s.instaTries + " · heal after hit " + (s.healAvg === null ? "-" : s.healAvg + "ms") + " · shame " + s.shame, "Kills: " + (s.kills.map(k => k.name + " in " + k.ms + "ms").join(", ") || "-"), "Heals: " + (s.heals.map(h => h.ms + "ms/" + h.ticks + "t").join(", ") || "-"), "", "Combat log:" ].concat(log.map(e => this.fmtLog(e)), [ "", "Knockback (server first tick / Ryn / total):" ], phys.map(p => "t" + p.tick + " " + p.name + " " + this.kindName(p.kind) + ": " + p.first + " / " + (p.ryn === null ? "-" : p.ryn) + " / " + p.total));
-      const text = lines.join("\n");
-      if (copy) {
-        try {
-          navigator.clipboard.writeText(text).then(() => this.say("Fight copied"), () => this.say("Could not copy", true));
-        } catch (_) {
-          this.say("Could not copy", true);
-        }
-        return;
-      }
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(new Blob([ text ], {
-        type: "text/plain"
-      }));
-      a.download = "ryn-fight-" + new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + ".txt";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 3e3);
-      this.say("Saved " + a.download);
-    },
-    // The overlays draw on a canvas of their own over the game, in their own frame
-    // loop, and never touch the game's canvas or its renderer.
-    overlayCanvas: null,
-    overlayDirty: false,
-    startOverlay() {
-      const loop = () => {
-        try {
-          this.drawOverlay();
-        } catch (_) {}
-        requestAnimationFrame(loop);
-      };
-      requestAnimationFrame(loop);
-    },
-    overlayContext() {
-      let cv = this.overlayCanvas;
-      if (!cv || !cv.isConnected) {
-        if (!document.body) return null;
-        cv = this.overlayCanvas = document.createElement("canvas");
-        cv.id = "ryn-admin-overlay";
-        cv.style.cssText = "position:fixed;left:0;top:0;width:100vw;height:100vh;pointer-events:none;z-index:47;";
-        document.body.appendChild(cv);
-        try {
-          Renderer._keepMenusAbove(47);
-        } catch (_) {}
-      }
-      const dpr = window.devicePixelRatio || 1;
-      const W = Math.round(window.innerWidth * dpr);
-      const H = Math.round(window.innerHeight * dpr);
-      if (cv.width !== W || cv.height !== H) {
-        cv.width = W;
-        cv.height = H;
-      }
-      return cv.getContext("2d");
-    },
-    drawOverlay() {
-      const L = this.layers || {};
-      const needWorld = !!(L.truth || L.ranges || L.shots);
-      const needMe = !!(L.shame || L.desync || this.open && this.tab === "stats");
-      const active = RynPrivate.on && this.root !== null && RynPrivate.ownerSocket !== null && (needWorld || needMe || this.editMode);
-      if (!active) {
-        if (this.overlayDirty && this.overlayCanvas) {
-          this.overlayCanvas.getContext("2d").clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
-          this.overlayDirty = false;
-        }
-        return;
-      }
-      const me = RynPrivate.call("me");
-      if (needMe) this.trackDesync(me);
-      const ctx = this.overlayContext();
-      if (ctx === null) return;
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-      this.overlayDirty = true;
-      if (!me || !me.alive) return;
-      let view;
-      try {
-        const {_w: w, _h: h} = ZoomHandler_default._scale.current;
-        const off = RYN._offset;
-        view = {
-          scale: Math.max(window.innerWidth / w, window.innerHeight / h),
-          cx: off.x + w / 2,
-          cy: off.y + h / 2
-        };
-      } catch (_) {
-        return;
-      }
-      if (!Number.isFinite(view.scale) || !Number.isFinite(view.cx) || !Number.isFinite(view.cy)) return;
-      // world coordinates, the same mapping as the cursor (worldAt)
-      const dpr = window.devicePixelRatio || 1;
-      ctx.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * (window.innerWidth / 2 - view.cx * view.scale), dpr * (window.innerHeight / 2 - view.cy * view.scale));
-      const w = needWorld ? RynPrivate.world() : null;
-      if (w !== null) {
-        if (L.ranges) this.drawRanges(ctx, w, me, true);
-        if (L.shots) this.drawShots(ctx, w);
-        if (L.truth) this.drawTruth(ctx, w, me, true);
-      }
-      ctx.setLineDash([]);
-      if (L.desync && this.desyncNow) this.drawDesync(ctx, me);
-      if (L.shame) this.drawShameMark(ctx, me);
-      if (this.editMode && this.mouse) this.drawEditPreview(ctx);
-    },
-    drawTruth(ctx, w, me, dash) {
-      ctx.lineWidth = 3;
-      if (dash) ctx.setLineDash([ 10, 8 ]);
-      ctx.strokeStyle = "rgba(120, 220, 255, 0.9)";
-      for (const p of w.players) {
-        ctx.beginPath();
-        ctx.arc(p[1], p[2], p[3], 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      ctx.strokeStyle = "rgba(255, 170, 90, 0.9)";
-      for (const a of w.ais) {
-        ctx.beginPath();
-        ctx.arc(a[2], a[3], a[4], 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      if (dash) ctx.setLineDash([]);
-      ctx.font = "bold 15px sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillStyle = "rgba(120, 220, 255, 0.95)";
-      const mine = me ? w.players.find(p => p[0] === me.sid) : null;
-      if (mine) ctx.fillText("server tick " + w.tick, mine[1], mine[2] + mine[3] + 62);
-      const king = w.ais.find(a => a[1] === 11);
-      const k = this.lastPanel && this.lastPanel.kings[0];
-      if (king && k) {
-        ctx.fillStyle = "rgba(255, 170, 90, 0.95)";
-        ctx.fillText(RYN_ADMIN_PHASES[k.phase] || k.phase, king[2], king[3] - king[4] - 30);
-      }
-      for (const [id, x, y, kind, every, max, alive] of w.spawners || []) {
-        ctx.strokeStyle = "rgba(166, 215, 178, 0.9)";
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(x, y, 80, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.fillStyle = "rgba(166, 215, 178, 0.95)";
-        ctx.fillText("#" + id + " " + kind + " " + alive + "/" + max, x, y - 92);
-      }
-    },
-    drawRanges(ctx, w, me, dash) {
-      const c = RynPrivate.catalog();
-      const ranges = c && c.weaponRange || [];
-      for (const d of w.danger || []) {
-        const [, x, y, scale, kind, range, owner] = d;
-        const mine = me && owner === me.sid;
-        if (kind === "spike") {
-          ctx.fillStyle = mine ? "rgba(127, 179, 255, 0.10)" : "rgba(230, 90, 90, 0.16)";
-          ctx.beginPath();
-          ctx.arc(x, y, scale + 35, 0, Math.PI * 2);
-          ctx.fill();
-        } else {
-          ctx.strokeStyle = mine ? "rgba(127, 179, 255, 0.5)" : "rgba(255, 170, 90, 0.6)";
-          ctx.lineWidth = 2;
-          if (dash) ctx.setLineDash([ 4, 10 ]);
-          ctx.beginPath();
-          ctx.arc(x, y, range, 0, Math.PI * 2);
-          ctx.stroke();
-          if (dash) ctx.setLineDash([]);
-        }
-      }
-      for (const p of w.players) {
-        const r = ranges[p[7]] || 0;
-        if (!r) continue;
-        const mine = me && p[0] === me.sid;
-        ctx.strokeStyle = mine ? "rgba(127, 179, 255, 0.85)" : "rgba(230, 120, 120, 0.8)";
-        ctx.lineWidth = 2;
-        if (dash) ctx.setLineDash([ 6, 6 ]);
-        ctx.beginPath();
-        ctx.arc(p[1], p[2], r + 35, 0, Math.PI * 2);
-        ctx.stroke();
-        if (dash) ctx.setLineDash([]);
-      }
-    },
-    drawShots(ctx, w) {
-      const now = performance.now();
-      const trails = this.trails || (this.trails = new Map);
-      for (const [sid, x, y] of w.shots || []) {
-        let t = trails.get(sid);
-        const last = t && t.pts[t.pts.length - 1];
-        if (!t || last && Math.hypot(x - last.x, y - last.y) > 400) {
-          t = {
-            pts: [],
-            seen: now
-          };
-          trails.set(sid, t);
-        }
-        if (!last || last.x !== x || last.y !== y) t.pts.push({
-          x: x,
-          y: y,
-          at: now
-        });
-        t.seen = now;
-      }
-      ctx.lineWidth = 3;
-      for (const [sid, t] of trails) {
-        t.pts = t.pts.filter(p => now - p.at < 900);
-        if (!t.pts.length) {
-          if (now - t.seen > 900) trails.delete(sid);
-          continue;
-        }
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.75)";
-        ctx.beginPath();
-        t.pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
-        ctx.stroke();
-        const head = t.pts[t.pts.length - 1];
-        ctx.fillStyle = "rgba(255, 230, 120, 0.95)";
-        ctx.beginPath();
-        ctx.arc(head.x, head.y, 7, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    },
-    drawDesync(ctx, me) {
-      const d = this.desyncNow;
-      const color = d.pred < 25 ? "rgba(166, 215, 178, 0.95)" : d.pred < 60 ? "rgba(240, 210, 110, 0.95)" : "rgba(230, 100, 100, 0.95)";
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(me.x, me.y);
-      ctx.lineTo(d.fx, d.fy);
-      ctx.stroke();
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(d.fx, d.fy, 6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.font = "bold 14px sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText(Math.round(d.pred) + "px", me.x, me.y - 70);
-    },
-    drawShameMark(ctx, me) {
-      const n = me.shame || 0;
-      const clown = me.shameTimer > 0;
-      if (!clown && n < 3) return;
-      ctx.font = "bold 16px sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillStyle = clown || n >= 6 ? "rgba(230, 100, 100, 0.95)" : "rgba(240, 210, 110, 0.95)";
-      ctx.fillText(clown ? "CLOWN " + Math.ceil(me.shameTimer / 1e3) + "s" : "shame " + n + "/8", me.x, me.y + 115);
     },
     benchTests() {
       return [ {
@@ -11612,24 +11077,23 @@ module.exports.PACKETCODE = PACKETCODE
       const t = this.benchTests().find(x => x.id === id);
       return t ? t.name : id;
     },
-    buildBench(body) {
-      this.section(body, "Test bench");
+    buildBench(page) {
+      const body = this.section(page, "bench", "Test bench", "Scores Ryn as it is set now; just stand still.");
       this.benchSelect = this.select(this.benchTests().map(t => [ t.id, t.name ]), "insta");
-      this.row(body, "", this.benchSelect, this.button("Run", () => this.benchRun([ this.benchSelect.value ]), "ra-go"));
+      this.row(body, "Test", this.benchSelect, this.button("Run", () => this.benchRun([ this.benchSelect.value ]), "ra-go"));
       this.row(body, "", this.button("Run all", () => this.benchRun(this.benchTests().map(t => t.id), true), "ra-go"), this.button("Stop", () => {
         this.benchStop = true;
-      }, "ra-del"));
+      }, "ra-del")).dataset.keys = "test bench";
       this.benchSetting = this.select([]);
       try {
         const keys = Object.keys(Settings_default).filter(k => typeof Settings_default[k] === "boolean" && /heal|insta|anti|soldier|sync|spike|trap|push|break|plac|gear|velocity|dash|turret|safe|predict|retrap|emp|tail|hat|kb/i.test(k) && !/^_bot|^_chat|render|hitbox|color|bar|ring|frozen|migrated/i.test(k));
         for (const k of keys.sort()) this.option(this.benchSetting, k, k.replace(/^_/, ""));
       } catch (_) {}
-      this.row(body, "A/B", this.benchSetting, this.button("Compare", () => this.benchAB(), "ra-go"));
-      this.benchStatus = this.el("div", "ra-hint", "");
+      this.row(body, "A/B", this.benchSetting, this.button("Compare", () => this.benchAB(), "ra-go", "Runs the test, flips the setting, runs it again and puts it back")).dataset.keys = "test setting";
+      this.benchStatus = this.el("div", "ra-note ra-item", "");
       body.appendChild(this.benchStatus);
-      this.benchLines = this.el("div", "ra-lines");
+      this.benchLines = this.el("div", "ra-lines ra-item");
       body.appendChild(this.benchLines);
-      body.appendChild(this.el("div", "ra-hint", "Tests your Ryn as it is set now; you can just stand there. A hit that would kill you counts as a death and heals you. A/B runs the test, flips the setting, runs it again and puts it back. Run all saves a report and compares it with the one before."));
       this.drawBenchHistory();
     },
     benchLine(text, cls) {
@@ -11849,38 +11313,1053 @@ module.exports.PACKETCODE = PACKETCODE
       }
       this.benchLine("Report " + new Date(last.at).toLocaleString() + " · Ryn " + last.version + (prev ? " (vs " + prev.version + ")" : "") + "\n" + lines.join("\n"));
     },
-    buildReplay(body) {
-      this.section(body, "Replay");
+    // ---- World ----
+    buildMap(page) {
+      const body = this.section(page, "map", "Map", "Place or Delete, then click the map. Esc stops, Ctrl+Z undoes.");
+      this.sub(body, "Presets");
+      this.grid(body, [ this.button("Forest", () => this.done("!map forest"), "", "Trees and bushes in the 1600 around you"), this.button("Rocks", () => this.done("!map rocks"), "", "Stone and gold in the 1600 around you"), this.button("Duel ring", () => this.done("!map duel"), "", "Clears the 1000 around you, buildings too, inside a ring of stones") ]).dataset.keys = "map preset";
+      this.sub(body, "Editor");
+      const what = this.editWhat = this.select([ [ "tree", "Tree" ], [ "bush", "Bush" ], [ "stone", "Stone" ], [ "gold", "Gold" ] ], "tree");
+      this.fillLater(c => {
+        for (const it of c.items) if (!it.consume) this.option(what, it.id, it.name);
+      });
+      this.editOwner = this.select([ [ "me", "Owner: me" ], [ "none", "Owner: nobody" ] ], "me");
+      this.editOwner.title = "With a dummy as the owner, its spikes and traps work against you";
+      this.editShape = this.select([ [ "point", "One" ], [ "line", "Line" ], [ "circle", "Circle" ], [ "square", "Square" ] ], "point");
+      this.editShape.title = "Line: click the start, then the end";
+      this.editSize = this.number(220, 20, 40, true);
+      this.editCount = this.number(8, 1, 2, true);
+      this.editSize.title = "Circle radius or square side";
+      this.editCount.title = "How many go on a circle";
+      this.editShape.addEventListener("change", () => {
+        this.editStart = null;
+      });
+      this.placeButton = this.liveToggle("Place", () => this.setEdit(this.editMode === "place" ? "" : "place"), "Click the map to place");
+      this.deleteButton = this.liveToggle("Delete", () => this.setEdit(this.editMode === "delete" ? "" : "delete"), "Click something on the map to delete it");
+      this.row(body, "What", what, this.editOwner).dataset.keys = "editor";
+      this.row(body, "Shape", this.editShape, this.editSize, this.editCount).dataset.keys = "editor size count";
+      this.row(body, "", this.placeButton, this.deleteButton, this.button("Undo", () => this.undo(), "", "Ctrl+Z")).dataset.keys = "editor";
+    },
+    setEdit(mode) {
+      this.editMode = mode;
+      this.editStart = null;
+      this.lit(this.placeButton, mode === "place");
+      this.lit(this.deleteButton, mode === "delete");
+      if (mode) this.say(mode === "place" ? "Click the map to place. Esc stops." : "Click something to delete it. Esc stops.");
+    },
+    buildAnimals(page) {
+      const body = this.section(page, "animals", "Animals", "Spawn puts them in front of you; a spawner keeps making them here.");
+      this.worldButtons = {};
+      const names = {
+        mobs: [ "Animals", "Every animal on the map" ],
+        hostile: [ "Hostile", "Animals that attack" ],
+        bosses: [ "Bosses", "Boss animals" ]
+      };
+      const switches = [];
+      for (const key of [ "mobs", "hostile", "bosses" ]) {
+        const b = this.liveToggle(names[key][0], () => {
+          const on = this.lastState && this.lastState.world && this.lastState.world[key];
+          this.done("!" + key + (on ? " off" : " on"));
+        }, names[key][1]);
+        this.worldButtons[key] = b;
+        switches.push(b);
+      }
+      this.grid(body, switches).dataset.keys = "mobs";
+      const animal = this.select(RYN_ADMIN_ANIMALS, "wolf");
+      this.row(body, "Animal", animal);
+      const count = this.number(1, 1, 1, true);
+      count.max = "20";
+      count.title = "How many";
+      this.row(body, "Spawn", count, this.button("Spawn", () => this.done("!spawn " + animal.value + " " + Math.max(1, Math.min(20, Number(count.value) || 1))), "ra-go")).dataset.keys = "animal";
+      const every = this.number(10, 1, 1, true);
+      const max = this.number(3, 1, 1, true);
+      every.title = "Seconds between animals";
+      max.title = "Most alive at once";
+      every.className = max.className = "ra-tiny";
+      this.row(body, "Spawner", every, this.el("span", "ra-unit", "s"), max, this.el("span", "ra-unit", "max"), this.button("Add", () => this.done("!spawner " + animal.value + " " + (Number(every.value) || 10) + " " + (Number(max.value) || 3)), "ra-go", "A spawner here: one animal every so many seconds, up to max alive")).dataset.keys = "animal spawner every";
+      this.spawnerList = this.el("div", "ra-plist ra-item");
+      this.spawnerList.dataset.keys = "spawner";
+      body.appendChild(this.spawnerList);
+      this.row(body, "", this.button("Remove spawners", () => this.done("!spawner clear"), "ra-del"), this.button("Send away", () => this.done("!killmobs 2000"), "", "Animals within 2000 of you leave")).dataset.keys = "animals spawner";
+    },
+    buildKing(page) {
+      const body = this.section(page, "king", "Crab King", "Practice one attack at a time.");
+      const card = this.el("div", "ra-pl ra-item");
+      card.dataset.keys = "boss";
+      const top = this.el("div", "ra-pl-top");
+      this.kingName = this.el("span", "ra-pl-name", "");
+      this.kingHp = this.el("span", "ra-pl-hp", "");
+      top.appendChild(this.kingName);
+      top.appendChild(this.kingHp);
+      card.appendChild(top);
+      this.kingBar = this.el("div", "ra-bar");
+      this.kingFill = this.el("i");
+      this.kingBar.appendChild(this.kingFill);
+      card.appendChild(this.kingBar);
+      body.appendChild(card);
+      this.grid(body, [ this.button("Arena", () => this.done("!arena"), "ra-go", "Go to the Crab King's arena"), this.button("Respawn", () => this.done("!king respawn"), "", "Full health, or back now if dead"), this.button("Attack now", () => this.done("!king attack")) ]).dataset.keys = "boss";
+      const hp = this.number(24e4, 1e4, 1);
+      this.row(body, "Health", hp, this.button("Set", () => this.done("!king hp " + (Number(hp.value) || 1)), "ra-go")).dataset.keys = "hp boss";
+      const speeds = [ [ "0.5", "×0.5" ], [ "0.75", "×0.75" ], [ "1", "×1" ], [ "1.5", "×1.5" ], [ "2", "×2" ] ];
+      this.kingSpeed = this.select(speeds, "1");
+      this.kingSpeed.addEventListener("change", () => this.done("!king speed " + this.kingSpeed.value));
+      this.kingDamage = this.select([ [ "0", "×0" ] ].concat(speeds), "1");
+      this.kingDamage.addEventListener("change", () => this.done("!king damage " + this.kingDamage.value));
+      this.row(body, "Speed", this.kingSpeed);
+      this.row(body, "Damage", this.kingDamage);
+      this.kingOnly = this.select([ [ "all", "All attacks" ], [ "slam", "Slam only" ], [ "charge", "Charge only" ], [ "ring", "Ring only" ], [ "dive", "Dive only" ] ], "all");
+      this.kingOnly.addEventListener("change", () => this.done("!king only " + this.kingOnly.value));
+      this.row(body, "Practice", this.kingOnly).dataset.keys = "attack";
+      this.kingDodge = this.el("span", "ra-pl-hp", "");
+      this.kingDodge.style.whiteSpace = "normal";
+      this.kingDodge.style.flex = "1";
+      this.row(body, "", this.kingDodge, this.button("Reset counts", () => this.done("!king resetstats"))).dataset.keys = "dodge kill time";
+    },
+    buildRules(page) {
+      const body = this.section(page, "rules", "Rules", "All hits × is everyone; Your hit is a fixed number for you.");
+      const dmg = this.number(1, .25, .1);
+      this.row(body, "All hits ×", dmg, this.button("Set", () => this.done("!rules dmg " + (Number(dmg.value) || 1)), "ra-go")).dataset.keys = "damage";
+      const mine = this.number(100, 10, 0);
+      this.you(this.row(body, "Your hit", mine, this.button("Set", () => this.done("!dmg " + (Number(mine.value) || 0), "Hit damage " + (Number(mine.value) || 0)), "ra-go"), this.button("Normal", () => this.done("!dmg", "Hit damage normal")))).dataset.keys = "damage";
+      const gather = this.number(1, 1, 1);
+      this.row(body, "Gather ×", gather, this.button("Set", () => this.done("!rules gather " + (Number(gather.value) || 1)), "ra-go"));
+      const tick = this.number(9, 1, 1);
+      this.row(body, "Ticks/s", tick, this.button("Set", () => this.done("!rules tick " + Math.max(1, Math.min(30, Number(tick.value) || 9))), "ra-go")).dataset.keys = "tick rate";
+      this.sandboxButton = this.liveToggle("Free build", () => this.done("!rules sandbox " + (this.lastPanel && this.lastPanel.rules.sandbox ? "off" : "on")), "No cost and no limits");
+      this.row(body, "", this.sandboxButton, this.button("Reset rules", () => this.done("!rules dmg 1; !rules gather 1; !rules tick 9; !rules sandbox on", "Rules reset"))).dataset.keys = "sandbox";
+      this.rulesNow = this.el("div", "ra-note ra-item", "");
+      body.appendChild(this.rulesNow);
+    },
+    stamps() {
+      const all = this.store("_ryn_stamps");
+      return Array.isArray(all) ? all.filter(s => s && s.stamp && Array.isArray(s.stamp.items)) : [];
+    },
+    saves() {
+      const all = this.store("_ryn_admin_saves");
+      return all && typeof all === "object" && !Array.isArray(all) ? all : {};
+    },
+    buildSaves(page) {
+      const body = this.section(page, "saves", "Saves");
+      this.sub(body, "This world", "saves itself every 5s").dataset.keys = "lobby auto";
+      this.worldSave = this.el("div", "ra-note ra-item", "");
+      this.worldSave.dataset.keys = "lobby world";
+      body.appendChild(this.worldSave);
+      this.sub(body, "Snapshots", "buildings, trees, dummies, rules, your spot").dataset.keys = "save load";
+      const name = this.text("Name this snapshot");
+      this.row(body, "", name, this.button("Save", () => {
+        const label = name.value.trim() || "World " + (Object.keys(this.saves()).length + 1);
+        const snap = RynPrivate.call("snapshot");
+        if (!snap) {
+          this.say("Spawn into the game first (press Play).", true);
+          return;
+        }
+        const all = this.saves();
+        all[label] = {
+          at: Date.now(),
+          snap: snap
+        };
+        this.store("_ryn_admin_saves", all);
+        name.value = "";
+        this.drawSaves();
+        this.say("Saved " + label + " (" + snap.objects.length + " objects, " + snap.dummies.length + " dummies)");
+      }, "ra-go", "Loads back into the world you are in"));
+      this.saveList = this.el("div", "ra-plist ra-item");
+      this.saveList.dataset.keys = "snapshot load";
+      body.appendChild(this.saveList);
+      this.sub(body, "Bases", "your own buildings, stamped where you stand").dataset.keys = "stamp";
+      const stampName = this.text("Name this base");
+      const radius = this.select([ [ "400", "400 around" ], [ "600", "600 around" ], [ "900", "900 around" ] ], "600");
+      this.row(body, "", stampName, radius).dataset.keys = "base stamp";
+      this.row(body, "", this.button("Copy my base", () => {
+        const stamp = RynPrivate.call("copyBase", Number(radius.value));
+        if (!stamp) {
+          this.say("Spawn into the game first (press Play).", true);
+          return;
+        }
+        if (!stamp.items.length) {
+          this.say("No buildings of yours around you", true);
+          return;
+        }
+        const all = this.stamps();
+        const label = stampName.value.trim() || "Base " + (all.length + 1);
+        all.push({
+          name: label,
+          stamp: stamp
+        });
+        this.store("_ryn_stamps", all);
+        stampName.value = "";
+        this.drawStamps();
+        this.say("Copied " + label + ": " + stamp.items.length + " buildings");
+      }, "ra-go"), this.toggleButton("Turn with me", () => !!this.store("_ryn_stamp_turn"), v => this.store("_ryn_stamp_turn", v), "Stamp turned to where you look")).dataset.keys = "stamp";
+      this.stampList = this.el("div", "ra-plist ra-item");
+      this.stampList.dataset.keys = "base stamp";
+      body.appendChild(this.stampList);
+      this.drawSaves();
+      this.drawStamps();
+    },
+    drawWorldSave() {
+      const box = this.worldSave;
+      if (!box) return;
+      let text = "Pick or make a world in the lobby's Worlds list.";
+      try {
+        const w = RynWorlds.applied ? RynWorlds.list().find(x => x.id === RynWorlds.applied) : null;
+        if (w) {
+          const ago = w.played ? Math.max(0, Math.round((Date.now() - w.played) / 1e3)) : null;
+          text = w.name + (ago === null ? "" : " · saved " + (ago < 60 ? ago + "s" : Math.round(ago / 60) + "m") + " ago");
+        }
+      } catch (_) {}
+      if (box.textContent !== text) box.textContent = text;
+    },
+    buildTravel(page) {
+      const body = this.section(page, "travel", "Travel", "Players: Go on the target bar. The arena: Crab King.");
+      const x = this.number(7200, 100);
+      const y = this.number(7200, 100);
+      this.row(body, "X / Y", x, y, this.button("Go", () => this.done("!tp " + (Number(x.value) || 0) + " " + (Number(y.value) || 0), "Teleported"), "ra-go")).dataset.keys = "teleport tp";
+    },
+    buildClear(page) {
+      const body = this.section(page, "clear", "Clear & reset", "Near = around you. Hover a button for what it removes.", true);
+      this.grid(body, [ this.button("Buildings near", () => this.done("!clearnear 600"), "ra-del", "Every building within 600 of you"), this.button("Nature near", () => this.done("!map empty"), "ra-del", "Trees, bushes, stone and gold within 1600 of you"), this.button("All buildings", () => this.done("!b", "Buildings cleared"), "ra-del", "Every building on the map") ]).dataset.keys = "clear delete";
+      this.grid(body, [ this.button("Original map", () => this.done("!map reset"), "ra-del", "The whole map's nature back the way the server made it"), this.button("Fresh start", () => this.done("!dummy clear; !b; !rules dmg 1; !rules gather 1; !rules tick 9; !rules sandbox on; !time play; !time speed 1; !king respawn", "Fresh start: no dummies, no buildings, normal rules"), "ra-del", "No dummies or buildings, normal rules and time, the Crab King back") ]).dataset.keys = "reset clear";
+    },
+    drawEditorOwners(state) {
+      const select = this.editOwner;
+      if (!select) return;
+      const dummies = state.players.filter(p => p.dummy);
+      const sig = dummies.map(p => p.sid + p.name).join("|");
+      if (sig === this._ownerSig) return;
+      this._ownerSig = sig;
+      const current = select.value;
+      select.innerHTML = "";
+      this.option(select, "me", "Owner: me");
+      this.option(select, "none", "Owner: nobody");
+      for (const p of dummies) this.option(select, "d" + p.sid, "Owner: " + p.name);
+      select.value = [ ...select.options ].some(o => o.value === current) ? current : "me";
+    },
+    worldAt(cx, cy) {
+      try {
+        const {_w: w, _h: h} = ZoomHandler_default._scale.current;
+        const scale = Math.max(window.innerWidth / w, window.innerHeight / h);
+        const off = RYN._offset;
+        return {
+          x: off.x + w / 2 + (cx - window.innerWidth / 2) / scale,
+          y: off.y + h / 2 + (cy - window.innerHeight / 2) / scale
+        };
+      } catch (_) {
+        return null;
+      }
+    },
+    editTarget(e) {
+      if (!this.editMode || e.button !== 0) return false;
+      const t = e.target;
+      return !!t && t.tagName === "CANVAS" && t.id !== "mapDisplay";
+    },
+    spacingOf(what) {
+      const nature = {
+        tree: 300,
+        bush: 170,
+        stone: 210,
+        gold: 160
+      };
+      if (nature[what]) return nature[what];
+      const c = RynPrivate.catalog();
+      const it = c && c.items.find(i => String(i.id) === String(what));
+      return it && it.scale ? it.scale * 2 + 2 : 100;
+    },
+    shapePoints(shape, at) {
+      const gap = this.spacingOf(this.editWhat.value);
+      const size = Math.max(40, Number(this.editSize.value) || 220);
+      const pts = [];
+      if (shape === "line" && this.editStart) {
+        const s = this.editStart;
+        const len = Math.hypot(at.x - s.x, at.y - s.y);
+        const a = Math.atan2(at.y - s.y, at.x - s.x);
+        const n = Math.min(60, Math.floor(len / gap) + 1);
+        for (let i = 0; i < n; i++) pts.push([ s.x + gap * i * Math.cos(a), s.y + gap * i * Math.sin(a) ]);
+      } else if (shape === "circle") {
+        const n = Math.max(2, Math.min(40, Number(this.editCount.value) || 8));
+        for (let i = 0; i < n; i++) {
+          const a = i / n * Math.PI * 2;
+          pts.push([ at.x + size * Math.cos(a), at.y + size * Math.sin(a) ]);
+        }
+      } else if (shape === "square") {
+        const h = size / 2;
+        const per = Math.max(1, Math.min(15, Math.round(size / gap)));
+        const c = [ [ -h, -h ], [ h, -h ], [ h, h ], [ -h, h ] ];
+        for (let i = 0; i < 4; i++) {
+          const [x1, y1] = c[i];
+          const [x2, y2] = c[(i + 1) % 4];
+          for (let k = 0; k < per; k++) pts.push([ at.x + x1 + (x2 - x1) * k / per, at.y + y1 + (y2 - y1) * k / per ]);
+        }
+      } else {
+        pts.push([ at.x, at.y ]);
+      }
+      return pts.map(([x, y]) => [ Math.round(x), Math.round(y) ]);
+    },
+    onEditPointer(e) {
+      if (!this.editTarget(e)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const at = this.worldAt(e.clientX, e.clientY);
+      if (at === null) return;
+      if (this.editMode === "delete") {
+        const rec = RynPrivate.call("removeAt", {
+          x: at.x,
+          y: at.y,
+          r: 90
+        });
+        if (rec) {
+          this.pushUndo({
+            recs: [ rec ]
+          });
+          this.say("Removed " + this.objName(rec));
+        } else {
+          this.say("Nothing there", true);
+        }
+        return;
+      }
+      const shape = this.editShape.value;
+      if (shape === "line" && !this.editStart) {
+        this.editStart = at;
+        this.say("Now click where the line ends.");
+        return;
+      }
+      const points = this.shapePoints(shape, at);
+      this.editStart = null;
+      const o = this.editOwner.value;
+      const r = RynPrivate.call("placeMany", {
+        what: this.editWhat.value,
+        owner: o === "none" || o === "me" ? o : o.slice(1),
+        points: points
+      });
+      if (!r || !r.sids.length) {
+        this.say(r ? "That can't be placed" : "Spawn into the game first (press Play).", true);
+        return;
+      }
+      this.pushUndo({
+        sids: r.sids
+      });
+      this.say("Placed " + r.sids.length + " " + r.name);
+    },
+    pushUndo(entry) {
+      const stack = this.undoStack || (this.undoStack = []);
+      stack.push(entry);
+      if (stack.length > 40) stack.shift();
+    },
+    undo() {
+      const e = (this.undoStack || []).pop();
+      if (!e) {
+        this.say("Nothing to undo", true);
+        return;
+      }
+      if (e.sids) this.say("Undone: took away " + (RynPrivate.call("removeSids", e.sids) || 0)); else if (e.recs) {
+        RynPrivate.call("restoreObjs", e.recs);
+        this.say("Undone: put back " + e.recs.map(r => this.objName(r)).join(", "));
+      }
+    },
+    objName(rec) {
+      if (rec[5] >= 0) {
+        const c = RynPrivate.catalog();
+        const it = c && c.items.find(i => i.id === rec[5]);
+        return it ? it.name : "item";
+      }
+      return [ "tree", "bush", "stone", "gold" ][rec[4]] || "object";
+    },
+    drawEditPreview(ctx) {
+      const at = this.worldAt(this.mouse.x, this.mouse.y);
+      if (at === null) return;
+      ctx.lineWidth = 3;
+      if (this.editMode === "delete") {
+        ctx.strokeStyle = "rgba(217, 163, 171, 0.95)";
+        ctx.beginPath();
+        ctx.arc(at.x, at.y, 90, 0, Math.PI * 2);
+        ctx.stroke();
+        return;
+      }
+      ctx.strokeStyle = "rgba(166, 215, 178, 0.95)";
+      const shape = this.editShape.value;
+      if (shape === "line" && this.editStart) {
+        ctx.beginPath();
+        ctx.moveTo(this.editStart.x, this.editStart.y);
+        ctx.lineTo(at.x, at.y);
+        ctx.stroke();
+      }
+      const pts = shape === "line" && !this.editStart ? [ [ at.x, at.y ] ] : this.shapePoints(shape, at);
+      const r = Math.max(20, this.spacingOf(this.editWhat.value) / 2 - 4);
+      for (const [x, y] of pts) {
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    },
+    drawStamps() {
+      const list = this.stampList;
+      if (!list) return;
+      list.innerHTML = "";
+      this.stamps().forEach((s, i) => {
+        const card = this.el("div", "ra-pl");
+        const top = this.el("div", "ra-pl-top");
+        top.appendChild(this.el("span", "ra-pl-name", s.name));
+        top.appendChild(this.el("span", "ra-chip", s.stamp.items.length + " items"));
+        card.appendChild(top);
+        const r = this.row(card, "", this.button("Stamp", () => {
+          const sids = RynPrivate.call("pasteBase", {
+            stamp: s.stamp,
+            rotate: !!this.store("_ryn_stamp_turn")
+          });
+          if (!sids) {
+            this.say("Spawn into the game first (press Play).", true);
+            return;
+          }
+          this.pushUndo({
+            sids: sids
+          });
+          this.say("Stamped " + s.name + " (" + sids.length + ")");
+        }, "ra-go"), this.button("Delete", () => {
+          const all = this.stamps();
+          all.splice(i, 1);
+          this.store("_ryn_stamps", all);
+          this.drawStamps();
+        }, "ra-del"));
+        r.style.marginTop = "5px";
+        list.appendChild(card);
+      });
+    },
+    drawSpawners(list) {
+      const box = this.spawnerList;
+      if (!box) return;
+      const sig = list.map(s => [ s.id, s.alive, s.max ].join(":")).join("|");
+      if (sig === this._spawnSig) return;
+      this._spawnSig = sig;
+      box.innerHTML = "";
+      for (const s of list) {
+        const card = this.el("div", "ra-pl");
+        const top = this.el("div", "ra-pl-top");
+        top.appendChild(this.el("span", "ra-pl-name", "#" + s.id + " " + s.kind + " · every " + s.every + "s"));
+        top.appendChild(this.el("span", "ra-chip", s.alive + "/" + s.max));
+        top.appendChild(this.button("Remove", () => this.done("!spawner remove " + s.id), "ra-del"));
+        card.appendChild(top);
+        box.appendChild(card);
+      }
+    },
+    drawSaves() {
+      const list = this.saveList;
+      if (!list) return;
+      list.innerHTML = "";
+      for (const [label, save] of Object.entries(this.saves())) {
+        const card = this.el("div", "ra-pl");
+        const top = this.el("div", "ra-pl-top");
+        top.appendChild(this.el("span", "ra-pl-name", label));
+        top.appendChild(this.el("span", "ra-hint", new Date(save.at).toLocaleString()));
+        card.appendChild(top);
+        const r = this.row(card, "", this.button("Load", () => {
+          const ok = RynPrivate.call("restore", save.snap);
+          this.say(ok ? "Loaded " + label : "Spawn into the game first (press Play).", !ok);
+        }, "ra-go"), this.button("Delete", () => {
+          const all = this.saves();
+          delete all[label];
+          this.store("_ryn_admin_saves", all);
+          this.drawSaves();
+        }, "ra-del"));
+        r.style.marginTop = "5px";
+        list.appendChild(card);
+      }
+    },
+    autoTick() {
+      RynWorlds.save();
+    },
+    drawKingStats(st) {
+      if (!this.kingDodge || !st) return;
+      const names = {
+        slam: "slam",
+        charge: "charge",
+        ring: "ring",
+        dive: "dive"
+      };
+      const kinds = Object.entries(st.kinds).map(([k, [d, h]]) => names[k] + " " + d + "/" + (d + h)).join(", ");
+      let best = Number(this.store("_ryn_king_best")) || null;
+      if (st.bestKill && (!best || st.bestKill < best)) {
+        best = st.bestKill;
+        this.store("_ryn_king_best", best);
+      }
+      const s = ms => (ms / 1e3).toFixed(1) + "s";
+      this.kingDodge.textContent = "Dodged " + st.dodged + " of " + (st.dodged + st.hit) + (kinds ? " (" + kinds + ")" : "") + ". Kill time: " + (st.fighting !== null ? "now " + s(st.fighting) + ", " : "") + "last " + (st.lastKill ? s(st.lastKill) : "–") + ", best " + (best ? s(best) : "–") + ".";
+    },
+    // ---- Analyze ----
+    buildFight(page) {
+      const body = this.section(page, "fight", "Fight", "Your fight, counted by the server.");
+      const grid = this.el("div", "ra-stats ra-item");
+      grid.dataset.keys = "dps stats damage insta heal kill";
+      this.statCells = {};
+      for (const [key, label] of [ [ "dps", "DPS, last 5s" ], [ "burst", "Best tick" ], [ "taken", "Taken, 5s" ], [ "insta", "Insta kills" ], [ "heal", "Heal after hit" ], [ "ttk", "Last kill" ] ]) {
+        const cell = this.el("div", "ra-stat");
+        const value = this.el("b", "", "–");
+        cell.appendChild(value);
+        cell.appendChild(this.el("span", "", label));
+        grid.appendChild(cell);
+        this.statCells[key] = value;
+      }
+      body.appendChild(grid);
+      this.row(body, "", this.button("Reset", () => {
+        RynPrivate.call("clearLog");
+        this.refresh();
+      }, "", "Clears the stats and the combat log"), this.button("Export", () => this.exportFight(false), "", "Save the fight as a text file"), this.button("Copy", () => this.exportFight(true), "", "Copy the fight as text")).dataset.keys = "stats fight";
+    },
+    buildGraph(page) {
+      const body = this.section(page, "graph", "Graph", "Last 60s: green health, purple dealt/s, red taken/s.");
+      this.graph = this.el("canvas", "ra-canvas ra-item");
+      this.graph.width = 576;
+      this.graph.height = 220;
+      body.appendChild(this.graph);
+    },
+    buildCombatLog(page) {
+      const body = this.section(page, "combat", "Combat log");
+      this.combatLines = this.el("div", "ra-lines ra-item");
+      this.combatLines.dataset.keys = "hits damage";
+      body.appendChild(this.combatLines);
+    },
+    buildKnockback(page) {
+      const body = this.section(page, "knockback", "Knockback", "First server tick and total, next to Ryn's model.");
+      this.physLines = this.el("div", "ra-lines ra-item");
+      this.physLines.dataset.keys = "kb push";
+      body.appendChild(this.physLines);
+    },
+    buildReplay(page) {
+      const body = this.section(page, "replay", "Replay", "The last 30 seconds, tick by tick.");
       this.replayFocus = this.select([ [ "me", "Follow me" ] ], "me");
       this.replayZoom = this.select([ [ "0.6", "×0.6" ], [ "1", "×1" ], [ "1.5", "×1.5" ], [ "2", "×2" ] ], "1");
-      this.row(body, "", this.button("Grab last 30s", () => this.grabReplay(), "ra-go"), this.replayFocus, this.replayZoom);
-      this.replayCanvas = this.el("canvas", "ra-canvas");
+      this.replayZoom.title = "Zoom";
+      this.replayZoom.style.flex = "0 0 auto";
+      this.row(body, "", this.button("Grab 30s", () => this.grabReplay(), "ra-go", "Take the last 30 seconds"), this.replayFocus, this.replayZoom).dataset.keys = "replay";
+      this.replayCanvas = this.el("canvas", "ra-canvas ra-item");
       this.replayCanvas.width = 576;
       this.replayCanvas.height = 400;
       body.appendChild(this.replayCanvas);
-      this.replaySlider = this.el("input");
+      this.replaySlider = this.el("input", "ra-item");
       this.replaySlider.type = "range";
       this.replaySlider.min = "0";
       this.replaySlider.max = "0";
       this.replaySlider.value = "0";
       this.replaySlider.addEventListener("input", () => this.drawReplay());
       body.appendChild(this.replaySlider);
-      this.replayPlay = this.button("Play", () => this.toggleReplay());
+      this.replayPlay = this.button("Play", () => this.toggleReplay(), "ra-go");
       this.replaySpeed = this.select([ [ "0.25", "×0.25" ], [ "0.5", "×0.5" ], [ "1", "×1" ] ], "1");
+      this.replaySpeed.title = "Playback speed";
       const step = n => () => {
         this.stopReplay();
         this.replaySlider.value = String(Math.max(0, Math.min(Number(this.replaySlider.max), Number(this.replaySlider.value) + n)));
         this.drawReplay();
       };
-      this.row(body, "", this.button("|<", step(-1e4)), this.button("<", step(-1)), this.replayPlay, this.button(">", step(1)), this.button(">|", step(1e4)), this.replaySpeed, this.button("Big", () => {
-        this.root.classList.toggle("ra-wide");
-        this.place(this.x, this.y);
-      }));
+      this.row(body, "", this.button("|<", step(-1e4), "", "First tick"), this.button("<", step(-1), "", "One tick back"), this.replayPlay, this.button(">", step(1), "", "One tick on"), this.button(">|", step(1e4), "", "Last tick"), this.replaySpeed).dataset.keys = "replay play";
       for (const s of [ this.replayFocus, this.replayZoom ]) s.addEventListener("change", () => this.drawReplay());
-      this.replayInfo = this.el("div", "ra-hint", "Grab to see the last 30 seconds tick by tick.");
+      this.replayInfo = this.el("div", "ra-note ra-item", "Grab to see the last 30 seconds.");
       body.appendChild(this.replayInfo);
-      this.replayHits = this.el("div", "ra-lines");
+      this.replayHits = this.el("div", "ra-lines ra-item");
       body.appendChild(this.replayHits);
+    },
+    buildLayers(page) {
+      const body = this.section(page, "layers", "On screen", "Their own layer over the game; hover for details.");
+      const tips = {
+        truth: "Where the server has everyone (dashed), the server tick under you, and spawners",
+        ranges: "Weapon reach, spikes and turrets",
+        shots: "Projectile paths",
+        desync: "A line from where Ryn predicts you to where the server has you",
+        shame: "Your shame count under you"
+      };
+      const buttons = [];
+      for (const [key, label] of [ [ "truth", "Truth" ], [ "ranges", "Ranges" ], [ "shots", "Shots" ], [ "desync", "Desync" ], [ "shame", "Shame" ] ]) {
+        buttons.push(this.toggleButton(label, () => !!this.layers[key], v => {
+          this.layers[key] = v;
+          this.store("_ryn_admin_layers", this.layers);
+        }, tips[key]));
+      }
+      this.grid(body, buttons).dataset.keys = "overlay layers";
+    },
+    buildDesync(page) {
+      const body = this.section(page, "desync", "Desync", "Ryn's prediction of you against the server.");
+      this.desyncText = this.el("div", "ra-note ra-item", "Needs you in the game.");
+      body.appendChild(this.desyncText);
+    },
+    // ---- Tools ----
+    buildCustom(page) {
+      const body = this.section(page, "buttons", "My buttons", "Right-click to edit. Several commands: !god; !res 99999");
+      this.customGrid = this.grid(body, []);
+      this.customGrid.dataset.keys = "custom hotkey";
+      this.customEditor = this.el("div", "ra-edit ra-item");
+      this.customEditor.style.display = "none";
+      body.appendChild(this.customEditor);
+      this.row(body, "", this.button("+ Add", () => this.edit(null), "", "A new button, with a hotkey if you like")).dataset.keys = "button custom hotkey";
+      this.drawCustom();
+    },
+    buildPing(page) {
+      const body = this.section(page, "ping", "Ping", "Changing: jumps between low and high every few seconds.");
+      const ms = this.number(RynPrivate.ping.ms || 100, 10, 0, true);
+      const jitter = this.number(RynPrivate.ping.jitter || 0, 5, 0, true);
+      ms.title = "Ping (ms)";
+      jitter.title = "Jitter, ± ms";
+      this.row(body, "ms / ±", ms, jitter, this.button("Apply", () => this.done("!ping " + (Number(ms.value) || 0) + " " + (Number(jitter.value) || 0)), "ra-go")).dataset.keys = "lag latency";
+      this.pingNow = this.el("span", "ra-pl-hp", "");
+      this.row(body, "", this.button("Off", () => this.done("!ping 0"), "", "No fake ping"), this.pingNow).dataset.keys = "ping lag";
+      const w = this.pingWave;
+      const lo = this.number(w.min, 10, 0, true);
+      const hi = this.number(w.max, 10, 0, true);
+      const every = this.number(w.every, 1, 1, true);
+      lo.title = "Lowest ping (ms)";
+      hi.title = "Highest ping (ms)";
+      every.title = "Change every (seconds)";
+      const save = () => {
+        this.pingWave = {
+          on: !!this.pingWave.on,
+          min: Math.max(0, Number(lo.value) || 0),
+          max: Math.max(0, Number(hi.value) || 0),
+          every: Math.max(1, Number(every.value) || 5)
+        };
+        this.store("_ryn_ping_wave", this.pingWave);
+        this.startPingWave();
+      };
+      for (const i of [ lo, hi, every ]) i.addEventListener("change", save);
+      this.row(body, "Low/high/s", lo, hi, every).dataset.keys = "changing ping";
+      this.row(body, "", this.toggleButton("Changing ping", () => !!this.pingWave.on, v => {
+        if (v) this.pingBase = Object.assign({}, RynPrivate.ping); else if (this.pingBase) RynPrivate.setPing(this.pingBase.ms, this.pingBase.jitter);
+        this.pingWave.on = v;
+        save();
+      }));
+    },
+    buildPackets(page) {
+      const body = this.section(page, "packets", "Packets", "↓ the server to you, ↑ you to the server.");
+      this.packets = [];
+      this.hideSpam = true;
+      this.row(body, "", this.toggleButton("Record", () => !!this.tapOn, v => {
+        this.tapOn = v;
+        this.installTap();
+      }), this.toggleButton("Hide spam", () => this.hideSpam, v => {
+        this.hideSpam = v;
+        this.drawPackets();
+      }, "Leaves out a, I, H, 0, 7, G and your D"), this.button("Clear", () => {
+        this.packets = [];
+        this.drawPackets();
+      })).dataset.keys = "packets";
+      this.packetFilter = this.text("Filter: code or name");
+      this.packetFilter.addEventListener("input", () => this.drawPackets());
+      this.row(body, "", this.packetFilter).dataset.keys = "packets";
+      this.packetRate = this.el("div", "ra-note ra-item", "");
+      body.appendChild(this.packetRate);
+      this.packetLines = this.el("div", "ra-lines ra-item");
+      this.packetLines.style.maxHeight = "260px";
+      body.appendChild(this.packetLines);
+    },
+    buildPrivateLog(page) {
+      const body = this.section(page, "log", "Private log", "Why you were sent to the lobby. Kept across a refresh.");
+      const lines = this.el("div", "ra-lines ra-item");
+      lines.style.maxHeight = "220px";
+      body.appendChild(lines);
+      const draw = () => {
+        lines.innerHTML = "";
+        for (const l of RynPrivate.debugLog.slice(-60).reverse()) lines.appendChild(this.el("div", /closed|died|error|did not start/i.test(l) ? "ra-hurt" : "", l));
+      };
+      RynPrivate.debugListeners.add(draw);
+      draw();
+      this.row(body, "", this.button("Copy", () => {
+        const text = RynPrivate.debugLog.join("\n");
+        try {
+          navigator.clipboard.writeText(text).then(() => this.say("Private log copied"), () => this.say("Could not copy", true));
+        } catch (_) {
+          this.say("Could not copy", true);
+        }
+      }), this.button("Clear", () => {
+        RynPrivate.debugLog.length = 0;
+        try {
+          sessionStorage.removeItem("_ryn_private_log");
+        } catch (_) {}
+        draw();
+      }, "ra-del")).dataset.keys = "private log disconnect";
+    },
+    kindName(kind) {
+      if (!kind) return "";
+      if (kind[0] === "w" && /^w\d+$/.test(kind)) return this.weaponName(Number(kind.slice(1)));
+      return kind;
+    },
+    fmtLog(e) {
+      const from = e.fromName || (e.kind ? this.kindName(e.kind) : "world");
+      const how = e.kind && e.fromName ? " · " + this.kindName(e.kind) : "";
+      return "t" + e.tick + "  " + (e.amount < 0 ? from + " → " + e.toName : e.toName + " healed") + "  " + (e.amount > 0 ? "+" : "") + e.amount + how + "  hp " + e.hp;
+    },
+    mineFilter(state) {
+      const me = state && state.me ? state.me.sid : -1;
+      const dummies = new Set((state ? state.players : []).filter(p => p.dummy).map(p => p.sid));
+      return e => !e.ai && (e.to === me || dummies.has(e.to)) || !e.fromAi && (e.from === me || dummies.has(e.from));
+    },
+    drawStats(state) {
+      const s = RynPrivate.call("stats");
+      if (!s || !this.statCells) return;
+      const c = this.statCells;
+      c.dps.textContent = String(s.dps);
+      c.burst.textContent = String(s.burst);
+      c.taken.textContent = String(s.taken);
+      c.insta.textContent = s.instaKills + " / " + s.instaTries;
+      c.heal.textContent = s.healAvg === null ? "–" : s.healAvg + "ms";
+      const kill = s.kills[s.kills.length - 1];
+      c.ttk.textContent = kill ? kill.ms + "ms" : "–";
+      if (kill) c.ttk.title = kill.name;
+      const log = (RynPrivate.call("log", 120) || []).filter(this.mineFilter(state)).slice(-16).reverse();
+      const lines = this.combatLines;
+      lines.innerHTML = "";
+      for (const e of log) lines.appendChild(this.el("div", e.amount < 0 ? "ra-hurt" : "ra-heal", this.fmtLog(e)));
+      const phys = RynPrivate.call("physics") || [];
+      const pl = this.physLines;
+      pl.innerHTML = "";
+      for (const p of phys.slice().reverse()) {
+        const same = p.ryn !== null && Math.abs(p.first - p.ryn) <= 3;
+        pl.appendChild(this.el("div", same ? "ra-heal" : p.ryn === null ? "" : "ra-hurt", "t" + p.tick + "  " + p.name + " · " + this.kindName(p.kind) + ": " + p.first + "px" + (p.ryn === null ? "" : ", Ryn " + p.ryn + "px" + (same ? " ✓" : "")) + ", total " + p.total + "px"));
+      }
+      this.drawGraph();
+      this.drawDesyncText();
+    },
+    drawGraph() {
+      const cv = this.graph;
+      if (!cv) return;
+      const ctx = cv.getContext("2d");
+      const W = cv.width;
+      const H = cv.height;
+      ctx.clearRect(0, 0, W, H);
+      ctx.font = "18px sans-serif";
+      const data = RynPrivate.call("series") || [];
+      if (data.length < 2) {
+        ctx.fillStyle = "#726f80";
+        ctx.fillText("No data yet", 14, 30);
+        return;
+      }
+      const t1 = data[data.length - 1][1];
+      const t0 = t1 - 6e4;
+      const perSecond = col => {
+        const out = [];
+        let sum = 0;
+        let j = 0;
+        for (let i = 0; i < data.length; i++) {
+          sum += data[i][col];
+          while (data[i][1] - data[j][1] > 1e3) sum -= data[j++][col];
+          out.push(sum);
+        }
+        return out;
+      };
+      const dealt = perSecond(3);
+      const taken = perSecond(4);
+      const top = Math.max(100, ...dealt, ...taken);
+      const X = at => (at - t0) / 6e4 * W;
+      const Y = (v, max) => H - 8 - v / max * (H - 16);
+      ctx.strokeStyle = "rgba(255,255,255,0.07)";
+      ctx.lineWidth = 1;
+      for (const f of [ .25, .5, .75 ]) {
+        ctx.beginPath();
+        ctx.moveTo(0, Y(f * 100, 100));
+        ctx.lineTo(W, Y(f * 100, 100));
+        ctx.stroke();
+      }
+      const line = (values, max, color) => {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        data.forEach((row, i) => {
+          const x = X(row[1]);
+          const y = Y(values[i], max);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      };
+      line(data.map(r => r[2]), 100, "#a6d7b2");
+      line(taken, top, "#d9a3ab");
+      line(dealt, top, "#a894e0");
+      ctx.fillStyle = "#aca9ba";
+      ctx.fillText("max " + Math.round(top) + "/s", W - 130, 24);
+    },
+    trackDesync(me) {
+      let pl = null;
+      try {
+        pl = client.myPlayer;
+      } catch (_) {}
+      if (!me || !me.alive || !pl || !pl.pos || !pl.pos.current || !pl.pos.future) {
+        this.desyncNow = null;
+        return;
+      }
+      const cur = pl.pos.current;
+      const fut = pl.pos.future;
+      const shown = Math.hypot(cur.x - me.x, cur.y - me.y);
+      const pred = Math.hypot(fut.x - me.x, fut.y - me.y);
+      const now = performance.now();
+      this.desyncNow = {
+        shown: shown,
+        pred: pred,
+        fx: fut.x,
+        fy: fut.y
+      };
+      const hist = this.desyncHist || (this.desyncHist = []);
+      hist.push([ now, pred ]);
+      while (hist.length && now - hist[0][0] > 5e3) hist.shift();
+      if (pred > 60) {
+        this.desyncBad = (this.desyncBad || 0) + 1;
+        if (this.desyncBad === 3) this.desyncWarn = (this.desyncWarn || 0) + 1;
+      } else {
+        this.desyncBad = 0;
+      }
+    },
+    drawDesyncText() {
+      if (!this.desyncText) return;
+      const d = this.desyncNow;
+      if (!d) {
+        this.desyncText.textContent = "Needs you in the game.";
+        return;
+      }
+      const peak = Math.max(0, ...(this.desyncHist || []).map(h => h[1]));
+      this.desyncText.textContent = "Ryn shows you " + Math.round(d.shown) + "px from where the server has you; its prediction is " + Math.round(d.pred) + "px off (worst in 5s: " + Math.round(peak) + "px). Over 60px for 3 frames: " + (this.desyncWarn || 0) + " times.";
+    },
+    exportFight(copy) {
+      const state = RynPrivate.state();
+      const s = RynPrivate.call("stats");
+      if (!state || !s) {
+        this.say("Spawn into the game first (press Play).", true);
+        return;
+      }
+      const log = (RynPrivate.call("log", 400) || []).filter(this.mineFilter(state));
+      const phys = RynPrivate.call("physics") || [];
+      let version = "?";
+      try {
+        version = GM_info.script.version;
+      } catch (_) {}
+      const lines = [ "Ryn fight export", new Date().toString(), "Ryn " + version + " · ping " + RynPrivate.ping.ms + "ms ±" + RynPrivate.ping.jitter + " · tick " + s.tick, "", "DPS " + s.dps + " · best tick " + s.burst + " · taken (5s) " + s.taken + " · insta kills " + s.instaKills + "/" + s.instaTries + " · heal after hit " + (s.healAvg === null ? "-" : s.healAvg + "ms") + " · shame " + s.shame, "Kills: " + (s.kills.map(k => k.name + " in " + k.ms + "ms").join(", ") || "-"), "Heals: " + (s.heals.map(h => h.ms + "ms/" + h.ticks + "t").join(", ") || "-"), "", "Combat log:" ].concat(log.map(e => this.fmtLog(e)), [ "", "Knockback (server first tick / Ryn / total):" ], phys.map(p => "t" + p.tick + " " + p.name + " " + this.kindName(p.kind) + ": " + p.first + " / " + (p.ryn === null ? "-" : p.ryn) + " / " + p.total));
+      const text = lines.join("\n");
+      if (copy) {
+        try {
+          navigator.clipboard.writeText(text).then(() => this.say("Fight copied"), () => this.say("Could not copy", true));
+        } catch (_) {
+          this.say("Could not copy", true);
+        }
+        return;
+      }
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([ text ], {
+        type: "text/plain"
+      }));
+      a.download = "ryn-fight-" + new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + ".txt";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 3e3);
+      this.say("Saved " + a.download);
+    },
+    // The overlays draw on a canvas of their own over the game, in their own frame
+    // loop, and never touch the game's canvas or its renderer.
+    overlayCanvas: null,
+    overlayDirty: false,
+    startOverlay() {
+      const loop = () => {
+        try {
+          this.drawOverlay();
+        } catch (_) {}
+        requestAnimationFrame(loop);
+      };
+      requestAnimationFrame(loop);
+    },
+    overlayContext() {
+      let cv = this.overlayCanvas;
+      if (!cv || !cv.isConnected) {
+        if (!document.body) return null;
+        cv = this.overlayCanvas = document.createElement("canvas");
+        cv.id = "ryn-admin-overlay";
+        cv.style.cssText = "position:fixed;left:0;top:0;width:100vw;height:100vh;pointer-events:none;z-index:47;";
+        document.body.appendChild(cv);
+        try {
+          Renderer._keepMenusAbove(47);
+        } catch (_) {}
+      }
+      const dpr = window.devicePixelRatio || 1;
+      const W = Math.round(window.innerWidth * dpr);
+      const H = Math.round(window.innerHeight * dpr);
+      if (cv.width !== W || cv.height !== H) {
+        cv.width = W;
+        cv.height = H;
+      }
+      return cv.getContext("2d");
+    },
+    drawOverlay() {
+      const L = this.layers || {};
+      const needWorld = !!(L.truth || L.ranges || L.shots);
+      const needMe = !!(L.shame || L.desync || this.open && this.shown("analyze"));
+      const active = RynPrivate.on && this.root !== null && RynPrivate.ownerSocket !== null && (needWorld || needMe || this.editMode);
+      if (!active) {
+        if (this.overlayDirty && this.overlayCanvas) {
+          this.overlayCanvas.getContext("2d").clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+          this.overlayDirty = false;
+        }
+        return;
+      }
+      const me = RynPrivate.call("me");
+      if (needMe) this.trackDesync(me);
+      const ctx = this.overlayContext();
+      if (ctx === null) return;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      this.overlayDirty = true;
+      if (!me || !me.alive) return;
+      let view;
+      try {
+        const {_w: w, _h: h} = ZoomHandler_default._scale.current;
+        const off = RYN._offset;
+        view = {
+          scale: Math.max(window.innerWidth / w, window.innerHeight / h),
+          cx: off.x + w / 2,
+          cy: off.y + h / 2
+        };
+      } catch (_) {
+        return;
+      }
+      if (!Number.isFinite(view.scale) || !Number.isFinite(view.cx) || !Number.isFinite(view.cy)) return;
+      // world coordinates, the same mapping as the cursor (worldAt)
+      const dpr = window.devicePixelRatio || 1;
+      ctx.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * (window.innerWidth / 2 - view.cx * view.scale), dpr * (window.innerHeight / 2 - view.cy * view.scale));
+      const w = needWorld ? RynPrivate.world() : null;
+      if (w !== null) {
+        if (L.ranges) this.drawRanges(ctx, w, me, true);
+        if (L.shots) this.drawShots(ctx, w);
+        if (L.truth) this.drawTruth(ctx, w, me, true);
+      }
+      ctx.setLineDash([]);
+      if (L.desync && this.desyncNow) this.drawDesync(ctx, me);
+      if (L.shame) this.drawShameMark(ctx, me);
+      if (this.editMode && this.mouse) this.drawEditPreview(ctx);
+    },
+    drawTruth(ctx, w, me, dash) {
+      ctx.lineWidth = 3;
+      if (dash) ctx.setLineDash([ 10, 8 ]);
+      ctx.strokeStyle = "rgba(120, 220, 255, 0.9)";
+      for (const p of w.players) {
+        ctx.beginPath();
+        ctx.arc(p[1], p[2], p[3], 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = "rgba(255, 170, 90, 0.9)";
+      for (const a of w.ais) {
+        ctx.beginPath();
+        ctx.arc(a[2], a[3], a[4], 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      if (dash) ctx.setLineDash([]);
+      ctx.font = "bold 15px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(120, 220, 255, 0.95)";
+      const mine = me ? w.players.find(p => p[0] === me.sid) : null;
+      if (mine) ctx.fillText("server tick " + w.tick, mine[1], mine[2] + mine[3] + 62);
+      const king = w.ais.find(a => a[1] === 11);
+      const k = this.lastPanel && this.lastPanel.kings[0];
+      if (king && k) {
+        ctx.fillStyle = "rgba(255, 170, 90, 0.95)";
+        ctx.fillText(RYN_ADMIN_PHASES[k.phase] || k.phase, king[2], king[3] - king[4] - 30);
+      }
+      for (const [id, x, y, kind, every, max, alive] of w.spawners || []) {
+        ctx.strokeStyle = "rgba(166, 215, 178, 0.9)";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(x, y, 80, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = "rgba(166, 215, 178, 0.95)";
+        ctx.fillText("#" + id + " " + kind + " " + alive + "/" + max, x, y - 92);
+      }
+    },
+    drawRanges(ctx, w, me, dash) {
+      const c = RynPrivate.catalog();
+      const ranges = c && c.weaponRange || [];
+      for (const d of w.danger || []) {
+        const [, x, y, scale, kind, range, owner] = d;
+        const mine = me && owner === me.sid;
+        if (kind === "spike") {
+          ctx.fillStyle = mine ? "rgba(127, 179, 255, 0.10)" : "rgba(230, 90, 90, 0.16)";
+          ctx.beginPath();
+          ctx.arc(x, y, scale + 35, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.strokeStyle = mine ? "rgba(127, 179, 255, 0.5)" : "rgba(255, 170, 90, 0.6)";
+          ctx.lineWidth = 2;
+          if (dash) ctx.setLineDash([ 4, 10 ]);
+          ctx.beginPath();
+          ctx.arc(x, y, range, 0, Math.PI * 2);
+          ctx.stroke();
+          if (dash) ctx.setLineDash([]);
+        }
+      }
+      for (const p of w.players) {
+        const r = ranges[p[7]] || 0;
+        if (!r) continue;
+        const mine = me && p[0] === me.sid;
+        ctx.strokeStyle = mine ? "rgba(127, 179, 255, 0.85)" : "rgba(230, 120, 120, 0.8)";
+        ctx.lineWidth = 2;
+        if (dash) ctx.setLineDash([ 6, 6 ]);
+        ctx.beginPath();
+        ctx.arc(p[1], p[2], r + 35, 0, Math.PI * 2);
+        ctx.stroke();
+        if (dash) ctx.setLineDash([]);
+      }
+    },
+    drawShots(ctx, w) {
+      const now = performance.now();
+      const trails = this.trails || (this.trails = new Map);
+      for (const [sid, x, y] of w.shots || []) {
+        let t = trails.get(sid);
+        const last = t && t.pts[t.pts.length - 1];
+        if (!t || last && Math.hypot(x - last.x, y - last.y) > 400) {
+          t = {
+            pts: [],
+            seen: now
+          };
+          trails.set(sid, t);
+        }
+        if (!last || last.x !== x || last.y !== y) t.pts.push({
+          x: x,
+          y: y,
+          at: now
+        });
+        t.seen = now;
+      }
+      ctx.lineWidth = 3;
+      for (const [sid, t] of trails) {
+        t.pts = t.pts.filter(p => now - p.at < 900);
+        if (!t.pts.length) {
+          if (now - t.seen > 900) trails.delete(sid);
+          continue;
+        }
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.75)";
+        ctx.beginPath();
+        t.pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+        ctx.stroke();
+        const head = t.pts[t.pts.length - 1];
+        ctx.fillStyle = "rgba(255, 230, 120, 0.95)";
+        ctx.beginPath();
+        ctx.arc(head.x, head.y, 7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    },
+    drawDesync(ctx, me) {
+      const d = this.desyncNow;
+      const color = d.pred < 25 ? "rgba(166, 215, 178, 0.95)" : d.pred < 60 ? "rgba(240, 210, 110, 0.95)" : "rgba(230, 100, 100, 0.95)";
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(me.x, me.y);
+      ctx.lineTo(d.fx, d.fy);
+      ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(d.fx, d.fy, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.font = "bold 14px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(Math.round(d.pred) + "px", me.x, me.y - 70);
+    },
+    drawShameMark(ctx, me) {
+      const n = me.shame || 0;
+      const clown = me.shameTimer > 0;
+      if (!clown && n < 3) return;
+      ctx.font = "bold 16px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillStyle = clown || n >= 6 ? "rgba(230, 100, 100, 0.95)" : "rgba(240, 210, 110, 0.95)";
+      ctx.fillText(clown ? "CLOWN " + Math.ceil(me.shameTimer / 1e3) + "s" : "shame " + n + "/8", me.x, me.y + 115);
     },
     grabReplay() {
       const r = RynPrivate.call("replay");
@@ -12057,33 +12536,6 @@ module.exports.PACKETCODE = PACKETCODE
       this.replayHits.innerHTML = "";
       for (const l of hitLines) this.replayHits.appendChild(this.el("div", "ra-hurt", l));
     },
-    buildPackets(body) {
-      this.section(body, "Packets");
-      this.packets = [];
-      this.hideSpam = true;
-      this.row(body, "", this.toggleButton("Record", () => !!this.tapOn, v => {
-        this.tapOn = v;
-        this.installTap();
-      }), this.toggleButton("Hide spam", () => this.hideSpam, v => {
-        this.hideSpam = v;
-        this.drawPackets();
-      }), this.button("Clear", () => {
-        this.packets = [];
-        this.drawPackets();
-      }));
-      this.packetFilter = this.el("input");
-      this.packetFilter.type = "text";
-      this.packetFilter.placeholder = "Filter: code or name";
-      this.packetFilter.style.flex = "1";
-      this.packetFilter.addEventListener("input", () => this.drawPackets());
-      this.row(body, "", this.packetFilter);
-      this.packetRate = this.el("div", "ra-hint", "");
-      body.appendChild(this.packetRate);
-      this.packetLines = this.el("div", "ra-lines");
-      this.packetLines.style.maxHeight = "260px";
-      body.appendChild(this.packetLines);
-      body.appendChild(this.el("div", "ra-hint", "↓ the server to you, ↑ you to the server. Hide spam leaves out what comes every tick (a, I, H, 0, 7, G and your D)."));
-    },
     installTap() {
       const sock = RynPrivate.ownerSocket;
       const conn = sock && sock._conn;
@@ -12127,33 +12579,6 @@ module.exports.PACKETCODE = PACKETCODE
       this.packetLines.innerHTML = "";
       for (const l of shown) this.packetLines.appendChild(this.el("div", "", l));
     },
-    buildPrivateLog(body) {
-      this.section(body, "Private log");
-      const lines = this.el("div", "ra-lines");
-      lines.style.maxHeight = "220px";
-      body.appendChild(lines);
-      const draw = () => {
-        lines.innerHTML = "";
-        for (const l of RynPrivate.debugLog.slice(-60).reverse()) lines.appendChild(this.el("div", /closed|died|error|did not start/i.test(l) ? "ra-hurt" : "", l));
-      };
-      RynPrivate.debugListeners.add(draw);
-      draw();
-      this.row(body, "", this.button("Copy", () => {
-        const text = RynPrivate.debugLog.join("\n");
-        try {
-          navigator.clipboard.writeText(text).then(() => this.say("Private log copied"), () => this.say("Could not copy", true));
-        } catch (_) {
-          this.say("Could not copy", true);
-        }
-      }), this.button("Clear", () => {
-        RynPrivate.debugLog.length = 0;
-        try {
-          sessionStorage.removeItem("_ryn_private_log");
-        } catch (_) {}
-        draw();
-      }, "ra-del"));
-      body.appendChild(this.el("div", "ra-hint", "When you get sent back to the lobby, this says why: who closed the connection, or who killed you. It survives a refresh of this tab. Copy it and send it if something goes wrong."));
-    },
     startPingWave() {
       clearInterval(this.pingWaveTimer);
       this.pingWaveTimer = null;
@@ -12166,144 +12591,6 @@ module.exports.PACKETCODE = PACKETCODE
       };
       jump();
       this.pingWaveTimer = setInterval(jump, Math.max(1, w.every) * 1e3);
-    },
-    buildTarget(body) {
-      this.section(body, "Target");
-      this.targetSelect = this.select([ [ "", "Me" ] ], "");
-      this.targetSelect.addEventListener("change", () => {
-        this.target = this.targetSelect.value;
-        this.refresh();
-      });
-      this.row(body, "Player", this.targetSelect);
-      body.appendChild(this.el("div", "ra-hint", "Health, god, age, resources and gear go to this player. The rest is you."));
-    },
-    buildPlayer(body) {
-      this.section(body, "Player");
-      this.godButton = this.button("God: off", () => this.done("!god" + this.sid()));
-      this.row(body, "", this.godButton, this.button("Heal", () => this.done("!heal" + this.sid())), this.button("Kill", () => this.done(this.target === "" ? "!die" : "!kill" + this.sid(), this.target === "" ? "You died" : "Killed " + this.target)));
-      const hp = this.number(100, 1, 1);
-      this.row(body, "Health", hp, this.button("Set", () => this.done("!hp " + (Number(hp.value) || 1) + this.sid()), "ra-go"));
-      const age = this.number(10, 1, 1);
-      this.row(body, "Age", age, this.button("Set", () => this.done("!age " + (Number(age.value) || 1) + this.sid()), "ra-go"));
-      const res = this.number(10000, 1000, 0);
-      this.row(body, "Resources", res, this.button("Set", () => this.done("!res " + (Number(res.value) || 0) + this.sid()), "ra-go"), this.button("Max", () => this.done("!s", "Resources maxed")));
-      const speed = this.number(1, 0.1, 0.1);
-      this.row(body, "Speed ×", speed, this.button("Set", () => this.done("!speed " + 0.0016 * (Number(speed.value) || 1), "Speed ×" + (Number(speed.value) || 1)), "ra-go"));
-      const dmg = this.number(100, 10, 0);
-      this.row(body, "Damage", dmg, this.button("Set", () => this.done("!dmg " + (Number(dmg.value) || 0), "Hit damage " + (Number(dmg.value) || 0)), "ra-go"), this.button("Normal", () => this.done("!dmg", "Hit damage normal")));
-      const tiers = this.el("div", "ra-row");
-      tiers.appendChild(this.el("span", "ra-lbl", "Tier"));
-      for (const [v, label] of RYN_ADMIN_TIERS) tiers.appendChild(this.button(label, () => this.done("!v " + v, label + " weapon")));
-      body.appendChild(tiers);
-    },
-    buildGear(body) {
-      this.section(body, "Gear");
-      const catalog = RynPrivate.catalog();
-      const hats = this.select([ [ 0, "No hat" ] ]);
-      const accs = this.select([ [ 0, "No accessory" ] ]);
-      const fill = () => {
-        const c = RynPrivate.catalog();
-        if (c === null) return false;
-        for (const [select, list] of [ [ hats, c.hats ], [ accs, c.accessories ] ]) {
-          for (const item of list) {
-            const o = this.el("option", "", item.id + " · " + item.name);
-            o.value = String(item.id);
-            select.appendChild(o);
-          }
-        }
-        return true;
-      };
-      if (catalog === null || !fill()) {
-        const wait = setInterval(() => {
-          if (fill()) clearInterval(wait);
-        }, 1e3);
-      }
-      this.row(body, "Hat", hats, this.button("Wear", () => this.done("!hat " + hats.value + this.sid()), "ra-go"));
-      this.row(body, "Accessory", accs, this.button("Wear", () => this.done("!acc " + accs.value + this.sid()), "ra-go"));
-    },
-    buildSpawn(body) {
-      this.section(body, "Spawn");
-      const animal = this.select(RYN_ADMIN_ANIMALS, "wolf");
-      const count = this.number(1, 1, 1);
-      count.max = "20";
-      this.row(body, "", animal, count, this.button("Spawn", () => this.done("!spawn " + animal.value + " " + Math.max(1, Math.min(20, Number(count.value) || 1))), "ra-go"));
-    },
-    buildTravel(body) {
-      this.section(body, "Travel");
-      this.row(body, "", this.button("Crab King arena", () => this.done("!arena")), this.button("To target", () => {
-        if (this.target === "") {
-          this.say("Pick a player as the target first.", true);
-          return;
-        }
-        this.done("!tp " + this.target, "Went to " + this.target);
-      }));
-      const x = this.number(7200, 100);
-      const y = this.number(7200, 100);
-      this.row(body, "X / Y", x, y, this.button("Go", () => this.done("!tp " + (Number(x.value) || 0) + " " + (Number(y.value) || 0), "Teleported"), "ra-go"));
-    },
-    buildWorld(body) {
-      this.section(body, "World");
-      this.worldButtons = {};
-      const names = {
-        mobs: "Animals",
-        hostile: "Hostile",
-        bosses: "Bosses"
-      };
-      const r = this.row(body, "");
-      for (const key of [ "mobs", "hostile", "bosses" ]) {
-        const b = this.button(names[key], () => {
-          const on = this.lastState && this.lastState.world && this.lastState.world[key];
-          this.done("!" + key + (on ? " off" : " on"));
-        });
-        this.worldButtons[key] = b;
-        r.appendChild(b);
-      }
-      this.row(body, "", this.button("Clear all buildings", () => this.done("!b", "Buildings cleared"), "ra-del"), this.button("Fresh start", () => this.done("!dummy clear; !b; !rules dmg 1; !rules gather 1; !rules tick 9; !rules sandbox on; !time play; !time speed 1; !king respawn", "Fresh start: no dummies, no buildings, normal rules"), "ra-del"));
-    },
-    buildPing(body) {
-      this.section(body, "Ping");
-      const ms = this.number(RynPrivate.ping.ms || 100, 10, 0);
-      const jitter = this.number(RynPrivate.ping.jitter || 0, 5, 0);
-      this.pingNow = this.el("span", "ra-hint", "");
-      this.row(body, "ms / ±", ms, jitter, this.button("Apply", () => this.done("!ping " + (Number(ms.value) || 0) + " " + (Number(jitter.value) || 0)), "ra-go"), this.button("Off", () => this.done("!ping 0")));
-      body.appendChild(this.pingNow);
-      const w = this.pingWave;
-      const lo = this.number(w.min, 10, 0);
-      const hi = this.number(w.max, 10, 0);
-      const every = this.number(w.every, 1, 1);
-      lo.style.width = hi.style.width = every.style.width = "58px";
-      lo.title = "Lowest ping (ms)";
-      hi.title = "Highest ping (ms)";
-      every.title = "Change every (seconds)";
-      const save = () => {
-        this.pingWave = {
-          on: !!this.pingWave.on,
-          min: Math.max(0, Number(lo.value) || 0),
-          max: Math.max(0, Number(hi.value) || 0),
-          every: Math.max(1, Number(every.value) || 5)
-        };
-        this.store("_ryn_ping_wave", this.pingWave);
-        this.startPingWave();
-      };
-      for (const i of [ lo, hi, every ]) i.addEventListener("change", save);
-      this.row(body, "Changing", lo, hi, every);
-      this.row(body, "", this.toggleButton("Changing ping", () => !!this.pingWave.on, v => {
-        if (v) this.pingBase = Object.assign({}, RynPrivate.ping); else if (this.pingBase) RynPrivate.setPing(this.pingBase.ms, this.pingBase.jitter);
-        this.pingWave.on = v;
-        save();
-      }));
-      body.appendChild(this.el("div", "ra-hint", "Lowest ms, highest ms, every seconds: the ping jumps to a random value in between, so you get used to lag that moves. Turning it off puts your ping back."));
-    },
-    buildCustom(body) {
-      this.section(body, "My buttons");
-      this.customGrid = this.el("div", "ra-grid");
-      body.appendChild(this.customGrid);
-      this.customEditor = this.el("div", "ra-edit");
-      this.customEditor.style.display = "none";
-      body.appendChild(this.customEditor);
-      this.row(body, "", this.button("+ Add button", () => this.edit(null)));
-      body.appendChild(this.el("div", "ra-hint", "Right-click a button to edit it. One button can run several commands: !god; !res 99999; !spawn king"));
-      this.drawCustom();
     },
     drawCustom() {
       const grid = this.customGrid;
