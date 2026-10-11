@@ -23,6 +23,19 @@ window.addEventListener("error", function(e) {
   try { console.error("[RYN FATAL]", window.__RYN_LAST_ERROR); } catch (_) {}
 }, true);
 
+// Short links for the private server: moomoo.io/?private and moomoo.io/#private mean ?rynPrivate=1, rewritten
+// before anything reads the address (the game would take #private for a server name)
+(function rynPrivateLink() {
+    try {
+        const url = new URL(location.href);
+        if (!url.searchParams.has("private") && url.hash !== "#private") return;
+        url.searchParams.delete("private");
+        if (url.hash === "#private") url.hash = "";
+        url.searchParams.set("rynPrivate", "1");
+        history.replaceState(history.state, "", url.href);
+    } catch (_) {}
+})();
+
 (function resetDeviceId() {
     try {
         if (typeof localStorage === "undefined") return;
