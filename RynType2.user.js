@@ -29,7 +29,11 @@ window.addEventListener("error", function(e) {
         localStorage.removeItem("moo_did");
         localStorage.removeItem("_ryn_bot_dids");
     } catch (e) {}
-    try { sessionStorage.setItem("_ryn_private", "1"); } catch (_) {}
+    try {
+        const asked = new URLSearchParams(location.search).get("rynPrivate");
+        if (asked === "0" || asked === "1") sessionStorage.setItem("_ryn_mode_set", "1");
+        else if (sessionStorage.getItem("_ryn_mode_set") !== "1") sessionStorage.setItem("_ryn_private", "1");
+    } catch (_) {}
 })();
 
 const RYN_FAVICON_URL = "https://i.postimg.cc/1t4HB4W1/ryntype2.png";
@@ -10031,6 +10035,7 @@ module.exports.PACKETCODE = PACKETCODE
     setMode(on) {
       try {
         if (on) sessionStorage.setItem(RYN_PRIVATE_KEY, "1"); else sessionStorage.removeItem(RYN_PRIVATE_KEY);
+        sessionStorage.setItem("_ryn_mode_set", "1");
       } catch (_) {}
     },
     log(...args) {
@@ -47024,8 +47029,6 @@ html.ryn-in-lobby .ryn-v2-wrapper {
 
       this.createSkinColors(group("Skin colour"));
 
-      const altLink = doc.querySelector("#altServer a");
-      const altHref = altLink !== null ? altLink.getAttribute("href") : null;
       const modeGroup = group("Mode");
       const seg = el("div", "rl-seg");
       let leaving = false;
@@ -47043,15 +47046,22 @@ html.ryn-in-lobby .ryn-v2-wrapper {
         }
         seg.appendChild(button);
       };
-      if (RynPrivate.on) {
-        // Private runs on moomoo.io; leaving it for sandbox must not bring an old Private flag back there
-        addMode("Normal", false, isSandbox ? rynNoPrivate(altHref || "//moomoo.io/") : "reload");
-        addMode("Sandbox", false, isSandbox ? "reload" : rynNoPrivate(altHref || "//sandbox.moomoo.io/"));
-      } else {
-        addMode("Normal", !isSandbox, isSandbox ? altHref || "//moomoo.io/" : null);
-        addMode("Sandbox", isSandbox, isSandbox ? null : altHref || "//sandbox.moomoo.io/");
-      }
-      addMode("Private", RynPrivate.on, "reload", true);
+      // Every switch names its mode in the address (?rynPrivate=0/1), so a reload can neither keep an old
+      // Private flag nor fall back into Private by default
+      const withMode = (href, on) => {
+        try {
+          const u = new URL(href, location.href);
+          u.searchParams.set("rynPrivate", on ? "1" : "0");
+          return u.href;
+        } catch (_) {
+          return href;
+        }
+      };
+      const NORMAL_URL = "https://moomoo.io/";
+      const SANDBOX_URL = "https://sandbox.moomoo.io/";
+      addMode("Normal", !RynPrivate.on && !isSandbox, withMode(isSandbox ? NORMAL_URL : location.href, false));
+      addMode("Sandbox", !RynPrivate.on && isSandbox, withMode(isSandbox ? location.href : SANDBOX_URL, false));
+      addMode("Private", RynPrivate.on, withMode(isSandbox ? NORMAL_URL : location.href, true), true);
       modeGroup.appendChild(seg);
 
       const gate = el("div", "rl-gate");
