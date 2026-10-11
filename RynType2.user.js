@@ -24722,9 +24722,10 @@ module.exports.PACKETCODE = PACKETCODE
       this.type = type;
       this.onPlatform = onPlatform;
       this.id = id;
-      this.scale = Projectiles[type].scale;
+      const _projDef = Projectiles[type] || Projectiles[0] || { scale: 20, damage: 0 };
+      this.scale = _projDef.scale;
       this.maxRange = maxRange || 0;
-      this.damage = Projectiles[type].damage;
+      this.damage = _projDef.damage;
     }
     formatFromCurrent(pos, increase) {
       if (this.isTurret) {
@@ -25502,7 +25503,7 @@ module.exports.PACKETCODE = PACKETCODE
 
        case "A":
         {
-          const teams = temp[1].teams;
+          const teams = temp[1] && Array.isArray(temp[1].teams) ? temp[1].teams : [];
           for (const team of teams) {
             PlayerManager2.createClan(team.sid, team.owner);
           }
