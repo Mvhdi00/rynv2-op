@@ -748,8 +748,8 @@ window.grbtp = 35;
       return this._loading !== null;
     },
     warm() {
-      // أصلحنا التعارض: لا نحقن نسخة ثانية من Turnstile أبداً
-      return;
+      if (this.api() || this._loading || Date.now() - this._failedAt < 3e4) return;
+      this.load().catch(() => {});
     },
     load() {
       const ready = this.api();
@@ -1675,8 +1675,6 @@ window.grbtp = 35;
   // hit this because RynCF draws their checks in containers that stay put, so the player gets the same treatment.
   // While the lobby is up a hidden check keeps the game holding a fresh token, so Play joins without waiting; the visible
   // check in the dialog is only the fallback for when Cloudflare wants a click.
-  // ملاحظة: تم تعطيل هذا الفحص لأنه كان يتعارض مع Turnstile الأصلي للعبة
-  if (false)
   (function rynPlayerCheck() {
     const EARLY_TIMEOUT_MS = 3e4;
     let host = null;
