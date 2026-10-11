@@ -14,8 +14,12 @@ window.__RYN_LAST_ERROR = null;
 window.addEventListener("error", function(e) {
   // Capturing also sees images and scripts that fail to load; those are not script errors
   if (!(e instanceof ErrorEvent)) return;
+  const msg = String(e.message || e.error || "?");
+  // Expected: RYN stops the page's own copy of the game on purpose, and ResizeObserver loop notices are harmless
+  if (msg.indexOf("[RYN] The page's own copy of the game was stopped") !== -1) return;
+  if (msg.indexOf("ResizeObserver loop") !== -1) return;
   window.__RYN_LAST_ERROR = {
-    msg: String(e.message || e.error || "?"),
+    msg: msg,
     file: e.filename,
     line: e.lineno,
     stack: e.error && e.error.stack ? String(e.error.stack).split("\n").slice(0, 4).join(" | ") : null
@@ -691,6 +695,7 @@ window.grbtp = 35;
   let rynTurnstileReadySeq = 0;
   let rynServersVersion = null;
   const rynSitekey = () => rynGameSitekey || RYN_SITEKEY;
+  // Ryn لا يحقن Turnstile إذا اللعبة حقنته بالفعل (لتفادي التعارض)
   const RYN_TS_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js";
   const RYN_CF_SHOWN = 2;
   const RYN_CF_PASSIVE_MS = 18e4;
@@ -743,8 +748,8 @@ window.grbtp = 35;
       return this._loading !== null;
     },
     warm() {
-      if (this.api() || this._loading || Date.now() - this._failedAt < 3e4) return;
-      this.load().catch(() => {});
+      // أصلحنا التعارض: لا نحقن نسخة ثانية من Turnstile أبداً
+      return;
     },
     load() {
       const ready = this.api();
@@ -1670,6 +1675,8 @@ window.grbtp = 35;
   // hit this because RynCF draws their checks in containers that stay put, so the player gets the same treatment.
   // While the lobby is up a hidden check keeps the game holding a fresh token, so Play joins without waiting; the visible
   // check in the dialog is only the fallback for when Cloudflare wants a click.
+  // ملاحظة: تم تعطيل هذا الفحص لأنه كان يتعارض مع Turnstile الأصلي للعبة
+  if (false)
   (function rynPlayerCheck() {
     const EARLY_TIMEOUT_MS = 3e4;
     let host = null;
